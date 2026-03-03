@@ -23,7 +23,9 @@ class StrategyTests(unittest.TestCase):
         self.assertEqual(sig.action, "hold")
 
     def test_buy_signal_with_volume_confirmation(self):
-        close = [100] * 50 + [99, 98, 99, 101, 104, 108]
+        # Prices dip then spike so the short MA crosses above the long MA exactly
+        # on the last bar (fresh bullish crossover with volume confirmation).
+        close = [100] * 50 + [95, 90, 90, 90, 90, 140]
         volume = [100] * 54 + [180, 220]
         df = pd.DataFrame(
             {
