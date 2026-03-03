@@ -19,6 +19,7 @@ Hogan is a **paper-trading research bot** for BTC/USD and ETH/USD on Kraken, aim
 - Portfolio simulation with fees (`PaperPortfolio`)
 - Max drawdown guard to halt trading on breach
 - Optional ML probability filter that gates buy/sell signals using a trained logistic model
+- Backtest engine + CLI to evaluate strategy/ML settings on historical candles
 - 24/5 behavior toggle (`HOGAN_TRADE_WEEKENDS=false` by default)
 - `--max-loops` option for finite test runs
 
@@ -49,7 +50,14 @@ HOGAN_ML_BUY_THRESHOLD=0.55
 HOGAN_ML_SELL_THRESHOLD=0.45
 ```
 
-3. Run paper trading and compare with ML disabled (A/B test):
+3. Backtest with and without ML before long paper runs:
+
+```bash
+python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000
+python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000 --use-ml
+```
+
+4. Run paper trading and compare with ML disabled (A/B test):
 
 ```bash
 python -m hogan_bot.main --max-loops 200
@@ -86,6 +94,7 @@ HOGAN_ML_SELL_THRESHOLD=0.45
 ## How to further enhance ML abilities next
 
 - Add walk-forward retraining (e.g., daily rolling retrain on latest bars).
+- Replace single split validation with time-series cross validation.
 - Add calibration and confidence bands before allowing trades.
 - Add regime features (volatility bucket, trend regime, funding/open-interest if available).
 - Add model registry + experiment tracking (metrics, params, model hash).
