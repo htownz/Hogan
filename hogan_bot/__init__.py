@@ -2,8 +2,11 @@
 
 __all__ = [
     "config",
+    "decision",
     "exchange",
+    "ml",
     "paper",
     "risk",
     "strategy",
+    "train",
 ]

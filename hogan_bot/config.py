@@ -28,6 +28,11 @@ class BotConfig:
     trade_weekends: bool = False
     paper_mode: bool = True
 
+    use_ml_filter: bool = False
+    ml_model_path: str = "models/hogan_logreg.pkl"
+    ml_buy_threshold: float = 0.55
+    ml_sell_threshold: float = 0.45
+
     kraken_api_key: str | None = None
     kraken_api_secret: str | None = None
 
@@ -55,6 +60,10 @@ def load_config() -> BotConfig:
         sleep_seconds=int(os.getenv("HOGAN_SLEEP_SECONDS", "30")),
         trade_weekends=os.getenv("HOGAN_TRADE_WEEKENDS", "false").lower() == "true",
         paper_mode=os.getenv("HOGAN_PAPER_MODE", "true").lower() == "true",
+        use_ml_filter=os.getenv("HOGAN_USE_ML_FILTER", "false").lower() == "true",
+        ml_model_path=os.getenv("HOGAN_ML_MODEL_PATH", "models/hogan_logreg.pkl"),
+        ml_buy_threshold=float(os.getenv("HOGAN_ML_BUY_THRESHOLD", "0.55")),
+        ml_sell_threshold=float(os.getenv("HOGAN_ML_SELL_THRESHOLD", "0.45")),
         kraken_api_key=os.getenv("KRAKEN_API_KEY"),
         kraken_api_secret=os.getenv("KRAKEN_API_SECRET"),
     )
