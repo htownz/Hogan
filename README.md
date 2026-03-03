@@ -18,6 +18,7 @@ Hogan is a **paper-trading research bot** for BTC/USD and ETH/USD on Kraken, aim
   - aggressive allocation cap
 - Portfolio simulation with fees (`PaperPortfolio`)
 - Max drawdown guard to halt trading on breach
+- Optional ML probability filter that gates buy/sell signals using a trained logistic model
 - 24/5 behavior toggle (`HOGAN_TRADE_WEEKENDS=false` by default)
 - `--max-loops` option for finite test runs
 
@@ -29,6 +30,29 @@ source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
 pip install -r requirements.txt
 cp .env.example .env
 python -m hogan_bot.main --max-loops 2
+```
+
+## ML enhancement workflow (recommended)
+
+1. Train a baseline directional model on BTC or ETH data:
+
+```bash
+python -m hogan_bot.train --symbol BTC/USD --timeframe 5m --limit 5000 --horizon-bars 3 --model-path models/hogan_logreg.pkl
+```
+
+2. Enable ML filter in `.env`:
+
+```env
+HOGAN_USE_ML_FILTER=true
+HOGAN_ML_MODEL_PATH=models/hogan_logreg.pkl
+HOGAN_ML_BUY_THRESHOLD=0.55
+HOGAN_ML_SELL_THRESHOLD=0.45
+```
+
+3. Run paper trading and compare with ML disabled (A/B test):
+
+```bash
+python -m hogan_bot.main --max-loops 200
 ```
 
 ## Environment config
@@ -53,12 +77,16 @@ HOGAN_FEE_RATE=0.0026
 HOGAN_SLEEP_SECONDS=30
 HOGAN_TRADE_WEEKENDS=false
 HOGAN_PAPER_MODE=true
+HOGAN_USE_ML_FILTER=false
+HOGAN_ML_MODEL_PATH=models/hogan_logreg.pkl
+HOGAN_ML_BUY_THRESHOLD=0.55
+HOGAN_ML_SELL_THRESHOLD=0.45
 ```
 
-## Next recommended steps
+## How to further enhance ML abilities next
 
-1. Add local persistence (SQLite) for candles, signals, fills, equity curve.
-2. Add offline backtester module (walk-forward + fee/slippage stress).
-3. Add feature store for volume regimes and volatility regimes.
-4. Train baseline ML classifier for directional filter (not direct execution).
-5. Add execution safeguards before enabling any live trading.
+- Add walk-forward retraining (e.g., daily rolling retrain on latest bars).
+- Add calibration and confidence bands before allowing trades.
+- Add regime features (volatility bucket, trend regime, funding/open-interest if available).
+- Add model registry + experiment tracking (metrics, params, model hash).
+- Promote only models that beat baseline after fees/slippage.

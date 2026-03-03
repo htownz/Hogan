@@ -7,6 +7,8 @@ from datetime import datetime
 
 from hogan_bot.config import BotConfig, load_config
 from hogan_bot.exchange import KrakenClient
+from hogan_bot.decision import apply_ml_filter
+from hogan_bot.ml import TrainedModel, load_model, predict_up_probability
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
 from hogan_bot.strategy import generate_signal
@@ -20,7 +22,14 @@ def is_allowed_trading_time(trade_weekends: bool) -> bool:
     return datetime.utcnow().weekday() < 5
 
 
-def run_iteration(config: BotConfig, client: KrakenClient, portfolio: PaperPortfolio, guard: DrawdownGuard) -> bool:
+
+def run_iteration(
+    config: BotConfig,
+    client: KrakenClient,
+    portfolio: PaperPortfolio,
+    guard: DrawdownGuard,
+    ml_model: TrainedModel | None,
+) -> bool:
     if not is_allowed_trading_time(config.trade_weekends):
         logging.info("Weekend pause enabled; sleeping.")
         return True
@@ -55,6 +64,12 @@ def run_iteration(config: BotConfig, client: KrakenClient, portfolio: PaperPortf
         )
         px = mark_prices[symbol]
 
+        up_prob = None
+        action = signal.action
+        if config.use_ml_filter and ml_model is not None:
+            up_prob = predict_up_probability(candles, ml_model)
+            action = apply_ml_filter(signal.action, up_prob, config.ml_buy_threshold, config.ml_sell_threshold)
+
         size = calculate_position_size(
             equity_usd=equity,
             price=px,
@@ -63,41 +78,44 @@ def run_iteration(config: BotConfig, client: KrakenClient, portfolio: PaperPortf
             max_allocation_pct=config.aggressive_allocation,
         )
 
-        if signal.action == "buy":
+        if action == "buy":
             executed = portfolio.execute_buy(symbol, px, size)
             logging.info(
-                "BUY symbol=%s px=%.2f qty=%.6f ok=%s vol_ratio=%.2f conf=%.2f equity=%.2f cash=%.2f",
+                "BUY symbol=%s px=%.2f qty=%.6f ok=%s vol_ratio=%.2f conf=%.2f ml_up=%.3f equity=%.2f cash=%.2f",
                 symbol,
                 px,
                 size,
                 executed,
                 signal.volume_ratio,
                 signal.confidence,
+                up_prob if up_prob is not None else -1.0,
                 equity,
                 portfolio.cash_usd,
             )
-        elif signal.action == "sell":
+        elif action == "sell":
             current_qty = portfolio.positions.get(symbol).qty if symbol in portfolio.positions else 0.0
             sell_qty = min(current_qty, size)
             executed = portfolio.execute_sell(symbol, px, sell_qty)
             logging.info(
-                "SELL symbol=%s px=%.2f qty=%.6f ok=%s vol_ratio=%.2f conf=%.2f equity=%.2f cash=%.2f",
+                "SELL symbol=%s px=%.2f qty=%.6f ok=%s vol_ratio=%.2f conf=%.2f ml_up=%.3f equity=%.2f cash=%.2f",
                 symbol,
                 px,
                 sell_qty,
                 executed,
                 signal.volume_ratio,
                 signal.confidence,
+                up_prob if up_prob is not None else -1.0,
                 equity,
                 portfolio.cash_usd,
             )
         else:
             logging.info(
-                "HOLD symbol=%s px=%.2f vol_ratio=%.2f conf=%.2f equity=%.2f cash=%.2f",
+                "HOLD symbol=%s px=%.2f vol_ratio=%.2f conf=%.2f ml_up=%.3f equity=%.2f cash=%.2f",
                 symbol,
                 px,
                 signal.volume_ratio,
                 signal.confidence,
+                up_prob if up_prob is not None else -1.0,
                 equity,
                 portfolio.cash_usd,
             )
@@ -114,12 +132,22 @@ def run(max_loops: int | None = None) -> None:
     portfolio = PaperPortfolio(cash_usd=config.starting_balance_usd, fee_rate=config.fee_rate)
     drawdown_guard = DrawdownGuard(config.starting_balance_usd, config.max_drawdown)
 
+    ml_model = None
+    if config.use_ml_filter:
+        try:
+            ml_model = load_model(config.ml_model_path)
+            logging.info("Loaded ML model from %s", config.ml_model_path)
+        except FileNotFoundError:
+            logging.warning("ML filter enabled but model path missing: %s. Continuing without ML filter.", config.ml_model_path)
+        except Exception as exc:  # pragma: no cover - defensive runtime guard
+            logging.warning("Could not load ML model (%s). Continuing without ML filter.", exc)
+
     logging.info("Starting Hogan in paper mode for symbols=%s", ",".join(config.symbols))
 
     loops = 0
     while True:
         loops += 1
-        keep_running = run_iteration(config, client, portfolio, drawdown_guard)
+        keep_running = run_iteration(config, client, portfolio, drawdown_guard, ml_model)
         if not keep_running:
             break
 
