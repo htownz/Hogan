@@ -1,0 +1,2 @@
+# Hogan
+AI Trading Agent
