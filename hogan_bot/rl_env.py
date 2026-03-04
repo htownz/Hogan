@@ -50,6 +50,13 @@ except ImportError:  # pragma: no cover
 from hogan_bot.ml import build_feature_row
 
 # ---------------------------------------------------------------------------
+# Base class — gym.Env when gymnasium is available, plain object otherwise
+# so the module stays importable without the dependency.
+# ---------------------------------------------------------------------------
+
+_GymBase = gym.Env if _GYM_AVAILABLE else object  # type: ignore[misc]
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
@@ -65,7 +72,7 @@ _OVERTRADING_WINDOW: int = 6          # bars to check for flip-flops
 _MAX_EPISODE_DRAWDOWN: float = 0.25
 
 
-class TradingEnv:
+class TradingEnv(_GymBase):
     """Gymnasium-compatible environment for bar-by-bar crypto trading.
 
     Parameters
