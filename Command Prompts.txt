@@ -1,0 +1,6 @@
+# Backtest with ICT pillars
+python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000 --use-ict
+
+# Optimize over 200 random configs, reject anything with >20% drawdown
+python -m hogan_bot.optimize --symbol BTC/USD --timeframe 5m --limit 20000 \
+    --trials 200 --metric sharpe --max-drawdown 20
