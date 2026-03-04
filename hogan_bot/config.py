@@ -60,6 +60,13 @@ class BotConfig:
     # CCXT exchange ID — any of the 110+ exchanges in the library
     exchange_id: str = "kraken"
 
+    # Walk-forward retraining defaults (used by hogan_bot.retrain)
+    retrain_window_bars: int = 5000
+    retrain_model_type: str = "logreg"
+    retrain_min_improvement: float = 0.005
+    retrain_promotion_metric: str = "roc_auc"
+    retrain_schedule_hours: float = 24.0
+
     kraken_api_key: str | None = None
     kraken_api_secret: str | None = None
 
@@ -104,6 +111,11 @@ def load_config() -> BotConfig:
         ml_confidence_sizing=os.getenv("HOGAN_ML_CONFIDENCE_SIZING", "false").lower() == "true",
         webhook_url=os.getenv("HOGAN_WEBHOOK_URL", ""),
         exchange_id=os.getenv("HOGAN_EXCHANGE", "kraken"),
+        retrain_window_bars=int(os.getenv("HOGAN_RETRAIN_WINDOW_BARS", "5000")),
+        retrain_model_type=os.getenv("HOGAN_RETRAIN_MODEL_TYPE", "logreg"),
+        retrain_min_improvement=float(os.getenv("HOGAN_RETRAIN_MIN_IMPROVEMENT", "0.005")),
+        retrain_promotion_metric=os.getenv("HOGAN_RETRAIN_PROMOTION_METRIC", "roc_auc"),
+        retrain_schedule_hours=float(os.getenv("HOGAN_RETRAIN_SCHEDULE_HOURS", "24.0")),
         kraken_api_key=os.getenv("KRAKEN_API_KEY"),
         kraken_api_secret=os.getenv("KRAKEN_API_SECRET"),
     )

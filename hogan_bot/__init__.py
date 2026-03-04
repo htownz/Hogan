@@ -13,6 +13,7 @@ __all__ = [
     "notifier",
     "paper",
     "registry",
+    "retrain",
     "risk",
     "storage",
     "strategy",
