@@ -29,3 +29,6 @@ scikit-learn>=1.4.0
 # PyTorch is a transitive dependency of stable-baselines3 (~700 MB first install)
 stable-baselines3>=2.3.0
 gymnasium>=0.29.0
+
+# Historical data backfill (no API key required)
+yfinance>=0.2.0
