@@ -301,8 +301,11 @@ def walk_forward_cv(
         raise RuntimeError("scikit-learn is required for walk-forward CV") from exc
 
     x, y, _ = build_training_set(candles, horizon_bars=horizon_bars)
-    if x is None or y is None:
-        return []
+    if x is None or y is None or len(x) < 200:
+        raise RuntimeError(
+            "Not enough labelled rows for walk-forward CV. "
+            "Increase OHLCV history or reduce n_splits."
+        )
 
     n = len(x)
     min_train = max(200, n // (n_splits + 1))
