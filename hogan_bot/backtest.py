@@ -130,6 +130,18 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     trailing_stop_pct: float = 0.0,
     take_profit_pct: float = 0.0,
     ml_confidence_sizing: bool = False,
+    atr_stop_multiplier: float = 1.5,
+    use_ict: bool = False,
+    ict_swing_left: int = 2,
+    ict_swing_right: int = 2,
+    ict_eq_tolerance_pct: float = 0.0008,
+    ict_min_displacement_pct: float = 0.003,
+    ict_require_time_window: bool = True,
+    ict_time_windows: str = "03:00-04:00,10:00-11:00,14:00-15:00",
+    ict_require_pd: bool = True,
+    ict_ote_enabled: bool = False,
+    ict_ote_low: float = 0.62,
+    ict_ote_high: float = 0.79,
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
@@ -189,6 +201,18 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             use_fvg=use_fvg,
             fvg_min_gap_pct=fvg_min_gap_pct,
             signal_mode=signal_mode,
+            atr_stop_multiplier=atr_stop_multiplier,
+            use_ict=use_ict,
+            ict_swing_left=ict_swing_left,
+            ict_swing_right=ict_swing_right,
+            ict_eq_tolerance_pct=ict_eq_tolerance_pct,
+            ict_min_displacement_pct=ict_min_displacement_pct,
+            ict_require_time_window=ict_require_time_window,
+            ict_time_windows=ict_time_windows,
+            ict_require_pd=ict_require_pd,
+            ict_ote_enabled=ict_ote_enabled,
+            ict_ote_low=ict_ote_low,
+            ict_ote_high=ict_ote_high,
         )
 
         action = signal.action

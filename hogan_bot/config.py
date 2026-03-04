@@ -51,6 +51,23 @@ class BotConfig:
     trailing_stop_pct: float = 0.0
     take_profit_pct: float = 0.0
 
+    # ATR stop-distance multiplier (strategy.py line: ATR × multiplier)
+    atr_stop_multiplier: float = 1.5
+
+    # ICT (Inner Circle Trader) signal pillars
+    use_ict: bool = False
+    ict_model: str = "silver_bullet"          # "silver_bullet" | "killzone"
+    ict_swing_left: int = 2
+    ict_swing_right: int = 2
+    ict_eq_tolerance_pct: float = 0.0008
+    ict_min_displacement_pct: float = 0.003
+    ict_require_time_window: bool = True
+    ict_time_windows: str = "03:00-04:00,10:00-11:00,14:00-15:00"
+    ict_require_pd: bool = True
+    ict_ote_enabled: bool = False
+    ict_ote_low: float = 0.62
+    ict_ote_high: float = 0.79
+
     # ML confidence-based position sizing: scales size by |prob−0.5|×2
     ml_confidence_sizing: bool = False
 
@@ -108,6 +125,19 @@ def load_config() -> BotConfig:
         signal_mode=os.getenv("HOGAN_SIGNAL_MODE", "any"),
         trailing_stop_pct=float(os.getenv("HOGAN_TRAILING_STOP_PCT", "0.0")),
         take_profit_pct=float(os.getenv("HOGAN_TAKE_PROFIT_PCT", "0.0")),
+        atr_stop_multiplier=float(os.getenv("HOGAN_ATR_STOP_MULTIPLIER", "1.5")),
+        use_ict=os.getenv("HOGAN_USE_ICT", "false").lower() == "true",
+        ict_model=os.getenv("HOGAN_ICT_MODEL", "silver_bullet"),
+        ict_swing_left=int(os.getenv("HOGAN_ICT_SWING_LEFT", "2")),
+        ict_swing_right=int(os.getenv("HOGAN_ICT_SWING_RIGHT", "2")),
+        ict_eq_tolerance_pct=float(os.getenv("HOGAN_ICT_EQ_TOLERANCE_PCT", "0.0008")),
+        ict_min_displacement_pct=float(os.getenv("HOGAN_ICT_MIN_DISPLACEMENT_PCT", "0.003")),
+        ict_require_time_window=os.getenv("HOGAN_ICT_REQUIRE_TIME_WINDOW", "true").lower() == "true",
+        ict_time_windows=os.getenv("HOGAN_ICT_TIME_WINDOWS", "03:00-04:00,10:00-11:00,14:00-15:00"),
+        ict_require_pd=os.getenv("HOGAN_ICT_REQUIRE_PD", "true").lower() == "true",
+        ict_ote_enabled=os.getenv("HOGAN_ICT_OTE_ENABLED", "false").lower() == "true",
+        ict_ote_low=float(os.getenv("HOGAN_ICT_OTE_LOW", "0.62")),
+        ict_ote_high=float(os.getenv("HOGAN_ICT_OTE_HIGH", "0.79")),
         ml_confidence_sizing=os.getenv("HOGAN_ML_CONFIDENCE_SIZING", "false").lower() == "true",
         webhook_url=os.getenv("HOGAN_WEBHOOK_URL", ""),
         exchange_id=os.getenv("HOGAN_EXCHANGE", "kraken"),

@@ -28,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeframe", default=None)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--use-ml", action="store_true")
+    parser.add_argument("--use-ict", action="store_true", help="Enable ICT signal pillars")
     parser.add_argument(
         "--compare",
         action="store_true",
@@ -36,7 +37,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _run_single(cfg, candles, symbol, ml_model, overrides: dict | None = None) -> dict:
+def _run_single(cfg, candles, symbol, ml_model, overrides: dict | None = None, use_ict: bool = False) -> dict:
     """Run one backtest with optional per-key overrides on *cfg*."""
     ov = overrides or {}
     result = run_backtest_on_candles(
@@ -65,6 +66,18 @@ def _run_single(cfg, candles, symbol, ml_model, overrides: dict | None = None) -
         trailing_stop_pct=cfg.trailing_stop_pct,
         take_profit_pct=cfg.take_profit_pct,
         ml_confidence_sizing=cfg.ml_confidence_sizing,
+        atr_stop_multiplier=cfg.atr_stop_multiplier,
+        use_ict=ov.get("use_ict", use_ict or cfg.use_ict),
+        ict_swing_left=cfg.ict_swing_left,
+        ict_swing_right=cfg.ict_swing_right,
+        ict_eq_tolerance_pct=cfg.ict_eq_tolerance_pct,
+        ict_min_displacement_pct=cfg.ict_min_displacement_pct,
+        ict_require_time_window=cfg.ict_require_time_window,
+        ict_time_windows=cfg.ict_time_windows,
+        ict_require_pd=cfg.ict_require_pd,
+        ict_ote_enabled=cfg.ict_ote_enabled,
+        ict_ote_low=cfg.ict_ote_low,
+        ict_ote_high=cfg.ict_ote_high,
     )
     return result.summary_dict()
 
@@ -84,16 +97,13 @@ def main() -> None:
     if args.compare:
         rows = []
         for label, overrides in _COMPARE_CONFIGS:
-            summary = _run_single(cfg, candles, args.symbol, ml_model, overrides)
+            summary = _run_single(cfg, candles, args.symbol, ml_model, overrides, use_ict=args.use_ict)
             rows.append({"config": label, **summary})
 
-        # Print as a JSON array — easy to pipe into jq or paste into a spreadsheet
         print(json.dumps(rows, indent=2))
-
-        # Also print a human-readable ASCII table
         _print_table(rows)
     else:
-        summary = _run_single(cfg, candles, args.symbol, ml_model)
+        summary = _run_single(cfg, candles, args.symbol, ml_model, use_ict=args.use_ict)
         print(json.dumps(summary, indent=2))
 
 
