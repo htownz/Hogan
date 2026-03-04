@@ -35,3 +35,8 @@ yfinance>=0.2.0
 
 # Hyperparameter tuning (python -m hogan_bot.rl_tune)
 optuna>=3.0.0
+
+# CoinGecko market intelligence (uses stdlib urllib — no extra package needed)
+# Set COINGECKO_KEY in .env, then run:
+#   python -m hogan_bot.fetch_coingecko --backfill   # one-time historical fill
+#   python -m hogan_bot.fetch_coingecko               # daily cron
