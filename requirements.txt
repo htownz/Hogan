@@ -24,3 +24,8 @@ scikit-learn>=1.4.0
 # Optional dashboard
 # streamlit>=1.32.0
 # plotly>=5.20.0
+
+# Reinforcement learning (PPO agent)
+# PyTorch is a transitive dependency of stable-baselines3 (~700 MB first install)
+stable-baselines3>=2.3.0
+gymnasium>=0.29.0

@@ -48,6 +48,12 @@ def generate_signal(
     ict_ote_enabled: bool = False,
     ict_ote_low: float = 0.62,
     ict_ote_high: float = 0.79,
+    # RL agent
+    use_rl_agent: bool = False,
+    rl_policy=None,
+    rl_in_position: bool = False,
+    rl_unrealized_pnl: float = 0.0,
+    rl_bars_in_trade: int = 0,
 ) -> StrategySignal:
     """MA crossover + optional EMA clouds / FVG / ICT pillars, combined via votes.
 
@@ -63,6 +69,14 @@ def generate_signal(
     ``"ma_only"``  Original MA crossover only; all extra signals ignored.
     ``"any"``      Buy/sell fires when *any* enabled signal agrees (default).
     ``"all"``      Buy/sell fires only when *every* enabled signal agrees.
+
+    RL agent note
+    -------------
+    When ``use_rl_agent=True`` the PPO policy is added as an additional vote.
+    Pass ``rl_policy`` as a loaded :class:`~hogan_bot.rl_agent.RLPolicy` object.
+    Position-state context (``rl_in_position``, ``rl_unrealized_pnl``,
+    ``rl_bars_in_trade``) should reflect the live paper portfolio so the agent
+    sees its own state during inference.
     """
     min_len = max(long_window, volume_window) + 2
     if len(candles) < min_len:
@@ -98,7 +112,7 @@ def generate_signal(
         ma_action = "hold"
 
     # Fast path: MA-only mode or no extras enabled
-    extra_enabled = use_ema_clouds or (use_fvg and not use_ict) or use_ict
+    extra_enabled = use_ema_clouds or (use_fvg and not use_ict) or use_ict or use_rl_agent
     if signal_mode == "ma_only" or not extra_enabled:
         return StrategySignal(ma_action, stop_distance_pct, confidence, volume_ratio)
 
@@ -147,6 +161,23 @@ def generate_signal(
         # Blend ICT confidence into the overall confidence metric
         if ict_action != "hold":
             confidence = (confidence + ict_conf) / 2.0
+
+    # ── RL agent vote ─────────────────────────────────────────────────────
+    if use_rl_agent:
+        try:
+            from hogan_bot.rl_agent import predict_rl_action
+            rl_action = predict_rl_action(
+                candles,
+                rl_policy,
+                in_position=rl_in_position,
+                unrealized_pnl_pct=rl_unrealized_pnl,
+                bars_in_trade=rl_bars_in_trade,
+            )
+            votes.append(rl_action)
+            if rl_action != "hold":
+                confidence = (confidence + 0.8) / 2.0  # RL vote boosts confidence
+        except Exception:  # noqa: BLE001
+            votes.append("hold")
 
     # ── Vote resolution ───────────────────────────────────────────────────────
     if signal_mode == "all":

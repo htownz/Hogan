@@ -185,6 +185,27 @@ _FEATURE_COLUMNS: list[str] = [
 # ---------------------------------------------------------------------------
 
 
+def build_feature_row(candles: pd.DataFrame) -> list[float] | None:
+    """Return the feature vector for the **last bar** in *candles*.
+
+    Used by :class:`~hogan_bot.rl_env.TradingEnv` at every environment step
+    to build the ML-feature portion of the observation vector.
+
+    Returns ``None`` when there is insufficient history to compute all features
+    (fewer than 60 bars).  The caller is expected to substitute zeros.
+    """
+    if len(candles) < 60:
+        return None
+    try:
+        frame = _feature_frame(candles)
+        last = frame[_FEATURE_COLUMNS].iloc[-1]
+        if last.isna().any():
+            return None
+        return [float(v) for v in last.values]
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def build_training_set(
     candles: pd.DataFrame, horizon_bars: int = 3
 ) -> tuple[pd.DataFrame | None, pd.Series | None, list[str]]:

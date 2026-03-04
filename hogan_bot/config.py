@@ -84,6 +84,12 @@ class BotConfig:
     retrain_promotion_metric: str = "roc_auc"
     retrain_schedule_hours: float = 24.0
 
+    # Reinforcement Learning agent
+    use_rl_agent: bool = False
+    rl_model_path: str = "models/hogan_rl_policy.zip"
+    rl_reward_type: str = "risk_adjusted"
+    rl_timesteps: int = 200_000
+
     kraken_api_key: str | None = None
     kraken_api_secret: str | None = None
 
@@ -146,6 +152,10 @@ def load_config() -> BotConfig:
         retrain_min_improvement=float(os.getenv("HOGAN_RETRAIN_MIN_IMPROVEMENT", "0.005")),
         retrain_promotion_metric=os.getenv("HOGAN_RETRAIN_PROMOTION_METRIC", "roc_auc"),
         retrain_schedule_hours=float(os.getenv("HOGAN_RETRAIN_SCHEDULE_HOURS", "24.0")),
+        use_rl_agent=os.getenv("HOGAN_USE_RL_AGENT", "false").lower() == "true",
+        rl_model_path=os.getenv("HOGAN_RL_MODEL_PATH", "models/hogan_rl_policy.zip"),
+        rl_reward_type=os.getenv("HOGAN_RL_REWARD_TYPE", "risk_adjusted"),
+        rl_timesteps=int(os.getenv("HOGAN_RL_TIMESTEPS", "200000")),
         kraken_api_key=os.getenv("KRAKEN_API_KEY"),
         kraken_api_secret=os.getenv("KRAKEN_API_SECRET"),
     )

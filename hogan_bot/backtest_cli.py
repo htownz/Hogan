@@ -8,6 +8,10 @@ from hogan_bot.config import load_config
 from hogan_bot.exchange import ExchangeClient
 from hogan_bot.ml import load_model
 
+# RL policy is loaded lazily so that missing stable-baselines3 doesn't break
+# non-RL backtests.
+_RL_POLICY_CACHE: dict[str, object] = {}
+
 # ---------------------------------------------------------------------------
 # Pre-defined strategy configurations for --compare mode.
 # Each entry is (label, kwargs_override) where kwargs_override is merged over
@@ -29,6 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--use-ml", action="store_true")
     parser.add_argument("--use-ict", action="store_true", help="Enable ICT signal pillars")
+    parser.add_argument("--use-rl", action="store_true", help="Enable trained RL agent vote (requires models/hogan_rl_policy.zip)")
     parser.add_argument(
         "--compare",
         action="store_true",
@@ -37,7 +42,14 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _run_single(cfg, candles, symbol, ml_model, overrides: dict | None = None, use_ict: bool = False) -> dict:
+def _load_rl_policy(model_path: str):
+    if model_path not in _RL_POLICY_CACHE:
+        from hogan_bot.rl_agent import load_rl_policy
+        _RL_POLICY_CACHE[model_path] = load_rl_policy(model_path)
+    return _RL_POLICY_CACHE[model_path]
+
+
+def _run_single(cfg, candles, symbol, ml_model, overrides: dict | None = None, use_ict: bool = False, use_rl_agent: bool = False, rl_policy=None) -> dict:
     """Run one backtest with optional per-key overrides on *cfg*."""
     ov = overrides or {}
     result = run_backtest_on_candles(
@@ -78,6 +90,8 @@ def _run_single(cfg, candles, symbol, ml_model, overrides: dict | None = None, u
         ict_ote_enabled=cfg.ict_ote_enabled,
         ict_ote_low=cfg.ict_ote_low,
         ict_ote_high=cfg.ict_ote_high,
+        use_rl_agent=use_rl_agent or cfg.use_rl_agent,
+        rl_policy=rl_policy,
     )
     return result.summary_dict()
 
@@ -94,16 +108,25 @@ def main() -> None:
 
     ml_model = load_model(cfg.ml_model_path) if args.use_ml else None
 
+    use_rl = args.use_rl or cfg.use_rl_agent
+    rl_policy = _load_rl_policy(cfg.rl_model_path) if use_rl else None
+
     if args.compare:
         rows = []
         for label, overrides in _COMPARE_CONFIGS:
-            summary = _run_single(cfg, candles, args.symbol, ml_model, overrides, use_ict=args.use_ict)
+            summary = _run_single(
+                cfg, candles, args.symbol, ml_model, overrides,
+                use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
+            )
             rows.append({"config": label, **summary})
 
         print(json.dumps(rows, indent=2))
         _print_table(rows)
     else:
-        summary = _run_single(cfg, candles, args.symbol, ml_model, use_ict=args.use_ict)
+        summary = _run_single(
+            cfg, candles, args.symbol, ml_model,
+            use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
+        )
         print(json.dumps(summary, indent=2))
 
 
