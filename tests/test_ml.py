@@ -45,8 +45,13 @@ class FeatureFrameTests(unittest.TestCase):
         for col in _FEATURE_COLUMNS:
             self.assertIn(col, frame.columns, f"Missing feature column: {col}")
 
+    def test_new_indicator_features_present(self):
+        frame = _feature_frame(self.df)
+        for col in ("atr_pct", "macd_hist_pct", "bb_pct_b", "vol_regime"):
+            self.assertIn(col, frame.columns, f"Missing new feature: {col}")
+
     def test_feature_column_count(self):
-        self.assertEqual(len(_FEATURE_COLUMNS), 20)
+        self.assertEqual(len(_FEATURE_COLUMNS), 24)
 
     def test_rsi_bounded(self):
         frame = _feature_frame(self.df)

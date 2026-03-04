@@ -8,16 +8,21 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from hogan_bot.indicators import cloud_signal, fvg_features_frame, ripster_ema_clouds
+from hogan_bot.indicators import (
+    cloud_signal,
+    compute_atr,
+    fvg_features_frame,
+    ripster_ema_clouds,
+)
 
 
 @dataclass
 class TrainedModel:
     model: object
     feature_columns: list[str]
-    # StandardScaler fitted on training data; None for models that don't need scaling
-    # (e.g. RandomForest).  Use getattr(m, "scaler", None) when reading pickled
-    # artifacts that pre-date this field.
+    # StandardScaler fitted on training data; None for tree-based models.
+    # Use getattr(m, "scaler", None) when reading pickled artifacts that
+    # pre-date this field to stay backward-compatible.
     scaler: object | None = field(default=None)
 
 
@@ -38,9 +43,11 @@ def _rsi(close: pd.Series, window: int = 14) -> pd.Series:
 
 
 def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
-    """Build the full feature matrix.  Returns a copy of *candles* with feature
-    columns appended.  No look-ahead — every column is computable from data
-    available up to and including each bar.
+    """Build the full feature matrix.
+
+    Returns a copy of *candles* with all feature columns appended.  Every
+    column is computed from data available up to and including each bar —
+    there is no look-ahead leakage.
     """
     close = candles["close"].astype(float)
     high = candles["high"].astype(float)
@@ -66,10 +73,42 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
     frame["ma_spread"] = (frame["ma_fast"] / frame["ma_slow"].clip(lower=1e-9)) - 1.0
 
     # ------------------------------------------------------------------
-    # Realized volatility and momentum oscillator
+    # Realized volatility and oscillator
     # ------------------------------------------------------------------
     frame["volatility_20"] = frame["ret_1"].rolling(20).std()
-    frame["rsi_14"] = _rsi(close, window=14) / 100.0  # normalized to [0, 1]
+    frame["rsi_14"] = _rsi(close, window=14) / 100.0  # normalize to [0, 1]
+
+    # ------------------------------------------------------------------
+    # ATR-based volatility
+    # ------------------------------------------------------------------
+    atr = compute_atr(frame, window=14)
+    frame["atr_pct"] = atr / close.clip(lower=1e-9)
+
+    # ------------------------------------------------------------------
+    # MACD histogram
+    # ------------------------------------------------------------------
+    ema_12 = close.ewm(span=12, adjust=False).mean()
+    ema_26 = close.ewm(span=26, adjust=False).mean()
+    macd_line = ema_12 - ema_26
+    signal_line = macd_line.ewm(span=9, adjust=False).mean()
+    frame["macd_hist_pct"] = (macd_line - signal_line) / close.clip(lower=1e-9)
+
+    # ------------------------------------------------------------------
+    # Bollinger %B — where is price within the bands?
+    # ------------------------------------------------------------------
+    bb_mid = close.rolling(20).mean()
+    bb_std = close.rolling(20).std()
+    bb_upper = bb_mid + 2.0 * bb_std
+    bb_lower = bb_mid - 2.0 * bb_std
+    bb_width = (bb_upper - bb_lower).clip(lower=1e-9)
+    frame["bb_pct_b"] = (close - bb_lower) / bb_width  # ~[0,1], <0 oversold, >1 overbought
+
+    # ------------------------------------------------------------------
+    # Volatility regime — current vol relative to its 50-bar average
+    # ------------------------------------------------------------------
+    vol_short = frame["ret_1"].rolling(10).std()
+    vol_long = frame["ret_1"].rolling(50).std().clip(lower=1e-9)
+    frame["vol_regime"] = vol_short / vol_long  # >1 = elevated, <1 = subdued
 
     # ------------------------------------------------------------------
     # Candle microstructure
@@ -79,8 +118,12 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
 
     body_top = np.maximum(open_.values, close.values)
     body_bot = np.minimum(open_.values, close.values)
-    frame["upper_wick_pct"] = np.maximum(high.values - body_top, 0.0) / close.clip(lower=1e-9).values
-    frame["lower_wick_pct"] = np.maximum(body_bot - low.values, 0.0) / close.clip(lower=1e-9).values
+    frame["upper_wick_pct"] = (
+        np.maximum(high.values - body_top, 0.0) / close.clip(lower=1e-9).values
+    )
+    frame["lower_wick_pct"] = (
+        np.maximum(body_bot - low.values, 0.0) / close.clip(lower=1e-9).values
+    )
 
     # ------------------------------------------------------------------
     # Volume
@@ -96,7 +139,6 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
     sig = cloud_signal(enriched)
     frame["cloud_bull"] = (sig == "bullish").astype(int)
     frame["cloud_bear"] = (sig == "bearish").astype(int)
-    # Signed normalized distance between fast and slow cloud tops
     frame["cloud_width_pct"] = (
         (enriched["ema_fast_short"] - enriched["ema_slow_long"]) / close.clip(lower=1e-9)
     )
@@ -113,14 +155,20 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
-# Feature column order is fixed; update build_training_set and tests together.
+# Feature column order is fixed.  Update _FEATURE_COLUMNS and tests together.
 _FEATURE_COLUMNS: list[str] = [
     # momentum
     "ret_1", "ret_3", "ret_6", "ret_12",
     # trend
     "ma_spread",
-    # volatility / oscillator
-    "volatility_20", "rsi_14",
+    # volatility / oscillators
+    "volatility_20", "rsi_14", "atr_pct",
+    # MACD
+    "macd_hist_pct",
+    # Bollinger
+    "bb_pct_b",
+    # regime
+    "vol_regime",
     # candle microstructure
     "range_pct", "candle_body_pct", "upper_wick_pct", "lower_wick_pct",
     # volume
@@ -142,7 +190,7 @@ def build_training_set(
 ) -> tuple[pd.DataFrame | None, pd.Series | None, list[str]]:
     """Construct feature matrix *X* and label vector *y* from *candles*.
 
-    Returns ``(None, None, feature_columns)`` if the dataset is empty after
+    Returns ``(None, None, feature_columns)`` when the dataset is empty after
     dropping NaN rows.
     """
     frame = _feature_frame(candles)
@@ -157,12 +205,17 @@ def build_training_set(
 
 
 def train_logistic_regression(
-    candles: pd.DataFrame, model_path: str, horizon_bars: int = 3
+    candles: pd.DataFrame,
+    model_path: str,
+    horizon_bars: int = 3,
+    tune_hyperparams: bool = False,
 ) -> dict[str, object]:
     """Fit a scaled logistic-regression classifier and pickle the artifact.
 
-    Returns a metrics dict that now includes ``roc_auc``, ``precision``,
-    ``recall``, and ``f1`` in addition to ``accuracy``.
+    When *tune_hyperparams* is ``True`` a small C grid search
+    (0.01 / 0.1 / 1.0 / 10.0) is performed and the best model is saved.
+    Returns an extended metrics dict including ``roc_auc``, ``precision``,
+    ``recall``, ``f1``, and (if tuning) ``best_C``.
     """
     try:
         from sklearn.linear_model import LogisticRegression
@@ -189,14 +242,27 @@ def train_logistic_regression(
     x_train_sc = scaler.fit_transform(x_train)
     x_test_sc = scaler.transform(x_test)
 
-    model = LogisticRegression(max_iter=500, C=1.0)
-    model.fit(x_train_sc, y_train)
+    if tune_hyperparams:
+        best_C, best_model, best_acc = 1.0, None, -1.0
+        for C in (0.01, 0.1, 1.0, 10.0):
+            candidate = LogisticRegression(max_iter=500, C=C)
+            candidate.fit(x_train_sc, y_train)
+            acc = float(accuracy_score(y_test, candidate.predict(x_test_sc)))
+            if acc > best_acc:
+                best_acc, best_C, best_model = acc, C, candidate
+        model = best_model
+    else:
+        best_C = 1.0
+        model = LogisticRegression(max_iter=500, C=best_C)
+        model.fit(x_train_sc, y_train)
+
     pred = model.predict(x_test_sc)
     proba = model.predict_proba(x_test_sc)[:, 1]
 
     auc = float(roc_auc_score(y_test, proba)) if len(set(y_test)) > 1 else 0.5
     metrics: dict[str, object] = {
         "model_type": "logistic_regression",
+        "best_C": best_C,
         "accuracy": float(accuracy_score(y_test, pred)),
         "roc_auc": auc,
         "precision": float(precision_score(y_test, pred, zero_division=0)),
@@ -221,9 +287,8 @@ def train_random_forest(
     """Fit a Random Forest classifier and pickle the artifact.
 
     Feature importances are included in the returned metrics under
-    ``feature_importances``.  Random Forest is invariant to feature scale so
-    no ``StandardScaler`` is applied; the pickled ``TrainedModel.scaler`` is
-    ``None``.
+    ``feature_importances``.  RF is invariant to feature scale so no
+    ``StandardScaler`` is applied (``TrainedModel.scaler`` is ``None``).
     """
     try:
         from sklearn.ensemble import RandomForestClassifier
@@ -281,17 +346,86 @@ def train_random_forest(
     return metrics
 
 
+def train_xgboost(
+    candles: pd.DataFrame, model_path: str, horizon_bars: int = 3
+) -> dict[str, object]:
+    """Fit an XGBoost gradient-boosted classifier and pickle the artifact.
+
+    Requires the ``xgboost`` package (``pip install xgboost``).
+    Returns metrics including ``feature_importances`` (gain-based).
+    No feature scaling is applied — XGBoost is tree-based.
+    """
+    try:
+        from xgboost import XGBClassifier
+    except ImportError as exc:
+        raise RuntimeError(
+            "xgboost is not installed.  Run: pip install xgboost"
+        ) from exc
+    try:
+        from sklearn.metrics import (
+            accuracy_score,
+            f1_score,
+            precision_score,
+            recall_score,
+            roc_auc_score,
+        )
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("scikit-learn is required for metrics") from exc
+
+    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars)
+    if x is None or y is None or len(x) < 200:
+        raise RuntimeError("Not enough training rows. Increase OHLCV history.")
+
+    split = int(len(x) * 0.8)
+    x_train, x_test = x.iloc[:split], x.iloc[split:]
+    y_train, y_test = y.iloc[:split], y.iloc[split:]
+
+    model = XGBClassifier(
+        n_estimators=300,
+        max_depth=4,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        eval_metric="logloss",
+        random_state=42,
+        verbosity=0,
+    )
+    model.fit(x_train, y_train)
+    pred = model.predict(x_test)
+    proba = model.predict_proba(x_test)[:, 1]
+
+    auc = float(roc_auc_score(y_test, proba)) if len(set(y_test)) > 1 else 0.5
+    raw_imp = model.get_booster().get_score(importance_type="gain")
+    importances = {col: float(raw_imp.get(col, 0.0)) for col in feature_columns}
+    metrics: dict[str, object] = {
+        "model_type": "xgboost",
+        "accuracy": float(accuracy_score(y_test, pred)),
+        "roc_auc": auc,
+        "precision": float(precision_score(y_test, pred, zero_division=0)),
+        "recall": float(recall_score(y_test, pred, zero_division=0)),
+        "f1": float(f1_score(y_test, pred, zero_division=0)),
+        "train_rows": float(len(x_train)),
+        "test_rows": float(len(x_test)),
+        "features": len(feature_columns),
+        "feature_importances": importances,
+    }
+
+    artifact = TrainedModel(model=model, feature_columns=feature_columns, scaler=None)
+    Path(model_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(model_path, "wb") as f:
+        pickle.dump(artifact, f)
+
+    return metrics
+
+
 def walk_forward_cv(
     candles: pd.DataFrame, horizon_bars: int = 3, n_splits: int = 5
 ) -> list[dict[str, object]]:
     """Walk-forward time-series cross-validation using logistic regression.
 
-    Splits the labelled dataset into *n_splits* expanding-window folds.  Each
-    fold trains on all data up to a cutpoint and tests on the next segment,
-    mirroring live deployment where the model never sees future data.
-
-    Returns a list of per-fold metric dicts with ``fold``, ``train_rows``,
-    ``test_rows``, ``accuracy``, and ``roc_auc``.
+    Each fold trains on all data up to a cutpoint and tests on the next
+    segment, mirroring live deployment.  Returns a list of per-fold dicts
+    with ``fold``, ``train_rows``, ``test_rows``, ``accuracy``, ``roc_auc``.
     """
     try:
         from sklearn.linear_model import LogisticRegression

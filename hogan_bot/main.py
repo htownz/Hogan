@@ -54,6 +54,20 @@ def run_iteration(
         logging.error("Max drawdown breached. Halting bot. equity=%.2f peak=%.2f", equity, guard.peak_equity)
         return False
 
+    # Auto-exit positions that have hit their trailing stop or take-profit
+    exits = portfolio.check_exits(mark_prices)
+    for exit_symbol, reason in exits:
+        pos = portfolio.positions.get(exit_symbol)
+        if pos is None:
+            continue
+        px = mark_prices[exit_symbol]
+        qty = pos.qty
+        executed = portfolio.execute_sell(exit_symbol, px, qty)
+        logging.info(
+            "AUTO_EXIT symbol=%s reason=%s px=%.2f qty=%.6f ok=%s equity=%.2f",
+            exit_symbol, reason, px, qty, executed, portfolio.total_equity(mark_prices),
+        )
+
     for symbol, candles in candles_by_symbol.items():
         signal = generate_signal(
             candles,
@@ -87,7 +101,11 @@ def run_iteration(
         )
 
         if action == "buy":
-            executed = portfolio.execute_buy(symbol, px, size)
+            executed = portfolio.execute_buy(
+                symbol, px, size,
+                trailing_stop_pct=config.trailing_stop_pct,
+                take_profit_pct=config.take_profit_pct,
+            )
             logging.info(
                 "BUY symbol=%s px=%.2f qty=%.6f ok=%s vol_ratio=%.2f conf=%.2f ml_up=%.3f equity=%.2f cash=%.2f",
                 symbol,

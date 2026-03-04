@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from hogan_bot.decision import apply_ml_filter
 from hogan_bot.ml import TrainedModel, predict_up_probability
@@ -17,6 +17,19 @@ class BacktestResult:
     max_drawdown_pct: float
     trades: int
     win_rate: float
+    equity_curve: list[float] = field(default_factory=list)
+    trade_log: list[dict] = field(default_factory=list)
+
+    def summary_dict(self) -> dict:
+        """Return all scalar fields as a plain dict (omits large lists)."""
+        return {
+            "start_equity": self.start_equity,
+            "end_equity": self.end_equity,
+            "total_return_pct": self.total_return_pct,
+            "max_drawdown_pct": self.max_drawdown_pct,
+            "trades": self.trades,
+            "win_rate": self.win_rate,
+        }
 
 
 def _compute_max_drawdown(equity_curve: list[float]) -> float:
@@ -53,6 +66,8 @@ def run_backtest_on_candles(
     use_fvg: bool = False,
     fvg_min_gap_pct: float = 0.001,
     signal_mode: str = "any",
+    trailing_stop_pct: float = 0.0,
+    take_profit_pct: float = 0.0,
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
@@ -66,11 +81,37 @@ def run_backtest_on_candles(
     closed = 0
     trades = 0
     equity_curve: list[float] = []
+    trade_log: list[dict] = []
 
     min_rows = max(long_ma_window, volume_window) + 2
     for i in range(min_rows, len(candles) + 1):
         window = candles.iloc[:i]
         px = float(window["close"].iloc[-1])
+        bar_ts = str(window["timestamp"].iloc[-1]) if "timestamp" in window.columns else str(i)
+
+        # Check trailing-stop and take-profit exits before the new signal
+        mark = {symbol: px}
+        exits = portfolio.check_exits(mark)
+        for exit_symbol, reason in exits:
+            pos = portfolio.positions.get(exit_symbol)
+            if pos is None:
+                continue
+            qty = pos.qty
+            avg_entry = pos.avg_entry
+            if portfolio.execute_sell(exit_symbol, px, qty):
+                trades += 1
+                closed += 1
+                if px > avg_entry:
+                    wins += 1
+                trade_log.append(
+                    {
+                        "bar": bar_ts,
+                        "action": "sell",
+                        "reason": reason,
+                        "price": px,
+                        "qty": qty,
+                    }
+                )
 
         signal = generate_signal(
             window,
@@ -93,7 +134,6 @@ def run_backtest_on_candles(
             up_prob = predict_up_probability(window, ml_model)
             action = apply_ml_filter(action, up_prob, ml_buy_threshold, ml_sell_threshold)
 
-        mark = {symbol: px}
         equity = portfolio.total_equity(mark)
         equity_curve.append(equity)
 
@@ -109,8 +149,15 @@ def run_backtest_on_candles(
         )
 
         if action == "buy":
-            if portfolio.execute_buy(symbol, px, size):
+            if portfolio.execute_buy(
+                symbol, px, size,
+                trailing_stop_pct=trailing_stop_pct,
+                take_profit_pct=take_profit_pct,
+            ):
                 trades += 1
+                trade_log.append(
+                    {"bar": bar_ts, "action": "buy", "reason": "signal", "price": px, "qty": size}
+                )
         elif action == "sell":
             if symbol not in portfolio.positions:
                 continue
@@ -125,12 +172,23 @@ def run_backtest_on_candles(
                 closed += 1
                 if px > avg_entry:
                     wins += 1
+                trade_log.append(
+                    {
+                        "bar": bar_ts,
+                        "action": "sell",
+                        "reason": "signal",
+                        "price": px,
+                        "qty": sell_qty,
+                    }
+                )
 
     if not equity_curve:
         equity_curve = [starting_balance_usd]
     end_equity = equity_curve[-1]
     max_dd = _compute_max_drawdown(equity_curve)
-    total_return_pct = ((end_equity / starting_balance_usd) - 1.0) * 100 if starting_balance_usd > 0 else 0.0
+    total_return_pct = (
+        ((end_equity / starting_balance_usd) - 1.0) * 100 if starting_balance_usd > 0 else 0.0
+    )
     win_rate = (wins / closed) if closed > 0 else 0.0
 
     return BacktestResult(
@@ -140,4 +198,6 @@ def run_backtest_on_candles(
         max_drawdown_pct=max_dd * 100,
         trades=trades,
         win_rate=win_rate,
+        equity_curve=equity_curve,
+        trade_log=trade_log,
     )
