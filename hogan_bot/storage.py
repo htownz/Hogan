@@ -53,6 +53,34 @@ def _create_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_candles_symbol_tf ON candles (symbol, timeframe)"
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS derivatives_metrics (
+            symbol TEXT    NOT NULL,
+            ts_ms  INTEGER NOT NULL,
+            metric TEXT    NOT NULL,
+            value  REAL    NOT NULL,
+            PRIMARY KEY (symbol, ts_ms, metric)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_deriv_symbol ON derivatives_metrics (symbol, metric)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS onchain_metrics (
+            symbol TEXT NOT NULL,
+            date   TEXT NOT NULL,
+            metric TEXT NOT NULL,
+            value  REAL NOT NULL,
+            PRIMARY KEY (symbol, date, metric)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_onchain_symbol ON onchain_metrics (symbol, metric)"
+    )
     conn.commit()
 
 
@@ -142,6 +170,108 @@ def candle_count(conn: sqlite3.Connection, symbol: str, timeframe: str) -> int:
         (symbol, timeframe),
     ).fetchone()
     return int(row[0]) if row else 0
+
+
+def upsert_derivatives(
+    conn: sqlite3.Connection,
+    symbol: str,
+    records: list[tuple[int, str, float]],
+) -> int:
+    """Insert or replace derivatives metrics.
+
+    Parameters
+    ----------
+    symbol:
+        Trading symbol, e.g. ``"BTC/USD"``.
+    records:
+        List of ``(ts_ms, metric_name, value)`` tuples.
+
+    Returns
+    -------
+    int
+        Number of rows written.
+    """
+    rows = [(symbol, ts_ms, metric, value) for ts_ms, metric, value in records]
+    conn.executemany(
+        """
+        INSERT OR REPLACE INTO derivatives_metrics (symbol, ts_ms, metric, value)
+        VALUES (?, ?, ?, ?)
+        """,
+        rows,
+    )
+    conn.commit()
+    return len(rows)
+
+
+def load_derivatives(
+    conn: sqlite3.Connection,
+    symbol: str,
+    metric: str,
+    limit: int | None = None,
+) -> pd.DataFrame:
+    """Load derivatives metrics as a DataFrame with columns ``ts_ms``, ``value``."""
+    if limit:
+        query = """
+            SELECT ts_ms, value FROM derivatives_metrics
+            WHERE symbol = ? AND metric = ?
+            ORDER BY ts_ms DESC LIMIT ?
+        """
+        df = pd.read_sql_query(query, conn, params=(symbol, metric, limit))
+    else:
+        query = """
+            SELECT ts_ms, value FROM derivatives_metrics
+            WHERE symbol = ? AND metric = ?
+            ORDER BY ts_ms
+        """
+        df = pd.read_sql_query(query, conn, params=(symbol, metric))
+    df["timestamp"] = pd.to_datetime(df["ts_ms"], unit="ms", utc=True)
+    return df
+
+
+def upsert_onchain(
+    conn: sqlite3.Connection,
+    symbol: str,
+    records: list[tuple[str, str, float]],
+) -> int:
+    """Insert or replace on-chain metrics.
+
+    Parameters
+    ----------
+    symbol:
+        Trading symbol.
+    records:
+        List of ``(date_str, metric_name, value)`` tuples where ``date_str``
+        is ``"YYYY-MM-DD"``.
+
+    Returns
+    -------
+    int
+        Number of rows written.
+    """
+    rows = [(symbol, date, metric, value) for date, metric, value in records]
+    conn.executemany(
+        """
+        INSERT OR REPLACE INTO onchain_metrics (symbol, date, metric, value)
+        VALUES (?, ?, ?, ?)
+        """,
+        rows,
+    )
+    conn.commit()
+    return len(rows)
+
+
+def load_onchain(
+    conn: sqlite3.Connection,
+    symbol: str,
+    metric: str,
+) -> pd.DataFrame:
+    """Load on-chain metrics as a DataFrame with columns ``date``, ``value``."""
+    query = """
+        SELECT date, value FROM onchain_metrics
+        WHERE symbol = ? AND metric = ?
+        ORDER BY date
+    """
+    return pd.read_sql_query(query, conn, params=(symbol, metric))
 
 
 def available_symbols(conn: sqlite3.Connection) -> list[tuple[str, str, int]]:

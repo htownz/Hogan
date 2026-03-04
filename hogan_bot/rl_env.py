@@ -4,14 +4,16 @@
 interface so any Stable-Baselines3 algorithm can train directly on historical
 price data.
 
-Observation (27-dim float32 vector)
--------------------------------------
-The 24 features produced by :func:`~hogan_bot.ml.feature_row` plus three
-position-state scalars appended at runtime:
+Observation vector
+------------------
+Base mode (27-dim):
+    24 ML features from :func:`~hogan_bot.ml.build_feature_row`
+    + 3 position-state scalars: in_position, unrealized_pnl, bars_in_trade
 
-    in_position      0.0 or 1.0
-    unrealized_pnl   signed percentage relative to entry price
-    bars_in_trade    number of bars held, normalised to [0, 1] over max_bars
+Extended mode (47-dim, requires MTF candles):
+    38 features from :func:`~hogan_bot.features_mtf.build_feature_row_extended`
+    + 6 external features (derivatives / on-chain, when available)
+    + 3 position-state scalars
 
 Action space
 ------------
@@ -20,18 +22,24 @@ Action space
 Reward modes (``reward_type`` constructor arg)
 ----------------------------------------------
 ``"delta_equity"``
-    Step reward = fractional change in total equity.  Fast to train,
-    aligns the agent to raw profitability.
+    Step reward = fractional change in total equity.
 
 ``"risk_adjusted"``
-    Step reward = fractional equity change
-        - overtrading penalty if the agent flip-flops more than once per N bars
-        - drawdown penalty proportional to depth below the equity high-water mark
-    Produces more conservative, realistic trading behaviour.
+    Step reward = equity change minus overtrading and drawdown penalties.
+
+``"sharpe"``
+    Step reward = equity change normalised by rolling volatility of recent
+    returns.  Encourages the agent to seek stable positive returns and avoid
+    high-variance strategies.
+
+``"sortino"``
+    Like ``"sharpe"`` but normalises by downside deviation only, penalising
+    losses more than upside variance.
 """
 
 from __future__ import annotations
 
+from collections import deque
 from typing import Any
 
 import numpy as np
@@ -60,16 +68,27 @@ _GymBase = gym.Env if _GYM_AVAILABLE else object  # type: ignore[misc]
 # Constants
 # ---------------------------------------------------------------------------
 
-N_ML_FEATURES: int = 24       # must match _FEATURE_COLUMNS in ml.py
-N_OBS: int = N_ML_FEATURES + 3  # + in_position, unrealized_pnl, bars_in_trade
+# Base feature count — must match _FEATURE_COLUMNS in ml.py
+N_ML_FEATURES: int = 24
+# Extended feature count: 24 base + 14 MTF + 6 ext + 3 position = 47
+N_ML_FEATURES_EXTENDED: int = 44  # 24 base + 14 MTF + 6 ext
+N_OBS: int = N_ML_FEATURES + 3          # 27 — base mode
+N_OBS_EXTENDED: int = N_ML_FEATURES_EXTENDED + 3  # 47 — extended mode
 
-# Reward shaping weights
-_OVERTRADING_PENALTY: float = 0.002   # fraction of equity penalised per flip
-_DRAWDOWN_PENALTY_SCALE: float = 0.5  # multiplies drawdown depth
-_OVERTRADING_WINDOW: int = 6          # bars to check for flip-flops
+# Reward shaping weights (risk_adjusted mode)
+_OVERTRADING_PENALTY: float = 0.002
+_DRAWDOWN_PENALTY_SCALE: float = 0.5
+_OVERTRADING_WINDOW: int = 6
+
+# Rolling-window size for Sharpe/Sortino reward normalisation
+_RETURN_BUFFER_SIZE: int = 50
+_MIN_VOL: float = 1e-6  # floor to prevent division by zero
 
 # Drawdown guard: terminate an episode if drawdown exceeds this fraction
 _MAX_EPISODE_DRAWDOWN: float = 0.25
+
+# Min-trade penalty applied when episode ends with too few round-trips
+_MIN_TRADE_PENALTY: float = 0.05
 
 
 class TradingEnv(_GymBase):
@@ -78,20 +97,37 @@ class TradingEnv(_GymBase):
     Parameters
     ----------
     candles:
-        OHLCV DataFrame (``timestamp``, ``open``, ``high``, ``low``,
-        ``close``, ``volume``) sorted oldest-first.
+        5m OHLCV DataFrame sorted oldest-first.
     starting_balance:
         Initial cash in USD.
     fee_rate:
-        Round-trip transaction fee as a fraction (e.g. 0.0026 for 0.26 %).
+        Per-side transaction fee as a fraction (e.g. 0.0026 for 0.26 %).
+    slippage_pct:
+        One-way slippage fraction applied at execution (e.g. 0.001 = 0.1 %).
+        Buys fill at ``close * (1 + slippage_pct)``, sells at
+        ``close * (1 - slippage_pct)``.
     reward_type:
-        ``"delta_equity"`` or ``"risk_adjusted"`` (see module docstring).
+        ``"delta_equity"``, ``"risk_adjusted"``, ``"sharpe"``, or
+        ``"sortino"`` (see module docstring).
+    min_trades:
+        Minimum number of completed round-trips per episode.  If the agent
+        finishes an episode with fewer trades a penalty of
+        ``_MIN_TRADE_PENALTY`` is deducted from the terminal reward to
+        prevent gaming risk metrics by staying flat.
     max_bars_in_trade:
         Normalisation denominator for the ``bars_in_trade`` observation feature.
     min_history:
-        Minimum number of bars needed before the first observation can be
-        computed (must be ≥ the longest window used in feature engineering,
-        typically 50).
+        Minimum bars needed before the first observation can be computed.
+    candles_1h:
+        Optional 1-hour OHLCV DataFrame for multi-timeframe features.
+    candles_15m:
+        Optional 15-minute OHLCV DataFrame for multi-timeframe features.
+    db_conn:
+        Optional open SQLite connection for ext feature lookup (derivatives /
+        on-chain / SPY).  Pass ``get_connection()`` from storage to activate
+        the 6 external features.  The env does NOT close this connection.
+    symbol:
+        Trading symbol string, used for DB lookups (default ``"BTC/USD"``).
     seed:
         Optional RNG seed for reproducibility.
     """
@@ -103,9 +139,15 @@ class TradingEnv(_GymBase):
         candles: pd.DataFrame,
         starting_balance: float = 10_000.0,
         fee_rate: float = 0.0026,
+        slippage_pct: float = 0.001,
         reward_type: str = "risk_adjusted",
+        min_trades: int = 3,
         max_bars_in_trade: int = 100,
         min_history: int = 60,
+        candles_1h: pd.DataFrame | None = None,
+        candles_15m: pd.DataFrame | None = None,
+        db_conn=None,
+        symbol: str = "BTC/USD",
         seed: int | None = None,
     ) -> None:
         if not _GYM_AVAILABLE:
@@ -118,10 +160,20 @@ class TradingEnv(_GymBase):
         self.candles = candles.reset_index(drop=True)
         self.starting_balance = starting_balance
         self.fee_rate = fee_rate
+        self.slippage_pct = slippage_pct
         self.reward_type = reward_type
+        self.min_trades = min_trades
         self.max_bars_in_trade = max_bars_in_trade
         self.min_history = max(min_history, 60)
+        self.candles_1h = candles_1h
+        self.candles_15m = candles_15m
+        self.db_conn = db_conn
+        self.symbol = symbol
         self._rng = np.random.default_rng(seed)
+
+        # Determine observation dimensionality
+        self._use_extended = (candles_1h is not None) or (candles_15m is not None)
+        self._n_obs = N_OBS_EXTENDED if self._use_extended else N_OBS
 
         self.n_bars = len(self.candles)
         if self.n_bars < self.min_history + 2:
@@ -131,12 +183,12 @@ class TradingEnv(_GymBase):
             )
 
         # Gymnasium spaces
-        low = np.full(N_OBS, -10.0, dtype=np.float32)
-        high = np.full(N_OBS, 10.0, dtype=np.float32)
+        low = np.full(self._n_obs, -10.0, dtype=np.float32)
+        high = np.full(self._n_obs, 10.0, dtype=np.float32)
         self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
         self.action_space = spaces.Discrete(3)
 
-        # State (reset on each episode)
+        # Episode state — reset in reset()
         self._cursor: int = self.min_history
         self._cash: float = starting_balance
         self._position_qty: float = 0.0
@@ -144,6 +196,8 @@ class TradingEnv(_GymBase):
         self._bars_in_trade: int = 0
         self._equity_peak: float = starting_balance
         self._action_history: list[int] = []
+        self._trade_count: int = 0
+        self._return_buffer: deque[float] = deque(maxlen=_RETURN_BUFFER_SIZE)
 
     # ------------------------------------------------------------------
     # Gymnasium interface
@@ -181,6 +235,8 @@ class TradingEnv(_GymBase):
         self._bars_in_trade = 0
         self._equity_peak = self.starting_balance
         self._action_history = []
+        self._trade_count = 0
+        self._return_buffer = deque(maxlen=_RETURN_BUFFER_SIZE)
 
         obs = self._get_obs()
         return obs, {}
@@ -201,21 +257,24 @@ class TradingEnv(_GymBase):
 
         self._action_history.append(action)
 
-        # ── Execute trade ───────────────────────────────────────────────
+        # ── Execute trade with slippage ─────────────────────────────────
         if action == 1 and self._position_qty == 0.0:          # buy
-            spend = self._cash * 0.95   # use 95% of available cash
-            qty = spend / price * (1.0 - self.fee_rate)
+            fill_price = price * (1.0 + self.slippage_pct)
+            spend = self._cash * 0.95
+            qty = spend / fill_price * (1.0 - self.fee_rate)
             self._cash -= spend
             self._position_qty = qty
-            self._entry_price = price
+            self._entry_price = fill_price
             self._bars_in_trade = 0
 
         elif action == 2 and self._position_qty > 0.0:         # sell
-            proceeds = self._position_qty * price * (1.0 - self.fee_rate)
+            fill_price = price * (1.0 - self.slippage_pct)
+            proceeds = self._position_qty * fill_price * (1.0 - self.fee_rate)
             self._cash += proceeds
             self._position_qty = 0.0
             self._entry_price = 0.0
             self._bars_in_trade = 0
+            self._trade_count += 1  # count completed round-trips
 
         # ── Advance cursor ──────────────────────────────────────────────
         if self._position_qty > 0.0:
@@ -229,17 +288,21 @@ class TradingEnv(_GymBase):
         if new_equity > self._equity_peak:
             self._equity_peak = new_equity
 
-        # ── Reward ─────────────────────────────────────────────────────
-        reward = self._compute_reward(prev_equity, new_equity, action)
+        # ── Track step return for Sharpe/Sortino ───────────────────────
+        step_ret = (new_equity - prev_equity) / max(prev_equity, 1e-9)
+        self._return_buffer.append(step_ret)
 
         # ── Termination ────────────────────────────────────────────────
-        drawdown = (self._equity_peak - new_equity) / self._equity_peak
+        drawdown = (self._equity_peak - new_equity) / max(self._equity_peak, 1e-9)
         terminated = bool(
             drawdown > _MAX_EPISODE_DRAWDOWN
             or self._cursor >= self.n_bars - 1
         )
-        truncated = False
 
+        # ── Reward ─────────────────────────────────────────────────────
+        reward = self._compute_reward(prev_equity, new_equity, action, terminated)
+
+        truncated = False
         obs = self._get_obs() if not terminated else self._zero_obs()
 
         info = {
@@ -247,17 +310,18 @@ class TradingEnv(_GymBase):
             "drawdown": drawdown,
             "position": self._position_qty > 0,
             "cursor": self._cursor,
+            "trade_count": self._trade_count,
         }
         return obs, float(reward), terminated, truncated, info
 
     def render(self) -> None:
         price = float(self.candles["close"].iloc[self._cursor])
         equity = self._total_equity(price)
-        dd = (self._equity_peak - equity) / self._equity_peak
+        dd = (self._equity_peak - equity) / max(self._equity_peak, 1e-9)
         print(
             f"  bar={self._cursor:>5d}  price={price:>10.2f}  "
             f"equity={equity:>10.2f}  dd={dd:.2%}  "
-            f"pos={self._position_qty > 0}"
+            f"pos={self._position_qty > 0}  trades={self._trade_count}"
         )
 
     # ------------------------------------------------------------------
@@ -268,13 +332,37 @@ class TradingEnv(_GymBase):
         return self._cash + self._position_qty * price
 
     def _get_obs(self) -> np.ndarray:
-        window = self.candles.iloc[: self._cursor + 1]
-        features = build_feature_row(window)   # 24-dim or None
-        if features is None:
-            ml_part = np.zeros(N_ML_FEATURES, dtype=np.float32)
+        window_5m = self.candles.iloc[: self._cursor + 1]
+
+        if self._use_extended:
+            try:
+                from hogan_bot.features_mtf import build_feature_row_extended
+                # Slice MTF candles up to current bar timestamp
+                ts = self.candles["timestamp"].iloc[self._cursor] if "timestamp" in self.candles.columns else None
+                w1h = _slice_up_to(self.candles_1h, ts) if self.candles_1h is not None else None
+                w15m = _slice_up_to(self.candles_15m, ts) if self.candles_15m is not None else None
+                features = build_feature_row_extended(
+                    window_5m, w1h, w15m,
+                    conn=self.db_conn,
+                    symbol=self.symbol,
+                )
+            except Exception:
+                features = None
+
+            # Pad / truncate to N_ML_FEATURES_EXTENDED
+            if features is None:
+                ml_part = np.zeros(N_ML_FEATURES_EXTENDED, dtype=np.float32)
+            else:
+                arr = np.array(features[:N_ML_FEATURES_EXTENDED], dtype=np.float32)
+                if len(arr) < N_ML_FEATURES_EXTENDED:
+                    arr = np.pad(arr, (0, N_ML_FEATURES_EXTENDED - len(arr)))
+                ml_part = np.clip(arr, -10.0, 10.0)
         else:
-            ml_part = np.array(features, dtype=np.float32)
-            ml_part = np.clip(ml_part, -10.0, 10.0)
+            features = build_feature_row(window_5m)
+            if features is None:
+                ml_part = np.zeros(N_ML_FEATURES, dtype=np.float32)
+            else:
+                ml_part = np.clip(np.array(features, dtype=np.float32), -10.0, 10.0)
 
         price = float(self.candles["close"].iloc[self._cursor])
         in_pos = 1.0 if self._position_qty > 0.0 else 0.0
@@ -283,39 +371,86 @@ class TradingEnv(_GymBase):
             if self._position_qty > 0.0
             else 0.0
         )
-        bars_norm = min(self._bars_in_trade / self.max_bars_in_trade, 1.0)
+        bars_norm = min(self._bars_in_trade / max(self.max_bars_in_trade, 1), 1.0)
 
         pos_part = np.array([in_pos, float(upnl), float(bars_norm)], dtype=np.float32)
         obs = np.concatenate([ml_part, pos_part])
         return np.clip(obs, -10.0, 10.0).astype(np.float32)
 
     def _zero_obs(self) -> np.ndarray:
-        return np.zeros(N_OBS, dtype=np.float32)
+        return np.zeros(self._n_obs, dtype=np.float32)
 
     def _compute_reward(
-        self, prev_equity: float, new_equity: float, action: int
+        self,
+        prev_equity: float,
+        new_equity: float,
+        action: int,
+        terminated: bool,
     ) -> float:
         delta = (new_equity - prev_equity) / max(prev_equity, 1e-9)
 
         if self.reward_type == "delta_equity":
-            return float(delta)
+            reward = float(delta)
 
-        # "risk_adjusted": penalise overtrading and drawdown
-        reward = float(delta)
+        elif self.reward_type == "sharpe":
+            reward = self._sharpe_reward(delta, downside_only=False)
 
-        # Overtrading penalty: penalise if agent flip-flopped recently
-        if len(self._action_history) >= _OVERTRADING_WINDOW:
-            recent = self._action_history[-_OVERTRADING_WINDOW:]
-            flips = sum(
-                1 for i in range(1, len(recent))
-                if recent[i] != recent[i - 1] and recent[i] != 0
-            )
-            if flips > 1:
-                reward -= _OVERTRADING_PENALTY * (flips - 1)
+        elif self.reward_type == "sortino":
+            reward = self._sharpe_reward(delta, downside_only=True)
 
-        # Drawdown penalty
-        if new_equity < self._equity_peak:
-            drawdown = (self._equity_peak - new_equity) / self._equity_peak
-            reward -= _DRAWDOWN_PENALTY_SCALE * drawdown * abs(delta) if delta < 0 else 0.0
+        else:  # "risk_adjusted"
+            reward = float(delta)
+
+            # Overtrading penalty
+            if len(self._action_history) >= _OVERTRADING_WINDOW:
+                recent = self._action_history[-_OVERTRADING_WINDOW:]
+                flips = sum(
+                    1 for i in range(1, len(recent))
+                    if recent[i] != recent[i - 1] and recent[i] != 0
+                )
+                if flips > 1:
+                    reward -= _OVERTRADING_PENALTY * (flips - 1)
+
+            # Drawdown penalty
+            if new_equity < self._equity_peak:
+                drawdown = (self._equity_peak - new_equity) / max(self._equity_peak, 1e-9)
+                reward -= _DRAWDOWN_PENALTY_SCALE * drawdown * abs(delta) if delta < 0 else 0.0
+
+        # ── Min-trade penalty at episode end ───────────────────────────
+        if terminated and self._trade_count < self.min_trades:
+            reward -= _MIN_TRADE_PENALTY
 
         return float(reward)
+
+    def _sharpe_reward(self, delta: float, downside_only: bool) -> float:
+        """Normalise the step return by rolling vol or downside-vol."""
+        buf = list(self._return_buffer)
+        if len(buf) < 2:
+            return float(delta)
+
+        buf_arr = np.array(buf, dtype=np.float64)
+        if downside_only:
+            neg = buf_arr[buf_arr < 0]
+            vol = float(np.sqrt(np.mean(neg ** 2))) if len(neg) > 0 else _MIN_VOL
+        else:
+            vol = float(np.std(buf_arr))
+
+        vol = max(vol, _MIN_VOL)
+        # Scale to keep rewards in a similar range as delta_equity
+        return float(delta / vol * 0.01)
+
+
+# ---------------------------------------------------------------------------
+# Helper: slice candles up to a timestamp
+# ---------------------------------------------------------------------------
+
+def _slice_up_to(df: pd.DataFrame | None, ts) -> pd.DataFrame | None:
+    """Return rows of *df* with timestamp <= *ts*, or the full df if ts is None."""
+    if df is None or ts is None:
+        return df
+    try:
+        mask = df["timestamp"] <= ts
+        sliced = df.loc[mask]
+        return sliced if len(sliced) > 0 else df
+    except Exception:
+        return df

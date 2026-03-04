@@ -104,6 +104,106 @@ def compute_calmar(total_return_pct: float, max_drawdown_pct: float) -> float | 
     return total_return_pct / max_drawdown_pct
 
 
+# ---------------------------------------------------------------------------
+# Regime-based evaluation
+# ---------------------------------------------------------------------------
+
+def _classify_regimes(
+    equity_curve: list[float],
+    ma_window: int = 50,
+    slope_threshold: float = 0.0002,
+) -> list[str]:
+    """Label each bar of *equity_curve* as ``"bull"``, ``"bear"``, or ``"sideways"``.
+
+    Regime is determined by the slope of a rolling ``ma_window``-bar simple
+    moving average of equity, normalised by the current level:
+        slope = (ma[i] - ma[i-1]) / ma[i-1]
+    If slope > +threshold  -> bull
+    If slope < -threshold  -> bear
+    Otherwise              -> sideways
+    """
+    n = len(equity_curve)
+    if n < ma_window + 1:
+        return ["sideways"] * n
+
+    arr = equity_curve  # list of floats
+    labels: list[str] = ["sideways"] * n
+
+    # Compute rolling MA
+    ma: list[float | None] = [None] * n
+    for i in range(ma_window - 1, n):
+        ma[i] = sum(arr[i - ma_window + 1 : i + 1]) / ma_window
+
+    for i in range(ma_window, n):
+        prev = ma[i - 1]
+        curr = ma[i]
+        if prev is None or curr is None or prev <= 0:
+            continue
+        slope = (curr - prev) / prev
+        if slope > slope_threshold:
+            labels[i] = "bull"
+        elif slope < -slope_threshold:
+            labels[i] = "bear"
+        else:
+            labels[i] = "sideways"
+
+    return labels
+
+
+def _regime_metrics(
+    equity_slice: list[float],
+    bars_per_year: float = _BARS_PER_YEAR_5M,
+) -> dict:
+    if len(equity_slice) < 2:
+        return {"bars": len(equity_slice), "sharpe": None, "total_return_pct": 0.0}
+    sharpe = compute_sharpe(equity_slice, bars_per_year)
+    total_ret = (equity_slice[-1] / equity_slice[0] - 1.0) * 100 if equity_slice[0] > 0 else 0.0
+    max_dd = _compute_max_drawdown(equity_slice)
+    return {
+        "bars": len(equity_slice),
+        "sharpe": round(sharpe, 4) if sharpe is not None else None,
+        "total_return_pct": round(total_ret, 4),
+        "max_drawdown_pct": round(max_dd * 100, 4),
+    }
+
+
+def evaluate_regimes(
+    result: "BacktestResult",
+    ma_window: int = 50,
+    slope_threshold: float = 0.0002,
+) -> dict[str, dict]:
+    """Split *result.equity_curve* into bull/bear/sideways segments and
+    compute per-regime performance metrics.
+
+    Parameters
+    ----------
+    result:
+        A :class:`BacktestResult` with a populated ``equity_curve``.
+    ma_window:
+        Rolling window for the MA slope classifier (default 50 bars).
+    slope_threshold:
+        Normalised slope above/below which a bar is classified bull/bear.
+
+    Returns
+    -------
+    dict
+        Keys ``"bull"``, ``"bear"``, ``"sideways"`` each mapping to a sub-dict
+        with ``bars``, ``sharpe``, ``total_return_pct``, ``max_drawdown_pct``.
+    """
+    equity = result.equity_curve
+    if not equity:
+        return {r: {"bars": 0, "sharpe": None, "total_return_pct": 0.0, "max_drawdown_pct": 0.0}
+                for r in ("bull", "bear", "sideways")}
+
+    labels = _classify_regimes(equity, ma_window=ma_window, slope_threshold=slope_threshold)
+
+    regime_bars: dict[str, list[float]] = {"bull": [], "bear": [], "sideways": []}
+    for eq, lbl in zip(equity, labels):
+        regime_bars[lbl].append(eq)
+
+    return {regime: _regime_metrics(bars) for regime, bars in regime_bars.items()}
+
+
 def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     candles,
     symbol: str,

@@ -32,3 +32,6 @@ gymnasium>=0.29.0
 
 # Historical data backfill (no API key required)
 yfinance>=0.2.0
+
+# Hyperparameter tuning (python -m hogan_bot.rl_tune)
+optuna>=3.0.0

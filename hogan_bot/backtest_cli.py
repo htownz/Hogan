@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from hogan_bot.backtest import run_backtest_on_candles
+from hogan_bot.backtest import evaluate_regimes, run_backtest_on_candles
 from hogan_bot.config import load_config
 from hogan_bot.exchange import ExchangeClient
 from hogan_bot.ml import load_model
@@ -35,6 +35,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--use-ict", action="store_true", help="Enable ICT signal pillars")
     parser.add_argument("--use-rl", action="store_true", help="Enable trained RL agent vote (requires models/hogan_rl_policy.zip)")
     parser.add_argument(
+        "--regime-report",
+        action="store_true",
+        help="Print per-regime (bull/bear/sideways) performance breakdown after the backtest",
+    )
+    parser.add_argument(
         "--compare",
         action="store_true",
         help="Sweep 5 signal configurations and print a comparison table instead of a single result",
@@ -49,10 +54,14 @@ def _load_rl_policy(model_path: str):
     return _RL_POLICY_CACHE[model_path]
 
 
-def _run_single(cfg, candles, symbol, ml_model, overrides: dict | None = None, use_ict: bool = False, use_rl_agent: bool = False, rl_policy=None) -> dict:
-    """Run one backtest with optional per-key overrides on *cfg*."""
+def _run_single(cfg, candles, symbol, ml_model, overrides: dict | None = None, use_ict: bool = False, use_rl_agent: bool = False, rl_policy=None):
+    """Run one backtest with optional per-key overrides on *cfg*.
+
+    Returns the full :class:`~hogan_bot.backtest.BacktestResult` object so
+    callers can access ``equity_curve`` for regime analysis.
+    """
     ov = overrides or {}
-    result = run_backtest_on_candles(
+    return run_backtest_on_candles(
         candles=candles,
         symbol=symbol,
         starting_balance_usd=cfg.starting_balance_usd,
@@ -93,7 +102,6 @@ def _run_single(cfg, candles, symbol, ml_model, overrides: dict | None = None, u
         use_rl_agent=use_rl_agent or cfg.use_rl_agent,
         rl_policy=rl_policy,
     )
-    return result.summary_dict()
 
 
 def main() -> None:
@@ -114,20 +122,30 @@ def main() -> None:
     if args.compare:
         rows = []
         for label, overrides in _COMPARE_CONFIGS:
-            summary = _run_single(
+            result = _run_single(
                 cfg, candles, args.symbol, ml_model, overrides,
                 use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
             )
-            rows.append({"config": label, **summary})
+            rows.append({"config": label, **result.summary_dict()})
 
         print(json.dumps(rows, indent=2))
         _print_table(rows)
     else:
-        summary = _run_single(
+        result = _run_single(
             cfg, candles, args.symbol, ml_model,
             use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
         )
-        print(json.dumps(summary, indent=2))
+        print(json.dumps(result.summary_dict(), indent=2))
+
+        if args.regime_report:
+            regimes = evaluate_regimes(result)
+            print("\n-- Regime breakdown ------------------------------------")
+            for regime, metrics in regimes.items():
+                print(f"  {regime:<10s}  bars={metrics['bars']:>5d}  "
+                      f"sharpe={str(metrics['sharpe']):<8s}  "
+                      f"return={metrics['total_return_pct']:>7.2f}%  "
+                      f"maxdd={metrics['max_drawdown_pct']:>6.2f}%")
+            print()
 
 
 def _print_table(rows: list[dict]) -> None:
