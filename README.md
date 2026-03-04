@@ -42,13 +42,33 @@ python -m hogan_bot.main --max-loops 2
 
 ## ML enhancement workflow (recommended)
 
-1. Train a baseline directional model on BTC or ETH data:
+The ML pipeline uses 20 features (momentum, RSI, volatility, candle microstructure, volume, EMA cloud direction and width, FVG counts) and supports two classifier types.
+
+### 1. Validate with walk-forward cross-validation first
+
+```bash
+python -m hogan_bot.train --symbol BTC/USD --timeframe 5m --limit 5000 --cv --cv-splits 5
+```
+
+Output includes per-fold accuracy and ROC-AUC, plus mean values across folds.
+
+### 2. Train a model
+
+Logistic regression (scaled, default):
 
 ```bash
 python -m hogan_bot.train --symbol BTC/USD --timeframe 5m --limit 5000 --horizon-bars 3 --model-path models/hogan_logreg.pkl
 ```
 
-2. Enable ML filter in `.env`:
+Random forest (includes feature importances in output):
+
+```bash
+python -m hogan_bot.train --symbol BTC/USD --timeframe 5m --limit 5000 --model-type random_forest --model-path models/hogan_rf.pkl
+```
+
+Both commands now report `accuracy`, `roc_auc`, `precision`, `recall`, and `f1`.
+
+### 3. Enable ML filter in `.env`
 
 ```env
 HOGAN_USE_ML_FILTER=true
@@ -57,14 +77,14 @@ HOGAN_ML_BUY_THRESHOLD=0.55
 HOGAN_ML_SELL_THRESHOLD=0.45
 ```
 
-3. Backtest with and without ML before long paper runs:
+### 4. Backtest with and without ML before long paper runs
 
 ```bash
 python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000
 python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000 --use-ml
 ```
 
-4. Run paper trading and compare with ML disabled (A/B test):
+### 5. Run paper trading
 
 ```bash
 python -m hogan_bot.main --max-loops 200
@@ -158,8 +178,9 @@ Signal combinator guide:
 ## How to further enhance ML abilities next
 
 - Add walk-forward retraining (e.g., daily rolling retrain on latest bars).
-- Replace single split validation with time-series cross validation.
-- Add calibration and confidence bands before allowing trades.
+- Add calibration (Platt scaling or isotonic regression) so probabilities are better-tuned.
+- Add confidence bands: only trade when predicted probability is far from 0.5.
 - Add regime features (volatility bucket, trend regime, funding/open-interest if available).
 - Add model registry + experiment tracking (metrics, params, model hash).
 - Promote only models that beat baseline after fees/slippage.
+- Try gradient boosted trees (XGBoost/LightGBM) for better handling of feature interactions.
