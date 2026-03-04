@@ -40,3 +40,16 @@ optuna>=3.0.0
 # Set COINGECKO_KEY in .env, then run:
 #   python -m hogan_bot.fetch_coingecko --backfill   # one-time historical fill
 #   python -m hogan_bot.fetch_coingecko               # daily cron
+
+# GPR Index Excel readers (fetch_gpr.py uses xlrd for .xls, openpyxl for .xlsx)
+xlrd>=2.0.1
+openpyxl>=3.1.0
+
+# Alternative / sentiment data (all use stdlib urllib — no extra packages needed)
+# Free:
+#   python -m hogan_bot.fetch_feargreed --backfill   # Alternative.me Fear & Greed
+#   python -m hogan_bot.fetch_news_sentiment         # CryptoPanic (set CRYPTOPANIC_KEY)
+#   python -m hogan_bot.fetch_gpr                   # Caldara & Iacoviello GPR Index
+# Paid ($78-148/mo):
+#   python -m hogan_bot.fetch_glassnode --days 365  # Glassnode (set GLASSNODE_KEY)
+#   python -m hogan_bot.fetch_santiment --days 365  # Santiment (set SANTIMENT_KEY)

@@ -71,9 +71,9 @@ _GymBase = gym.Env if _GYM_AVAILABLE else object  # type: ignore[misc]
 # Base feature count — must match _FEATURE_COLUMNS in ml.py
 N_ML_FEATURES: int = 24
 # Extended feature count: 24 base + 14 MTF + 6 ext + 3 position = 47
-N_ML_FEATURES_EXTENDED: int = 50  # 24 base + 14 MTF + 12 ext (6 on-chain + 6 CoinGecko)
+N_ML_FEATURES_EXTENDED: int = 70  # 36 base + 14 MTF + 20 ext (6 on-chain + 6 CoinGecko + 8 alt/sentiment/geo)
 N_OBS: int = N_ML_FEATURES + 3          # 27 — base mode
-N_OBS_EXTENDED: int = N_ML_FEATURES_EXTENDED + 3  # 53 — extended mode
+N_OBS_EXTENDED: int = N_ML_FEATURES_EXTENDED + 3  # 73 — extended mode
 
 # Reward shaping weights (risk_adjusted mode)
 _OVERTRADING_PENALTY: float = 0.002
