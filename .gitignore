@@ -1,4 +1,6 @@
 .venv/
+.venv-linux/
 __pycache__/
 *.pyc
 .env
+models/hogan_rl_policy.zip
