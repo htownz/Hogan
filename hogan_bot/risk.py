@@ -7,9 +7,14 @@ def calculate_position_size(
     stop_distance_pct: float,
     max_risk_per_trade: float,
     max_allocation_pct: float,
+    confidence_scale: float = 1.0,
 ) -> float:
-    """Return coin amount based on risk and allocation constraints."""
+    """Return coin amount based on risk and allocation constraints.
 
+    *confidence_scale* (0.0–1.0) multiplies the raw position size to allow
+    ML-confidence-based dynamic sizing.  Default ``1.0`` preserves the
+    original behaviour.
+    """
     if equity_usd <= 0 or price <= 0:
         return 0.0
     if stop_distance_pct <= 0 or max_risk_per_trade <= 0 or max_allocation_pct <= 0:
@@ -21,7 +26,8 @@ def calculate_position_size(
     allocation_budget_usd = equity_usd * max_allocation_pct
     size_from_allocation = allocation_budget_usd / price
 
-    return max(0.0, min(size_from_risk, size_from_allocation))
+    raw = max(0.0, min(size_from_risk, size_from_allocation))
+    return raw * max(0.0, min(1.0, confidence_scale))
 
 
 class DrawdownGuard:

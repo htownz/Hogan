@@ -51,6 +51,12 @@ class BotConfig:
     trailing_stop_pct: float = 0.0
     take_profit_pct: float = 0.0
 
+    # ML confidence-based position sizing: scales size by |prob−0.5|×2
+    ml_confidence_sizing: bool = False
+
+    # Webhook URL for trade/drawdown notifications (empty string = disabled)
+    webhook_url: str = ""
+
     kraken_api_key: str | None = None
     kraken_api_secret: str | None = None
 
@@ -92,6 +98,8 @@ def load_config() -> BotConfig:
         signal_mode=os.getenv("HOGAN_SIGNAL_MODE", "any"),
         trailing_stop_pct=float(os.getenv("HOGAN_TRAILING_STOP_PCT", "0.0")),
         take_profit_pct=float(os.getenv("HOGAN_TAKE_PROFIT_PCT", "0.0")),
+        ml_confidence_sizing=os.getenv("HOGAN_ML_CONFIDENCE_SIZING", "false").lower() == "true",
+        webhook_url=os.getenv("HOGAN_WEBHOOK_URL", ""),
         kraken_api_key=os.getenv("KRAKEN_API_KEY"),
         kraken_api_secret=os.getenv("KRAKEN_API_SECRET"),
     )

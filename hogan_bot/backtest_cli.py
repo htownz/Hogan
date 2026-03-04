@@ -8,6 +8,19 @@ from hogan_bot.config import load_config
 from hogan_bot.exchange import KrakenClient
 from hogan_bot.ml import load_model
 
+# ---------------------------------------------------------------------------
+# Pre-defined strategy configurations for --compare mode.
+# Each entry is (label, kwargs_override) where kwargs_override is merged over
+# the base config values.
+# ---------------------------------------------------------------------------
+_COMPARE_CONFIGS: list[tuple[str, dict]] = [
+    ("ma_only", {"use_ema_clouds": False, "use_fvg": False, "signal_mode": "ma_only"}),
+    ("clouds_any", {"use_ema_clouds": True, "use_fvg": False, "signal_mode": "any"}),
+    ("fvg_any", {"use_ema_clouds": False, "use_fvg": True, "signal_mode": "any"}),
+    ("clouds_fvg_any", {"use_ema_clouds": True, "use_fvg": True, "signal_mode": "any"}),
+    ("clouds_fvg_all", {"use_ema_clouds": True, "use_fvg": True, "signal_mode": "all"}),
+]
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Hogan backtest on Kraken OHLCV")
@@ -15,7 +28,45 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeframe", default=None)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--use-ml", action="store_true")
+    parser.add_argument(
+        "--compare",
+        action="store_true",
+        help="Sweep 5 signal configurations and print a comparison table instead of a single result",
+    )
     return parser.parse_args()
+
+
+def _run_single(cfg, candles, symbol, ml_model, overrides: dict | None = None) -> dict:
+    """Run one backtest with optional per-key overrides on *cfg*."""
+    ov = overrides or {}
+    result = run_backtest_on_candles(
+        candles=candles,
+        symbol=symbol,
+        starting_balance_usd=cfg.starting_balance_usd,
+        aggressive_allocation=cfg.aggressive_allocation,
+        max_risk_per_trade=cfg.max_risk_per_trade,
+        max_drawdown=cfg.max_drawdown,
+        short_ma_window=cfg.short_ma_window,
+        long_ma_window=cfg.long_ma_window,
+        volume_window=cfg.volume_window,
+        volume_threshold=cfg.volume_threshold,
+        fee_rate=cfg.fee_rate,
+        ml_model=ml_model,
+        ml_buy_threshold=cfg.ml_buy_threshold,
+        ml_sell_threshold=cfg.ml_sell_threshold,
+        use_ema_clouds=ov.get("use_ema_clouds", cfg.use_ema_clouds),
+        ema_fast_short=cfg.ema_fast_short,
+        ema_fast_long=cfg.ema_fast_long,
+        ema_slow_short=cfg.ema_slow_short,
+        ema_slow_long=cfg.ema_slow_long,
+        use_fvg=ov.get("use_fvg", cfg.use_fvg),
+        fvg_min_gap_pct=cfg.fvg_min_gap_pct,
+        signal_mode=ov.get("signal_mode", cfg.signal_mode),
+        trailing_stop_pct=cfg.trailing_stop_pct,
+        take_profit_pct=cfg.take_profit_pct,
+        ml_confidence_sizing=cfg.ml_confidence_sizing,
+    )
+    return result.summary_dict()
 
 
 def main() -> None:
@@ -30,34 +81,50 @@ def main() -> None:
 
     ml_model = load_model(cfg.ml_model_path) if args.use_ml else None
 
-    result = run_backtest_on_candles(
-        candles=candles,
-        symbol=args.symbol,
-        starting_balance_usd=cfg.starting_balance_usd,
-        aggressive_allocation=cfg.aggressive_allocation,
-        max_risk_per_trade=cfg.max_risk_per_trade,
-        max_drawdown=cfg.max_drawdown,
-        short_ma_window=cfg.short_ma_window,
-        long_ma_window=cfg.long_ma_window,
-        volume_window=cfg.volume_window,
-        volume_threshold=cfg.volume_threshold,
-        fee_rate=cfg.fee_rate,
-        ml_model=ml_model,
-        ml_buy_threshold=cfg.ml_buy_threshold,
-        ml_sell_threshold=cfg.ml_sell_threshold,
-        use_ema_clouds=cfg.use_ema_clouds,
-        ema_fast_short=cfg.ema_fast_short,
-        ema_fast_long=cfg.ema_fast_long,
-        ema_slow_short=cfg.ema_slow_short,
-        ema_slow_long=cfg.ema_slow_long,
-        use_fvg=cfg.use_fvg,
-        fvg_min_gap_pct=cfg.fvg_min_gap_pct,
-        signal_mode=cfg.signal_mode,
-        trailing_stop_pct=cfg.trailing_stop_pct,
-        take_profit_pct=cfg.take_profit_pct,
-    )
+    if args.compare:
+        rows = []
+        for label, overrides in _COMPARE_CONFIGS:
+            summary = _run_single(cfg, candles, args.symbol, ml_model, overrides)
+            rows.append({"config": label, **summary})
 
-    print(json.dumps(result.summary_dict(), indent=2))
+        # Print as a JSON array — easy to pipe into jq or paste into a spreadsheet
+        print(json.dumps(rows, indent=2))
+
+        # Also print a human-readable ASCII table
+        _print_table(rows)
+    else:
+        summary = _run_single(cfg, candles, args.symbol, ml_model)
+        print(json.dumps(summary, indent=2))
+
+
+def _print_table(rows: list[dict]) -> None:
+    """Print a fixed-width comparison table to stdout."""
+    columns = [
+        ("config", 18),
+        ("total_return_pct", 14),
+        ("max_drawdown_pct", 14),
+        ("sharpe_ratio", 10),
+        ("sortino_ratio", 11),
+        ("calmar_ratio", 10),
+        ("win_rate", 8),
+        ("trades", 6),
+    ]
+    header = "  ".join(col.ljust(width) for col, width in columns)
+    separator = "  ".join("-" * width for _, width in columns)
+    print("\n" + header)
+    print(separator)
+    for row in rows:
+        parts = []
+        for col, width in columns:
+            val = row.get(col)
+            if val is None:
+                parts.append("N/A".ljust(width))
+            elif isinstance(val, float):
+                parts.append(f"{val:.4f}".ljust(width))
+            else:
+                parts.append(str(val).ljust(width))
+        print("  ".join(parts))
+    print()
 
 
 if __name__ == "__main__":

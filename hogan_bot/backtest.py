@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
-from hogan_bot.decision import apply_ml_filter
+from hogan_bot.decision import apply_ml_filter, ml_confidence
 from hogan_bot.ml import TrainedModel, predict_up_probability
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
 from hogan_bot.strategy import generate_signal
+
+# Annualisation constant for 5-minute 24/7 crypto bars.
+# 365 days × 24 hours × 12 five-minute intervals = 105 120 bars/year.
+_BARS_PER_YEAR_5M: float = 105_120.0
 
 
 @dataclass
@@ -17,6 +22,10 @@ class BacktestResult:
     max_drawdown_pct: float
     trades: int
     win_rate: float
+    # Risk-adjusted performance ratios (None when not enough data to compute)
+    sharpe_ratio: float | None = None
+    sortino_ratio: float | None = None
+    calmar_ratio: float | None = None
     equity_curve: list[float] = field(default_factory=list)
     trade_log: list[dict] = field(default_factory=list)
 
@@ -25,11 +34,19 @@ class BacktestResult:
         return {
             "start_equity": self.start_equity,
             "end_equity": self.end_equity,
-            "total_return_pct": self.total_return_pct,
-            "max_drawdown_pct": self.max_drawdown_pct,
+            "total_return_pct": round(self.total_return_pct, 4),
+            "max_drawdown_pct": round(self.max_drawdown_pct, 4),
             "trades": self.trades,
-            "win_rate": self.win_rate,
+            "win_rate": round(self.win_rate, 4),
+            "sharpe_ratio": round(self.sharpe_ratio, 4) if self.sharpe_ratio is not None else None,
+            "sortino_ratio": round(self.sortino_ratio, 4) if self.sortino_ratio is not None else None,
+            "calmar_ratio": round(self.calmar_ratio, 4) if self.calmar_ratio is not None else None,
         }
+
+
+# ---------------------------------------------------------------------------
+# Metric helpers
+# ---------------------------------------------------------------------------
 
 
 def _compute_max_drawdown(equity_curve: list[float]) -> float:
@@ -43,7 +60,51 @@ def _compute_max_drawdown(equity_curve: list[float]) -> float:
     return max_dd
 
 
-def run_backtest_on_candles(
+def _equity_returns(equity_curve: list[float]) -> list[float]:
+    return [
+        equity_curve[i] / equity_curve[i - 1] - 1.0
+        for i in range(1, len(equity_curve))
+        if equity_curve[i - 1] > 0
+    ]
+
+
+def compute_sharpe(equity_curve: list[float], bars_per_year: float = _BARS_PER_YEAR_5M) -> float | None:
+    """Annualised Sharpe ratio (zero risk-free rate)."""
+    rets = _equity_returns(equity_curve)
+    if len(rets) < 2:
+        return None
+    n = len(rets)
+    mean = sum(rets) / n
+    variance = sum((r - mean) ** 2 for r in rets) / (n - 1)
+    std = math.sqrt(variance)
+    if std < 1e-12:
+        return None
+    return mean / std * math.sqrt(bars_per_year)
+
+
+def compute_sortino(equity_curve: list[float], bars_per_year: float = _BARS_PER_YEAR_5M) -> float | None:
+    """Annualised Sortino ratio (zero target return, only downside deviation)."""
+    rets = _equity_returns(equity_curve)
+    if len(rets) < 2:
+        return None
+    mean = sum(rets) / len(rets)
+    downside_sq = [r ** 2 for r in rets if r < 0]
+    if not downside_sq:
+        return None
+    downside_dev = math.sqrt(sum(downside_sq) / len(downside_sq))
+    if downside_dev < 1e-12:
+        return None
+    return mean / downside_dev * math.sqrt(bars_per_year)
+
+
+def compute_calmar(total_return_pct: float, max_drawdown_pct: float) -> float | None:
+    """Calmar ratio = total return / max drawdown (both as percentages)."""
+    if max_drawdown_pct <= 0:
+        return None
+    return total_return_pct / max_drawdown_pct
+
+
+def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     candles,
     symbol: str,
     starting_balance_usd: float,
@@ -68,6 +129,7 @@ def run_backtest_on_candles(
     signal_mode: str = "any",
     trailing_stop_pct: float = 0.0,
     take_profit_pct: float = 0.0,
+    ml_confidence_sizing: bool = False,
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
@@ -130,9 +192,12 @@ def run_backtest_on_candles(
         )
 
         action = signal.action
+        conf_scale = 1.0
         if ml_model is not None:
             up_prob = predict_up_probability(window, ml_model)
             action = apply_ml_filter(action, up_prob, ml_buy_threshold, ml_sell_threshold)
+            if ml_confidence_sizing:
+                conf_scale = ml_confidence(up_prob)
 
         equity = portfolio.total_equity(mark)
         equity_curve.append(equity)
@@ -146,6 +211,7 @@ def run_backtest_on_candles(
             stop_distance_pct=signal.stop_distance_pct,
             max_risk_per_trade=max_risk_per_trade,
             max_allocation_pct=aggressive_allocation,
+            confidence_scale=conf_scale,
         )
 
         if action == "buy":
@@ -190,14 +256,18 @@ def run_backtest_on_candles(
         ((end_equity / starting_balance_usd) - 1.0) * 100 if starting_balance_usd > 0 else 0.0
     )
     win_rate = (wins / closed) if closed > 0 else 0.0
+    max_dd_pct = max_dd * 100
 
     return BacktestResult(
         start_equity=starting_balance_usd,
         end_equity=end_equity,
         total_return_pct=total_return_pct,
-        max_drawdown_pct=max_dd * 100,
+        max_drawdown_pct=max_dd_pct,
         trades=trades,
         win_rate=win_rate,
+        sharpe_ratio=compute_sharpe(equity_curve),
+        sortino_ratio=compute_sortino(equity_curve),
+        calmar_ratio=compute_calmar(total_return_pct, max_dd_pct),
         equity_curve=equity_curve,
         trade_log=trade_log,
     )

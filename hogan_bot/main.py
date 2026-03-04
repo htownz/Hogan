@@ -6,9 +6,10 @@ import time
 from datetime import datetime
 
 from hogan_bot.config import BotConfig, load_config
+from hogan_bot.decision import apply_ml_filter, ml_confidence
 from hogan_bot.exchange import KrakenClient
-from hogan_bot.decision import apply_ml_filter
 from hogan_bot.ml import TrainedModel, load_model, predict_up_probability
+from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
 from hogan_bot.strategy import generate_signal
@@ -29,6 +30,7 @@ def run_iteration(
     portfolio: PaperPortfolio,
     guard: DrawdownGuard,
     ml_model: TrainedModel | None,
+    notifier=None,
 ) -> bool:
     if not is_allowed_trading_time(config.trade_weekends):
         logging.info("Weekend pause enabled; sleeping.")
@@ -52,6 +54,8 @@ def run_iteration(
     equity = portfolio.total_equity(mark_prices)
     if not guard.update_and_check(equity):
         logging.error("Max drawdown breached. Halting bot. equity=%.2f peak=%.2f", equity, guard.peak_equity)
+        if notifier:
+            notifier.notify("drawdown_breach", {"equity": equity, "peak": guard.peak_equity})
         return False
 
     # Auto-exit positions that have hit their trailing stop or take-profit
@@ -67,6 +71,8 @@ def run_iteration(
             "AUTO_EXIT symbol=%s reason=%s px=%.2f qty=%.6f ok=%s equity=%.2f",
             exit_symbol, reason, px, qty, executed, portfolio.total_equity(mark_prices),
         )
+        if notifier and executed:
+            notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason, "price": px, "qty": qty})
 
     for symbol, candles in candles_by_symbol.items():
         signal = generate_signal(
@@ -87,10 +93,13 @@ def run_iteration(
         px = mark_prices[symbol]
 
         up_prob = None
+        conf_scale = 1.0
         action = signal.action
         if config.use_ml_filter and ml_model is not None:
             up_prob = predict_up_probability(candles, ml_model)
             action = apply_ml_filter(signal.action, up_prob, config.ml_buy_threshold, config.ml_sell_threshold)
+            if config.ml_confidence_sizing:
+                conf_scale = ml_confidence(up_prob)
 
         size = calculate_position_size(
             equity_usd=equity,
@@ -98,6 +107,7 @@ def run_iteration(
             stop_distance_pct=signal.stop_distance_pct,
             max_risk_per_trade=config.max_risk_per_trade,
             max_allocation_pct=config.aggressive_allocation,
+            confidence_scale=conf_scale,
         )
 
         if action == "buy":
@@ -106,6 +116,8 @@ def run_iteration(
                 trailing_stop_pct=config.trailing_stop_pct,
                 take_profit_pct=config.take_profit_pct,
             )
+            if notifier and executed:
+                notifier.notify("buy", {"symbol": symbol, "price": px, "qty": size, "ml_up_prob": up_prob})
             logging.info(
                 "BUY symbol=%s px=%.2f qty=%.6f ok=%s vol_ratio=%.2f conf=%.2f ml_up=%.3f equity=%.2f cash=%.2f",
                 symbol,
@@ -122,6 +134,8 @@ def run_iteration(
             current_qty = portfolio.positions.get(symbol).qty if symbol in portfolio.positions else 0.0
             sell_qty = min(current_qty, size)
             executed = portfolio.execute_sell(symbol, px, sell_qty)
+            if notifier and executed:
+                notifier.notify("sell", {"symbol": symbol, "price": px, "qty": sell_qty, "ml_up_prob": up_prob})
             logging.info(
                 "SELL symbol=%s px=%.2f qty=%.6f ok=%s vol_ratio=%.2f conf=%.2f ml_up=%.3f equity=%.2f cash=%.2f",
                 symbol,
@@ -168,12 +182,13 @@ def run(max_loops: int | None = None) -> None:
         except Exception as exc:  # pragma: no cover - defensive runtime guard
             logging.warning("Could not load ML model (%s). Continuing without ML filter.", exc)
 
+    notifier = make_notifier(config.webhook_url or None)
     logging.info("Starting Hogan in paper mode for symbols=%s", ",".join(config.symbols))
 
     loops = 0
     while True:
         loops += 1
-        keep_running = run_iteration(config, client, portfolio, drawdown_guard, ml_model)
+        keep_running = run_iteration(config, client, portfolio, drawdown_guard, ml_model, notifier=notifier)
         if not keep_running:
             break
 

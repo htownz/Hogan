@@ -8,12 +8,19 @@ except ModuleNotFoundError:  # pragma: no cover
     pd = None
     np = None
 
+try:
+    import lightgbm  # noqa: F401
+    _HAS_LIGHTGBM = True
+except ImportError:
+    _HAS_LIGHTGBM = False
+
 from hogan_bot.ml import (
     TrainedModel,
     _FEATURE_COLUMNS,
     _feature_frame,
     build_training_set,
     predict_up_probability,
+    train_lightgbm,
     train_logistic_regression,
     train_random_forest,
     walk_forward_cv,
@@ -233,6 +240,52 @@ class WalkForwardCVTests(unittest.TestCase):
         df = _synthetic_candles(n=30)
         with self.assertRaises(RuntimeError):
             walk_forward_cv(df, horizon_bars=3, n_splits=5)
+
+
+@unittest.skipUnless(_HAS_LIGHTGBM, "lightgbm not installed")
+class TestTrainLightGBM(unittest.TestCase):
+    def test_returns_expected_keys(self):
+        df = _synthetic_candles(n=500)
+        import tempfile, os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "lgbm.pkl")
+            metrics = train_lightgbm(df, model_path=path, horizon_bars=3)
+        for key in ("model_type", "accuracy", "roc_auc", "features", "feature_importances"):
+            self.assertIn(key, metrics)
+        self.assertEqual(metrics["model_type"], "lightgbm")
+
+    def test_model_type_label(self):
+        df = _synthetic_candles(n=500)
+        import tempfile, os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "lgbm.pkl")
+            metrics = train_lightgbm(df, model_path=path)
+        self.assertEqual(metrics["model_type"], "lightgbm")
+
+    def test_feature_importances_all_features_present(self):
+        df = _synthetic_candles(n=500)
+        import tempfile, os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "lgbm.pkl")
+            metrics = train_lightgbm(df, model_path=path)
+        imps = metrics["feature_importances"]
+        self.assertEqual(set(imps.keys()), set(_FEATURE_COLUMNS))
+
+
+class TestTrainLightGBMMissingPackage(unittest.TestCase):
+    def test_raises_runtime_error_when_not_installed(self):
+        """Verify the helpful error is raised when lightgbm is absent."""
+        if _HAS_LIGHTGBM:
+            self.skipTest("lightgbm is installed; skip missing-package test")
+        df = _synthetic_candles(n=300)
+        import tempfile, os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(RuntimeError):
+                train_lightgbm(df, model_path=os.path.join(tmp, "m.pkl"))
 
 
 if __name__ == "__main__":
