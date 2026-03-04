@@ -1,3 +1,6 @@
+# Timezone database — required on Windows for zoneinfo (ICT time-window filter)
+tzdata>=2024.1
+
 # Core bot dependencies
 ccxt>=4.4.0
 pandas>=2.2.0

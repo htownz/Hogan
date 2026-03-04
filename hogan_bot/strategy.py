@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from hogan_bot.ict import ict_setup_signal, parse_time_windows
 from hogan_bot.indicators import (
     cloud_signal,
     compute_atr,
@@ -34,17 +35,34 @@ def generate_signal(
     use_fvg: bool = False,
     fvg_min_gap_pct: float = 0.001,
     signal_mode: str = "any",
+    atr_stop_multiplier: float = 1.5,
+    # ICT pillars
+    use_ict: bool = False,
+    ict_swing_left: int = 2,
+    ict_swing_right: int = 2,
+    ict_eq_tolerance_pct: float = 0.0008,
+    ict_min_displacement_pct: float = 0.003,
+    ict_require_time_window: bool = True,
+    ict_time_windows: str = "03:00-04:00,10:00-11:00,14:00-15:00",
+    ict_require_pd: bool = True,
+    ict_ote_enabled: bool = False,
+    ict_ote_low: float = 0.62,
+    ict_ote_high: float = 0.79,
 ) -> StrategySignal:
-    """MA crossover with volume confirmation, optionally combined with EMA clouds and FVGs.
+    """MA crossover + optional EMA clouds / FVG / ICT pillars, combined via votes.
 
-    All parameters after the bare ``*`` are keyword-only and default to the
-    behaviour of the original MA-only strategy, so existing callers require
-    no changes.
+    ICT note
+    --------
+    When ``use_ict=True`` the ICT signal is an additional vote alongside the MA
+    crossover.  The standalone FVG vote (``use_fvg``) is automatically skipped
+    when ICT is enabled because ICT already incorporates FVG internally —
+    enabling both would double-count the same information.
 
-    signal_mode
-        ``"ma_only"`` — original MA crossover behaviour; new indicators ignored.
-        ``"any"``     — buy/sell fires when *any* enabled signal agrees.
-        ``"all"``     — buy/sell fires only when *all* enabled signals agree.
+    ``signal_mode``
+    ---------------
+    ``"ma_only"``  Original MA crossover only; all extra signals ignored.
+    ``"any"``      Buy/sell fires when *any* enabled signal agrees (default).
+    ``"all"``      Buy/sell fires only when *every* enabled signal agrees.
     """
     min_len = max(long_window, volume_window) + 2
     if len(candles) < min_len:
@@ -67,9 +85,9 @@ def generate_signal(
 
     confidence = min(1.0, max(0.0, (volume_ratio - 1.0) / 1.5)) if volume_confirmed else 0.0
 
-    # ATR-based stop distance (14-bar Wilder ATR replaces the single-bar range proxy)
+    # ATR-based stop distance — multiplier is now configurable
     atr_series = compute_atr(candles, window=14)
-    atr_stop = float(atr_series.iloc[-1] / max(close.iloc[-1], 1e-9)) * 1.5
+    atr_stop = float(atr_series.iloc[-1] / max(close.iloc[-1], 1e-9)) * atr_stop_multiplier
     stop_distance_pct = max(0.004, min(0.03, atr_stop))
 
     if bullish_cross and volume_confirmed:
@@ -79,11 +97,14 @@ def generate_signal(
     else:
         ma_action = "hold"
 
-    if signal_mode == "ma_only" or (not use_ema_clouds and not use_fvg):
+    # Fast path: MA-only mode or no extras enabled
+    extra_enabled = use_ema_clouds or (use_fvg and not use_ict) or use_ict
+    if signal_mode == "ma_only" or not extra_enabled:
         return StrategySignal(ma_action, stop_distance_pct, confidence, volume_ratio)
 
     votes: list[str] = [ma_action]
 
+    # ── EMA cloud vote ────────────────────────────────────────────────────────
     if use_ema_clouds:
         enriched = ripster_ema_clouds(
             candles,
@@ -100,11 +121,34 @@ def generate_signal(
         else:
             votes.append("hold")
 
-    if use_fvg:
+    # ── Standalone FVG vote (skipped when ICT is enabled) ────────────────────
+    if use_fvg and not use_ict:
         fvgs = detect_fvgs(candles, min_gap_pct=fvg_min_gap_pct)
         last_close = float(close.iloc[-1])
         votes.append(fvg_entry_signal(fvgs, last_close))
 
+    # ── ICT vote (primary signal; incorporates FVG internally) ───────────────
+    if use_ict:
+        tw_list = parse_time_windows(ict_time_windows)
+        ict_action, ict_conf, _debug = ict_setup_signal(
+            candles,
+            swing_left=ict_swing_left,
+            swing_right=ict_swing_right,
+            eq_tolerance_pct=ict_eq_tolerance_pct,
+            min_displacement_pct=ict_min_displacement_pct,
+            require_time_window=ict_require_time_window,
+            time_windows=tw_list if tw_list else None,
+            require_pd=ict_require_pd,
+            ote_enabled=ict_ote_enabled,
+            ote_low=ict_ote_low,
+            ote_high=ict_ote_high,
+        )
+        votes.append(ict_action)
+        # Blend ICT confidence into the overall confidence metric
+        if ict_action != "hold":
+            confidence = (confidence + ict_conf) / 2.0
+
+    # ── Vote resolution ───────────────────────────────────────────────────────
     if signal_mode == "all":
         if all(v == "buy" for v in votes):
             action = "buy"
