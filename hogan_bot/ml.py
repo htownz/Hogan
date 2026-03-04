@@ -418,6 +418,141 @@ def train_xgboost(
     return metrics
 
 
+def train_lightgbm(
+    candles: pd.DataFrame, model_path: str, horizon_bars: int = 3
+) -> dict[str, object]:
+    """Fit a LightGBM gradient-boosted classifier and pickle the artifact.
+
+    Requires the ``lightgbm`` package (``pip install lightgbm``).
+    Returns metrics including ``feature_importances`` (split-based).
+    No feature scaling is applied — LightGBM is tree-based.
+    """
+    try:
+        from lightgbm import LGBMClassifier
+    except ImportError as exc:
+        raise RuntimeError(
+            "lightgbm is not installed.  Run: pip install lightgbm"
+        ) from exc
+    try:
+        from sklearn.metrics import (
+            accuracy_score,
+            f1_score,
+            precision_score,
+            recall_score,
+            roc_auc_score,
+        )
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("scikit-learn is required for metrics") from exc
+
+    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars)
+    if x is None or y is None or len(x) < 200:
+        raise RuntimeError("Not enough training rows. Increase OHLCV history.")
+
+    split = int(len(x) * 0.8)
+    x_train, x_test = x.iloc[:split], x.iloc[split:]
+    y_train, y_test = y.iloc[:split], y.iloc[split:]
+
+    model = LGBMClassifier(
+        n_estimators=300,
+        max_depth=5,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        min_child_samples=20,
+        random_state=42,
+        n_jobs=-1,
+        verbose=-1,
+    )
+    model.fit(x_train, y_train)
+    pred = model.predict(x_test)
+    proba = model.predict_proba(x_test)[:, 1]
+
+    auc = float(roc_auc_score(y_test, proba)) if len(set(y_test)) > 1 else 0.5
+    importances = {
+        col: float(imp) for col, imp in zip(feature_columns, model.feature_importances_)
+    }
+    metrics: dict[str, object] = {
+        "model_type": "lightgbm",
+        "accuracy": float(accuracy_score(y_test, pred)),
+        "roc_auc": auc,
+        "precision": float(precision_score(y_test, pred, zero_division=0)),
+        "recall": float(recall_score(y_test, pred, zero_division=0)),
+        "f1": float(f1_score(y_test, pred, zero_division=0)),
+        "train_rows": float(len(x_train)),
+        "test_rows": float(len(x_test)),
+        "features": len(feature_columns),
+        "feature_importances": importances,
+    }
+
+    artifact = TrainedModel(model=model, feature_columns=feature_columns, scaler=None)
+    Path(model_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(model_path, "wb") as f:
+        pickle.dump(artifact, f)
+
+    return metrics
+
+
+def calibrate_model(
+    candles: pd.DataFrame,
+    model_path: str,
+    horizon_bars: int = 3,
+    method: str = "sigmoid",
+    calibration_fraction: float = 0.2,
+) -> dict[str, object]:
+    """Wrap an existing pickled model with probability calibration.
+
+    Loads the artifact at *model_path*, uses the last *calibration_fraction*
+    of the labelled dataset as a holdout calibration set (``cv="prefit"``),
+    fits a ``CalibratedClassifierCV``, and overwrites the pickle.
+
+    Returns a summary dict so the result can be logged to the model registry.
+
+    Parameters
+    ----------
+    method:
+        ``"sigmoid"`` (Platt scaling) or ``"isotonic"``.
+    calibration_fraction:
+        Fraction of labelled rows reserved for calibration (default 20 %).
+    """
+    try:
+        from sklearn.calibration import CalibratedClassifierCV
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("scikit-learn is required for calibration") from exc
+
+    artifact = load_model(model_path)
+    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars)
+    if x is None or y is None or len(x) < 100:
+        raise RuntimeError("Not enough data for calibration. Increase OHLCV history.")
+
+    cal_start = int(len(x) * (1.0 - calibration_fraction))
+    x_cal = x.iloc[cal_start:]
+    y_cal = y.iloc[cal_start:]
+
+    scaler = getattr(artifact, "scaler", None)
+    if scaler is not None:
+        x_cal_arr = scaler.transform(x_cal)
+    else:
+        x_cal_arr = x_cal.values
+
+    calibrated = CalibratedClassifierCV(artifact.model, cv="prefit", method=method)
+    calibrated.fit(x_cal_arr, y_cal)
+
+    new_artifact = TrainedModel(
+        model=calibrated,
+        feature_columns=feature_columns,
+        scaler=scaler,
+    )
+    with open(model_path, "wb") as f:
+        pickle.dump(new_artifact, f)
+
+    return {
+        "model_type": f"calibrated_{method}",
+        "calibration_rows": len(x_cal),
+        "total_rows": len(x),
+        "features": len(feature_columns),
+    }
+
+
 def walk_forward_cv(
     candles: pd.DataFrame, horizon_bars: int = 3, n_splits: int = 5
 ) -> list[dict[str, object]]:

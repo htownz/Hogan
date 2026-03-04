@@ -6,6 +6,8 @@ import statistics
 
 from hogan_bot.exchange import KrakenClient
 from hogan_bot.ml import (
+    calibrate_model,
+    train_lightgbm,
     train_logistic_regression,
     train_random_forest,
     train_xgboost,
@@ -23,14 +25,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model-path", default="models/hogan_logreg.pkl")
     parser.add_argument(
         "--model-type",
-        choices=["logreg", "random_forest", "xgboost"],
+        choices=["logreg", "random_forest", "xgboost", "lightgbm"],
         default="logreg",
-        help="Classifier: logistic regression (default), random forest, or xgboost",
+        help="Classifier: logistic regression (default), random forest, xgboost, or lightgbm",
     )
     parser.add_argument(
         "--tune",
         action="store_true",
         help="Run C grid-search hyper-parameter tuning (logreg only)",
+    )
+    parser.add_argument(
+        "--calibrate",
+        action="store_true",
+        help="After training, apply probability calibration (Platt scaling) to the saved model",
+    )
+    parser.add_argument(
+        "--calibration-method",
+        choices=["sigmoid", "isotonic"],
+        default="sigmoid",
+        help="Calibration method when --calibrate is set (default: sigmoid / Platt scaling)",
     )
     parser.add_argument(
         "--cv",
@@ -78,6 +91,10 @@ def main() -> None:
         metrics = train_xgboost(
             candles, model_path=args.model_path, horizon_bars=args.horizon_bars
         )
+    elif args.model_type == "lightgbm":
+        metrics = train_lightgbm(
+            candles, model_path=args.model_path, horizon_bars=args.horizon_bars
+        )
     else:
         metrics = train_logistic_regression(
             candles,
@@ -85,6 +102,15 @@ def main() -> None:
             horizon_bars=args.horizon_bars,
             tune_hyperparams=args.tune,
         )
+
+    if args.calibrate:
+        cal_meta = calibrate_model(
+            candles,
+            model_path=args.model_path,
+            horizon_bars=args.horizon_bars,
+            method=args.calibration_method,
+        )
+        metrics["calibration"] = cal_meta
 
     if not args.no_registry:
         registry = ModelRegistry(registry_path=args.registry_path)
