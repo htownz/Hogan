@@ -15,6 +15,9 @@ Usage
     # Custom date range (1h / 1d only; yfinance 5m is limited to last 60 days)
     python -m hogan_bot.backfill --symbol BTC/USD --timeframe 1h --period 2y
 
+    # Backfill SPY daily data for macro features (stored as SPY/USD 1d)
+    python -m hogan_bot.backfill --macro
+
 Supported periods : 1d 5d 1mo 3mo 6mo 1y 2y 5y 10y ytd max
 Supported intervals: 1m 2m 5m 15m 30m 60m 90m 1h 1d 5d 1wk 1mo 3mo
   Note: intervals shorter than 1h are only available for the last 60 days.
@@ -120,6 +123,15 @@ def fetch_yfinance(
 # CLI
 # ---------------------------------------------------------------------------
 
+def fetch_spy_daily(period: str = "10y") -> pd.DataFrame:
+    """Download SPY daily OHLCV from Yahoo Finance.
+
+    Returns a DataFrame with the standard ``timestamp, open, high, low,
+    close, volume`` schema stored under symbol ``"SPY/USD"`` timeframe ``"1d"``.
+    """
+    return fetch_yfinance("SPY/USD", timeframe="1d", period=period)
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Backfill historical OHLCV data from Yahoo Finance into hogan.db",
@@ -133,6 +145,11 @@ def parse_args() -> argparse.Namespace:
                    help="Lookback period: 7d 60d 1y 2y 5y max (default depends on timeframe)")
     p.add_argument("--db", default="data/hogan.db",
                    help="Path to the SQLite database file")
+    p.add_argument(
+        "--macro",
+        action="store_true",
+        help="Also backfill SPY daily data for macro features (stored as SPY/USD 1d)",
+    )
     return p.parse_args()
 
 
@@ -169,6 +186,33 @@ def main() -> None:
         }
         print(json.dumps(summary))
         results.append(summary)
+
+    if args.macro:
+        print("Fetching SPY daily data from Yahoo Finance ...", flush=True)
+        try:
+            spy_period = args.period or "10y"
+            df_spy = fetch_spy_daily(period=spy_period)
+        except Exception as exc:
+            msg = {"symbol": "SPY/USD", "error": str(exc)}
+            print(json.dumps(msg))
+            results.append(msg)
+        else:
+            conn = get_connection(args.db)
+            before = candle_count(conn, "SPY/USD", "1d")
+            upsert_candles(conn, "SPY/USD", "1d", df_spy)
+            after = candle_count(conn, "SPY/USD", "1d")
+            conn.close()
+            summary = {
+                "symbol": "SPY/USD",
+                "timeframe": "1d",
+                "fetched": len(df_spy),
+                "new_rows": after - before,
+                "total_stored": after,
+                "oldest": str(df_spy["timestamp"].iloc[0]),
+                "newest": str(df_spy["timestamp"].iloc[-1]),
+            }
+            print(json.dumps(summary))
+            results.append(summary)
 
 
 if __name__ == "__main__":

@@ -185,6 +185,22 @@ _FEATURE_COLUMNS: list[str] = [
 # ---------------------------------------------------------------------------
 
 
+def build_feature_row_extended(
+    candles_5m: pd.DataFrame,
+    candles_1h: pd.DataFrame | None = None,
+    candles_15m: pd.DataFrame | None = None,
+    conn=None,
+    symbol: str = "BTC/USD",
+) -> list[float] | None:
+    """44-dim extended feature vector (24 base + 14 MTF + 6 ext).
+
+    Convenience re-export — delegates to
+    :func:`hogan_bot.features_mtf.build_feature_row_extended`.
+    """
+    from hogan_bot.features_mtf import build_feature_row_extended as _ext
+    return _ext(candles_5m, candles_1h, candles_15m, conn=conn, symbol=symbol)
+
+
 def build_feature_row(candles: pd.DataFrame) -> list[float] | None:
     """Return the feature vector for the **last bar** in *candles*.
 
