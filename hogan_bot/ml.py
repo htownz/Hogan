@@ -42,6 +42,46 @@ def _rsi(close: pd.Series, window: int = 14) -> pd.Series:
     return 100.0 - (100.0 / (1.0 + rs))
 
 
+def _adx(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    window: int = 14,
+) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Return (ADX, +DI, -DI) using Wilder's smoothing.
+
+    All three are normalised to [0, 1] before being returned.
+    """
+    # True Range
+    tr = pd.concat(
+        [high - low, (high - close.shift()).abs(), (low - close.shift()).abs()],
+        axis=1,
+    ).max(axis=1)
+
+    # Raw directional movement
+    up_move = high.diff()
+    down_move = -(low.diff())  # positive when price falls
+
+    plus_dm = pd.Series(
+        np.where((up_move > down_move) & (up_move > 0), up_move, 0.0),
+        index=close.index,
+    )
+    minus_dm = pd.Series(
+        np.where((down_move > up_move) & (down_move > 0), down_move, 0.0),
+        index=close.index,
+    )
+
+    alpha = 1.0 / window  # Wilder's exponential smoothing factor
+    atr14 = tr.ewm(alpha=alpha, min_periods=window, adjust=False).mean()
+    plus_di = 100.0 * plus_dm.ewm(alpha=alpha, min_periods=window, adjust=False).mean() / atr14.clip(lower=1e-9)
+    minus_di = 100.0 * minus_dm.ewm(alpha=alpha, min_periods=window, adjust=False).mean() / atr14.clip(lower=1e-9)
+
+    dx = (plus_di - minus_di).abs() / (plus_di + minus_di).clip(lower=1e-9) * 100.0
+    adx = dx.ewm(alpha=alpha, min_periods=window, adjust=False).mean()
+
+    return adx / 100.0, plus_di / 100.0, minus_di / 100.0
+
+
 def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
     """Build the full feature matrix.
 
@@ -75,8 +115,10 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
     # ------------------------------------------------------------------
     # Realized volatility and oscillator
     # ------------------------------------------------------------------
-    frame["volatility_20"] = frame["ret_1"].rolling(20).std()
-    frame["rsi_14"] = _rsi(close, window=14) / 100.0  # normalize to [0, 1]
+    ret_1 = frame["ret_1"]
+    frame["volatility_20"] = ret_1.rolling(20).std()
+    rsi_raw = _rsi(close, window=14)
+    frame["rsi_14"] = rsi_raw / 100.0  # normalize to [0, 1]
 
     # ------------------------------------------------------------------
     # ATR-based volatility
@@ -106,8 +148,8 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
     # ------------------------------------------------------------------
     # Volatility regime — current vol relative to its 50-bar average
     # ------------------------------------------------------------------
-    vol_short = frame["ret_1"].rolling(10).std()
-    vol_long = frame["ret_1"].rolling(50).std().clip(lower=1e-9)
+    vol_short = ret_1.rolling(10).std()
+    vol_long = ret_1.rolling(50).std().clip(lower=1e-9)
     frame["vol_regime"] = vol_short / vol_long  # >1 = elevated, <1 = subdued
 
     # ------------------------------------------------------------------
@@ -152,32 +194,138 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
     frame["in_bull_fvg"] = fvg_feats["in_bull_fvg"].values
     frame["in_bear_fvg"] = fvg_feats["in_bear_fvg"].values
 
+    # ==================================================================
+    # NEW INDICATORS (12 additions — total base features: 24 → 36)
+    # ==================================================================
+
+    # ------------------------------------------------------------------
+    # ADX — trend strength (normalised to [0,1]) and directional lines
+    # ------------------------------------------------------------------
+    adx_val, plus_di_val, minus_di_val = _adx(high, low, close, window=14)
+    frame["adx_14"] = adx_val
+    frame["plus_di"] = plus_di_val
+    frame["minus_di"] = minus_di_val
+
+    # ------------------------------------------------------------------
+    # Stochastic RSI — RSI of RSI, K and D lines [0, 1]
+    # ------------------------------------------------------------------
+    rsi_min = rsi_raw.rolling(14).min()
+    rsi_max = rsi_raw.rolling(14).max()
+    stoch_rsi_k = (rsi_raw - rsi_min) / (rsi_max - rsi_min).clip(lower=1e-9)
+    frame["stoch_rsi_k"] = stoch_rsi_k
+    frame["stoch_rsi_d"] = stoch_rsi_k.rolling(3).mean()
+
+    # ------------------------------------------------------------------
+    # OBV z-score — directional volume flow, 20-bar normalised
+    # ------------------------------------------------------------------
+    obv = (np.sign(close.diff()).fillna(0.0) * volume).cumsum()
+    obv_mean = obv.rolling(20).mean()
+    obv_std = obv.rolling(20).std().clip(lower=1e-9)
+    frame["obv_norm"] = (obv - obv_mean) / obv_std  # z-score ~[-3, 3]
+
+    # ------------------------------------------------------------------
+    # VWAP distance — % price above/below session VWAP (resets 00:00 UTC)
+    # ------------------------------------------------------------------
+    typical_price = (high + low + close) / 3.0
+    pv = typical_price * volume
+
+    # Determine day grouping from available timestamp columns
+    if "ts_ms" in candles.columns:
+        day_key = pd.to_datetime(candles["ts_ms"], unit="ms", utc=True).dt.date
+    elif "timestamp" in candles.columns:
+        day_key = pd.to_datetime(candles["timestamp"], utc=True).dt.date
+    else:
+        # Fallback: assume 288 5m bars per day
+        day_key = pd.Series(np.arange(len(close)) // 288, index=close.index)
+
+    cum_pv = pv.groupby(day_key).cumsum()
+    cum_vol = volume.groupby(day_key).cumsum().clip(lower=1e-9)
+    vwap = cum_pv / cum_vol
+    frame["vwap_dist"] = (close - vwap) / vwap.clip(lower=1e-9)
+
+    # ------------------------------------------------------------------
+    # Keltner channel position — ATR-based band %B [0, 1] normally
+    # ------------------------------------------------------------------
+    kc_mid = close.ewm(span=20, adjust=False).mean()
+    kc_upper = kc_mid + 2.0 * atr
+    kc_lower = kc_mid - 2.0 * atr
+    kc_width = (kc_upper - kc_lower).clip(lower=1e-9)
+    frame["keltner_pos"] = (close - kc_lower) / kc_width
+
+    # ------------------------------------------------------------------
+    # CCI (20) — commodity channel index, clipped to ±2
+    # ------------------------------------------------------------------
+    tp_mean = typical_price.rolling(20).mean()
+    tp_mad = typical_price.rolling(20).apply(
+        lambda x: np.abs(x - x.mean()).mean(), raw=True
+    ).clip(lower=1e-9)
+    frame["cci_20"] = ((typical_price - tp_mean) / (0.015 * tp_mad)).clip(-2.0, 2.0)
+
+    # ------------------------------------------------------------------
+    # MFI (14) — Money Flow Index, volume-weighted RSI, [0, 1]
+    # ------------------------------------------------------------------
+    tp_diff = typical_price.diff()
+    pos_mf = (typical_price * volume).where(tp_diff > 0, 0.0)
+    neg_mf = (typical_price * volume).where(tp_diff < 0, 0.0)
+    pos_sum = pos_mf.rolling(14).sum()
+    neg_sum = neg_mf.rolling(14).sum().clip(lower=1e-9)
+    mfr = pos_sum / neg_sum
+    frame["mfi_14"] = (100.0 - 100.0 / (1.0 + mfr)) / 100.0
+
+    # ------------------------------------------------------------------
+    # CMF (20) — Chaikin Money Flow [-1, 1]
+    # ------------------------------------------------------------------
+    hl_range = (high - low).clip(lower=1e-9)
+    clv = ((close - low) - (high - close)) / hl_range  # Close Location Value
+    frame["cmf_20"] = (clv * volume).rolling(20).sum() / volume.rolling(20).sum().clip(lower=1e-9)
+
+    # ------------------------------------------------------------------
+    # ROC (10) — Rate of Change, 10-bar price momentum
+    # ------------------------------------------------------------------
+    frame["roc_10"] = (close / close.shift(10).clip(lower=1e-9)) - 1.0
+
     return frame
 
 
-# Feature column order is fixed.  Update _FEATURE_COLUMNS and tests together.
+# Feature column order is fixed — 36 features total.
+# Update _FEATURE_COLUMNS and tests together.
 _FEATURE_COLUMNS: list[str] = [
-    # momentum
+    # momentum (4)
     "ret_1", "ret_3", "ret_6", "ret_12",
-    # trend
+    # trend (1)
     "ma_spread",
-    # volatility / oscillators
+    # volatility / oscillators (3)
     "volatility_20", "rsi_14", "atr_pct",
-    # MACD
+    # MACD (1)
     "macd_hist_pct",
-    # Bollinger
+    # Bollinger (1)
     "bb_pct_b",
-    # regime
+    # regime (1)
     "vol_regime",
-    # candle microstructure
+    # candle microstructure (4)
     "range_pct", "candle_body_pct", "upper_wick_pct", "lower_wick_pct",
-    # volume
+    # volume (2)
     "vol_ratio", "vol_spike",
-    # EMA cloud
+    # EMA cloud (3)
     "cloud_bull", "cloud_bear", "cloud_width_pct",
-    # FVG
+    # FVG (4)
     "fvg_bull_active", "fvg_bear_active", "in_bull_fvg", "in_bear_fvg",
+    # --- new indicators below (12) ---
+    # ADX — trend strength + directional lines (3)
+    "adx_14", "plus_di", "minus_di",
+    # Stochastic RSI (2)
+    "stoch_rsi_k", "stoch_rsi_d",
+    # OBV z-score (1)
+    "obv_norm",
+    # VWAP distance (1)
+    "vwap_dist",
+    # Keltner channel position (1)
+    "keltner_pos",
+    # CCI, MFI, CMF, ROC (4)
+    "cci_20", "mfi_14", "cmf_20", "roc_10",
 ]
+
+assert len(_FEATURE_COLUMNS) == 36, f"Expected 36 features, got {len(_FEATURE_COLUMNS)}"
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +340,7 @@ def build_feature_row_extended(
     conn=None,
     symbol: str = "BTC/USD",
 ) -> list[float] | None:
-    """44-dim extended feature vector (24 base + 14 MTF + 6 ext).
+    """73-dim extended feature vector (36 base + 14 MTF + 20 ext + 3 pos).
 
     Convenience re-export — delegates to
     :func:`hogan_bot.features_mtf.build_feature_row_extended`.
@@ -209,6 +357,7 @@ def build_feature_row(candles: pd.DataFrame) -> list[float] | None:
 
     Returns ``None`` when there is insufficient history to compute all features
     (fewer than 60 bars).  The caller is expected to substitute zeros.
+    ADX and Stochastic RSI both need ~28 bars of warmup; 60 is conservative.
     """
     if len(candles) < 60:
         return None
