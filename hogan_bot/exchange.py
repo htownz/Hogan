@@ -99,6 +99,16 @@ class ExchangeClient:
         since:    Unix timestamp in **milliseconds** to start from.  ``None``
                   fetches the most recent *limit* bars.
         """
+        # Validate timeframe before hitting the exchange — many exchanges (Kraken
+        # in particular) return a cryptic 400 when given an unsupported interval.
+        supported = getattr(self._exchange, "timeframes", {})
+        if supported and timeframe not in supported:
+            supported_list = ", ".join(sorted(supported.keys()))
+            raise ValueError(
+                f"Timeframe '{timeframe}' is not supported by {self.exchange_id}. "
+                f"Supported timeframes: {supported_list}"
+            )
+
         rows = self._exchange.fetch_ohlcv(
             symbol, timeframe=timeframe, limit=limit, since=since
         )
