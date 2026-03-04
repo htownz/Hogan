@@ -58,8 +58,10 @@ def _check_deps() -> None:
 
 def _load_from_db(symbol: str, timeframe: str) -> pd.DataFrame:
     """Fetch candles from the local SQLite database."""
-    from hogan_bot.storage import load_candles
-    candles = load_candles(symbol=symbol, timeframe=timeframe)
+    from hogan_bot.storage import get_connection, load_candles
+    conn = get_connection()
+    candles = load_candles(conn, symbol=symbol, timeframe=timeframe)
+    conn.close()
     if candles is None or len(candles) == 0:
         sys.exit(
             f"No candles found in the database for {symbol} {timeframe}.\n"
@@ -211,7 +213,7 @@ def train(
 
     Path(model_path).parent.mkdir(parents=True, exist_ok=True)
     model.save(model_path.removesuffix(".zip"))
-    print(f"Policy saved → {model_path}")
+    print(f"Policy saved -> {model_path}")
 
     # Evaluate on held-out window
     if len(eval_candles) >= min_bars:
@@ -288,7 +290,7 @@ def main() -> None:
     )
 
     if metrics:
-        print("\n── Evaluation (held-out 20 %) ──────────────────────────")
+        print("\n-- Evaluation (held-out 20 %) --------------------------")
         for k, v in metrics.items():
             print(f"  {k:<25s} {v}")
         print()
