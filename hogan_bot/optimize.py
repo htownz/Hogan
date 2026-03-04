@@ -516,6 +516,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"  Best config: {json.dumps(result['best_config'], indent=4)}\n")
 
     if result["leaderboard"]:
+        # Display column uses the friendly name; lookup uses the internal key
         cols = ["rank", args.metric, "total_return_pct", "max_drawdown_pct",
                 "win_rate", "trades"]
         widths = [6, 12, 16, 16, 10, 6]
@@ -526,7 +527,7 @@ def main(argv: list[str] | None = None) -> None:
         for row in result["leaderboard"]:
             vals = [
                 row.get("rank", ""),
-                row.get(args.metric, ""),
+                row.get(metric_key, ""),   # internal key e.g. "sharpe_ratio"
                 row.get("total_return_pct", ""),
                 row.get("max_drawdown_pct", ""),
                 row.get("win_rate", ""),
