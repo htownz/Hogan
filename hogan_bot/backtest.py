@@ -45,6 +45,14 @@ def run_backtest_on_candles(
     ml_model: TrainedModel | None = None,
     ml_buy_threshold: float = 0.55,
     ml_sell_threshold: float = 0.45,
+    use_ema_clouds: bool = False,
+    ema_fast_short: int = 8,
+    ema_fast_long: int = 9,
+    ema_slow_short: int = 34,
+    ema_slow_long: int = 50,
+    use_fvg: bool = False,
+    fvg_min_gap_pct: float = 0.001,
+    signal_mode: str = "any",
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
@@ -70,6 +78,14 @@ def run_backtest_on_candles(
             long_window=long_ma_window,
             volume_window=volume_window,
             volume_threshold=volume_threshold,
+            use_ema_clouds=use_ema_clouds,
+            ema_fast_short=ema_fast_short,
+            ema_fast_long=ema_fast_long,
+            ema_slow_short=ema_slow_short,
+            ema_slow_long=ema_slow_long,
+            use_fvg=use_fvg,
+            fvg_min_gap_pct=fvg_min_gap_pct,
+            signal_mode=signal_mode,
         )
 
         action = signal.action

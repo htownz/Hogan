@@ -6,6 +6,7 @@ __all__ = [
     "config",
     "decision",
     "exchange",
+    "indicators",
     "ml",
     "paper",
     "risk",
