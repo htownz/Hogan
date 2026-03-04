@@ -4,7 +4,7 @@ import argparse
 import json
 import statistics
 
-from hogan_bot.exchange import KrakenClient
+from hogan_bot.exchange import ExchangeClient
 from hogan_bot.ml import (
     calibrate_model,
     train_lightgbm,
@@ -66,7 +66,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    client = KrakenClient(api_key=None, api_secret=None)
+    client = ExchangeClient("kraken")
     candles = client.fetch_ohlcv_df(args.symbol, timeframe=args.timeframe, limit=args.limit)
 
     if args.cv:

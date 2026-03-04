@@ -22,7 +22,7 @@ import json
 import os
 import sys
 
-from hogan_bot.exchange import KrakenClient
+from hogan_bot.exchange import ExchangeClient
 from hogan_bot.storage import candle_count, get_connection, upsert_candles
 
 
@@ -41,6 +41,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--timeframe", default="5m", help="OHLCV bar interval, e.g. 1m 5m 1h")
     p.add_argument("--limit", type=int, default=5000, help="Number of bars to fetch per symbol")
     p.add_argument(
+        "--exchange",
+        default=os.getenv("HOGAN_EXCHANGE", "kraken"),
+        help="CCXT exchange ID, e.g. kraken binance bybit coinbase (default: kraken)",
+    )
+    p.add_argument(
         "--db",
         default=os.path.join("data", "hogan.db"),
         help="Path to the SQLite database file",
@@ -53,12 +58,13 @@ def fetch_and_store(
     timeframe: str,
     limit: int,
     db_path: str,
+    exchange_id: str = "kraken",
 ) -> dict:
     """Fetch *limit* bars for *symbol* and upsert into *db_path*.
 
     Returns a summary dict with fetch/store statistics.
     """
-    client = KrakenClient(api_key=None, api_secret=None)
+    client = ExchangeClient(exchange_id, api_key=None, api_secret=None)
     df = client.fetch_ohlcv_df(symbol, timeframe=timeframe, limit=limit)
 
     os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
@@ -84,7 +90,7 @@ def main(argv: list[str] | None = None) -> None:
 
     for symbol in args.symbol:
         try:
-            summary = fetch_and_store(symbol, args.timeframe, args.limit, args.db)
+            summary = fetch_and_store(symbol, args.timeframe, args.limit, args.db, args.exchange)
             results.append(summary)
             print(json.dumps(summary), flush=True)
         except Exception as exc:  # noqa: BLE001

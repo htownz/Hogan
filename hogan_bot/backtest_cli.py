@@ -5,7 +5,7 @@ import json
 
 from hogan_bot.backtest import run_backtest_on_candles
 from hogan_bot.config import load_config
-from hogan_bot.exchange import KrakenClient
+from hogan_bot.exchange import ExchangeClient
 from hogan_bot.ml import load_model
 
 # ---------------------------------------------------------------------------
@@ -76,7 +76,7 @@ def main() -> None:
     timeframe = args.timeframe or cfg.timeframe
     limit = args.limit or cfg.ohlcv_limit
 
-    client = KrakenClient(cfg.kraken_api_key, cfg.kraken_api_secret)
+    client = ExchangeClient(cfg.exchange_id, cfg.kraken_api_key, cfg.kraken_api_secret)
     candles = client.fetch_ohlcv_df(args.symbol, timeframe=timeframe, limit=limit)
 
     ml_model = load_model(cfg.ml_model_path) if args.use_ml else None

@@ -57,6 +57,9 @@ class BotConfig:
     # Webhook URL for trade/drawdown notifications (empty string = disabled)
     webhook_url: str = ""
 
+    # CCXT exchange ID — any of the 110+ exchanges in the library
+    exchange_id: str = "kraken"
+
     kraken_api_key: str | None = None
     kraken_api_secret: str | None = None
 
@@ -100,6 +103,7 @@ def load_config() -> BotConfig:
         take_profit_pct=float(os.getenv("HOGAN_TAKE_PROFIT_PCT", "0.0")),
         ml_confidence_sizing=os.getenv("HOGAN_ML_CONFIDENCE_SIZING", "false").lower() == "true",
         webhook_url=os.getenv("HOGAN_WEBHOOK_URL", ""),
+        exchange_id=os.getenv("HOGAN_EXCHANGE", "kraken"),
         kraken_api_key=os.getenv("KRAKEN_API_KEY"),
         kraken_api_secret=os.getenv("KRAKEN_API_SECRET"),
     )
