@@ -53,9 +53,11 @@ def main() -> None:
         use_fvg=cfg.use_fvg,
         fvg_min_gap_pct=cfg.fvg_min_gap_pct,
         signal_mode=cfg.signal_mode,
+        trailing_stop_pct=cfg.trailing_stop_pct,
+        take_profit_pct=cfg.take_profit_pct,
     )
 
-    print(json.dumps(result.__dict__, indent=2))
+    print(json.dumps(result.summary_dict(), indent=2))
 
 
 if __name__ == "__main__":

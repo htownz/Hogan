@@ -1,8 +1,35 @@
-"""Ripster EMA clouds and ICT Fair-Value Gap indicators for Hogan."""
+"""Ripster EMA clouds, ICT Fair-Value Gaps, and ATR for Hogan."""
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+
+
+# ---------------------------------------------------------------------------
+# ATR
+# ---------------------------------------------------------------------------
+
+
+def compute_atr(df: pd.DataFrame, window: int = 14) -> pd.Series:
+    """Wilder-smoothed Average True Range (ATR).
+
+    True Range = max(high − low, |high − prev_close|, |low − prev_close|).
+    Smoothed with an EWM whose span equals *window* (Wilder's method).
+    Returns a Series aligned to *df*'s index.
+    """
+    high = df["high"].astype(float)
+    low = df["low"].astype(float)
+    close = df["close"].astype(float)
+    prev_close = close.shift(1)
+    tr = pd.concat(
+        [
+            (high - low).rename("hl"),
+            (high - prev_close).abs().rename("hpc"),
+            (low - prev_close).abs().rename("lpc"),
+        ],
+        axis=1,
+    ).max(axis=1)
+    return tr.ewm(span=window, adjust=False).mean()
 
 
 # ---------------------------------------------------------------------------

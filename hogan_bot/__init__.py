@@ -9,7 +9,9 @@ __all__ = [
     "indicators",
     "ml",
     "paper",
+    "registry",
     "risk",
+    "storage",
     "strategy",
     "train",
 ]

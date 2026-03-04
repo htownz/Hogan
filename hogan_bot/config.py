@@ -47,6 +47,10 @@ class BotConfig:
     # Signal combinator: "ma_only" | "any" | "all"
     signal_mode: str = "any"
 
+    # Exit management (0 = disabled)
+    trailing_stop_pct: float = 0.0
+    take_profit_pct: float = 0.0
+
     kraken_api_key: str | None = None
     kraken_api_secret: str | None = None
 
@@ -86,6 +90,8 @@ def load_config() -> BotConfig:
         use_fvg=os.getenv("HOGAN_USE_FVG", "false").lower() == "true",
         fvg_min_gap_pct=float(os.getenv("HOGAN_FVG_MIN_GAP_PCT", "0.001")),
         signal_mode=os.getenv("HOGAN_SIGNAL_MODE", "any"),
+        trailing_stop_pct=float(os.getenv("HOGAN_TRAILING_STOP_PCT", "0.0")),
+        take_profit_pct=float(os.getenv("HOGAN_TAKE_PROFIT_PCT", "0.0")),
         kraken_api_key=os.getenv("KRAKEN_API_KEY"),
         kraken_api_secret=os.getenv("KRAKEN_API_SECRET"),
     )

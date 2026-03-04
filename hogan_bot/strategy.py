@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from hogan_bot.indicators import (
     cloud_signal,
+    compute_atr,
     detect_fvgs,
     fvg_entry_signal,
     ripster_ema_clouds,
@@ -64,11 +65,12 @@ def generate_signal(
     volume_ratio = float(volume.iloc[-1] / max(avg_volume.iloc[-1], 1e-9))
     volume_confirmed = volume_ratio >= volume_threshold
 
-    # crude volatility proxy based on recent candle range
-    candle_range_pct = float(((high.iloc[-1] - low.iloc[-1]) / max(close.iloc[-1], 1e-9)))
-    stop_distance_pct = max(0.004, min(0.03, candle_range_pct * 1.5))
-
     confidence = min(1.0, max(0.0, (volume_ratio - 1.0) / 1.5)) if volume_confirmed else 0.0
+
+    # ATR-based stop distance (14-bar Wilder ATR replaces the single-bar range proxy)
+    atr_series = compute_atr(candles, window=14)
+    atr_stop = float(atr_series.iloc[-1] / max(close.iloc[-1], 1e-9)) * 1.5
+    stop_distance_pct = max(0.004, min(0.03, atr_stop))
 
     if bullish_cross and volume_confirmed:
         ma_action = "buy"
