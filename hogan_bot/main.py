@@ -7,7 +7,7 @@ from datetime import datetime
 
 from hogan_bot.config import BotConfig, load_config
 from hogan_bot.decision import apply_ml_filter, ml_confidence
-from hogan_bot.exchange import KrakenClient
+from hogan_bot.exchange import ExchangeClient
 from hogan_bot.ml import TrainedModel, load_model, predict_up_probability
 from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
@@ -168,7 +168,7 @@ def run(max_loops: int | None = None) -> None:
     if not config.paper_mode:
         raise ValueError("Live mode is intentionally disabled in this build. Use paper mode only.")
 
-    client = KrakenClient(config.kraken_api_key, config.kraken_api_secret)
+    client = ExchangeClient(config.exchange_id, config.kraken_api_key, config.kraken_api_secret)
     portfolio = PaperPortfolio(cash_usd=config.starting_balance_usd, fee_rate=config.fee_rate)
     drawdown_guard = DrawdownGuard(config.starting_balance_usd, config.max_drawdown)
 

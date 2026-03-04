@@ -9,6 +9,7 @@ __all__ = [
     "fetch_data",
     "indicators",
     "ml",
+    "multi_exchange",
     "notifier",
     "paper",
     "registry",

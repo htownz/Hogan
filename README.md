@@ -1,6 +1,6 @@
 # Hogan
 
-Hogan is a **paper-trading research bot** for BTC/USD and ETH/USD on Kraken, aimed at day-trading and short-term strategy iteration.
+Hogan is a **paper-trading research bot** for BTC/USD, ETH/USD and any trading pair on 110+ exchanges, aimed at day-trading and short-term strategy iteration.
 
 ## Important safety notes
 
@@ -175,12 +175,99 @@ Signal combinator guide:
 | `any` | A buy/sell fires if the MA crossover, cloud direction, **or** FVG entry agrees |
 | `all` | A buy/sell fires only when every enabled signal agrees simultaneously |
 
+## Multi-exchange support
+
+Hogan is powered by [CCXT](https://docs.ccxt.com/) (110+ exchanges).  The active exchange is
+controlled by a single environment variable — no code changes needed.
+
+### Switching exchange
+
+```env
+HOGAN_EXCHANGE=binance      # or bybit, coinbase, okx, huobi, kucoin, …
+```
+
+Run the bot or backtest on a different venue:
+
+```bash
+# Backtest BTC/USDT on Binance
+HOGAN_EXCHANGE=binance python -m hogan_bot.backtest_cli --symbol BTC/USDT --limit 5000
+
+# Fetch Binance data into local DB
+python -m hogan_bot.fetch_data --exchange binance --symbol BTC/USDT ETH/USDT --limit 10000
+```
+
+### Using your forked CCXT
+
+You have a fork at <https://github.com/htownz/ccxt>.  To install it:
+
+```bash
+pip uninstall ccxt -y
+pip install git+https://github.com/htownz/ccxt.git@master#egg=ccxt
+```
+
+Keep your fork in sync with upstream:
+
+```bash
+git remote add upstream https://github.com/ccxt/ccxt.git
+git fetch upstream
+git merge upstream/master
+git push origin master
+```
+
+### Multi-exchange data aggregation (`hogan_bot.multi_exchange`)
+
+```python
+from hogan_bot.multi_exchange import (
+    fetch_multi_ohlcv,    # parallel OHLCV fetch
+    vwap_composite,       # volume-weighted average across venues
+    price_spread,         # cross-exchange price divergence
+    fetch_funding_rates,  # perpetual funding rates
+    fetch_open_interests, # open interest snapshot
+    fetch_tickers,        # latest tickers
+    composite_last_price, # volume-weighted last price
+)
+
+# Fetch BTC/USDT 1h bars from three exchanges in parallel
+dfs = fetch_multi_ohlcv("BTC/USDT", ["binance", "bybit", "okx"], timeframe="1h")
+
+# Build a composite OHLCV series (volume-weighted)
+composite = vwap_composite(dfs)
+
+# Monitor cross-exchange spread (useful for arbitrage awareness)
+spread_df = price_spread(dfs)
+
+# Check perpetual funding rates (high positive rate = crowded longs = bearish bias)
+rates = fetch_funding_rates("BTC/USDT:USDT", ["binance", "bybit"])
+for eid, r in rates.items():
+    if r:
+        print(f"{eid}: {r['fundingRate']:.4%}")
+```
+
+### Available CCXT endpoints
+
+| Method | Description |
+|---|---|
+| `fetch_ohlcv_df()` | OHLCV bars as a pandas DataFrame |
+| `fetch_ticker()` | Latest bid/ask/last/volume snapshot |
+| `fetch_order_book()` | Level-2 order book (configurable depth) |
+| `fetch_trades()` | Most recent public trades |
+| `fetch_funding_rate()` | Current perpetual funding rate (derivatives) |
+| `fetch_open_interest()` | Open interest snapshot (derivatives) |
+| `fetch_funding_rate_history()` | Historical funding rates |
+| `list_symbols()` | All active symbols (optionally filtered by quote) |
+| `list_timeframes()` | Supported bar intervals |
+| `market_info()` | Price/qty precision, min order size, fees |
+
+Endpoints that are not supported by a specific exchange return `None` gracefully
+— you never need to check `exchange.has` manually.
+
 ## How to further enhance ML abilities next
 
 - Add walk-forward retraining (e.g., daily rolling retrain on latest bars).
-- Add calibration (Platt scaling or isotonic regression) so probabilities are better-tuned.
-- Add confidence bands: only trade when predicted probability is far from 0.5.
-- Add regime features (volatility bucket, trend regime, funding/open-interest if available).
-- Add model registry + experiment tracking (metrics, params, model hash).
-- Promote only models that beat baseline after fees/slippage.
-- Try gradient boosted trees (XGBoost/LightGBM) for better handling of feature interactions.
+- Funding rates and open interest (now available via `multi_exchange`) can be
+  added as ML features — high positive funding is a crowded-long signal.
+- Add calibration (Platt scaling or isotonic regression): `python -m hogan_bot.train --calibrate`.
+- Add confidence bands: only trade when predicted probability is far from 0.5
+  (`HOGAN_ML_CONFIDENCE_SIZING=true`).
+- Try gradient boosted trees: `--model-type xgboost` or `--model-type lightgbm`.
+- Promote only models that beat baseline after fees/slippage using the model registry.

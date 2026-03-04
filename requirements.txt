@@ -1,5 +1,23 @@
+# Core bot dependencies
 ccxt>=4.4.0
 pandas>=2.2.0
 numpy>=1.26.0
 python-dotenv>=1.0.1
 scikit-learn>=1.4.0
+
+# ---------------------------------------------------------------------------
+# To use your forked CCXT (https://github.com/htownz/ccxt):
+#   pip uninstall ccxt -y
+#   pip install git+https://github.com/htownz/ccxt.git@master#egg=ccxt
+#
+# Keep in sync with upstream by periodically running:
+#   git -C /path/to/htownz-ccxt fetch upstream && git merge upstream/master
+# ---------------------------------------------------------------------------
+
+# Optional ML backends (install as needed)
+# xgboost>=2.0.0
+# lightgbm>=4.0.0
+
+# Optional dashboard
+# streamlit>=1.32.0
+# plotly>=5.20.0
