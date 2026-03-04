@@ -33,6 +33,20 @@ class BotConfig:
     ml_buy_threshold: float = 0.55
     ml_sell_threshold: float = 0.45
 
+    # Ripster EMA cloud settings
+    use_ema_clouds: bool = False
+    ema_fast_short: int = 8
+    ema_fast_long: int = 9
+    ema_slow_short: int = 34
+    ema_slow_long: int = 50
+
+    # ICT Fair-Value Gap settings
+    use_fvg: bool = False
+    fvg_min_gap_pct: float = 0.001
+
+    # Signal combinator: "ma_only" | "any" | "all"
+    signal_mode: str = "any"
+
     kraken_api_key: str | None = None
     kraken_api_secret: str | None = None
 
@@ -64,6 +78,14 @@ def load_config() -> BotConfig:
         ml_model_path=os.getenv("HOGAN_ML_MODEL_PATH", "models/hogan_logreg.pkl"),
         ml_buy_threshold=float(os.getenv("HOGAN_ML_BUY_THRESHOLD", "0.55")),
         ml_sell_threshold=float(os.getenv("HOGAN_ML_SELL_THRESHOLD", "0.45")),
+        use_ema_clouds=os.getenv("HOGAN_USE_EMA_CLOUDS", "false").lower() == "true",
+        ema_fast_short=int(os.getenv("HOGAN_EMA_FAST_SHORT", "8")),
+        ema_fast_long=int(os.getenv("HOGAN_EMA_FAST_LONG", "9")),
+        ema_slow_short=int(os.getenv("HOGAN_EMA_SLOW_SHORT", "34")),
+        ema_slow_long=int(os.getenv("HOGAN_EMA_SLOW_LONG", "50")),
+        use_fvg=os.getenv("HOGAN_USE_FVG", "false").lower() == "true",
+        fvg_min_gap_pct=float(os.getenv("HOGAN_FVG_MIN_GAP_PCT", "0.001")),
+        signal_mode=os.getenv("HOGAN_SIGNAL_MODE", "any"),
         kraken_api_key=os.getenv("KRAKEN_API_KEY"),
         kraken_api_secret=os.getenv("KRAKEN_API_SECRET"),
     )

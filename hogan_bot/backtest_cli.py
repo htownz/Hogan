@@ -45,6 +45,14 @@ def main() -> None:
         ml_model=ml_model,
         ml_buy_threshold=cfg.ml_buy_threshold,
         ml_sell_threshold=cfg.ml_sell_threshold,
+        use_ema_clouds=cfg.use_ema_clouds,
+        ema_fast_short=cfg.ema_fast_short,
+        ema_fast_long=cfg.ema_fast_long,
+        ema_slow_short=cfg.ema_slow_short,
+        ema_slow_long=cfg.ema_slow_long,
+        use_fvg=cfg.use_fvg,
+        fvg_min_gap_pct=cfg.fvg_min_gap_pct,
+        signal_mode=cfg.signal_mode,
     )
 
     print(json.dumps(result.__dict__, indent=2))

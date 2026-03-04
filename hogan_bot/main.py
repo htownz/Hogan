@@ -61,6 +61,14 @@ def run_iteration(
             long_window=config.long_ma_window,
             volume_window=config.volume_window,
             volume_threshold=config.volume_threshold,
+            use_ema_clouds=config.use_ema_clouds,
+            ema_fast_short=config.ema_fast_short,
+            ema_fast_long=config.ema_fast_long,
+            ema_slow_short=config.ema_slow_short,
+            ema_slow_long=config.ema_slow_long,
+            use_fvg=config.use_fvg,
+            fvg_min_gap_pct=config.fvg_min_gap_pct,
+            signal_mode=config.signal_mode,
         )
         px = mark_prices[symbol]
 
