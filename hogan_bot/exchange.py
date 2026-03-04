@@ -20,6 +20,7 @@ without touching this file.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import ccxt
@@ -29,6 +30,30 @@ logger = logging.getLogger(__name__)
 
 # OHLCV column names matching the CCXT standard.
 _OHLCV_COLS = ["timestamp", "open", "high", "low", "close", "volume"]
+
+# Many exchanges (Kraken, Bitstamp, …) return at most this many candles per
+# REST request.  We paginate automatically when the caller asks for more.
+_MAX_BARS_PER_REQUEST: int = 720
+
+# Milliseconds per timeframe — used to compute the `since` offset when
+# walking backwards through history.
+_TF_MS: dict[str, int] = {
+    "1m":   60_000,
+    "3m":  180_000,
+    "5m":  300_000,
+    "15m": 900_000,
+    "30m": 1_800_000,
+    "1h":  3_600_000,
+    "2h":  7_200_000,
+    "4h":  14_400_000,
+    "6h":  21_600_000,
+    "8h":  28_800_000,
+    "12h": 43_200_000,
+    "1d":  86_400_000,
+    "3d":  259_200_000,
+    "1w":  604_800_000,
+    "2w":  1_209_600_000,
+}
 
 
 class ExchangeClient:
@@ -89,15 +114,18 @@ class ExchangeClient:
         limit: int = 500,
         since: int | None = None,
     ) -> pd.DataFrame:
-        """Return a DataFrame of OHLCV bars.
+        """Return a DataFrame of OHLCV bars, paginating automatically.
 
         Parameters
         ----------
-        symbol:   Trading pair, e.g. ``"BTC/USD"`` or ``"BTC/USDT"``.
+        symbol:    Trading pair, e.g. ``"BTC/USD"`` or ``"BTC/USDT"``.
         timeframe: CCXT timeframe string, e.g. ``"1m"``, ``"5m"``, ``"1h"``.
-        limit:    Number of bars to fetch (exchange-dependent maximum).
-        since:    Unix timestamp in **milliseconds** to start from.  ``None``
-                  fetches the most recent *limit* bars.
+        limit:     Total number of bars to return.  Values larger than an
+                   exchange's per-request cap (e.g. 720 for Kraken) are
+                   satisfied by chaining multiple ``fetch_ohlcv`` calls via the
+                   ``since`` parameter, walking backwards through history.
+        since:     Unix timestamp in **milliseconds** to start from.  ``None``
+                   fetches the most recent *limit* bars.
         """
         # Validate timeframe before hitting the exchange — many exchanges (Kraken
         # in particular) return a cryptic 400 when given an unsupported interval.
@@ -109,9 +137,90 @@ class ExchangeClient:
                 f"Supported timeframes: {supported_list}"
             )
 
-        rows = self._exchange.fetch_ohlcv(
-            symbol, timeframe=timeframe, limit=limit, since=since
+        # ── Fast path: single request is enough ─────────────────────────────
+        if limit <= _MAX_BARS_PER_REQUEST or since is not None:
+            rows = self._exchange.fetch_ohlcv(
+                symbol,
+                timeframe=timeframe,
+                limit=min(limit, _MAX_BARS_PER_REQUEST),
+                since=since,
+            )
+            return self._rows_to_df(rows)
+
+        # ── Paginating path: walk backwards from "now" ───────────────────────
+        bar_ms = _TF_MS.get(timeframe, 300_000)
+        all_rows: list[list] = []
+
+        # Step 1 — most-recent batch (no since)
+        batch = self._exchange.fetch_ohlcv(
+            symbol, timeframe=timeframe, limit=_MAX_BARS_PER_REQUEST
         )
+        if not batch:
+            return self._rows_to_df([])
+
+        all_rows = list(batch)
+        logger.debug("fetch_ohlcv_df page 1: %d bars", len(all_rows))
+
+        # Minimum new bars required to consider a page "useful".
+        # Kraken 5m always returns the same ~720 bars regardless of `since`
+        # so we'd get < 5 genuinely new bars each loop — detect and stop.
+        _MIN_PROGRESS = max(10, _MAX_BARS_PER_REQUEST // 20)
+        _MAX_PAGES = 50  # hard safety cap
+
+        # Step 2 — keep fetching older batches until we have enough
+        page = 2
+        while len(all_rows) < limit and page <= _MAX_PAGES:
+            oldest_ts: int = all_rows[0][0]
+            fetch_since = oldest_ts - _MAX_BARS_PER_REQUEST * bar_ms
+            batch = self._exchange.fetch_ohlcv(
+                symbol,
+                timeframe=timeframe,
+                limit=_MAX_BARS_PER_REQUEST,
+                since=fetch_since,
+            )
+            if not batch:
+                break
+
+            # Drop bars that overlap with what we already have
+            new_bars = [b for b in batch if b[0] < oldest_ts]
+            if len(new_bars) < _MIN_PROGRESS:
+                # Exchange isn't providing older data (Kraken 5m cap, etc.)
+                logger.info(
+                    "fetch_ohlcv_df: pagination stalled on %s %s after %d bars "
+                    "(exchange history limit reached). "
+                    "For more history use a longer timeframe (1h → 30 days, "
+                    "4h → 4 months) or pre-fetch into the local DB with "
+                    "`python -m hogan_bot.fetch_data`.",
+                    self.exchange_id, timeframe, len(all_rows),
+                )
+                break
+
+            all_rows = new_bars + all_rows
+            logger.debug("fetch_ohlcv_df page %d: +%d bars  total=%d",
+                         page, len(new_bars), len(all_rows))
+            page += 1
+            time.sleep(0.33)   # gentle rate limiting (~3 req/s)
+
+        if len(all_rows) < limit:
+            logger.info(
+                "fetch_ohlcv_df: returned %d bars (requested %d). "
+                "Consider --timeframe 1h or --from-db for deeper history.",
+                len(all_rows), limit,
+            )
+
+        # Deduplicate, sort ascending, keep the most-recent `limit` rows
+        seen: set[int] = set()
+        unique: list[list] = []
+        for row in sorted(all_rows, key=lambda x: x[0]):
+            if row[0] not in seen:
+                seen.add(row[0])
+                unique.append(row)
+
+        return self._rows_to_df(unique[-limit:])
+
+    @staticmethod
+    def _rows_to_df(rows: list[list]) -> pd.DataFrame:
+        """Convert a list of raw OHLCV rows to a typed DataFrame."""
         if not rows:
             return pd.DataFrame(columns=_OHLCV_COLS)
         df = pd.DataFrame(rows, columns=_OHLCV_COLS)
