@@ -261,13 +261,95 @@ for eid, r in rates.items():
 Endpoints that are not supported by a specific exchange return `None` gracefully
 — you never need to check `exchange.has` manually.
 
+## Walk-forward retraining (`hogan_bot.retrain`)
+
+The bot adapts to changing market regimes by periodically retraining on the
+most recent N bars (rolling window).  A new model only **replaces** the
+production model when it improves the chosen metric by at least
+`--min-improvement` — a stale or regressing model is never promoted.
+
+### One-shot retrain
+
+```bash
+# Fetch the latest 5 000 bars from Kraken, train logreg, promote if better
+python -m hogan_bot.retrain
+
+# Load candles from local SQLite DB (offline, faster)
+python -m hogan_bot.retrain --from-db
+
+# Evaluate without touching anything
+python -m hogan_bot.retrain --dry-run
+```
+
+### Scheduled retrain (blocking loop)
+
+```bash
+# Retrain every 24 hours (daily)
+python -m hogan_bot.retrain --schedule 24
+
+# Every 6 hours on Binance with XGBoost
+python -m hogan_bot.retrain --exchange binance --symbol BTC/USDT \
+    --model-type xgboost --schedule 6
+```
+
+### Scheduling on Windows (Task Scheduler)
+
+1. Open **Task Scheduler → Create Basic Task**.
+2. Set the trigger to **Daily** (or your preferred interval).
+3. Set the action to **Start a Program**:
+   - Program: `C:\path\to\Hogan\.venv\Scripts\python.exe`
+   - Arguments: `-m hogan_bot.retrain --from-db --window-bars 5000`
+   - Start in: `C:\path\to\Hogan`
+
+### Scheduling on Linux/macOS (cron)
+
+```cron
+# Retrain daily at 02:00 UTC, load from local DB
+0 2 * * * cd /path/to/Hogan && .venv/bin/python -m hogan_bot.retrain --from-db >> logs/retrain.log 2>&1
+```
+
+### How it works
+
+```
+Cycle N-1   ├───────────── window ──────────────┤
+Cycle N         ├───────────── window ──────────────┤
+Cycle N+1           ├───────────── window ──────────────┤
+                                                      ↑ "now"
+```
+
+1. Fetch the `window_bars` most recent candles (live or from SQLite).
+2. Train a **candidate** model to a timestamped temp path.
+3. Compare candidate `roc_auc` (or `--promotion-metric`) against the registry best.
+4. If improvement ≥ `--min-improvement`: copy candidate → production path + log to registry.
+5. Delete the candidate file regardless of outcome (no orphaned artifacts).
+
+### Key options
+
+| Flag | Default | Description |
+|---|---|---|
+| `--window-bars` | 5000 | Rolling window size (number of bars) |
+| `--model-type` | `logreg` | `logreg` / `random_forest` / `xgboost` / `lightgbm` |
+| `--promotion-metric` | `roc_auc` | Metric compared against registry best |
+| `--min-improvement` | `0.005` | Minimum gain over registry best to promote |
+| `--schedule HOURS` | — | Run continuously every N hours |
+| `--from-db` | — | Load from local SQLite instead of live fetch |
+| `--dry-run` | — | Train + evaluate, no writes at all |
+
+### Environment variables (`.env`)
+
+```env
+HOGAN_RETRAIN_WINDOW_BARS=5000
+HOGAN_RETRAIN_MODEL_TYPE=logreg
+HOGAN_RETRAIN_MIN_IMPROVEMENT=0.005
+HOGAN_RETRAIN_PROMOTION_METRIC=roc_auc
+HOGAN_RETRAIN_SCHEDULE_HOURS=24
+```
+
 ## How to further enhance ML abilities next
 
-- Add walk-forward retraining (e.g., daily rolling retrain on latest bars).
 - Funding rates and open interest (now available via `multi_exchange`) can be
   added as ML features — high positive funding is a crowded-long signal.
-- Add calibration (Platt scaling or isotonic regression): `python -m hogan_bot.train --calibrate`.
-- Add confidence bands: only trade when predicted probability is far from 0.5
-  (`HOGAN_ML_CONFIDENCE_SIZING=true`).
+- Probability calibration (Platt scaling): `python -m hogan_bot.train --calibrate`.
+- Confidence-based position sizing: `HOGAN_ML_CONFIDENCE_SIZING=true`.
 - Try gradient boosted trees: `--model-type xgboost` or `--model-type lightgbm`.
 - Promote only models that beat baseline after fees/slippage using the model registry.
