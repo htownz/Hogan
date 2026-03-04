@@ -139,6 +139,7 @@ def train(
     fee_rate: float = 0.0026,
     seed: int = 42,
     verbose: int = 1,
+    device: str = "cpu",
 ) -> dict[str, float]:
     """Train a PPO agent and save the policy.
 
@@ -196,6 +197,7 @@ def train(
         env,
         verbose=verbose,
         seed=seed,
+        device=device,
         n_steps=2048,
         batch_size=64,
         n_epochs=10,
@@ -265,6 +267,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--balance", type=float, default=10_000.0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--verbose", type=int, default=1)
+    parser.add_argument(
+        "--device", default="cpu",
+        help="PyTorch device: 'cpu' (default, faster for small MLP) or 'cuda'",
+    )
     return parser.parse_args()
 
 
@@ -287,6 +293,7 @@ def main() -> None:
         starting_balance=args.balance,
         seed=args.seed,
         verbose=args.verbose,
+        device=args.device,
     )
 
     if metrics:
