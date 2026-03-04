@@ -142,6 +142,9 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     ict_ote_enabled: bool = False,
     ict_ote_low: float = 0.62,
     ict_ote_high: float = 0.79,
+    # RL agent
+    use_rl_agent: bool = False,
+    rl_policy=None,
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
@@ -156,6 +159,9 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     trades = 0
     equity_curve: list[float] = []
     trade_log: list[dict] = []
+
+    # RL position-state tracking (used in generate_signal RL vote)
+    _rl_bars_in_trade: int = 0
 
     min_rows = max(long_ma_window, volume_window) + 2
     for i in range(min_rows, len(candles) + 1):
@@ -187,6 +193,16 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     }
                 )
 
+        # Build RL position state for this bar
+        _rl_pos = portfolio.positions.get(symbol)
+        _rl_in_pos = _rl_pos is not None
+        if _rl_in_pos:
+            _rl_upnl = (px - _rl_pos.avg_entry) / max(_rl_pos.avg_entry, 1e-9)
+            _rl_bars_in_trade += 1
+        else:
+            _rl_upnl = 0.0
+            _rl_bars_in_trade = 0
+
         signal = generate_signal(
             window,
             short_window=short_ma_window,
@@ -213,6 +229,11 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             ict_ote_enabled=ict_ote_enabled,
             ict_ote_low=ict_ote_low,
             ict_ote_high=ict_ote_high,
+            use_rl_agent=use_rl_agent,
+            rl_policy=rl_policy,
+            rl_in_position=_rl_in_pos,
+            rl_unrealized_pnl=_rl_upnl,
+            rl_bars_in_trade=_rl_bars_in_trade,
         )
 
         action = signal.action

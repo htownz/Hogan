@@ -18,6 +18,9 @@ __all__ = [
     "retrain",
     "risk",
     "storage",
+    "rl_agent",
+    "rl_env",
+    "rl_train",
     "strategy",
     "train",
 ]
