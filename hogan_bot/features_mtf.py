@@ -1,15 +1,15 @@
 """Multi-timeframe (MTF) and external feature builder for the Hogan RL agent.
 
-Provides :func:`build_feature_row_extended` which returns a 44-element
+Provides :func:`build_feature_row_extended` which returns a 50-element
 feature vector:
 
     24 base 5m features  (from :func:`~hogan_bot.ml.build_feature_row`)
   + 14 MTF features      (7 from 1h + 7 from 15m, see table below)
-  + 6 ext features       (derivatives / on-chain / macro, zeros when unavailable)
-  = 44 ML features
+  + 12 ext features      (derivatives / on-chain / macro / CoinGecko)
+  = 50 ML features
 
 Combined with 3 position-state scalars in :class:`~hogan_bot.rl_env.TradingEnv`
-the final observation vector is 47-dimensional.
+the final observation vector is 53-dimensional.
 
 MTF feature table
 -----------------
@@ -30,8 +30,9 @@ MTF feature table
 | m15_trend_up       | 15m close > 15m 20-bar MA (0 / 1)        |
 +--------------------+-------------------------------------------+
 
-External feature table (6 features — zeros when data unavailable)
+External feature table (12 features — zeros when data unavailable)
 -------------------------------------------------------------------
+Derivatives / On-chain / Macro  (6 — from Kraken Futures, CryptoQuant, yfinance)
 +---------------------------+--------------------------------------------+
 | funding_rate              | Kraken Futures funding rate (clipped ±0.005)|
 | open_interest_pct_change  | 1-day OI % change                          |
@@ -40,6 +41,16 @@ External feature table (6 features — zeros when data unavailable)
 | active_addr_ma7_pct_change| 7-day MA of active addresses % change      |
 | spy_ret_1d                | Previous-day SPY return                    |
 +---------------------------+--------------------------------------------+
+
+CoinGecko market intelligence  (6 — fetch with fetch_coingecko.py)
++-------------------------+-------------------------------------------+
+| cg_btc_dominance        | BTC % of total crypto market cap (÷100)   |
+| cg_stablecoin_dominance | USDT+USDC % of market cap (÷100)          |
+| cg_mcap_change_24h      | Global crypto market 24h % change         |
+| cg_defi_dominance       | DeFi % of total market cap (÷100)         |
+| cg_btc_ath_pct          | Distance from BTC ATH in % (÷100, ≤0)    |
+| cg_btc_sentiment_up     | Community % bullish votes (÷100)          |
++-------------------------+-------------------------------------------+
 """
 from __future__ import annotations
 
@@ -48,14 +59,22 @@ import pandas as pd
 
 from hogan_bot.ml import build_feature_row
 
-# Names for the 6 extended (external) features — used for DB lookups
+# Names for the 12 extended (external) features — order determines obs indices
 EXT_FEATURE_NAMES: list[str] = [
+    # Derivatives / on-chain / macro  (indices 0-5)
     "funding_rate",
     "open_interest_pct_change",
     "mvrv_zscore",
     "sopr",
     "active_addr_ma7_pct_change",
     "spy_ret_1d",
+    # CoinGecko market intelligence  (indices 6-11)
+    "cg_btc_dominance",
+    "cg_stablecoin_dominance",
+    "cg_mcap_change_24h",
+    "cg_defi_dominance",
+    "cg_btc_ath_pct",
+    "cg_btc_sentiment_up",
 ]
 
 _MTF_MIN_BARS: int = 20   # minimum candles needed to compute MTF features
@@ -149,10 +168,25 @@ def build_ext_features(
     conn=None,
     symbol: str = "BTC/USD",
 ) -> list[float]:
-    """Return the 6 external features aligned to *current_ts*.
+    """Return the 12 external features aligned to *current_ts*.
 
     Fetches from the ``derivatives_metrics`` and ``onchain_metrics`` SQLite
     tables (and ``candles`` for SPY).  Returns zeros when data is unavailable.
+
+    Feature index map
+    -----------------
+    0  funding_rate
+    1  open_interest_pct_change
+    2  mvrv_zscore
+    3  sopr
+    4  active_addr_ma7_pct_change
+    5  spy_ret_1d
+    6  cg_btc_dominance          (÷100 before returning)
+    7  cg_stablecoin_dominance   (÷100)
+    8  cg_mcap_change_24h        (raw %)
+    9  cg_defi_dominance         (÷100)
+    10 cg_btc_ath_pct            (÷100)
+    11 cg_btc_sentiment_up       (÷100)
 
     Parameters
     ----------
@@ -189,7 +223,7 @@ def build_ext_features(
 
         # ── On-chain metrics (MVRV z-score, SOPR, active addresses) ────
         ts_date = pd.Timestamp(current_ts).strftime("%Y-%m-%d")
-        onchain_map = {
+        onchain_map: dict[str, int] = {
             "mvrv_zscore": 2,
             "sopr": 3,
             "active_addr_ma7_pct_change": 4,
@@ -222,6 +256,30 @@ def build_ext_features(
             prev_close, curr_close = float(spy_row[1][0]), float(spy_row[0][0])
             if prev_close > 0:
                 result[5] = (curr_close - prev_close) / prev_close
+
+        # ── CoinGecko market intelligence (indices 6-11) ────────────────
+        # Raw values are stored in onchain_metrics; divide percentages
+        # by 100 so all CG features land in roughly [-1, 1].
+        _CG_METRICS: list[tuple[str, int, float]] = [
+            ("cg_btc_dominance",        6,  100.0),
+            ("cg_stablecoin_dominance", 7,  100.0),
+            ("cg_mcap_change_24h",      8,    1.0),   # already a small %
+            ("cg_defi_dominance",       9,  100.0),
+            ("cg_btc_ath_pct",         10,  100.0),
+            ("cg_btc_sentiment_up",    11,  100.0),
+        ]
+        for cg_metric, idx, divisor in _CG_METRICS:
+            cg_row = conn.execute(
+                """
+                SELECT value FROM onchain_metrics
+                WHERE symbol = ? AND metric = ? AND date <= ?
+                ORDER BY date DESC LIMIT 1
+                """,
+                (symbol, cg_metric, ts_date),
+            ).fetchone()
+            if cg_row:
+                result[idx] = float(cg_row[0]) / divisor
+
         return result
 
     except Exception:
@@ -239,12 +297,12 @@ def build_feature_row_extended(
     conn=None,
     symbol: str = "BTC/USD",
 ) -> list[float] | None:
-    """Return the 44-element extended feature vector for the last bar.
+    """Return the 50-element extended feature vector for the last bar.
 
     Computes:
     * 24 base 5m features  via :func:`~hogan_bot.ml.build_feature_row`
     * 14 MTF features       (7 from 1h + 7 from 15m; zeros when unavailable)
-    * 6 ext features        (from DB; zeros when unavailable)
+    * 12 ext features       (from DB; zeros when unavailable)
 
     Parameters
     ----------
@@ -261,7 +319,7 @@ def build_feature_row_extended(
 
     Returns
     -------
-    list[float] of length 44, or ``None`` when base features cannot be computed.
+    list[float] of length 50, or ``None`` when base features cannot be computed.
     """
     # 24 base 5m features
     base = build_feature_row(candles_5m)
@@ -273,7 +331,7 @@ def build_feature_row_extended(
     # 7 from 15m
     m15_feats = _compute_tf_features(candles_15m) or [0.0] * 7
 
-    # 6 ext features
+    # 12 ext features (6 on-chain/macro + 6 CoinGecko)
     ts = (
         candles_5m["timestamp"].iloc[-1]
         if "timestamp" in candles_5m.columns
@@ -281,7 +339,7 @@ def build_feature_row_extended(
     )
     ext = build_ext_features(ts, conn=conn, symbol=symbol)
 
-    combined = base + h1_feats + m15_feats + ext  # 24 + 7 + 7 + 6 = 44
+    combined = base + h1_feats + m15_feats + ext  # 24 + 7 + 7 + 12 = 50
     return combined
 
 
