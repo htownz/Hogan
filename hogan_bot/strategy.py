@@ -54,6 +54,11 @@ def generate_signal(
     rl_in_position: bool = False,
     rl_unrealized_pnl: float = 0.0,
     rl_bars_in_trade: int = 0,
+    rl_use_ext_features: bool = False,
+    rl_candles_1h=None,
+    rl_candles_15m=None,
+    rl_db_conn=None,
+    rl_symbol: str = "BTC/USD",
 ) -> StrategySignal:
     """MA crossover + optional EMA clouds / FVG / ICT pillars, combined via votes.
 
@@ -77,6 +82,10 @@ def generate_signal(
     Position-state context (``rl_in_position``, ``rl_unrealized_pnl``,
     ``rl_bars_in_trade``) should reflect the live paper portfolio so the agent
     sees its own state during inference.
+
+    When ``rl_use_ext_features=True`` the policy expects the 73-dim extended obs;
+    pass ``rl_candles_1h``, ``rl_candles_15m``, ``rl_db_conn``, and ``rl_symbol``
+    to supply the MTF and external-data inputs.
     """
     min_len = max(long_window, volume_window) + 2
     if len(candles) < min_len:
@@ -172,10 +181,15 @@ def generate_signal(
                 in_position=rl_in_position,
                 unrealized_pnl_pct=rl_unrealized_pnl,
                 bars_in_trade=rl_bars_in_trade,
+                use_ext_features=rl_use_ext_features,
+                candles_1h=rl_candles_1h,
+                candles_15m=rl_candles_15m,
+                db_conn=rl_db_conn,
+                symbol=rl_symbol,
             )
             votes.append(rl_action)
             if rl_action != "hold":
-                confidence = (confidence + 0.8) / 2.0  # RL vote boosts confidence
+                confidence = (confidence + 0.8) / 2.0
         except Exception:  # noqa: BLE001
             votes.append("hold")
 
