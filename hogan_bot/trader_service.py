@@ -96,8 +96,6 @@ def run_loop(max_loops: int | None = None) -> None:
         )
     notifier = make_notifier(
         webhook_url=config.webhook_url or None,
-        telegram_token=config.telegram_token or None,
-        telegram_chat_id=config.telegram_chat_id or None,
         email=email_cfg,
     )
 

@@ -1,4 +1,4 @@
-Daily Data Refresh Workflow
+**Daily Data Refresh Workflow**
 
 \# Free (run daily):
 
@@ -24,7 +24,7 @@ python -m hogan\_bot.fetch\_santiment         # SANTIMENT\_KEY
 
 
 
-New Ubuntu Terminal Commands
+**New Ubuntu Terminal Commands**
 
 source ~/hogan-venv/bin/activate
 
@@ -32,13 +32,13 @@ cd /mnt/c/Users/15125/Documents/Hogan/Hogan
 
 
 
-Ubuntu Training Command
+**Ubuntu Training Command**
 
 python3 -m hogan\_bot.rl\_train --symbol BTC/USD --timeframe 5m --from-db --timesteps 500000
 
 
 
-OPENING NEW TERMINAL COMMAND - 
+**OPENING NEW TERMINAL COMMAND -** 
 
 
 
