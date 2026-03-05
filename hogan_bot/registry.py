@@ -1,10 +1,39 @@
-"""Model registry for Hogan — append-only JSONL log of training runs."""
+"""Model registry for Hogan — append-only JSONL log + MLflow experiment tracking.
+
+MLflow is optional: when ``mlflow`` is installed and ``MLFLOW_TRACKING_URI`` is
+set (or defaults to ``./mlruns``), every training run is also logged as an
+MLflow run with params, metrics, and model artifact.  The JSONL file is always
+written as a lightweight local fallback.
+
+Start the MLflow UI::
+
+    mlflow server --host 0.0.0.0 --port 5000
+
+Or just::
+
+    mlflow ui
+"""
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+_MLFLOW_AVAILABLE = False
+try:
+    import mlflow  # type: ignore
+    _MLFLOW_AVAILABLE = True
+except ImportError:
+    pass
+
+
+def _mlflow_tracking_uri() -> str:
+    return os.getenv("MLFLOW_TRACKING_URI", "mlruns")
 
 
 class ModelRegistry:
@@ -36,9 +65,20 @@ class ModelRegistry:
         best = registry.best(metric="roc_auc")
     """
 
-    def __init__(self, registry_path: str = "models/registry.jsonl") -> None:
+    def __init__(
+        self,
+        registry_path: str = "models/registry.jsonl",
+        experiment_name: str = "hogan",
+        use_mlflow: bool = True,
+    ) -> None:
         self.registry_path = Path(registry_path)
         self.registry_path.parent.mkdir(parents=True, exist_ok=True)
+        self.experiment_name = experiment_name
+        self._use_mlflow = use_mlflow and _MLFLOW_AVAILABLE
+        if self._use_mlflow:
+            mlflow.set_tracking_uri(_mlflow_tracking_uri())
+            mlflow.set_experiment(experiment_name)
+            logger.debug("MLflow tracking at %s, experiment=%s", _mlflow_tracking_uri(), experiment_name)
 
     # ------------------------------------------------------------------
     # Writing
@@ -51,8 +91,9 @@ class ModelRegistry:
         symbol: str = "BTC/USD",
         timeframe: str = "5m",
         horizon_bars: int = 3,
+        params: dict | None = None,
     ) -> dict:
-        """Append a training-run record and return it."""
+        """Append a training-run record to JSONL and optionally MLflow."""
         entry = {
             "timestamp": datetime.now(tz=timezone.utc).isoformat(),
             "model_path": str(model_path),
@@ -70,6 +111,36 @@ class ModelRegistry:
         }
         with open(self.registry_path, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry) + "\n")
+
+        # MLflow logging (best-effort — never crash on MLflow error)
+        if self._use_mlflow:
+            try:
+                with mlflow.start_run(run_name=f"{metrics.get('model_type','model')}-{symbol}-{timeframe}"):
+                    mlflow.set_tags({
+                        "symbol": symbol,
+                        "timeframe": timeframe,
+                        "horizon_bars": horizon_bars,
+                        "model_type": metrics.get("model_type", "unknown"),
+                    })
+                    log_params = {
+                        "symbol": symbol,
+                        "timeframe": timeframe,
+                        "horizon_bars": horizon_bars,
+                        "features": metrics.get("features", 0),
+                    }
+                    if params:
+                        log_params.update(params)
+                    mlflow.log_params(log_params)
+                    log_metrics = {
+                        k: float(v) for k, v in entry["metrics"].items()
+                        if isinstance(v, (int, float)) and v == v  # exclude NaN
+                    }
+                    mlflow.log_metrics(log_metrics)
+                    if Path(model_path).exists():
+                        mlflow.log_artifact(model_path, artifact_path="model")
+            except Exception as exc:
+                logger.warning("MLflow log failed (non-fatal): %s", exc)
+
         return entry
 
     # ------------------------------------------------------------------

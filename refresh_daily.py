@@ -138,6 +138,29 @@ def _refresh_spy() -> None:
         raise RuntimeError(result.stderr.strip() or "backfill --macro failed")
 
 
+def _refresh_openbb() -> None:
+    """Fetch DXY, VIX, SPY return, FOMC calendar via OpenBB / yfinance."""
+    from hogan_bot.fetch_openbb import (
+        fetch_dxy, fetch_vix, fetch_spy_return, fetch_fed_calendar,
+        fetch_btc_options_skew, store_records,
+    )
+    from hogan_bot.storage import get_connection
+    db_path = os.getenv("HOGAN_DB", "data/hogan.db")
+    conn = get_connection(db_path)
+    symbol = os.getenv("HOGAN_SYMBOL", "BTC/USD")
+    total = 0
+    for fn in [fetch_dxy, fetch_vix, fetch_spy_return]:
+        records = fn(days=30)
+        total += store_records(records, symbol, conn)
+    records = fetch_fed_calendar()
+    total += store_records(records, symbol, conn)
+    records = fetch_btc_options_skew()
+    total += store_records(records, symbol, conn)
+    conn.close()
+    if total == 0:
+        raise RuntimeError("OpenBB refresh produced 0 rows — check yfinance install")
+
+
 # ---------------------------------------------------------------------------
 # Source registry
 # ---------------------------------------------------------------------------
@@ -149,6 +172,7 @@ _SOURCES: list[tuple[str, str, Callable]] = [
     ("gpr",          "GPR Index (Caldara & Iacoviello, free download)",   _refresh_gpr),
     ("derivatives",  "Kraken Futures — funding rate + open interest",     _refresh_derivatives),
     ("spy",          "SPY daily macro candles (yfinance, free)",          _refresh_spy),
+    ("openbb",       "OpenBB macro: DXY, VIX, SPY return, FOMC (yfinance)", _refresh_openbb),
     # paid / key-gated sources
     ("news",         "CryptoPanic news sentiment (CRYPTOPANIC_KEY)",      _refresh_news_sentiment),
     ("onchain",      "CryptoQuant on-chain metrics (CRYPTOQUANT_KEY)",    _refresh_onchain),

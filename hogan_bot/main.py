@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import logging
 import time
 from datetime import datetime
@@ -13,6 +14,8 @@ from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
 from hogan_bot.strategy import generate_signal
+from hogan_bot.storage import get_connection, record_equity, upsert_position
+from hogan_bot.execution import PaperExecution, LiveExecution
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -26,11 +29,13 @@ def is_allowed_trading_time(trade_weekends: bool) -> bool:
 
 def run_iteration(
     config: BotConfig,
-    client: KrakenClient,
+    client: ExchangeClient,
     portfolio: PaperPortfolio,
     guard: DrawdownGuard,
     ml_model: TrainedModel | None,
     notifier=None,
+    conn=None,
+    executor=None,
 ) -> bool:
     if not is_allowed_trading_time(config.trade_weekends):
         logging.info("Weekend pause enabled; sleeping.")
@@ -52,6 +57,9 @@ def run_iteration(
         return True
 
     equity = portfolio.total_equity(mark_prices)
+    if conn is not None:
+        dd = 0.0 if guard.peak_equity <= 0 else max(0.0, (guard.peak_equity - equity) / guard.peak_equity)
+        record_equity(conn, int(time.time()*1000), portfolio.cash_usd, equity, dd)
     if not guard.update_and_check(equity):
         logging.error("Max drawdown breached. Halting bot. equity=%.2f peak=%.2f", equity, guard.peak_equity)
         if notifier:
@@ -111,11 +119,21 @@ def run_iteration(
         )
 
         if action == "buy":
-            executed = portfolio.execute_buy(
-                symbol, px, size,
-                trailing_stop_pct=config.trailing_stop_pct,
-                take_profit_pct=config.take_profit_pct,
-            )
+            if executor:
+                res = executor.buy(symbol, px, size)
+                executed = bool(res.ok)
+                # Shadow-accounting so sizing/drawdown guard keep working even in live mode.
+                if executed:
+                    portfolio.execute_buy(symbol, px, size,
+                        trailing_stop_pct=config.trailing_stop_pct,
+                        take_profit_pct=config.take_profit_pct,
+                    )
+            else:
+                executed = portfolio.execute_buy(
+                    symbol, px, size,
+                    trailing_stop_pct=config.trailing_stop_pct,
+                    take_profit_pct=config.take_profit_pct,
+                )
             if notifier and executed:
                 notifier.notify("buy", {"symbol": symbol, "price": px, "qty": size, "ml_up_prob": up_prob})
             logging.info(
@@ -133,7 +151,13 @@ def run_iteration(
         elif action == "sell":
             current_qty = portfolio.positions.get(symbol).qty if symbol in portfolio.positions else 0.0
             sell_qty = min(current_qty, size)
-            executed = portfolio.execute_sell(symbol, px, sell_qty)
+            if executor:
+                res = executor.sell(symbol, px, sell_qty)
+                executed = bool(res.ok)
+                if executed:
+                    portfolio.execute_sell(symbol, px, sell_qty)
+            else:
+                executed = portfolio.execute_sell(symbol, px, sell_qty)
             if notifier and executed:
                 notifier.notify("sell", {"symbol": symbol, "price": px, "qty": sell_qty, "ml_up_prob": up_prob})
             logging.info(
@@ -165,12 +189,29 @@ def run_iteration(
 
 def run(max_loops: int | None = None) -> None:
     config = load_config()
-    if not config.paper_mode:
-        raise ValueError("Live mode is intentionally disabled in this build. Use paper mode only.")
+
+    # Persistence / journaling DB
+    conn = get_connection(config.db_path)
 
     client = ExchangeClient(config.exchange_id, config.kraken_api_key, config.kraken_api_secret)
+
+    # Safety latch for live mode
+    live_ack = (os.getenv("HOGAN_LIVE_ACK", "") or "").strip()
+    allow_live = (not config.paper_mode) and config.live_mode and (live_ack == "I_UNDERSTAND_LIVE_TRADING")
+
     portfolio = PaperPortfolio(cash_usd=config.starting_balance_usd, fee_rate=config.fee_rate)
     drawdown_guard = DrawdownGuard(config.starting_balance_usd, config.max_drawdown)
+
+    if allow_live:
+        logging.warning("LIVE TRADING ENABLED on exchange=%s (spot only).", config.exchange_id)
+        executor = LiveExecution(client=client, conn=conn, exchange_id=config.exchange_id)
+    else:
+        if not config.paper_mode:
+            logging.warning(
+                "Paper disabled but live latch not satisfied; forcing PAPER mode. "
+                "Set HOGAN_LIVE_MODE=true and HOGAN_LIVE_ACK=I_UNDERSTAND_LIVE_TRADING to allow live."
+            )
+        executor = PaperExecution(portfolio=portfolio, conn=conn, exchange_id="paper")
 
     ml_model = None
     if config.use_ml_filter:
@@ -179,16 +220,22 @@ def run(max_loops: int | None = None) -> None:
             logging.info("Loaded ML model from %s", config.ml_model_path)
         except FileNotFoundError:
             logging.warning("ML filter enabled but model path missing: %s. Continuing without ML filter.", config.ml_model_path)
-        except Exception as exc:  # pragma: no cover - defensive runtime guard
+        except Exception as exc:  # pragma: no cover
             logging.warning("Could not load ML model (%s). Continuing without ML filter.", exc)
 
     notifier = make_notifier(config.webhook_url or None)
-    logging.info("Starting Hogan in paper mode for symbols=%s", ",".join(config.symbols))
+    logging.info(
+        "Starting Hogan mode=%s symbols=%s timeframe=%s db=%s",
+        "LIVE" if allow_live else "PAPER",
+        ",".join(config.symbols),
+        config.timeframe,
+        config.db_path,
+    )
 
     loops = 0
     while True:
         loops += 1
-        keep_running = run_iteration(config, client, portfolio, drawdown_guard, ml_model, notifier=notifier)
+        keep_running = run_iteration(config, client, portfolio, drawdown_guard, ml_model, notifier=notifier, conn=conn, executor=executor)
         if not keep_running:
             break
 

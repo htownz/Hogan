@@ -1,0 +1,107 @@
+{
+  "title": "Hogan Trading Bot",
+  "uid": "hogan-main",
+  "version": 1,
+  "schemaVersion": 38,
+  "refresh": "15s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Equity (USD)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [{"expr": "hogan_equity", "legendFormat": "Equity"}],
+      "fieldConfig": {"defaults": {"unit": "currencyUSD"}}
+    },
+    {
+      "id": 2,
+      "title": "Drawdown",
+      "type": "gauge",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+      "targets": [{"expr": "hogan_drawdown", "legendFormat": "Drawdown"}],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0, "max": 1,
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": 0},
+              {"color": "yellow", "value": 0.05},
+              {"color": "red", "value": 0.1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Cash (USD)",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+      "targets": [{"expr": "hogan_cash", "legendFormat": "Cash"}],
+      "fieldConfig": {"defaults": {"unit": "currencyUSD"}}
+    },
+    {
+      "id": 4,
+      "title": "Loop Duration (seconds)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {"expr": "rate(hogan_loop_seconds_sum[5m]) / rate(hogan_loop_seconds_count[5m])", "legendFormat": "avg loop s"}
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Orders/min",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {"expr": "rate(hogan_orders_total[1m]) * 60", "legendFormat": "{{side}} {{mode}}"}
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Fills/min",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16},
+      "targets": [{"expr": "rate(hogan_fills_total[5m]) * 60", "legendFormat": "fills/min"}]
+    },
+    {
+      "id": 7,
+      "title": "Stale Data Events",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 16},
+      "targets": [{"expr": "increase(hogan_stale_data_total[1h])", "legendFormat": "{{symbol}}"}],
+      "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color": "green", "value": 0}, {"color": "red", "value": 1}]}}}
+    },
+    {
+      "id": 8,
+      "title": "Exceptions/hour",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 16},
+      "targets": [{"expr": "increase(hogan_exceptions_total[1h])", "legendFormat": "exceptions"}],
+      "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color": "green", "value": 0}, {"color": "red", "value": 1}]}}}
+    },
+    {
+      "id": 9,
+      "title": "WS Reconnects",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 16},
+      "targets": [{"expr": "increase(hogan_ws_reconnects_total[1h])", "legendFormat": "{{symbol}}"}]
+    },
+    {
+      "id": 10,
+      "title": "Feature Drift Detections",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 20},
+      "targets": [{"expr": "rate(hogan_feature_drift_total[30m]) * 60", "legendFormat": "{{symbol}} drift/min"}]
+    },
+    {
+      "id": 11,
+      "title": "Data Lag (seconds)",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 20},
+      "targets": [{"expr": "hogan_data_lag_seconds", "legendFormat": "{{symbol}}"}]
+    }
+  ]
+}

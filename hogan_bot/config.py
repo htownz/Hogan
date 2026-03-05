@@ -28,6 +28,12 @@ class BotConfig:
     trade_weekends: bool = False
     paper_mode: bool = True
 
+    # Persistence
+    db_path: str = "data/hogan.db"
+
+    # Live trading safety latch (must be true AND HOGAN_LIVE_ACK set)
+    live_mode: bool = False
+
     use_ml_filter: bool = False
     ml_model_path: str = "models/hogan_logreg.pkl"
     ml_buy_threshold: float = 0.55
@@ -90,6 +96,20 @@ class BotConfig:
     rl_reward_type: str = "risk_adjusted"
     rl_timesteps: int = 200_000
 
+    # Account valuation currency for spot equity (USD, USDT, USDC, ...)
+    quote_currency: str = "USD"
+
+    # Monitoring
+    metrics_port: int = 8000
+    telegram_token: str = ""
+    telegram_chat_id: str = ""
+    email_smtp_host: str = ""
+    email_smtp_port: int = 587
+    email_username: str = ""
+    email_password: str = ""
+    email_from: str = ""
+    email_to: str = ""
+
     kraken_api_key: str | None = None
     kraken_api_secret: str | None = None
 
@@ -117,6 +137,8 @@ def load_config() -> BotConfig:
         sleep_seconds=int(os.getenv("HOGAN_SLEEP_SECONDS", "30")),
         trade_weekends=os.getenv("HOGAN_TRADE_WEEKENDS", "false").lower() == "true",
         paper_mode=os.getenv("HOGAN_PAPER_MODE", "true").lower() == "true",
+        db_path=os.getenv("HOGAN_DB_PATH", "data/hogan.db"),
+        live_mode=os.getenv("HOGAN_LIVE_MODE", "false").lower() == "true",
         use_ml_filter=os.getenv("HOGAN_USE_ML_FILTER", "false").lower() == "true",
         ml_model_path=os.getenv("HOGAN_ML_MODEL_PATH", "models/hogan_logreg.pkl"),
         ml_buy_threshold=float(os.getenv("HOGAN_ML_BUY_THRESHOLD", "0.55")),
@@ -147,6 +169,16 @@ def load_config() -> BotConfig:
         ml_confidence_sizing=os.getenv("HOGAN_ML_CONFIDENCE_SIZING", "false").lower() == "true",
         webhook_url=os.getenv("HOGAN_WEBHOOK_URL", ""),
         exchange_id=os.getenv("HOGAN_EXCHANGE", "kraken"),
+        quote_currency=os.getenv("HOGAN_QUOTE_CCY", "USD"),
+        metrics_port=int(os.getenv("HOGAN_METRICS_PORT", "8000")),
+        telegram_token=os.getenv("HOGAN_TELEGRAM_TOKEN", ""),
+        telegram_chat_id=os.getenv("HOGAN_TELEGRAM_CHAT_ID", ""),
+        email_smtp_host=os.getenv("HOGAN_EMAIL_SMTP_HOST", ""),
+        email_smtp_port=int(os.getenv("HOGAN_EMAIL_SMTP_PORT", "587")),
+        email_username=os.getenv("HOGAN_EMAIL_USERNAME", ""),
+        email_password=os.getenv("HOGAN_EMAIL_PASSWORD", ""),
+        email_from=os.getenv("HOGAN_EMAIL_FROM", ""),
+        email_to=os.getenv("HOGAN_EMAIL_TO", ""),
         retrain_window_bars=int(os.getenv("HOGAN_RETRAIN_WINDOW_BARS", "5000")),
         retrain_model_type=os.getenv("HOGAN_RETRAIN_MODEL_TYPE", "logreg"),
         retrain_min_improvement=float(os.getenv("HOGAN_RETRAIN_MIN_IMPROVEMENT", "0.005")),
