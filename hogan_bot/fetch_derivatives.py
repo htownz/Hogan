@@ -1,25 +1,17 @@
 """Fetch Kraken Futures derivatives data (funding rate + open interest).
 
-Uses the Kraken Futures **public** REST API — no authentication required for
-historical analytics endpoints.  Data is upserted into the
-``derivatives_metrics`` SQLite table.
+Uses the Kraken Futures **public** REST API v3 — no authentication required.
+Each call fetches the current live snapshot (fundingRate, openInterest) from
+the tickers endpoint and upserts a row for today into ``derivatives_metrics``.
+OI % change is computed relative to the previous row stored in the DB.
 
-Endpoints used
---------------
-Funding rate history:
-    GET https://futures.kraken.com/api/charts/v1/analytics/funding
-    ?symbol=PF_XBTUSD&from=<unix_s>&to=<unix_s>
-
-Open interest:
-    GET https://futures.kraken.com/api/charts/v1/analytics/openInterest
-    ?symbol=PF_XBTUSD&from=<unix_s>&to=<unix_s>
+Endpoint used
+-------------
+    GET https://futures.kraken.com/derivatives/api/v3/tickers
 
 Usage
 -----
     python -m hogan_bot.fetch_derivatives --symbol BTC/USD
-
-    # Limit history window
-    python -m hogan_bot.fetch_derivatives --symbol BTC/USD --days 30
 """
 from __future__ import annotations
 
@@ -32,10 +24,10 @@ from typing import Any
 from urllib.error import URLError
 from urllib.request import urlopen
 
-import pandas as pd
+import numpy as np
 
-# Kraken Futures API base URL
-_KF_BASE = "https://futures.kraken.com/api/charts/v1/analytics"
+# Kraken Futures v3 tickers endpoint (public, no auth required)
+_KF_TICKERS_URL = "https://futures.kraken.com/derivatives/api/v3/tickers"
 
 # CCXT-style symbol -> Kraken Futures perpetual symbol
 _SYMBOL_MAP: dict[str, str] = {
@@ -71,85 +63,16 @@ def _fetch_json(url: str) -> Any:
     return None
 
 
-# ---------------------------------------------------------------------------
-# Fetch helpers
-# ---------------------------------------------------------------------------
-
-def fetch_funding_rate(
-    kf_symbol: str,
-    from_ts: int,
-    to_ts: int,
-) -> list[tuple[int, str, float]]:
-    """Return funding-rate records as ``(ts_ms, 'funding_rate', value)`` tuples.
-
-    The Kraken Futures API returns ``fundingRate`` as an 8-hour rate.
-    We store it as-is and normalise to a per-step value in the feature layer.
-    """
-    url = (
-        f"{_KF_BASE}/funding?symbol={kf_symbol}"
-        f"&from={from_ts}&to={to_ts}"
+def _fetch_ticker(kf_symbol: str) -> dict:
+    """Return the live ticker dict for *kf_symbol* from the v3 tickers endpoint."""
+    data = _fetch_json(_KF_TICKERS_URL)
+    tickers = data.get("tickers", [])
+    for t in tickers:
+        if t.get("symbol") == kf_symbol:
+            return t
+    raise RuntimeError(
+        f"Symbol {kf_symbol!r} not found in Kraken Futures tickers response"
     )
-    data = _fetch_json(url)
-
-    records: list[tuple[int, str, float]] = []
-    # Response schema varies; try multiple known shapes
-    items = (
-        data.get("rates")
-        or data.get("data")
-        or data.get("result", {}).get("rates")
-        or []
-    )
-    for item in items:
-        try:
-            ts_ms = int(item.get("timestamp", item.get("time", 0))) * 1000
-            rate = float(item.get("fundingRate", item.get("rate", 0.0)))
-            if ts_ms > 0:
-                records.append((ts_ms, "funding_rate", rate))
-        except (KeyError, TypeError, ValueError):
-            continue
-    return records
-
-
-def fetch_open_interest(
-    kf_symbol: str,
-    from_ts: int,
-    to_ts: int,
-) -> list[tuple[int, str, float]]:
-    """Return OI records as ``(ts_ms, 'open_interest_pct_change', value)`` tuples.
-
-    Converts raw OI to 1-day percentage change before storing.
-    """
-    url = (
-        f"{_KF_BASE}/openInterest?symbol={kf_symbol}"
-        f"&from={from_ts}&to={to_ts}"
-    )
-    data = _fetch_json(url)
-
-    raw_oi: list[tuple[int, float]] = []
-    items = (
-        data.get("openInterest")
-        or data.get("data")
-        or data.get("result", {}).get("openInterest")
-        or []
-    )
-    for item in items:
-        try:
-            ts_ms = int(item.get("timestamp", item.get("time", 0))) * 1000
-            oi = float(item.get("openInterest", item.get("value", 0.0)))
-            if ts_ms > 0:
-                raw_oi.append((ts_ms, oi))
-        except (KeyError, TypeError, ValueError):
-            continue
-
-    # Convert to pct change
-    raw_oi.sort()
-    records: list[tuple[int, str, float]] = []
-    for i in range(1, len(raw_oi)):
-        ts_ms, oi_now = raw_oi[i]
-        _, oi_prev = raw_oi[i - 1]
-        pct = (oi_now - oi_prev) / max(abs(oi_prev), 1e-9)
-        records.append((ts_ms, "open_interest_pct_change", pct))
-    return records
 
 
 # ---------------------------------------------------------------------------
@@ -161,14 +84,18 @@ def fetch_derivatives(
     days: int = _DEFAULT_DAYS,
     db_path: str = "data/hogan.db",
 ) -> dict[str, int]:
-    """Fetch funding rate + OI for *symbol* and upsert into the DB.
+    """Fetch today's funding rate + OI snapshot for *symbol* and upsert into the DB.
+
+    Uses the Kraken Futures v3 ``/tickers`` endpoint which returns the current
+    live ``fundingRate`` and ``openInterest``.  OI % change is computed from
+    the most recent raw-OI row already in the DB.
 
     Parameters
     ----------
     symbol:
         CCXT-style symbol (e.g. ``"BTC/USD"``).
     days:
-        Number of historical days to fetch.
+        Unused — kept for backwards-compatible CLI signature.
     db_path:
         Path to the SQLite database.
 
@@ -177,25 +104,48 @@ def fetch_derivatives(
     dict
         ``{"funding_rate": <rows_written>, "open_interest_pct_change": <rows_written>}``
     """
-    from hogan_bot.storage import get_connection, upsert_derivatives
+    from hogan_bot.storage import get_connection, load_derivatives, upsert_derivatives
 
     kf_symbol = _ccxt_to_kf(symbol)
-    now = int(datetime.now(timezone.utc).timestamp())
-    from_ts = now - days * 86_400
+    print(f"Fetching live ticker for {kf_symbol} ...")
 
-    print(f"Fetching funding rate for {kf_symbol} ...")
-    fr_records = fetch_funding_rate(kf_symbol, from_ts, now)
-    print(f"  Got {len(fr_records)} funding-rate records")
+    ticker = _fetch_ticker(kf_symbol)
+    funding_rate = float(ticker.get("fundingRate", 0.0))
+    open_interest = float(ticker.get("openInterest", 0.0))
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
 
-    print(f"Fetching open interest for {kf_symbol} ...")
-    oi_records = fetch_open_interest(kf_symbol, from_ts, now)
-    print(f"  Got {len(oi_records)} OI records")
+    print(f"  fundingRate    = {funding_rate:.6f}")
+    print(f"  openInterest   = {open_interest:.4f} BTC")
 
     conn = get_connection(db_path)
-    fr_written = upsert_derivatives(conn, symbol, fr_records) if fr_records else 0
-    oi_written = upsert_derivatives(conn, symbol, oi_records) if oi_records else 0
-    conn.close()
 
+    # Store funding rate
+    fr_records = [(now_ms, "funding_rate", funding_rate)]
+    fr_written = upsert_derivatives(conn, symbol, fr_records)
+
+    # Store raw OI (BTC)
+    oi_raw_records = [(now_ms, "open_interest_btc", open_interest)]
+    upsert_derivatives(conn, symbol, oi_raw_records)
+
+    # Compute OI % change from previous stored raw value
+    oi_written = 0
+    try:
+        prev_raw = load_derivatives(conn, symbol, "open_interest_btc")
+        prev_raw = prev_raw.sort_values("ts_ms")
+        if len(prev_raw) >= 2:
+            oi_prev = float(prev_raw.iloc[-2]["value"])
+            oi_now = float(prev_raw.iloc[-1]["value"])
+            pct = (oi_now - oi_prev) / max(abs(oi_prev), 1e-9)
+            pct = float(np.clip(pct, -1.0, 1.0))
+        else:
+            pct = 0.0
+        oi_records = [(now_ms, "open_interest_pct_change", pct)]
+        oi_written = upsert_derivatives(conn, symbol, oi_records)
+        print(f"  OI pct change  = {pct:+.4f}")
+    except Exception as exc:
+        print(f"  Warning: could not compute OI pct change: {exc}")
+
+    conn.close()
     return {"funding_rate": fr_written, "open_interest_pct_change": oi_written}
 
 
@@ -211,7 +161,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--symbol", default="BTC/USD",
                    help="CCXT-style trading pair, e.g. BTC/USD")
     p.add_argument("--days", type=int, default=_DEFAULT_DAYS,
-                   help="Number of historical days to fetch")
+                   help="(unused) kept for CLI compatibility")
     p.add_argument("--db", default="data/hogan.db",
                    help="Path to the SQLite database file")
     return p.parse_args()

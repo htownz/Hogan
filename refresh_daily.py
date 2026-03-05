@@ -68,23 +68,28 @@ def _run_step(name: str, fn: Callable, dry_run: bool) -> bool:
 
 def _refresh_feargreed() -> None:
     from hogan_bot.fetch_feargreed import fetch_and_store
-    fetch_and_store(days=30)
+    # backfill=False fetches only the most recent reading
+    fetch_and_store(backfill=False)
 
 
 def _refresh_coingecko() -> None:
-    key = os.getenv("COINGECKO_KEY", "")
-    from hogan_bot.fetch_coingecko import fetch_and_store
-    fetch_and_store(api_key=key, days=7)
+    key = os.getenv("COINGECKO_KEY", "").strip()
+    if not key:
+        raise RuntimeError("COINGECKO_KEY not set — skipping CoinGecko")
+    from hogan_bot.fetch_coingecko import CoinGeckoClient, fetch_today
+    client = CoinGeckoClient(key)
+    fetch_today(client)
 
 
 def _refresh_gpr() -> None:
     from hogan_bot.fetch_gpr import fetch_and_store
-    fetch_and_store(backfill=False)
+    # force=False skips download if the file was already fetched today
+    fetch_and_store(force=False)
 
 
 def _refresh_derivatives() -> None:
-    from hogan_bot.fetch_derivatives import fetch_and_store
-    fetch_and_store()
+    from hogan_bot.fetch_derivatives import fetch_derivatives
+    fetch_derivatives(days=7)
 
 
 def _refresh_news_sentiment() -> None:
@@ -92,15 +97,17 @@ def _refresh_news_sentiment() -> None:
     if not key:
         raise RuntimeError("CRYPTOPANIC_KEY not set — skipping news sentiment")
     from hogan_bot.fetch_news_sentiment import fetch_and_store
-    fetch_and_store(api_key=key, days=14)
+    # pages=5 → ~100 recent posts; reads CRYPTOPANIC_KEY from env internally
+    fetch_and_store(pages=5)
 
 
 def _refresh_onchain() -> None:
     key = os.getenv("CRYPTOQUANT_KEY", "")
     if not key:
         raise RuntimeError("CRYPTOQUANT_KEY not set — skipping CryptoQuant on-chain")
-    from hogan_bot.fetch_onchain import fetch_and_store
-    fetch_and_store(api_key=key)
+    from hogan_bot.fetch_onchain import fetch_onchain
+    # API key is read from CRYPTOQUANT_KEY env var inside the module
+    fetch_onchain(days=7)
 
 
 def _refresh_glassnode() -> None:
@@ -108,7 +115,8 @@ def _refresh_glassnode() -> None:
     if not key:
         raise RuntimeError("GLASSNODE_KEY not set — skipping Glassnode")
     from hogan_bot.fetch_glassnode import fetch_and_store
-    fetch_and_store(api_key=key)
+    # API key is read from GLASSNODE_KEY env var inside the module
+    fetch_and_store(days=7)
 
 
 def _refresh_santiment() -> None:
@@ -116,7 +124,8 @@ def _refresh_santiment() -> None:
     if not key:
         raise RuntimeError("SANTIMENT_KEY not set — skipping Santiment")
     from hogan_bot.fetch_santiment import fetch_and_store
-    fetch_and_store(api_key=key)
+    # API key is read from SANTIMENT_KEY env var inside the module
+    fetch_and_store(days=7)
 
 
 def _refresh_spy() -> None:
@@ -134,15 +143,17 @@ def _refresh_spy() -> None:
 # ---------------------------------------------------------------------------
 
 _SOURCES: list[tuple[str, str, Callable]] = [
-    ("feargreed",    "Fear & Greed Index (Alternative.me, free)",         _refresh_feargreed),
-    ("coingecko",    "CoinGecko macro data (demo key)",                   _refresh_coingecko),
+    # free sources — run every day
+    ("feargreed",    "Fear & Greed Index (Alternative.me, no key)",       _refresh_feargreed),
+    ("coingecko",    "CoinGecko macro data (COINGECKO_KEY required)",     _refresh_coingecko),
     ("gpr",          "GPR Index (Caldara & Iacoviello, free download)",   _refresh_gpr),
     ("derivatives",  "Kraken Futures — funding rate + open interest",     _refresh_derivatives),
+    ("spy",          "SPY daily macro candles (yfinance, free)",          _refresh_spy),
+    # paid / key-gated sources
     ("news",         "CryptoPanic news sentiment (CRYPTOPANIC_KEY)",      _refresh_news_sentiment),
     ("onchain",      "CryptoQuant on-chain metrics (CRYPTOQUANT_KEY)",    _refresh_onchain),
     ("glassnode",    "Glassnode on-chain analytics (GLASSNODE_KEY)",      _refresh_glassnode),
     ("santiment",    "Santiment social/dev intelligence (SANTIMENT_KEY)", _refresh_santiment),
-    ("spy",          "SPY daily macro candles (yfinance, free)",          _refresh_spy),
 ]
 
 _SOURCE_KEYS = [s[0] for s in _SOURCES]
@@ -187,11 +198,20 @@ def main() -> None:
     fail_count = len(results) - ok_count
     print(f"\n{_BOLD}Summary:{_RESET} {ok_count} succeeded, {fail_count} failed")
     if fail_count:
+        _KEY_GATED = {"news", "onchain", "glassnode", "santiment", "coingecko"}
         failed = [k for k, v in results.items() if not v]
-        print(
-            f"  {_YELLOW}Note:{_RESET} failures above are usually missing API keys "
-            f"({', '.join(failed)}) — add keys to .env to enable those sources."
-        )
+        key_failures = [k for k in failed if k in _KEY_GATED]
+        other_failures = [k for k in failed if k not in _KEY_GATED]
+        if key_failures:
+            print(
+                f"  {_YELLOW}Key-gated:{_RESET} add API keys to .env for: "
+                + ", ".join(key_failures)
+            )
+        if other_failures:
+            print(
+                f"  {_RED}Unexpected failures:{_RESET} {', '.join(other_failures)} "
+                "— check network or run individually for details."
+            )
     print()
 
 
