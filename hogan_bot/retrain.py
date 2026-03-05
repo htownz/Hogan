@@ -146,6 +146,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Train and evaluate but do NOT overwrite the production model or update the registry",
     )
     p.add_argument(
+        "--force-promote",
+        action="store_true",
+        help=(
+            "Promote the new model regardless of registry score. "
+            "Use when the feature space changed (e.g. 36 → 43 features) "
+            "and the old registry benchmark is no longer comparable."
+        ),
+    )
+    p.add_argument(
         "--shadow-eval",
         action="store_true",
         help=(
@@ -288,7 +297,14 @@ def retrain_once(args: argparse.Namespace) -> dict:
     registry = ModelRegistry(registry_path=args.registry_path)
     current_score = _get_current_best_score(registry, args.promotion_metric)
     threshold = (current_score or 0.0) + args.min_improvement
-    should_promote = current_score is None or new_score >= threshold
+    force = getattr(args, "force_promote", False)
+    should_promote = force or current_score is None or new_score >= threshold
+    if force and not (current_score is None or new_score >= threshold):
+        logger.info(
+            "--force-promote set: overriding promotion check "
+            "(new=%.4f vs registry=%.4f). Feature space changed — old score is not comparable.",
+            new_score, current_score or 0.0,
+        )
 
     # Build result dict (feature_importances omitted — too large for JSON log)
     result: dict = {
@@ -333,6 +349,11 @@ def retrain_once(args: argparse.Namespace) -> dict:
             improvement = new_score - (current_score or 0.0)
             if current_score is None:
                 result["message"] = "Promoted — first model in registry"
+            elif force:
+                result["message"] = (
+                    f"Promoted (force) — {args.promotion_metric} {new_score:.4f} "
+                    f"(old registry={current_score:.4f}, feature space changed)"
+                )
             else:
                 result["message"] = (
                     f"Promoted — {args.promotion_metric} {new_score:.4f} "

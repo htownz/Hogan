@@ -17,9 +17,9 @@ scikit-learn>=1.4.0
 #   git -C /path/to/htownz-ccxt fetch upstream && git merge upstream/master
 # ---------------------------------------------------------------------------
 
-# Optional ML backends (install as needed)
-# xgboost>=2.0.0
-# lightgbm>=4.0.0
+# ML backends
+xgboost>=2.0.0
+# lightgbm>=4.0.0  (optional — install if needed)
 
 # Optional dashboard
 # streamlit>=1.32.0
