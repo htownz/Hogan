@@ -5,15 +5,18 @@ Refreshes all external data sources in dependency order:
   2.  CoinGecko macro data      (free demo key)
   3.  GPR Index                 (free, academic download)
   4.  Kraken Futures / Deriv.   (free public API)
-  5.  CryptoPanic news          (free token)
-  6.  CryptoQuant on-chain      (paid — skipped if CRYPTOQUANT_KEY absent)
-  7.  Glassnode                 (paid — skipped if GLASSNODE_KEY absent)
-  8.  Santiment                 (paid — skipped if SANTIMENT_KEY absent)
-  9.  SPY macro backfill        (yfinance, free)
-  10. OpenBB macro: DXY/VIX     (yfinance fallback, free)
-  11. Messari fundamentals      (free tier — skipped if MESSARI_KEY absent)
-  12. Dune Analytics on-chain   (paid — skipped if DUNE_API_KEY absent)
-  13. Oanda prices              (OANDA_ACCESS_TOKEN required — BTC/ETH/XAU/EUR)
+  5.  Blockchain.com + Mempool  (free, no key — BTC hash rate, mempool, fees)
+  6.  DeFi Llama                (free, no key — TVL, stablecoin mcap)
+  7.  CryptoPanic news          (Developer plan key — 1 req/day)
+  8.  FRED macro data           (free key — yields, M2, CPI, DXY)
+  9.  CryptoQuant on-chain      (paid — skipped if CRYPTOQUANT_KEY absent)
+  10. Glassnode                 (paid — skipped if GLASSNODE_KEY absent)
+  11. Santiment                 (paid — skipped if SANTIMENT_KEY absent)
+  12. SPY macro backfill        (yfinance, free)
+  13. OpenBB macro: DXY/VIX     (yfinance fallback, free)
+  14. Messari fundamentals      (free tier — skipped if MESSARI_KEY absent)
+  15. Dune Analytics on-chain   (paid — skipped if DUNE_API_KEY absent)
+  16. Oanda prices              (OANDA_ACCESS_TOKEN required — BTC/ETH/XAU/EUR)
 
 Usage
 -----
@@ -70,6 +73,30 @@ def _run_step(name: str, fn: Callable, dry_run: bool) -> bool:
 # Individual refresh functions
 # ---------------------------------------------------------------------------
 
+def _refresh_blockchain() -> None:
+    """Fetch BTC hash rate, difficulty, mempool, tx count (blockchain.com + mempool.space)."""
+    from hogan_bot.fetch_blockchain import fetch_all_blockchain
+    fetch_all_blockchain(symbol=_primary_symbol(), db_path=_db_path(), days=30)
+
+
+def _refresh_defillama() -> None:
+    """Fetch DeFi TVL, ETH chain dominance, stablecoin market cap (DeFi Llama)."""
+    from hogan_bot.fetch_defillama import fetch_all_defillama
+    fetch_all_defillama(symbol=_primary_symbol(), db_path=_db_path())
+
+
+def _refresh_fred() -> None:
+    """Fetch FRED macro data: 10Y yield, yield curve, M2, CPI, Fed rate."""
+    key = os.getenv("FRED_API_KEY", "")
+    if not key:
+        raise RuntimeError(
+            "FRED_API_KEY not set — skipping FRED macro data\n"
+            "Free key at: https://fred.stlouisfed.org/docs/api/api_key.html"
+        )
+    from hogan_bot.fetch_fred import fetch_all_fred
+    fetch_all_fred(symbol=_primary_symbol(), db_path=_db_path(), days=60)
+
+
 def _refresh_feargreed() -> None:
     from hogan_bot.fetch_feargreed import fetch_and_store
     # backfill=False fetches only the most recent reading
@@ -101,8 +128,8 @@ def _refresh_news_sentiment() -> None:
     if not key:
         raise RuntimeError("CRYPTOPANIC_KEY not set — skipping news sentiment")
     from hogan_bot.fetch_news_sentiment import fetch_and_store
-    # pages=5 → ~100 recent posts; reads CRYPTOPANIC_KEY from env internally
-    fetch_and_store(pages=5)
+    # pages=1 → 20 recent posts, 1 API request (Developer plan: 100 req/mo limit)
+    fetch_and_store(pages=1)
 
 
 def _refresh_onchain() -> None:
@@ -206,21 +233,25 @@ def _refresh_openbb() -> None:
 # ---------------------------------------------------------------------------
 
 _SOURCES: list[tuple[str, str, Callable]] = [
-    # free sources — run every day
-    ("feargreed",    "Fear & Greed Index (Alternative.me, no key)",       _refresh_feargreed),
-    ("coingecko",    "CoinGecko macro data (COINGECKO_KEY required)",     _refresh_coingecko),
-    ("gpr",          "GPR Index (Caldara & Iacoviello, free download)",   _refresh_gpr),
-    ("derivatives",  "Kraken Futures — funding rate + open interest",     _refresh_derivatives),
-    ("spy",          "SPY daily macro candles (yfinance, free)",          _refresh_spy),
-    ("openbb",       "OpenBB macro: DXY, VIX, SPY return, FOMC (yfinance)", _refresh_openbb),
-    # paid / key-gated sources
-    ("news",         "CryptoPanic news sentiment (CRYPTOPANIC_KEY)",      _refresh_news_sentiment),
-    ("onchain",      "CryptoQuant on-chain metrics (CRYPTOQUANT_KEY)",    _refresh_onchain),
-    ("glassnode",    "Glassnode on-chain analytics (GLASSNODE_KEY)",      _refresh_glassnode),
-    ("santiment",    "Santiment social/dev intelligence (SANTIMENT_KEY)", _refresh_santiment),
-    ("messari",      "Messari fundamentals: NVT, realized cap (MESSARI_KEY)", _refresh_messari),
-    ("dune",         "Dune Analytics: BTC exchange flow, whales (DUNE_API_KEY)", _refresh_dune),
+    # ── Completely free (no key) ─────────────────────────────────────────────
+    ("feargreed",    "Fear & Greed Index (Alternative.me, no key)",            _refresh_feargreed),
+    ("gpr",          "GPR Index (Caldara & Iacoviello, free download)",        _refresh_gpr),
+    ("derivatives",  "Kraken Futures — funding rate + open interest",          _refresh_derivatives),
+    ("blockchain",   "BTC on-chain: hash rate, mempool, fees (no key)",        _refresh_blockchain),
+    ("defillama",    "DeFi TVL + stablecoin mcap (DeFi Llama, no key)",        _refresh_defillama),
+    ("spy",          "SPY daily macro candles (yfinance, free)",                _refresh_spy),
+    ("openbb",       "OpenBB macro: DXY, VIX, SPY return, FOMC (yfinance)",   _refresh_openbb),
+    # ── Free with API key ────────────────────────────────────────────────────
+    ("coingecko",    "CoinGecko market intelligence (COINGECKO_KEY)",          _refresh_coingecko),
+    ("fred",         "FRED macro: 10Y yield, M2, CPI, Fed rate (FRED_API_KEY)", _refresh_fred),
+    ("news",         "CryptoPanic news sentiment 1 req/day (CRYPTOPANIC_KEY)", _refresh_news_sentiment),
+    ("messari",      "Messari fundamentals: NVT, realized cap (MESSARI_KEY)",  _refresh_messari),
     ("oanda",        "Oanda prices: BTC/ETH/XAU/EUR mid (OANDA_ACCESS_TOKEN)", _refresh_oanda),
+    # ── Paid / key-gated ────────────────────────────────────────────────────
+    ("dune",         "Dune Analytics: BTC exchange flow, whales (DUNE_API_KEY)", _refresh_dune),
+    ("onchain",      "CryptoQuant on-chain metrics (CRYPTOQUANT_KEY)",          _refresh_onchain),
+    ("glassnode",    "Glassnode on-chain analytics (GLASSNODE_KEY)",            _refresh_glassnode),
+    ("santiment",    "Santiment social/dev intelligence (SANTIMENT_KEY)",       _refresh_santiment),
 ]
 
 _SOURCE_KEYS = [s[0] for s in _SOURCES]
@@ -265,7 +296,7 @@ def main() -> None:
     fail_count = len(results) - ok_count
     print(f"\n{_BOLD}Summary:{_RESET} {ok_count} succeeded, {fail_count} failed")
     if fail_count:
-        _KEY_GATED = {"news", "onchain", "glassnode", "santiment", "coingecko", "messari", "dune", "oanda"}
+        _KEY_GATED = {"news", "onchain", "glassnode", "santiment", "coingecko", "messari", "dune", "oanda", "fred"}
         failed = [k for k, v in results.items() if not v]
         key_failures = [k for k in failed if k in _KEY_GATED]
         other_failures = [k for k in failed if k not in _KEY_GATED]

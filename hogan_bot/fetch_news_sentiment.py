@@ -1,8 +1,16 @@
 """Fetch BTC news sentiment from CryptoPanic.
 
-Requires a free API token from https://cryptopanic.com/developers/api/
+Requires a Developer API token from https://cryptopanic.com/developers/api/
 
 Set ``CRYPTOPANIC_KEY`` in your ``.env`` file.
+
+⚠️  QUOTA WARNING — Developer plan limits
+------------------------------------------
+* 100 requests / month  (≈ 3/day)
+* 20 items per page     (fixed by API)
+* 24-hour news delay    (not real-time on Developer tier)
+* Default: 1 page/run  = 1 request consumed.  Do NOT raise pages > 3
+  without upgrading to Growth plan ($199/mo).
 
 Metrics stored daily in ``onchain_metrics``
 -------------------------------------------
@@ -16,11 +24,11 @@ Metrics stored daily in ``onchain_metrics``
 
 Usage
 -----
-    # Daily refresh (cron)
+    # Daily refresh (cron) — uses 1 request
     python -m hogan_bot.fetch_news_sentiment
 
-    # Fetch last N pages (each page = up to 20 stories)
-    python -m hogan_bot.fetch_news_sentiment --pages 10
+    # Fetch last N pages (each page = 1 request against your quota)
+    python -m hogan_bot.fetch_news_sentiment --pages 3
 """
 from __future__ import annotations
 
@@ -34,9 +42,10 @@ from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-_BASE_URL = "https://cryptopanic.com/api/free/v1/posts/"
+_BASE_URL = "https://cryptopanic.com/api/developer/v2/posts/"
 _TIMEOUT = 20
-_PAGE_SIZE = 20  # fixed by CryptoPanic free tier
+_PAGE_SIZE = 20        # fixed by CryptoPanic API
+_QUOTA_WARN_PAGES = 3  # warn if caller requests more than this on Developer plan
 
 
 def _get_key() -> str:
@@ -103,14 +112,16 @@ def _aggregate_by_day(results: list[dict]) -> dict[str, dict]:
 def fetch_and_store(
     symbol: str = "BTC/USD",
     db_path: str = "data/hogan.db",
-    pages: int = 5,
+    pages: int = 1,
 ) -> int:
     """Fetch recent BTC news from CryptoPanic and store daily sentiment metrics.
 
     Parameters
     ----------
     pages:
-        Number of pages to fetch (20 posts/page).  5 pages = ~100 recent posts.
+        Number of pages to fetch (20 posts/page = 1 API request each).
+        **Developer plan: 100 req/month — keep this at 1 for daily runs.**
+        Each page = 1 request against your monthly quota.
 
     Returns
     -------
@@ -120,6 +131,12 @@ def fetch_and_store(
     from hogan_bot.storage import get_connection, upsert_onchain
 
     import sqlite3
+
+    if pages > _QUOTA_WARN_PAGES:
+        print(
+            f"⚠️  WARNING: pages={pages} will use {pages} requests. "
+            f"Developer plan allows only 100/month. Consider pages=1."
+        )
 
     auth_token = _get_key()
     print(f"Fetching CryptoPanic BTC news sentiment ({pages} page(s)) ...")
@@ -185,7 +202,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--symbol", default="BTC/USD", help="Symbol for DB storage")
     p.add_argument("--db", default="data/hogan.db", help="SQLite database path")
-    p.add_argument("--pages", type=int, default=5, help="Number of pages to fetch (20 posts/page)")
+    p.add_argument("--pages", type=int, default=1, help="Pages to fetch (20 posts/page = 1 request each; Developer plan: 100 req/mo)")
     return p.parse_args()
 
 

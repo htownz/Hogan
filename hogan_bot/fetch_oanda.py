@@ -113,12 +113,15 @@ def account_summary(token: str, account_id: str, base_url: str) -> dict:
 def fetch_prices(
     token: str,
     base_url: str,
+    account_id: str = "",
     instruments: list[str] | None = None,
 ) -> dict[str, float]:
     """Fetch mid prices for a list of instruments.
 
     Parameters
     ----------
+    account_id : str
+        Oanda account ID — required for the v20 pricing endpoint.
     instruments : list[str]
         Oanda instrument codes, e.g. ``["BTC_USD", "ETH_USD"]``.
         Defaults to all instruments in ``_INSTRUMENTS``.
@@ -130,8 +133,10 @@ def fetch_prices(
     """
     instruments = instruments or list(_INSTRUMENTS.keys())
     inst_str = "%2C".join(instruments)   # URL-encoded comma
+    # Correct v20 endpoint: /v3/accounts/{id}/pricing?instruments=...
+    path = f"/v3/accounts/{account_id}/pricing?instruments={inst_str}"
     try:
-        data = _get(f"/v3/prices?instruments={inst_str}", token, base_url)
+        data = _get(path, token, base_url)
     except URLError as exc:
         logger.warning("Oanda prices request failed: %s", exc)
         return {}
@@ -174,8 +179,11 @@ def fetch_all_oanda(
     """
     from hogan_bot.storage import get_connection, upsert_onchain
 
-    token, _account_id, base_url = _get_config()
-    prices = fetch_prices(token, base_url)
+    token, account_id, base_url = _get_config()
+    if not account_id:
+        logger.warning("Oanda: OANDA_ACCOUNT_ID not set — cannot fetch prices")
+        return {}
+    prices = fetch_prices(token, base_url, account_id=account_id)
 
     if not prices:
         logger.warning("Oanda: no prices returned")

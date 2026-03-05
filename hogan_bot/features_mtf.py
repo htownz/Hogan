@@ -105,9 +105,25 @@ EXT_FEATURE_NAMES: list[str] = [
     "glassnode_puell_multiple",       # Glassnode Puell Multiple (miner income / 365d MA)
     "cg_stablecoin_dominance",        # USDT+USDC % of market cap (÷100)
     "cg_defi_dominance",              # DeFi % of total market cap (÷100)
+    # FRED macro rates  (indices 28-32) — Phase 9
+    "fred_dgs10",                     # 10-Year Treasury Yield % (÷10 → ~[0,1])
+    "fred_t10y2y",                    # 10Y-2Y Yield Spread % (<0 = inverted curve)
+    "fred_fedfunds",                  # Fed Funds Rate % (÷10)
+    "fred_m2_yoy",                    # M2 Money Supply YoY % change (÷20 → ~[-1,1])
+    "fred_cpi_yoy",                   # CPI YoY % change (÷10 → ~[0,1])
+    # Bitcoin on-chain (indices 33-36) — Phase 9
+    "btc_hashrate_eh",                # Hash rate EH/s (÷500 → ~[0,1])
+    "btc_mempool_mb",                 # Mempool backlog MB (÷200 → ~[0,1])
+    "btc_avg_fee_usd",                # Average fee USD (÷100 → ~[0,1])
+    "btc_active_addr",                # Active addresses (÷1e6 → ~[0,1])
+    # DeFi Llama  (indices 37-40) — Phase 9
+    "defi_total_tvl_b",               # Total DeFi TVL USD billions (÷200 → ~[0,1])
+    "defi_tvl_change_1d",             # DeFi TVL 1-day % change (÷5 → ~[-1,1])
+    "defi_eth_tvl_pct",               # Ethereum TVL share % (÷100 → [0,1])
+    "defi_stablecoin_b",              # Stablecoin mcap USD billions (÷300 → ~[0,1])
 ]
 
-assert len(EXT_FEATURE_NAMES) == 28, f"Expected 28 ext features, got {len(EXT_FEATURE_NAMES)}"
+assert len(EXT_FEATURE_NAMES) == 41, f"Expected 41 ext features, got {len(EXT_FEATURE_NAMES)}"
 
 _MTF_MIN_BARS: int = 20   # minimum candles needed to compute MTF features
 
@@ -300,6 +316,22 @@ def build_ext_features(
             ("glassnode_puell_multiple",  25,    3.0,   0.0,  1.0),   # ÷3, clip [0,1]
             ("cg_stablecoin_dominance",   26,  100.0,   0.0,  1.0),   # ÷100
             ("cg_defi_dominance",         27,  100.0,   0.0,  1.0),   # ÷100
+            # FRED macro rates  (Phase 9, indices 28-32)
+            ("fred_dgs10",                28,   10.0,   0.0,  2.0),   # ÷10, clip [0,2]
+            ("fred_t10y2y",               29,    5.0,  -1.0,  1.0),   # ÷5, clip [-1,1]
+            ("fred_fedfunds",             30,   10.0,   0.0,  1.0),   # ÷10
+            ("fred_m2_yoy",               31,   20.0,  -1.0,  1.0),   # ÷20, clip [-1,1]
+            ("fred_cpi_yoy",              32,   10.0,  -0.5,  1.5),   # ÷10
+            # Bitcoin on-chain  (Phase 9, indices 33-36)
+            ("btc_hashrate_eh",           33,  500.0,   0.0,  1.0),   # ÷500 EH/s
+            ("btc_mempool_mb",            34,  200.0,   0.0,  1.0),   # ÷200 MB
+            ("btc_avg_fee_usd",           35,  100.0,   0.0,  1.0),   # ÷100 USD
+            ("btc_active_addr",           36,  1e6,     0.0,  2.0),   # ÷1M addresses
+            # DeFi Llama  (Phase 9, indices 37-40)
+            ("defi_total_tvl_b",          37,  200.0,   0.0,  1.0),   # ÷200 billion USD
+            ("defi_tvl_change_1d",        38,    5.0,  -1.0,  1.0),   # ÷5 %
+            ("defi_eth_tvl_pct",          39,  100.0,   0.0,  1.0),   # ÷100 %
+            ("defi_stablecoin_b",         40,  300.0,   0.0,  1.0),   # ÷300 billion USD
         ]
 
         for metric, idx, divisor, clip_lo, clip_hi in _ONCHAIN_LOOKUP:
