@@ -33,6 +33,14 @@ gymnasium>=0.29.0
 # Historical data backfill (no API key required)
 yfinance>=0.2.0
 
+# ---------------------------------------------------------------------------
+# Alpaca — paper + live crypto trading, stock/crypto market data, MCP server
+# ---------------------------------------------------------------------------
+# Free paper-trading account at alpaca.markets (no credit card required).
+# Provides: SPY/VIX/crypto bars, real-time orderbook (bid-ask spread), order
+# placement for BTC/ETH/USD, and portfolio tracking via MCP in Cursor.
+alpaca-py>=0.28.0
+
 # Hyperparameter tuning (python -m hogan_bot.rl_tune)
 optuna>=3.0.0
 
