@@ -15,9 +15,10 @@ Refreshes all external data sources in dependency order:
   12. SPY macro backfill        (yfinance, free)
   13. OpenBB macro: DXY/VIX     (yfinance fallback, free)
   14. Messari fundamentals      (free tier — skipped if MESSARI_KEY absent)
-  15. Alpaca market data        (free key — SPY close + BTC/ETH bid-ask spread)
-  16. Dune Analytics on-chain   (paid — skipped if DUNE_API_KEY absent)
-  17. Oanda prices              (OANDA_ACCESS_TOKEN required — BTC/ETH/XAU/EUR)
+  15. CoinMarketCap             (free key — BTC/ETH dominance, total mcap, DeFi%)
+  16. Alpaca market data        (free key — SPY close + BTC/ETH bid-ask spread)
+  17. Dune Analytics on-chain   (paid — skipped if DUNE_API_KEY absent)
+  18. Oanda prices              (OANDA_ACCESS_TOKEN required — BTC/ETH/XAU/EUR)
 
 Usage
 -----
@@ -229,6 +230,20 @@ def _refresh_openbb() -> None:
         raise RuntimeError("OpenBB refresh produced 0 rows — check yfinance install")
 
 
+def _refresh_cmc() -> None:
+    """Fetch BTC/ETH dominance, total market cap, DeFi % from CoinMarketCap (CMC_API_KEY)."""
+    k = os.getenv("CMC_API_KEY", "").strip()
+    if not k:
+        raise RuntimeError(
+            "CMC_API_KEY not set — skipping CoinMarketCap\n"
+            "Free Basic plan (10k credits/month) at: pro.coinmarketcap.com"
+        )
+    from hogan_bot.fetch_cmc import fetch_all_cmc
+    result = fetch_all_cmc(db_path=_db_path())
+    total = sum(result.values())
+    print(f"  CMC: global metrics + BTC/ETH quotes — {total} records stored")
+
+
 def _refresh_alpaca() -> None:
     """Fetch SPY close, crypto bid-ask spread from Alpaca (ALPACA_API_KEY required)."""
     k = os.getenv("ALPACA_API_KEY", "").strip()
@@ -259,6 +274,7 @@ _SOURCES: list[tuple[str, str, Callable]] = [
     ("openbb",       "OpenBB macro: DXY, VIX, SPY return, FOMC (yfinance)",   _refresh_openbb),
     # ── Free with API key ────────────────────────────────────────────────────
     ("coingecko",    "CoinGecko market intelligence (COINGECKO_KEY)",          _refresh_coingecko),
+    ("cmc",          "CoinMarketCap: BTC/ETH dominance, market cap, DeFi% (CMC_API_KEY)", _refresh_cmc),
     ("fred",         "FRED macro: 10Y yield, M2, CPI, Fed rate (FRED_API_KEY)", _refresh_fred),
     ("news",         "CryptoPanic news sentiment 1 req/day (CRYPTOPANIC_KEY)", _refresh_news_sentiment),
     ("messari",      "Messari fundamentals: NVT, realized cap (MESSARI_KEY)",  _refresh_messari),
