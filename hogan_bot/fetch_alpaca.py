@@ -4,7 +4,7 @@ Provides two capabilities:
 
 1. **Stock macro data** (SPY, VIX) — a reliable alternative to yfinance that
    avoids the recurring MultiIndex column issues.  Stores into the
-   ``macro_metrics`` table alongside the existing OpenBB/yfinance records.
+   ``onchain_metrics`` table alongside the existing OpenBB/yfinance records.
 
 2. **Crypto bid-ask spread** — the latest orderbook for BTC/USD and ETH/USD,
    giving Hogan a real-time microstructure signal (wide spread = illiquid /
@@ -88,7 +88,7 @@ def fetch_stock_bars(
     """Fetch daily OHLCV bars for *symbols* from Alpaca stock data API.
 
     Returns a list of (date_str, metric_name, value) tuples ready to upsert
-    into the ``macro_metrics`` table.
+    into the ``onchain_metrics`` table.
     """
     _check_keys()
     StockClient, _, TimeFrame = _try_import()
@@ -155,8 +155,8 @@ def fetch_crypto_spread(
     k, s = _keys()
     client = CryptoClient(api_key=k, secret_key=s)
 
-    # Alpaca crypto uses BTCUSD format (no slash) for data requests
-    alpaca_symbols = [sym.replace("/", "") for sym in symbols]
+    # Alpaca crypto orderbook API requires BTC/USD format (with slash)
+    alpaca_symbols = symbols
     today = date.today().isoformat()
     records: list[tuple[str, str, float]] = []
 
@@ -164,8 +164,8 @@ def fetch_crypto_spread(
         req = CryptoLatestOrderbookRequest(symbol_or_symbols=alpaca_symbols)
         books = client.get_crypto_latest_orderbook(req)
 
-        for sym, alpaca_sym in zip(symbols, alpaca_symbols):
-            book = books.get(alpaca_sym) if hasattr(books, "get") else None
+        for sym in symbols:
+            book = books.get(sym) if hasattr(books, "get") else None
             if book is None:
                 continue
             # Best bid/ask
@@ -293,14 +293,13 @@ def fetch_crypto_bars(
 # DB upsert for macro metrics
 # ---------------------------------------------------------------------------
 
-def _upsert_macro(conn: sqlite3.Connection, records: list[tuple[str, str, float]]) -> int:
-    """Insert or replace (date, metric, value) into macro_metrics."""
+def _upsert_macro(conn: sqlite3.Connection, records: list[tuple[str, str, float]], symbol: str = "BTC/USD") -> int:
+    """Insert or replace (symbol, date, metric, value) into onchain_metrics."""
     if not records:
         return 0
     conn.executemany(
-        """INSERT OR REPLACE INTO macro_metrics (date, metric, value)
-           VALUES (?, ?, ?)""",
-        records,
+        "INSERT OR REPLACE INTO onchain_metrics (symbol, date, metric, value) VALUES (?, ?, ?, ?)",
+        [(symbol, d, m, v) for d, m, v in records],
     )
     conn.commit()
     return len(records)
