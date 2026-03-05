@@ -101,8 +101,6 @@ class BotConfig:
 
     # Monitoring
     metrics_port: int = 8000
-    telegram_token: str = ""
-    telegram_chat_id: str = ""
     email_smtp_host: str = ""
     email_smtp_port: int = 587
     email_username: str = ""
@@ -171,8 +169,6 @@ def load_config() -> BotConfig:
         exchange_id=os.getenv("HOGAN_EXCHANGE", "kraken"),
         quote_currency=os.getenv("HOGAN_QUOTE_CCY", "USD"),
         metrics_port=int(os.getenv("HOGAN_METRICS_PORT", "8000")),
-        telegram_token=os.getenv("HOGAN_TELEGRAM_TOKEN", ""),
-        telegram_chat_id=os.getenv("HOGAN_TELEGRAM_CHAT_ID", ""),
         email_smtp_host=os.getenv("HOGAN_EMAIL_SMTP_HOST", ""),
         email_smtp_port=int(os.getenv("HOGAN_EMAIL_SMTP_PORT", "587")),
         email_username=os.getenv("HOGAN_EMAIL_USERNAME", ""),

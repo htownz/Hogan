@@ -142,15 +142,23 @@ def _refresh_spy() -> None:
         raise RuntimeError(result.stderr.strip() or "backfill --macro failed")
 
 
+def _primary_symbol() -> str:
+    """Return the first configured trading symbol (HOGAN_SYMBOLS, comma-separated)."""
+    return os.getenv("HOGAN_SYMBOLS", "BTC/USD").split(",")[0].strip()
+
+
+def _db_path() -> str:
+    """Return the canonical database path (HOGAN_DB_PATH)."""
+    return os.getenv("HOGAN_DB_PATH", "data/hogan.db")
+
+
 def _refresh_messari() -> None:
     """Fetch NVT ratio, realized cap, ROI, dev activity from Messari (free tier)."""
     key = os.getenv("MESSARI_KEY", "")
     if not key:
         raise RuntimeError("MESSARI_KEY not set — skipping Messari")
     from hogan_bot.fetch_messari import fetch_all_messari
-    symbol = os.getenv("HOGAN_SYMBOL", "BTC/USD")
-    db_path = os.getenv("HOGAN_DB", "data/hogan.db")
-    fetch_all_messari(symbol=symbol, db_path=db_path)
+    fetch_all_messari(symbol=_primary_symbol(), db_path=_db_path())
 
 
 def _refresh_dune() -> None:
@@ -159,9 +167,7 @@ def _refresh_dune() -> None:
     if not key:
         raise RuntimeError("DUNE_API_KEY not set — skipping Dune Analytics")
     from hogan_bot.fetch_dune import fetch_all_dune
-    symbol = os.getenv("HOGAN_SYMBOL", "BTC/USD")
-    db_path = os.getenv("HOGAN_DB", "data/hogan.db")
-    fetch_all_dune(symbol=symbol, db_path=db_path)
+    fetch_all_dune(symbol=_primary_symbol(), db_path=_db_path())
 
 
 def _refresh_oanda() -> None:
@@ -170,9 +176,7 @@ def _refresh_oanda() -> None:
     if not token:
         raise RuntimeError("OANDA_ACCESS_TOKEN not set — skipping Oanda")
     from hogan_bot.fetch_oanda import fetch_all_oanda
-    symbol = os.getenv("HOGAN_SYMBOL", "BTC/USD")
-    db_path = os.getenv("HOGAN_DB", "data/hogan.db")
-    fetch_all_oanda(symbol=symbol, db_path=db_path)
+    fetch_all_oanda(symbol=_primary_symbol(), db_path=_db_path())
 
 
 def _refresh_openbb() -> None:
@@ -182,9 +186,8 @@ def _refresh_openbb() -> None:
         fetch_btc_options_skew, store_records,
     )
     from hogan_bot.storage import get_connection
-    db_path = os.getenv("HOGAN_DB", "data/hogan.db")
-    conn = get_connection(db_path)
-    symbol = os.getenv("HOGAN_SYMBOL", "BTC/USD")
+    conn = get_connection(_db_path())
+    symbol = _primary_symbol()
     total = 0
     for fn in [fetch_dxy, fetch_vix, fetch_spy_return]:
         records = fn(days=30)

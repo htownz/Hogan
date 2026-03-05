@@ -207,14 +207,14 @@ def make_notifier(
 
     Explicit args override env vars. Reads these environment variables:
 
-    * ``HOGAN_DISCORD_WEBHOOK_URL`` — Discord incoming webhook (primary)
-    * ``HOGAN_WEBHOOK_URL``         — Generic JSON webhook (Slack, Make, etc.)
-    * ``HOGAN_SMTP_HOST``           — SMTP host for email
-    * ``HOGAN_SMTP_PORT``           — SMTP port (default 587)
-    * ``HOGAN_SMTP_USER``           — SMTP username
-    * ``HOGAN_SMTP_PASS``           — SMTP password
-    * ``HOGAN_EMAIL_FROM``          — From address
-    * ``HOGAN_EMAIL_TO``            — To address
+    * ``HOGAN_DISCORD_WEBHOOK_URL``  — Discord incoming webhook (primary)
+    * ``HOGAN_WEBHOOK_URL``          — Generic JSON webhook (Slack, Make, etc.)
+    * ``HOGAN_EMAIL_SMTP_HOST``      — SMTP host for email
+    * ``HOGAN_EMAIL_SMTP_PORT``      — SMTP port (default 587)
+    * ``HOGAN_EMAIL_USERNAME``       — SMTP username
+    * ``HOGAN_EMAIL_PASSWORD``       — SMTP password
+    * ``HOGAN_EMAIL_FROM``           — From address
+    * ``HOGAN_EMAIL_TO``             — To address
     """
     import os
 
@@ -234,17 +234,17 @@ def make_notifier(
         except Exception as exc:
             logger.warning("EmailNotifier setup failed: %s", exc)
     else:
-        smtp_host = os.getenv("HOGAN_SMTP_HOST", "")
+        smtp_host = os.getenv("HOGAN_EMAIL_SMTP_HOST", "")
         if smtp_host:
             notifiers.append(
                 EmailNotifier(
                     smtp_host=smtp_host,
-                    smtp_port=int(os.getenv("HOGAN_SMTP_PORT", "587")),
-                    username=os.getenv("HOGAN_SMTP_USER", ""),
-                    password=os.getenv("HOGAN_SMTP_PASS", ""),
+                    smtp_port=int(os.getenv("HOGAN_EMAIL_SMTP_PORT", "587")),
+                    username=os.getenv("HOGAN_EMAIL_USERNAME", ""),
+                    password=os.getenv("HOGAN_EMAIL_PASSWORD", ""),
                     from_addr=os.getenv("HOGAN_EMAIL_FROM", "hogan@localhost"),
                     to_addr=os.getenv("HOGAN_EMAIL_TO", ""),
-                    use_tls=os.getenv("HOGAN_SMTP_TLS", "true").lower() != "false",
+                    use_tls=os.getenv("HOGAN_EMAIL_TLS", "true").lower() != "false",
                 )
             )
 

@@ -58,8 +58,6 @@ def train_once(from_db: bool = True) -> None:
         )
     notifier = make_notifier(
         webhook_url=cfg.webhook_url or None,
-        telegram_token=cfg.telegram_token or None,
-        telegram_chat_id=cfg.telegram_chat_id or None,
         email=email_cfg,
     )
 
