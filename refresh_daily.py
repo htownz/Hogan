@@ -1,15 +1,19 @@
 """Daily data refresh script — run once per day before training or live trading.
 
 Refreshes all external data sources in dependency order:
-  1. Fear & Greed Index        (free, Alternative.me)
-  2. CoinGecko macro data      (free demo key)
-  3. GPR Index                 (free, academic download)
-  4. Kraken Futures / Deriv.   (free public API)
-  5. CryptoPanic news          (free token)
-  6. CryptoQuant on-chain      (paid — skipped if CRYPTOQUANT_KEY absent)
-  7. Glassnode                 (paid — skipped if GLASSNODE_KEY absent)
-  8. Santiment                 (paid — skipped if SANTIMENT_KEY absent)
-  9. SPY macro backfill        (yfinance, free)
+  1.  Fear & Greed Index        (free, Alternative.me)
+  2.  CoinGecko macro data      (free demo key)
+  3.  GPR Index                 (free, academic download)
+  4.  Kraken Futures / Deriv.   (free public API)
+  5.  CryptoPanic news          (free token)
+  6.  CryptoQuant on-chain      (paid — skipped if CRYPTOQUANT_KEY absent)
+  7.  Glassnode                 (paid — skipped if GLASSNODE_KEY absent)
+  8.  Santiment                 (paid — skipped if SANTIMENT_KEY absent)
+  9.  SPY macro backfill        (yfinance, free)
+  10. OpenBB macro: DXY/VIX     (yfinance fallback, free)
+  11. Messari fundamentals      (free tier — skipped if MESSARI_KEY absent)
+  12. Dune Analytics on-chain   (paid — skipped if DUNE_API_KEY absent)
+  13. Oanda prices              (OANDA_ACCESS_TOKEN required — BTC/ETH/XAU/EUR)
 
 Usage
 -----
@@ -138,6 +142,39 @@ def _refresh_spy() -> None:
         raise RuntimeError(result.stderr.strip() or "backfill --macro failed")
 
 
+def _refresh_messari() -> None:
+    """Fetch NVT ratio, realized cap, ROI, dev activity from Messari (free tier)."""
+    key = os.getenv("MESSARI_KEY", "")
+    if not key:
+        raise RuntimeError("MESSARI_KEY not set — skipping Messari")
+    from hogan_bot.fetch_messari import fetch_all_messari
+    symbol = os.getenv("HOGAN_SYMBOL", "BTC/USD")
+    db_path = os.getenv("HOGAN_DB", "data/hogan.db")
+    fetch_all_messari(symbol=symbol, db_path=db_path)
+
+
+def _refresh_dune() -> None:
+    """Fetch BTC exchange flow and whale count from Dune Analytics."""
+    key = os.getenv("DUNE_API_KEY", "")
+    if not key:
+        raise RuntimeError("DUNE_API_KEY not set — skipping Dune Analytics")
+    from hogan_bot.fetch_dune import fetch_all_dune
+    symbol = os.getenv("HOGAN_SYMBOL", "BTC/USD")
+    db_path = os.getenv("HOGAN_DB", "data/hogan.db")
+    fetch_all_dune(symbol=symbol, db_path=db_path)
+
+
+def _refresh_oanda() -> None:
+    """Fetch BTC/ETH/XAU/EUR mid prices from Oanda REST v20."""
+    token = os.getenv("OANDA_ACCESS_TOKEN", "")
+    if not token:
+        raise RuntimeError("OANDA_ACCESS_TOKEN not set — skipping Oanda")
+    from hogan_bot.fetch_oanda import fetch_all_oanda
+    symbol = os.getenv("HOGAN_SYMBOL", "BTC/USD")
+    db_path = os.getenv("HOGAN_DB", "data/hogan.db")
+    fetch_all_oanda(symbol=symbol, db_path=db_path)
+
+
 def _refresh_openbb() -> None:
     """Fetch DXY, VIX, SPY return, FOMC calendar via OpenBB / yfinance."""
     from hogan_bot.fetch_openbb import (
@@ -178,6 +215,9 @@ _SOURCES: list[tuple[str, str, Callable]] = [
     ("onchain",      "CryptoQuant on-chain metrics (CRYPTOQUANT_KEY)",    _refresh_onchain),
     ("glassnode",    "Glassnode on-chain analytics (GLASSNODE_KEY)",      _refresh_glassnode),
     ("santiment",    "Santiment social/dev intelligence (SANTIMENT_KEY)", _refresh_santiment),
+    ("messari",      "Messari fundamentals: NVT, realized cap (MESSARI_KEY)", _refresh_messari),
+    ("dune",         "Dune Analytics: BTC exchange flow, whales (DUNE_API_KEY)", _refresh_dune),
+    ("oanda",        "Oanda prices: BTC/ETH/XAU/EUR mid (OANDA_ACCESS_TOKEN)", _refresh_oanda),
 ]
 
 _SOURCE_KEYS = [s[0] for s in _SOURCES]
@@ -222,7 +262,7 @@ def main() -> None:
     fail_count = len(results) - ok_count
     print(f"\n{_BOLD}Summary:{_RESET} {ok_count} succeeded, {fail_count} failed")
     if fail_count:
-        _KEY_GATED = {"news", "onchain", "glassnode", "santiment", "coingecko"}
+        _KEY_GATED = {"news", "onchain", "glassnode", "santiment", "coingecko", "messari", "dune", "oanda"}
         failed = [k for k, v in results.items() if not v]
         key_failures = [k for k in failed if k in _KEY_GATED]
         other_failures = [k for k in failed if k not in _KEY_GATED]

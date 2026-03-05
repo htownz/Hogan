@@ -4,3 +4,9 @@ __pycache__/
 *.pyc
 .env
 models/hogan_rl_policy.zip
+
+# Secret / key files — NEVER commit these
+API Keys.txt
+*.key
+*.pem
+secrets.txt

@@ -1,4 +1,0 @@
-The Kraken API Key: L12qSbf9XBwUrLFfar7d04obhntvJ4II+2Sz+WFQmPlTA9ogo1qcGI8I
-Private Key: gJjiYi7EJLT7hfakY5fHvyzbu2Z0FfvCANYCGu0KzPTPQM548F/NRV8nH6+kLCOktEkkWCq+d0Ti94f6GASdvw==
-
-COINAPI Key: a89d99c2-6982-4534-9c0b-0dea93d900c2

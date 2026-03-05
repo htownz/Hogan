@@ -1,16 +1,16 @@
 """Lightweight event notification for the Hogan trading bot.
 
-Two concrete implementations are provided:
+Concrete implementations:
 
-* ``WebhookNotifier`` — fires a JSON POST to any HTTP endpoint (Slack
-  incoming-webhook, Discord, Make/Zapier, custom server, …).
-* ``NullNotifier`` — silently discards all events; used when no webhook URL
-  is configured so callers never need to check for ``None``.
+* ``DiscordNotifier``  — rich embeds to a Discord webhook (preferred).
+* ``WebhookNotifier``  — generic JSON POST (Slack, Make/Zapier, etc.).
+* ``EmailNotifier``    — SMTP email delivery.
+* ``NullNotifier``     — silently discards all events (no channels configured).
 
 Usage::
 
     from hogan_bot.notifier import make_notifier
-    notifier = make_notifier(webhook_url="https://hooks.slack.com/…")
+    notifier = make_notifier()   # reads env vars automatically
     notifier.notify("buy", {"symbol": "BTC/USD", "price": 60000})
 """
 
@@ -75,29 +75,66 @@ class WebhookNotifier:
 
 
 
-class TelegramNotifier:
-    """Send events to a Telegram chat via bot token + chat id."""
+_EVENT_COLORS = {
+    "buy":      0x00C853,   # green
+    "sell":     0xFF1744,   # red
+    "drawdown": 0xFF6D00,   # orange
+    "error":    0xD50000,   # dark red
+    "info":     0x2196F3,   # blue
+    "stale":    0xFFC107,   # amber
+    "retrain":  0x9C27B0,   # purple
+}
 
-    def __init__(self, bot_token: str, chat_id: str, timeout_seconds: int = 5) -> None:
-        self.bot_token = bot_token
-        self.chat_id = chat_id
+
+class DiscordNotifier:
+    """Send rich embeds to a Discord channel via an incoming webhook URL.
+
+    Webhook URL format:
+        https://discord.com/api/webhooks/{webhook_id}/{webhook_token}
+
+    Create via: Server Settings → Integrations → Webhooks → New Webhook.
+    """
+
+    def __init__(self, webhook_url: str, timeout_seconds: int = 5) -> None:
+        self.webhook_url = webhook_url
         self.timeout_seconds = timeout_seconds
 
     def notify(self, event_type: str, payload: dict) -> None:
-        text = {
-            "event": event_type,
-            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-            **payload,
+        ts = datetime.now(tz=timezone.utc).isoformat()
+        color = _EVENT_COLORS.get(event_type.lower(), 0x607D8B)
+
+        # Build embed fields from payload (skip internal/noisy keys)
+        _SKIP = {"event", "timestamp"}
+        fields = [
+            {"name": str(k), "value": f"`{str(v)[:100]}`", "inline": True}
+            for k, v in payload.items()
+            if k not in _SKIP and v is not None
+        ]
+
+        body = {
+            "username": "Hogan Bot",
+            "embeds": [{
+                "title": f"[Hogan] {event_type.upper()}",
+                "color": color,
+                "timestamp": ts,
+                "fields": fields[:25],  # Discord limit
+                "footer": {"text": "Hogan Trading Bot"},
+            }],
         }
-        msg = json.dumps(text, default=str)
-        url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
-        data = urllib.parse.urlencode({"chat_id": self.chat_id, "text": msg}).encode("utf-8")
-        req = urllib.request.Request(url, data=data, method="POST")
+        data = json.dumps(body, default=str).encode("utf-8")
+        req = urllib.request.Request(
+            self.webhook_url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
         try:
             with urllib.request.urlopen(req, timeout=self.timeout_seconds):
                 pass
+        except urllib.error.URLError as exc:
+            logger.warning("Discord webhook failed (%s): %s", self.webhook_url, exc)
         except Exception as exc:
-            logger.warning("Telegram notify failed: %s", exc)
+            logger.warning("Discord unexpected error: %s", exc)
 
 
 class EmailNotifier:
@@ -159,40 +196,37 @@ class MultiNotifier:
                 logger.warning("Notifier failed (%s): %s", type(n).__name__, exc)
 
 def make_notifier(
+    discord_webhook_url: str | None = None,
     webhook_url: str | None = None,
-    telegram_token: str | None = None,
-    telegram_chat_id: str | None = None,
     email: dict | None = None,
-) -> "NullNotifier | WebhookNotifier | TelegramNotifier | MultiNotifier":
+) -> "NullNotifier | DiscordNotifier | WebhookNotifier | MultiNotifier":
     """Build and return the appropriate notifier from args or environment variables.
 
-    Priority order: webhook -> Telegram -> Email. Any subset can be active
-    simultaneously; all active notifiers are combined into a ``MultiNotifier``.
+    Discord is the primary notification channel. Generic webhook and SMTP email
+    are also supported and can run simultaneously via ``MultiNotifier``.
 
-    Explicit args override env vars. Reads these environment variables (all optional):
+    Explicit args override env vars. Reads these environment variables:
 
-    * ``HOGAN_WEBHOOK_URL``     — HTTP webhook endpoint
-    * ``HOGAN_TELEGRAM_TOKEN``  — Telegram bot token
-    * ``HOGAN_TELEGRAM_CHAT``   — Telegram chat ID
-    * ``HOGAN_SMTP_HOST``       — SMTP host for email
-    * ``HOGAN_SMTP_PORT``       — SMTP port (default 587)
-    * ``HOGAN_SMTP_USER``       — SMTP username
-    * ``HOGAN_SMTP_PASS``       — SMTP password
-    * ``HOGAN_EMAIL_FROM``      — From address
-    * ``HOGAN_EMAIL_TO``        — To address
+    * ``HOGAN_DISCORD_WEBHOOK_URL`` — Discord incoming webhook (primary)
+    * ``HOGAN_WEBHOOK_URL``         — Generic JSON webhook (Slack, Make, etc.)
+    * ``HOGAN_SMTP_HOST``           — SMTP host for email
+    * ``HOGAN_SMTP_PORT``           — SMTP port (default 587)
+    * ``HOGAN_SMTP_USER``           — SMTP username
+    * ``HOGAN_SMTP_PASS``           — SMTP password
+    * ``HOGAN_EMAIL_FROM``          — From address
+    * ``HOGAN_EMAIL_TO``            — To address
     """
     import os
 
     notifiers: list = []
 
-    url = webhook_url or os.getenv("HOGAN_WEBHOOK_URL", "")
-    if url:
-        notifiers.append(WebhookNotifier(url))
+    discord_url = discord_webhook_url or os.getenv("HOGAN_DISCORD_WEBHOOK_URL", "")
+    if discord_url:
+        notifiers.append(DiscordNotifier(discord_url))
 
-    tg_token = telegram_token or os.getenv("HOGAN_TELEGRAM_TOKEN", "")
-    tg_chat = telegram_chat_id or os.getenv("HOGAN_TELEGRAM_CHAT", "")
-    if tg_token and tg_chat:
-        notifiers.append(TelegramNotifier(tg_token, tg_chat))
+    generic_url = webhook_url or os.getenv("HOGAN_WEBHOOK_URL", "")
+    if generic_url:
+        notifiers.append(WebhookNotifier(generic_url))
 
     if email:
         try:
