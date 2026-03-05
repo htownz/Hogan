@@ -1,6 +1,10 @@
 **Daily Data Refresh Workflow**
 
-\# Free (run daily):
+\# Run everything at once (recommended):
+
+python refresh\_daily.py
+
+\# Or run individual free sources:
 
 python -m hogan\_bot.fetch\_feargreed         # no key
 
@@ -12,7 +16,13 @@ python -m hogan\_bot.fetch\_derivatives       # Kraken Futures, no key
 
 python -m hogan\_bot.fetch\_news\_sentiment    # CRYPTOPANIC\_KEY (free token)
 
+\# Your active paid/keyed sources:
 
+python -m hogan\_bot.fetch\_messari           # MESSARI\_KEY (on-chain: NVT, realized cap)
+
+python -m hogan\_bot.fetch\_dune              # DUNE\_API\_KEY (BTC exchange flow, whales)
+
+python -m hogan\_bot.fetch\_oanda             # OANDA\_ACCESS\_TOKEN (BTC/ETH/XAU/EUR prices)
 
 \# Paid (run daily after subscribing):
 
@@ -24,31 +34,35 @@ python -m hogan\_bot.fetch\_santiment         # SANTIMENT\_KEY
 
 
 
-**New Ubuntu Terminal Commands**
+---
+
+**STEP 0 — Open a terminal every time (Windows PowerShell)**
+
+cd C:\Users\15125\Documents\Hogan\Hogan
+
+.\.venv\Scripts\Activate.ps1
+
+\# You should see (.venv) at the start of your prompt. If not, run:
+
+python -m venv .venv
+
+pip install -r requirements.txt
+
+---
+
+**Ubuntu / WSL Terminal Commands**
 
 source ~/hogan-venv/bin/activate
 
 cd /mnt/c/Users/15125/Documents/Hogan/Hogan
 
-
-
-**Ubuntu Training Command**
+\# Ubuntu Training Command (heavy RL — run here for GPU speed):
 
 python3 -m hogan\_bot.rl\_train --symbol BTC/USD --timeframe 5m --from-db --timesteps 500000
 
+---
 
-
-**OPENING NEW TERMINAL COMMAND -** 
-
-
-
-**cd C:\\Users\\15125\\Documents\\Hogan\\Hogan**
-
-.\\.venv\\Scripts\\Activate.ps1
-
-
-
-All commands assume you're in the project directory with the venv active:
+All commands below assume you're in the project directory with the venv active:
 
 
 
