@@ -213,7 +213,7 @@ def train(
     dict
         Evaluation metrics from the held-out 20 % window.
     """
-    from hogan_bot.rl_env import TradingEnv
+    from hogan_bot.rl_env import TradingEnv, N_OBS, N_OBS_EXTENDED
 
     split = int(len(candles) * 0.8)
     train_candles = candles.iloc[:split].reset_index(drop=True)
@@ -241,7 +241,7 @@ def train(
 
     # Open a DB connection for ext features (derivatives / on-chain / SPY)
     _db_conn = None
-    if use_ext_features and (candles_1h is not None or candles_15m is not None):
+    if use_ext_features:
         try:
             from hogan_bot.storage import get_connection
             _db_conn = get_connection()
@@ -351,6 +351,15 @@ def train(
         print("Eval window too small — skipping evaluation.")
         metrics = {}
 
+    if _db_conn is not None:
+        try:
+            _db_conn.close()
+        except Exception:
+            pass
+
+    obs_dims = N_OBS_EXTENDED if use_ext_features else N_OBS
+    print(f"Observation space: {obs_dims}-dim ({'extended' if use_ext_features else 'base'})")
+
     return metrics
 
 
@@ -421,10 +430,6 @@ def parse_args() -> argparse.Namespace:
         "--ext-features", action="store_true",
         help="Load derivatives / on-chain / SPY ext features from DB (requires prior fetch)",
     )
-    parser.add_argument(
-        "--symbol-str", default="BTC/USD", dest="symbol_str",
-        help="Trading symbol for DB lookups (default BTC/USD)",
-    )
     return parser.parse_args()
 
 
@@ -465,7 +470,7 @@ def main() -> None:
         candles_1h=candles_1h,
         candles_15m=candles_15m,
         use_ext_features=args.ext_features,
-        symbol=args.symbol_str,
+        symbol=args.symbol,
     )
 
     if metrics:
