@@ -15,8 +15,9 @@ Refreshes all external data sources in dependency order:
   12. SPY macro backfill        (yfinance, free)
   13. OpenBB macro: DXY/VIX     (yfinance fallback, free)
   14. Messari fundamentals      (free tier — skipped if MESSARI_KEY absent)
-  15. Dune Analytics on-chain   (paid — skipped if DUNE_API_KEY absent)
-  16. Oanda prices              (OANDA_ACCESS_TOKEN required — BTC/ETH/XAU/EUR)
+  15. Alpaca market data        (free key — SPY close + BTC/ETH bid-ask spread)
+  16. Dune Analytics on-chain   (paid — skipped if DUNE_API_KEY absent)
+  17. Oanda prices              (OANDA_ACCESS_TOKEN required — BTC/ETH/XAU/EUR)
 
 Usage
 -----
@@ -228,6 +229,21 @@ def _refresh_openbb() -> None:
         raise RuntimeError("OpenBB refresh produced 0 rows — check yfinance install")
 
 
+def _refresh_alpaca() -> None:
+    """Fetch SPY close, crypto bid-ask spread from Alpaca (ALPACA_API_KEY required)."""
+    k = os.getenv("ALPACA_API_KEY", "").strip()
+    if not k:
+        raise RuntimeError(
+            "ALPACA_API_KEY not set — skipping Alpaca\n"
+            "Free paper account at: https://alpaca.markets"
+        )
+    from hogan_bot.fetch_alpaca import fetch_all_alpaca
+    result = fetch_all_alpaca(db_path=_db_path(), stock_days=10, include_spread=True)
+    total = sum(result.values())
+    if total == 0:
+        raise RuntimeError("Alpaca refresh produced 0 rows — check API keys")
+
+
 # ---------------------------------------------------------------------------
 # Source registry
 # ---------------------------------------------------------------------------
@@ -246,6 +262,7 @@ _SOURCES: list[tuple[str, str, Callable]] = [
     ("fred",         "FRED macro: 10Y yield, M2, CPI, Fed rate (FRED_API_KEY)", _refresh_fred),
     ("news",         "CryptoPanic news sentiment 1 req/day (CRYPTOPANIC_KEY)", _refresh_news_sentiment),
     ("messari",      "Messari fundamentals: NVT, realized cap (MESSARI_KEY)",  _refresh_messari),
+    ("alpaca",       "Alpaca: SPY close + BTC/ETH bid-ask spread (ALPACA_API_KEY)", _refresh_alpaca),
     ("oanda",        "Oanda prices: BTC/ETH/XAU/EUR mid (OANDA_ACCESS_TOKEN)", _refresh_oanda),
     # ── Paid / key-gated ────────────────────────────────────────────────────
     ("dune",         "Dune Analytics: BTC exchange flow, whales (DUNE_API_KEY)", _refresh_dune),

@@ -447,3 +447,199 @@ class CoinbaseClient(ExchangeClient):
         """Convenience constructor identical to ``CoinbaseClient()``."""
         return cls(sandbox=sandbox)
 
+
+class AlpacaClient:
+    """Alpaca crypto trading client (paper and live).
+
+    Alpaca uses its own SDK (``alpaca-py``) rather than CCXT, so this class
+    provides the same ``buy`` / ``sell`` / ``get_balance`` / ``fetch_ohlcv_df``
+    interface as :class:`ExchangeClient` but delegates to the Alpaca REST API.
+
+    Install
+    -------
+    ``pip install alpaca-py``
+
+    Environment variables
+    ---------------------
+    ``ALPACA_API_KEY``    API key from alpaca.markets paper-trading dashboard
+    ``ALPACA_SECRET_KEY`` Corresponding secret key
+    ``ALPACA_PAPER``      ``true`` (default) or ``false`` for live trading
+
+    Paper trading is the default and requires zero real money.  To switch to
+    live trading, set ``ALPACA_PAPER=false`` and replace with live keys.
+    """
+
+    def __init__(self, paper: bool | None = None) -> None:
+        import os
+        self._api_key = os.getenv("ALPACA_API_KEY", "").strip()
+        self._secret_key = os.getenv("ALPACA_SECRET_KEY", "").strip()
+        if not self._api_key or not self._secret_key:
+            raise ValueError(
+                "ALPACA_API_KEY and ALPACA_SECRET_KEY must be set in .env. "
+                "Get free paper-trading keys at alpaca.markets."
+            )
+        if paper is None:
+            paper = os.getenv("ALPACA_PAPER", "true").lower() != "false"
+        self._paper = paper
+        self._base_url = (
+            "https://paper-api.alpaca.markets"
+            if paper
+            else "https://api.alpaca.markets"
+        )
+        # Lazy-loaded SDK clients
+        self._trading_client = None
+        self._crypto_data_client = None
+
+    # ------------------------------------------------------------------
+    # Internal SDK bootstrapping
+    # ------------------------------------------------------------------
+
+    def _trading(self):
+        """Return a lazily constructed TradingClient."""
+        if self._trading_client is None:
+            try:
+                from alpaca.trading.client import TradingClient
+            except ImportError as exc:
+                raise ImportError("Run: pip install alpaca-py") from exc
+            self._trading_client = TradingClient(
+                self._api_key, self._secret_key, paper=self._paper
+            )
+        return self._trading_client
+
+    def _crypto_data(self):
+        """Return a lazily constructed CryptoHistoricalDataClient."""
+        if self._crypto_data_client is None:
+            try:
+                from alpaca.data import CryptoHistoricalDataClient
+            except ImportError as exc:
+                raise ImportError("Run: pip install alpaca-py") from exc
+            self._crypto_data_client = CryptoHistoricalDataClient(
+                self._api_key, self._secret_key
+            )
+        return self._crypto_data_client
+
+    # ------------------------------------------------------------------
+    # ExchangeClient-compatible interface
+    # ------------------------------------------------------------------
+
+    def get_balance(self) -> dict[str, float]:
+        """Return {currency: amount} dict for the Alpaca account."""
+        acct = self._trading().get_account()
+        return {
+            "USD": float(acct.cash),
+            "equity": float(acct.equity),
+            "buying_power": float(acct.buying_power),
+        }
+
+    def buy(self, symbol: str, amount_usd: float, order_type: str = "market") -> dict:
+        """Place a notional buy order for *symbol* (e.g. 'BTC/USD').
+
+        *amount_usd* is the dollar notional to spend.
+        Returns the Alpaca order object as a dict.
+        """
+        from alpaca.trading.requests import MarketOrderRequest
+        from alpaca.trading.enums import OrderSide, TimeInForce
+        alpaca_sym = symbol.replace("/", "")
+        req = MarketOrderRequest(
+            symbol=alpaca_sym,
+            notional=round(amount_usd, 2),
+            side=OrderSide.BUY,
+            time_in_force=TimeInForce.GTC,
+        )
+        order = self._trading().submit_order(req)
+        logger.info("Alpaca BUY %s notional=%.2f order_id=%s", symbol, amount_usd, order.id)
+        return order.__dict__
+
+    def sell(self, symbol: str, qty: float, order_type: str = "market") -> dict:
+        """Place a qty-based sell order for *symbol*.
+
+        *qty* is the number of coins/tokens to sell.
+        Returns the Alpaca order object as a dict.
+        """
+        from alpaca.trading.requests import MarketOrderRequest
+        from alpaca.trading.enums import OrderSide, TimeInForce
+        alpaca_sym = symbol.replace("/", "")
+        req = MarketOrderRequest(
+            symbol=alpaca_sym,
+            qty=qty,
+            side=OrderSide.SELL,
+            time_in_force=TimeInForce.GTC,
+        )
+        order = self._trading().submit_order(req)
+        logger.info("Alpaca SELL %s qty=%.6f order_id=%s", symbol, qty, order.id)
+        return order.__dict__
+
+    def fetch_ohlcv_df(
+        self,
+        symbol: str,
+        timeframe: str = "1h",
+        limit: int = 500,
+    ) -> pd.DataFrame:
+        """Fetch OHLCV bars from Alpaca into a standard Hogan DataFrame.
+
+        *timeframe* uses CCXT-style notation: ``1m``, ``5m``, ``15m``,
+        ``1h``, ``4h``, ``1d``.  Returns a DataFrame with columns
+        [timestamp, open, high, low, close, volume].
+        """
+        from alpaca.data.requests import CryptoBarsRequest
+        from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+        from datetime import datetime, timezone, timedelta
+
+        _TF: dict[str, object] = {
+            "1m":  TimeFrame(1, TimeFrameUnit.Minute),
+            "5m":  TimeFrame(5, TimeFrameUnit.Minute),
+            "15m": TimeFrame(15, TimeFrameUnit.Minute),
+            "30m": TimeFrame(30, TimeFrameUnit.Minute),
+            "1h":  TimeFrame.Hour,
+            "4h":  TimeFrame(4, TimeFrameUnit.Hour),
+            "1d":  TimeFrame.Day,
+        }
+        tf = _TF.get(timeframe, TimeFrame.Hour)
+
+        # Estimate start date from limit and timeframe
+        _TF_MIN: dict[str, int] = {
+            "1m": 1, "5m": 5, "15m": 15, "30m": 30,
+            "1h": 60, "4h": 240, "1d": 1440,
+        }
+        mins_per_bar = _TF_MIN.get(timeframe, 60)
+        total_minutes = limit * mins_per_bar
+        start = datetime.now(tz=timezone.utc) - timedelta(minutes=total_minutes + 60)
+
+        alpaca_sym = symbol.replace("/", "")
+        req = CryptoBarsRequest(
+            symbol_or_symbols=alpaca_sym,
+            timeframe=tf,
+            start=start,
+        )
+        bars_resp = self._crypto_data().get_crypto_bars(req)
+        sym_bars = bars_resp.get(alpaca_sym) if hasattr(bars_resp, "get") else None
+        if not sym_bars:
+            return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
+
+        rows = [
+            {
+                "timestamp": int(bar.timestamp.timestamp() * 1000),
+                "open": float(bar.open),
+                "high": float(bar.high),
+                "low": float(bar.low),
+                "close": float(bar.close),
+                "volume": float(bar.volume),
+            }
+            for bar in sym_bars[-limit:]
+        ]
+        return pd.DataFrame(rows)
+
+    def get_positions(self) -> list[dict]:
+        """Return all open positions as a list of dicts."""
+        positions = self._trading().get_all_positions()
+        return [p.__dict__ for p in positions]
+
+    def cancel_all_orders(self) -> None:
+        """Cancel all open orders."""
+        self._trading().cancel_orders()
+
+    @classmethod
+    def from_env(cls, paper: bool | None = None) -> "AlpacaClient":
+        """Convenience constructor identical to ``AlpacaClient()``."""
+        return cls(paper=paper)
+
