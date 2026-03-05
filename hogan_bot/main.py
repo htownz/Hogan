@@ -97,6 +97,19 @@ def run_iteration(
             use_fvg=config.use_fvg,
             fvg_min_gap_pct=config.fvg_min_gap_pct,
             signal_mode=config.signal_mode,
+            atr_stop_multiplier=config.atr_stop_multiplier,
+            # ICT pillars — were previously missing, causing ICT to be silently disabled
+            use_ict=config.use_ict,
+            ict_swing_left=config.ict_swing_left,
+            ict_swing_right=config.ict_swing_right,
+            ict_eq_tolerance_pct=config.ict_eq_tolerance_pct,
+            ict_min_displacement_pct=config.ict_min_displacement_pct,
+            ict_require_time_window=config.ict_require_time_window,
+            ict_time_windows=config.ict_time_windows,
+            ict_require_pd=config.ict_require_pd,
+            ict_ote_enabled=config.ict_ote_enabled,
+            ict_ote_low=config.ict_ote_low,
+            ict_ote_high=config.ict_ote_high,
         )
         px = mark_prices[symbol]
 
