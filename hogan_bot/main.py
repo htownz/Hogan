@@ -224,13 +224,22 @@ def run(max_loops: int | None = None) -> None:
             logging.warning("Could not load ML model (%s). Continuing without ML filter.", exc)
 
     notifier = make_notifier(config.webhook_url or None)
+    mode_str = "LIVE" if allow_live else "PAPER"
     logging.info(
         "Starting Hogan mode=%s symbols=%s timeframe=%s db=%s",
-        "LIVE" if allow_live else "PAPER",
+        mode_str,
         ",".join(config.symbols),
         config.timeframe,
         config.db_path,
     )
+    notifier.notify("info", {
+        "status": f"Hogan {mode_str} started",
+        "symbols": ", ".join(config.symbols),
+        "timeframe": config.timeframe,
+        "ml_model": "loaded" if ml_model else "no model — retraining needed",
+        "ict": "enabled" if config.use_ict else "disabled",
+        "equity": f"${config.starting_balance:,.2f}",
+    })
 
     loops = 0
     while True:

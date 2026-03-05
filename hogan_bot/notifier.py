@@ -125,12 +125,23 @@ class DiscordNotifier:
         req = urllib.request.Request(
             self.webhook_url,
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                # Discord/Cloudflare blocks Python's default urllib UA with error 1010.
+                # A descriptive bot UA is accepted and encouraged by Discord's API docs.
+                "User-Agent": "HoganBot/1.0 (trading bot; +https://github.com/htownz/Hogan)",
+            },
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout_seconds):
-                pass
+            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
+                logger.debug("Discord webhook sent: HTTP %s", resp.status)
+        except urllib.error.HTTPError as exc:
+            body_text = exc.read().decode(errors="replace")[:200]
+            logger.warning(
+                "Discord webhook HTTP %s — %s — body: %s",
+                exc.code, exc.reason, body_text,
+            )
         except urllib.error.URLError as exc:
             logger.warning("Discord webhook failed (%s): %s", self.webhook_url, exc)
         except Exception as exc:
