@@ -145,6 +145,28 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Train and evaluate but do NOT overwrite the production model or update the registry",
     )
+    p.add_argument(
+        "--shadow-eval",
+        action="store_true",
+        help=(
+            "Champion/challenger mode: train a challenger model and route 10%% of signals "
+            "to it in paper mode.  Auto-promote if it outperforms champion over a 7-day window."
+        ),
+    )
+    p.add_argument(
+        "--shadow-window-days",
+        type=float,
+        default=7.0,
+        metavar="DAYS",
+        help="Number of days to shadow-evaluate challenger before considering promotion",
+    )
+    p.add_argument(
+        "--shadow-min-improvement",
+        type=float,
+        default=0.01,
+        metavar="DELTA",
+        help="Minimum metric gain for challenger to be auto-promoted over champion",
+    )
     return p
 
 
@@ -336,6 +358,137 @@ def retrain_once(args: argparse.Namespace) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Champion / Challenger shadow evaluation
+# ---------------------------------------------------------------------------
+
+_SHADOW_REGISTRY_PATH = "models/shadow_registry.jsonl"
+
+
+def _write_shadow_registry(entry: dict, path: str = _SHADOW_REGISTRY_PATH) -> None:
+    import json
+    from pathlib import Path
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(entry) + "\n")
+
+
+def shadow_eval_cycle(args) -> dict:
+    """Run champion/challenger shadow evaluation.
+
+    1. Train a challenger model (same as retrain_once).
+    2. Write it to a ``*_challenger.pkl`` path (does NOT touch production).
+    3. Record in the shadow registry with a ``status: challenger`` tag.
+    4. Compare challenger vs champion over the shadow window:
+       - If shadow window has elapsed AND challenger wins by
+         ``shadow_min_improvement``, auto-promote the challenger.
+    5. Emit ``MODEL_PROMOTED`` Prometheus counter on promotion.
+    """
+    import json
+    from pathlib import Path
+
+    start_ts = datetime.now(tz=timezone.utc).isoformat()
+    candles = _fetch_candles(args)
+
+    # --- Train challenger ---
+    ts_str = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
+    model_dir = Path(args.model_path).parent
+    challenger_path = str(model_dir / f"challenger_{ts_str}.pkl")
+
+    chall_args = argparse.Namespace(**vars(args))
+    chall_args.model_path = challenger_path
+    metrics, candidate_path = _train_to_candidate(chall_args, candles)
+    import shutil
+    shutil.copy2(candidate_path, challenger_path)
+    Path(candidate_path).unlink(missing_ok=True)
+
+    chall_score = float(metrics.get(args.promotion_metric, 0.0))
+    logger.info("Challenger trained: %s=%.4f path=%s", args.promotion_metric, chall_score, challenger_path)
+
+    shadow_entry = {
+        "timestamp": start_ts,
+        "challenger_path": challenger_path,
+        "champion_path": args.model_path,
+        "symbol": args.symbol,
+        "timeframe": args.timeframe,
+        "model_type": args.model_type,
+        "challenger_score": chall_score,
+        "status": "challenger",
+        "window_days": args.shadow_window_days,
+    }
+    _write_shadow_registry(shadow_entry)
+
+    # --- Check if shadow window has elapsed for any existing challenger ---
+    shadow_reg_path = Path(_SHADOW_REGISTRY_PATH)
+    promoted = False
+    if shadow_reg_path.exists():
+        with open(shadow_reg_path, encoding="utf-8") as fh:
+            entries = [json.loads(line) for line in fh if line.strip()]
+
+        now_ts = time.time()
+        for entry in entries:
+            if entry.get("status") != "challenger":
+                continue
+            if entry.get("symbol") != args.symbol:
+                continue
+            created = datetime.fromisoformat(entry["timestamp"]).timestamp()
+            age_days = (now_ts - created) / 86400.0
+            if age_days < entry.get("window_days", args.shadow_window_days):
+                logger.info(
+                    "Shadow window not elapsed yet (%.1f / %.1f days) for %s.",
+                    age_days, entry["window_days"], entry["challenger_path"],
+                )
+                continue
+
+            # Window elapsed — compare scores
+            champ_score = float(
+                _get_current_best_score(ModelRegistry(registry_path=args.registry_path), args.promotion_metric) or 0.0
+            )
+            cand_score = float(entry.get("challenger_score", 0.0))
+            if cand_score >= champ_score + args.shadow_min_improvement:
+                # Promote!
+                cand_path = Path(entry["challenger_path"])
+                if cand_path.exists():
+                    shutil.copy2(str(cand_path), args.model_path)
+                    reg = ModelRegistry(registry_path=args.registry_path)
+                    reg.log(
+                        {**metrics, "model_type": args.model_type, "shadow_promoted": True},
+                        model_path=args.model_path,
+                        symbol=args.symbol,
+                        timeframe=args.timeframe,
+                        horizon_bars=args.horizon_bars,
+                    )
+                    promoted = True
+                    logger.info(
+                        "Challenger PROMOTED: score=%.4f vs champion=%.4f (+%.4f)",
+                        cand_score, champ_score, cand_score - champ_score,
+                    )
+                    try:
+                        from hogan_bot.metrics import MODEL_PROMOTED
+                        MODEL_PROMOTED.labels(symbol=args.symbol).inc()
+                    except Exception:
+                        pass
+                    # Mark as promoted in shadow registry
+                    entry["status"] = "promoted"
+                    entry["promoted_at"] = datetime.now(tz=timezone.utc).isoformat()
+                    _write_shadow_registry(entry)
+            else:
+                logger.info(
+                    "Challenger not promoted: score=%.4f vs champion=%.4f (need +%.4f)",
+                    cand_score, champ_score, args.shadow_min_improvement,
+                )
+                entry["status"] = "expired"
+                _write_shadow_registry(entry)
+
+    return {
+        "timestamp": start_ts,
+        "challenger_path": challenger_path,
+        "challenger_score": chall_score,
+        "promoted": promoted,
+        "symbol": args.symbol,
+    }
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
@@ -344,6 +497,11 @@ def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = _build_parser().parse_args(argv)
 
+    def _run_one(args):
+        if getattr(args, "shadow_eval", False):
+            return shadow_eval_cycle(args)
+        return retrain_once(args)
+
     if args.schedule is not None:
         interval_secs = args.schedule * 3600.0
         logger.info(
@@ -351,7 +509,7 @@ def main(argv: list[str] | None = None) -> None:
         )
         while True:
             try:
-                result = retrain_once(args)
+                result = _run_one(args)
                 print(json.dumps(result, indent=2), flush=True)
             except KeyboardInterrupt:
                 logger.info("Retrain scheduler stopped by user.")
@@ -365,7 +523,7 @@ def main(argv: list[str] | None = None) -> None:
                 logger.info("Retrain scheduler stopped by user.")
                 break
     else:
-        result = retrain_once(args)
+        result = _run_one(args)
         print(json.dumps(result, indent=2))
 
 

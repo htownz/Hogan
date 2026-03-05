@@ -96,9 +96,18 @@ EXT_FEATURE_NAMES: list[str] = [
     "glassnode_realized_dist",        # % price vs. realized price (paid)
     "santiment_social_vol_chg",       # Social volume 24h % change ÷100 (paid)
     "santiment_dev_activity_chg",     # Dev activity 7d MA % change ÷100 (paid)
+    # OpenBB macro / derivatives  (indices 20-27) — Phase 6
+    "dxy_close",                      # US Dollar Index close (÷120 to normalize ~[0.8,1.0])
+    "vix_close",                      # CBOE VIX close (÷100 to normalize ~[0.1,0.8])
+    "spy_return_pct",                 # SPY 1-day return % (÷10 to clip ±3σ)
+    "fomc_proximity",                 # Binary: 1 if within 1 day of FOMC meeting
+    "btc_put_call_ratio",             # BTC options put/call OI ratio
+    "glassnode_puell_multiple",       # Glassnode Puell Multiple (miner income / 365d MA)
+    "cg_stablecoin_dominance",        # USDT+USDC % of market cap (÷100)
+    "cg_defi_dominance",              # DeFi % of total market cap (÷100)
 ]
 
-assert len(EXT_FEATURE_NAMES) == 20, f"Expected 20 ext features, got {len(EXT_FEATURE_NAMES)}"
+assert len(EXT_FEATURE_NAMES) == 28, f"Expected 28 ext features, got {len(EXT_FEATURE_NAMES)}"
 
 _MTF_MIN_BARS: int = 20   # minimum candles needed to compute MTF features
 
@@ -282,6 +291,15 @@ def build_ext_features(
             # Santiment (paid, stored as ÷100 already)
             ("santiment_social_vol_chg",  18,    1.0,  -1.0,  1.0),
             ("santiment_dev_activity_chg", 19,   1.0,  -1.0,  1.0),
+            # OpenBB macro / derivatives  (Phase 6, indices 20-27)
+            ("dxy_close",                 20,  120.0,  0.7,   1.0),   # ÷120, clip [0.7,1.0]
+            ("vix_close",                 21,  100.0,  0.05,  1.0),   # ÷100, clip [0.05,1.0]
+            ("spy_return_pct",            22,   10.0,  -1.0,  1.0),   # ÷10, clip [-1,1]
+            ("fomc_proximity",            23,    1.0,   0.0,  1.0),   # binary
+            ("btc_put_call_ratio",        24,    2.0,   0.0,  1.0),   # ÷2, clip [0,1]
+            ("glassnode_puell_multiple",  25,    3.0,   0.0,  1.0),   # ÷3, clip [0,1]
+            ("cg_stablecoin_dominance",   26,  100.0,   0.0,  1.0),   # ÷100
+            ("cg_defi_dominance",         27,  100.0,   0.0,  1.0),   # ÷100
         ]
 
         for metric, idx, divisor, clip_lo, clip_hi in _ONCHAIN_LOOKUP:
@@ -364,7 +382,7 @@ def build_feature_row_extended(
     # 7 from 15m
     m15_feats = _compute_tf_features(candles_15m) or [0.0] * 7
 
-    # 20 ext features (6 on-chain/macro + 6 CoinGecko + 8 alt/sentiment/geo)
+    # 28 ext features (6 on-chain/macro + 6 CoinGecko + 8 alt/sentiment/geo + 8 OpenBB)
     ts = (
         candles_5m["ts_ms"].iloc[-1]
         if "ts_ms" in candles_5m.columns
@@ -374,7 +392,7 @@ def build_feature_row_extended(
     )
     ext = build_ext_features(ts, conn=conn, symbol=symbol)
 
-    combined = base + h1_feats + m15_feats + ext  # 36 + 7 + 7 + 20 = 70
+    combined = base + h1_feats + m15_feats + ext  # 36 + 7 + 7 + 28 = 78
     return combined
 
 

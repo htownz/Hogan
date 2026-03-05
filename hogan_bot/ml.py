@@ -828,3 +828,56 @@ def predict_up_probability(candles: pd.DataFrame, trained_model: TrainedModel) -
     else:
         proba = trained_model.model.predict_proba(latest)[0][1]
     return float(proba)
+
+
+
+def train_hist_gradient_boosting(
+    candles: pd.DataFrame,
+    model_path: str,
+    horizon_bars: int = 3,
+    max_depth: int = 6,
+    learning_rate: float = 0.05,
+    max_iter: int = 400,
+) -> dict[str, object]:
+    """Train + save sklearn HistGradientBoostingClassifier (strong tabular baseline)."""
+    from sklearn.ensemble import HistGradientBoostingClassifier
+    from sklearn.metrics import accuracy_score, roc_auc_score, precision_score, recall_score, f1_score
+
+    X, y, feature_cols = make_feature_matrix(candles, horizon_bars=horizon_bars)
+    split = int(len(X) * 0.8)
+    X_train, X_test = X.iloc[:split], X.iloc[split:]
+    y_train, y_test = y.iloc[:split], y.iloc[split:]
+
+    clf = HistGradientBoostingClassifier(
+        max_depth=max_depth,
+        learning_rate=learning_rate,
+        max_iter=max_iter,
+        random_state=42,
+    )
+    clf.fit(X_train, y_train)
+
+    proba = clf.predict_proba(X_test)[:, 1]
+    pred = (proba >= 0.5).astype(int)
+
+    metrics = {
+        "model_type": "hist_gb",
+        "accuracy": float(accuracy_score(y_test, pred)),
+        "roc_auc": float(roc_auc_score(y_test, proba)) if len(set(y_test)) > 1 else 0.0,
+        "precision": float(precision_score(y_test, pred, zero_division=0)),
+        "recall": float(recall_score(y_test, pred, zero_division=0)),
+        "f1": float(f1_score(y_test, pred, zero_division=0)),
+        "n_train": int(len(X_train)),
+        "n_test": int(len(X_test)),
+    }
+
+    artifact = TrainedModel(model=clf, feature_columns=feature_cols, scaler=None)
+    save_model(artifact, model_path)
+    return metrics
+
+
+def build_feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
+    """Return a feature DataFrame aligned to candles index for advanced models."""
+    frame = _feature_frame(candles)
+    cols = list(_FEATURE_COLUMNS)
+    out = frame[cols].copy()
+    return out.replace([np.inf, -np.inf], np.nan)

@@ -1,0 +1,36 @@
+[Unit]
+Description=Hogan Crypto Trading Bot
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hogan
+WorkingDirectory=/opt/hogan
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/opt/hogan/.env
+
+# Use the async event loop (Phase 2) as the primary entry point
+ExecStart=/opt/hogan/venv/bin/python -m hogan_bot.event_loop
+
+# Restart on any failure, with a 30-second delay
+Restart=on-failure
+RestartSec=30
+
+# Systemd watchdog integration — kills and restarts if no keepalive in 120s
+WatchdogSec=120
+NotifyAccess=main
+
+# Resource limits
+LimitNOFILE=65536
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/hogan/data /opt/hogan/models /opt/hogan/mlruns /opt/hogan/logs
+
+[Install]
+WantedBy=multi-user.target

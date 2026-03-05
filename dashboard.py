@@ -35,8 +35,8 @@ rl_model_path = st.sidebar.text_input("RL policy (.zip)", value="models/hogan_rl
 # ---------------------------------------------------------------------------
 # Tab layout
 # ---------------------------------------------------------------------------
-tab_rl, tab_classical, tab_data, tab_backtest = st.tabs(
-    ["RL Agent", "Classical Model", "Data Coverage", "Backtest"]
+tab_rl, tab_classical, tab_exec, tab_data, tab_backtest = st.tabs(
+    ["RL Agent", "Classical Model", "Execution Log", "Data Coverage", "Backtest"]
 )
 
 # ===========================================================================
@@ -209,8 +209,8 @@ with tab_data:
             st.subheader("External & On-Chain Metrics")
             _EXT_METRICS = [
                 # on-chain / derivatives
-                "mvrv_ratio", "sopr", "active_addresses",
-                "funding_rate", "open_interest",
+                "mvrv_zscore", "sopr", "active_addresses",
+                "funding_rate", "open_interest_pct_change",
                 # coingecko
                 "btc_dominance_pct", "stablecoin_dominance_pct",
                 "global_mcap_change_24h", "defi_dominance_pct",
@@ -249,14 +249,21 @@ with tab_data:
             # derivatives_metrics table
             try:
                 cur = raw_conn.execute(
-                    "SELECT COUNT(*), MIN(timestamp), MAX(timestamp) FROM derivatives_metrics"
+                    "SELECT COUNT(*), MIN(ts_ms), MAX(ts_ms) FROM derivatives_metrics"
                 )
                 count, min_t, max_t = cur.fetchone()
+                def _ms_to_date(ms):
+                    if ms is None:
+                        return "—"
+                    try:
+                        return pd.Timestamp(ms, unit="ms", tz="UTC").strftime("%Y-%m-%d")
+                    except Exception:
+                        return str(ms)[:10]
                 metric_rows.append({
                     "metric": "derivatives_metrics (table)",
                     "rows": count or 0,
-                    "earliest": str(min_t or "—")[:10],
-                    "latest": str(max_t or "—")[:10],
+                    "earliest": _ms_to_date(min_t),
+                    "latest": _ms_to_date(max_t),
                     "status": "OK" if count else "EMPTY",
                 })
             except Exception:
@@ -365,3 +372,75 @@ with tab_backtest:
 
             except Exception as exc:
                 st.error(f"Backtest failed: {exc}")
+# ===========================================================================
+# TAB 3 — EXECUTION LOG
+# ===========================================================================
+with tab_exec:
+    st.header("Execution Log & Portfolio")
+
+    if not Path(db_path).exists():
+        st.warning(f"Database not found at `{db_path}`.")
+    else:
+        try:
+            from hogan_bot.storage import get_connection, load_positions, load_fills, load_equity
+
+            exec_conn = get_connection(str(db_path))
+
+            positions_df = load_positions(exec_conn)
+            fills_df = load_fills(exec_conn, limit=2000)
+            equity_df = load_equity(exec_conn, limit=2000)
+            exec_conn.close()
+
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Open positions", int((positions_df["qty"] > 0).sum()) if not positions_df.empty else 0)
+            col2.metric("Recent fills", int(len(fills_df)) if fills_df is not None and not fills_df.empty else 0)
+            col3.metric("Equity snapshots", int(len(equity_df)) if equity_df is not None and not equity_df.empty else 0)
+
+            st.subheader("Positions")
+            if not positions_df.empty:
+                st.dataframe(positions_df, use_container_width=True)
+            else:
+                st.info("No open positions.")
+
+            st.subheader("Equity Curve")
+            if equity_df is not None and not equity_df.empty:
+                eq = equity_df.copy()
+                eq["ts"] = pd.to_datetime(eq["ts_ms"], unit="ms", utc=True)
+                try:
+                    import plotly.express as px
+                    fig_eq = px.line(eq, x="ts", y="equity_usd", title="Equity (USD)")
+                    st.plotly_chart(fig_eq, use_container_width=True)
+                    fig_dd = px.area(eq, x="ts", y="drawdown", title="Drawdown fraction",
+                                     color_discrete_sequence=["red"])
+                    st.plotly_chart(fig_dd, use_container_width=True)
+                except ImportError:
+                    st.line_chart(eq.set_index("ts")[["equity_usd"]])
+                    st.line_chart(eq.set_index("ts")[["drawdown"]])
+            else:
+                st.info("No equity snapshots yet. Run the bot to populate.")
+
+            st.subheader("Recent Fills")
+            if fills_df is not None and not fills_df.empty:
+                fd = fills_df.copy()
+                fd["ts"] = pd.to_datetime(fd["ts_ms"], unit="ms", utc=True)
+                # Check for LLM explanation column
+                raw_conn2 = sqlite3.connect(db_path)
+                try:
+                    expl = pd.read_sql_query(
+                        "SELECT fill_id, explanation FROM trade_explanations ORDER BY ts_ms DESC LIMIT 500",
+                        raw_conn2,
+                    )
+                    fd = fd.merge(expl, on="fill_id", how="left")
+                except Exception:
+                    pass
+                finally:
+                    raw_conn2.close()
+                st.dataframe(fd.sort_values("ts_ms", ascending=False).head(200), use_container_width=True)
+            else:
+                st.info("No fills recorded yet.")
+
+        except Exception as exc:
+            st.error(f"Execution log error: {exc}")
+
+
+

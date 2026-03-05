@@ -11,6 +11,7 @@ from hogan_bot.ml import (
     train_logistic_regression,
     train_random_forest,
     train_xgboost,
+    train_hist_gradient_boosting,
     walk_forward_cv,
 )
 from hogan_bot.registry import ModelRegistry
@@ -25,9 +26,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model-path", default="models/hogan_logreg.pkl")
     parser.add_argument(
         "--model-type",
-        choices=["logreg", "random_forest", "xgboost", "lightgbm"],
+        choices=["logreg", "random_forest", "xgboost", "lightgbm", "hist_gb"],
         default="logreg",
-        help="Classifier: logistic regression (default), random forest, xgboost, or lightgbm",
+        help="Classifier: logistic regression (default), random forest, xgboost, lightgbm, or hist_gb",
     )
     parser.add_argument(
         "--tune",
@@ -93,6 +94,10 @@ def main() -> None:
         )
     elif args.model_type == "lightgbm":
         metrics = train_lightgbm(
+            candles, model_path=args.model_path, horizon_bars=args.horizon_bars
+        )
+    elif args.model_type == "hist_gb":
+        metrics = train_hist_gradient_boosting(
             candles, model_path=args.model_path, horizon_bars=args.horizon_bars
         )
     else:

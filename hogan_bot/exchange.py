@@ -347,6 +347,38 @@ class ExchangeClient:
         """Return account balances.  Requires valid API credentials."""
         return self._exchange.fetch_balance()
 
+    # ---------------------------------------------------------------------
+    # Trading (spot) — intentionally minimal, for live routing in production
+    # ---------------------------------------------------------------------
+
+    def create_market_order(self, symbol: str, side: str, amount: float, params: dict | None = None) -> dict:
+        """Create a market order. Returns the raw CCXT order dict."""
+        if amount <= 0:
+            raise ValueError("amount must be > 0")
+        params = params or {}
+        return self._exchange.create_order(symbol, "market", side, amount, None, params)
+
+    def create_limit_order(self, symbol: str, side: str, amount: float, price: float, params: dict | None = None) -> dict:
+        """Create a limit order. Returns the raw CCXT order dict."""
+        if amount <= 0 or price <= 0:
+            raise ValueError("amount and price must be > 0")
+        params = params or {}
+        return self._exchange.create_order(symbol, "limit", side, amount, price, params)
+
+    def cancel_order(self, order_id: str, symbol: str | None = None, params: dict | None = None) -> dict:
+        params = params or {}
+        return self._exchange.cancel_order(order_id, symbol, params)
+
+    def fetch_open_orders(self, symbol: str | None = None, limit: int | None = None) -> list[dict]:
+        return self._exchange.fetch_open_orders(symbol, None, limit)
+
+    def fetch_my_trades(self, symbol: str | None = None, since: int | None = None, limit: int = 100) -> list[dict]:
+        """Fetch your historical trades (fills). 'since' is ms timestamp."""
+        return self._exchange.fetch_my_trades(symbol=symbol, since=since, limit=limit)
+
+    def fetch_ticker(self, symbol: str) -> dict:
+        return self._exchange.fetch_ticker(symbol)
+
     # ------------------------------------------------------------------
     # Dunder helpers
     # ------------------------------------------------------------------
@@ -359,17 +391,7 @@ class ExchangeClient:
 # Backward-compatible alias
 # ---------------------------------------------------------------------------
 
-
 class KrakenClient(ExchangeClient):
-    """Thin alias for ``ExchangeClient("kraken", …)``.
+    def __init__(self, api_key: str | None = None, api_secret: str | None = None, sandbox: bool = False):
+        super().__init__("kraken", api_key=api_key, api_secret=api_secret, sandbox=sandbox)
 
-    Preserved so existing code that imports ``KrakenClient`` continues to
-    work without modification.
-    """
-
-    def __init__(
-        self,
-        api_key: str | None = None,
-        api_secret: str | None = None,
-    ) -> None:
-        super().__init__("kraken", api_key=api_key, api_secret=api_secret)

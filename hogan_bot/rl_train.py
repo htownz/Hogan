@@ -479,6 +479,32 @@ def main() -> None:
             print(f"  {k:<25s} {v}")
         print()
 
+        # MLflow logging (best-effort)
+        try:
+            import mlflow
+            import os
+            mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "mlruns"))
+            mlflow.set_experiment("hogan-rl")
+            with mlflow.start_run(run_name=f"PPO-{args.symbol}-{args.reward}"):
+                mlflow.log_params({
+                    "symbol": args.symbol,
+                    "timeframe": args.timeframe,
+                    "timesteps": args.timesteps,
+                    "reward_type": args.reward,
+                    "starting_balance": args.balance,
+                    "use_ext_features": args.ext_features,
+                    "slippage_pct": args.slippage,
+                    "seed": args.seed,
+                })
+                mlflow.log_metrics({
+                    k: float(v) for k, v in metrics.items()
+                    if isinstance(v, (int, float)) and v == v
+                })
+                if Path(args.model_path).exists():
+                    mlflow.log_artifact(args.model_path, artifact_path="rl_policy")
+        except Exception as mlf_exc:
+            print(f"[MLflow] non-fatal logging error: {mlf_exc}")
+
 
 if __name__ == "__main__":
     main()
