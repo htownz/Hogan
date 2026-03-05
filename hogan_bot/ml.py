@@ -284,10 +284,52 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
     # ------------------------------------------------------------------
     frame["roc_10"] = (close / close.shift(10).clip(lower=1e-9)) - 1.0
 
+    # ==================================================================
+    # ICT (Inner Circle Trading) structural features — 7 additions
+    # All computed from the price series alone; no look-ahead.
+    # ==================================================================
+
+    # 1. Dealing-range position (Premium / Discount):
+    #    Where is price within the rolling 20-bar high/low range?
+    #    0 = at range low (discount), 1 = at range high (premium), 0.5 = equilibrium
+    rolling_high_20 = high.rolling(20).max()
+    rolling_low_20 = low.rolling(20).min()
+    range_width = (rolling_high_20 - rolling_low_20).clip(lower=1e-9)
+    frame["ict_pd_pct"] = (close - rolling_low_20) / range_width
+
+    # 2 & 3. Binary premium / discount flags
+    frame["ict_in_discount"] = (frame["ict_pd_pct"] < 0.5).astype(float)
+    frame["ict_in_premium"]  = (frame["ict_pd_pct"] > 0.5).astype(float)
+
+    # 4 & 5. Proximity to recent liquidity pools (swing high / low):
+    #    % distance *below* the nearest swing high (buy-side liquidity above price)
+    #    % distance *above* the nearest swing low  (sell-side liquidity below price)
+    rolling_high_14 = high.rolling(14).max()
+    rolling_low_14  = low.rolling(14).min()
+    frame["ict_swing_high_dist"] = (rolling_high_14 - close) / close.clip(lower=1e-9)
+    frame["ict_swing_low_dist"]  = (close - rolling_low_14) / close.clip(lower=1e-9)
+
+    # 6 & 7. Previous-day high / low reference levels (PDH / PDL):
+    #    Key ICT levels where buy-side and sell-side liquidity rest overnight.
+    if "ts_ms" in candles.columns:
+        day_key = pd.to_datetime(candles["ts_ms"], unit="ms", utc=True).dt.date
+    elif "timestamp" in candles.columns:
+        day_key = pd.to_datetime(candles["timestamp"], utc=True).dt.date
+    else:
+        day_key = pd.Series(np.arange(len(close)) // 288, index=close.index)
+
+    day_key_s = pd.Series(day_key.values, index=close.index)
+    prev_day_high = high.groupby(day_key_s).transform("max").shift(288)
+    prev_day_low  = low.groupby(day_key_s).transform("min").shift(288)
+    # % distance below PDH (positive = price is below PDH, the "safe" zone)
+    frame["ict_pdh_dist"] = (prev_day_high - close) / close.clip(lower=1e-9)
+    # % distance above PDL (positive = price is above PDL, the "safe" zone)
+    frame["ict_pdl_dist"] = (close - prev_day_low) / close.clip(lower=1e-9)
+
     return frame
 
 
-# Feature column order is fixed — 36 features total.
+# Feature column order is fixed — 43 features total (36 base + 7 ICT structural).
 # Update _FEATURE_COLUMNS and tests together.
 _FEATURE_COLUMNS: list[str] = [
     # momentum (4)
@@ -310,7 +352,6 @@ _FEATURE_COLUMNS: list[str] = [
     "cloud_bull", "cloud_bear", "cloud_width_pct",
     # FVG (4)
     "fvg_bull_active", "fvg_bear_active", "in_bull_fvg", "in_bear_fvg",
-    # --- new indicators below (12) ---
     # ADX — trend strength + directional lines (3)
     "adx_14", "plus_di", "minus_di",
     # Stochastic RSI (2)
@@ -323,9 +364,17 @@ _FEATURE_COLUMNS: list[str] = [
     "keltner_pos",
     # CCI, MFI, CMF, ROC (4)
     "cci_20", "mfi_14", "cmf_20", "roc_10",
+    # ICT structural features (7) — premium/discount, liquidity proximity, PDH/PDL
+    "ict_pd_pct",           # dealing-range position [0=discount, 1=premium]
+    "ict_in_discount",      # 1 if price < range midpoint
+    "ict_in_premium",       # 1 if price > range midpoint
+    "ict_swing_high_dist",  # % below nearest 14-bar swing high (buy-side liquidity)
+    "ict_swing_low_dist",   # % above nearest 14-bar swing low (sell-side liquidity)
+    "ict_pdh_dist",         # % below previous-day high (PDH)
+    "ict_pdl_dist",         # % above previous-day low (PDL)
 ]
 
-assert len(_FEATURE_COLUMNS) == 36, f"Expected 36 features, got {len(_FEATURE_COLUMNS)}"
+assert len(_FEATURE_COLUMNS) == 43, f"Expected 43 features, got {len(_FEATURE_COLUMNS)}"
 
 
 # ---------------------------------------------------------------------------

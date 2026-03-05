@@ -42,14 +42,31 @@ def _try_import_openbb():
 def _flatten_yf(df: "Any") -> "Any":
     """Flatten yfinance MultiIndex columns (introduced in yfinance >=0.2.38).
 
-    Newer yfinance returns a MultiIndex like ('Close', 'BTC-USD') when
-    downloading a single ticker.  This strips the second level so callers
-    can use df['Close'] as a plain Series of scalars.
+    Newer yfinance returns a MultiIndex like ('Close', 'DX-Y.NYB') for every
+    download. This strips the ticker level so callers can use df['Close'] as a
+    plain Series of scalars.  Also deduplicates column names so that selecting
+    a single column always returns a Series, not a DataFrame.
     """
     import pandas as pd
+    if df is None or df.empty:
+        return df
     if isinstance(df.columns, pd.MultiIndex):
+        df = df.copy()
         df.columns = df.columns.get_level_values(0)
+        # After flattening, duplicate names (e.g. two 'Close' cols) would cause
+        # df['Close'] to return a DataFrame instead of a Series — drop dupes.
+        df = df.loc[:, ~df.columns.duplicated(keep="first")]
     return df
+
+
+def _safe_series(df: "Any", col: str) -> "Any":
+    """Extract *col* from df as a scalar Series, handling DataFrame edge cases."""
+    import pandas as pd
+    s = df[col]
+    # If duplicate columns caused a DataFrame to be returned, take the first col
+    if isinstance(s, pd.DataFrame):
+        s = s.iloc[:, 0]
+    return s
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +105,7 @@ def fetch_dxy(days: int = _DEFAULT_DAYS) -> list[tuple[str, str, float]]:
         df = _flatten_yf(yf.download("DX-Y.NYB", start=str(start_date), end=str(end_date), progress=False))
         if not df.empty:
             close_col = "Close" if "Close" in df.columns else "close"
-            for idx, val in df[close_col].items():
+            for idx, val in _safe_series(df, close_col).items():
                 d = str(idx.date()) if hasattr(idx, "date") else str(idx)[:10]
                 records.append((d, "dxy_close", float(val)))
         logger.info("Fetched %d DXY rows via yfinance", len(records))
@@ -126,7 +143,7 @@ def fetch_vix(days: int = _DEFAULT_DAYS) -> list[tuple[str, str, float]]:
         df = _flatten_yf(yf.download("^VIX", start=str(start_date), end=str(end_date), progress=False))
         if not df.empty:
             close_col = "Close" if "Close" in df.columns else "close"
-            for idx, val in df[close_col].items():
+            for idx, val in _safe_series(df, close_col).items():
                 d = str(idx.date()) if hasattr(idx, "date") else str(idx)[:10]
                 records.append((d, "vix_close", float(val)))
         logger.info("Fetched %d VIX rows via yfinance", len(records))
@@ -147,7 +164,8 @@ def fetch_spy_return(days: int = _DEFAULT_DAYS) -> list[tuple[str, str, float]]:
         import pandas as pd
         df = _flatten_yf(yf.download("SPY", start=str(start_date), end=str(end_date), progress=False))
         if not df.empty:
-            close = df["Close"] if "Close" in df.columns else df["close"]
+            close_col = "Close" if "Close" in df.columns else "close"
+            close = _safe_series(df, close_col)
             returns = close.pct_change().dropna()
             for idx, val in returns.items():
                 d = str(idx.date()) if hasattr(idx, "date") else str(idx)[:10]
