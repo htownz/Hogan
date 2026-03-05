@@ -54,6 +54,13 @@ openpyxl>=3.1.0
 #   python -m hogan_bot.fetch_glassnode --days 365  # Glassnode (set GLASSNODE_KEY)
 #   python -m hogan_bot.fetch_santiment --days 365  # Santiment (set SANTIMENT_KEY)
 
+# ---------------------------------------------------------------------------
+# Oanda REST v20 (fetch_oanda.py uses stdlib urllib — no extra package needed)
+# ---------------------------------------------------------------------------
+# Oanda is accessed via their public REST v20 API using the built-in urllib.
+# If you later want the official Python wrapper, uncomment below:
+# oandapyV20>=0.6.0
+
 # Metrics / monitoring (optional)
 prometheus-client>=0.20.0
 

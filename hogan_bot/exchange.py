@@ -395,3 +395,55 @@ class KrakenClient(ExchangeClient):
     def __init__(self, api_key: str | None = None, api_secret: str | None = None, sandbox: bool = False):
         super().__init__("kraken", api_key=api_key, api_secret=api_secret, sandbox=sandbox)
 
+
+class CoinbaseClient(ExchangeClient):
+    """Coinbase Advanced Trade client with CDP (JWT) authentication.
+
+    Coinbase now uses the Coinbase Developer Platform (CDP) API keys which
+    authenticate via JWT signed with an EC private key, rather than a simple
+    HMAC secret.  This class loads the key pair from the environment and
+    converts the escaped ``\\n`` literals in the private key to real newlines
+    before passing them to CCXT.
+
+    Environment variables
+    ---------------------
+    ``COINBASE_CDP_KEY_NAME``
+        Full key name, e.g.
+        ``organizations/{org_id}/apiKeys/{key_id}``.
+    ``COINBASE_CDP_PRIVATE_KEY``
+        EC private key PEM string stored on one line with ``\\n`` literals.
+
+    Fallback (limited / no-account access)
+    ---------------------------------------
+    ``COINBASE_KEY_ID`` + ``COINBASE_KEY_SECRET``
+        Legacy base64 key pair — read-only market data only.
+
+    Examples
+    --------
+    >>> client = CoinbaseClient()            # reads from .env
+    >>> df = client.fetch_ohlcv_df("BTC/USD", timeframe="1h", limit=200)
+    """
+
+    def __init__(self, sandbox: bool = False) -> None:
+        import os
+
+        cdp_key_name = os.getenv("COINBASE_CDP_KEY_NAME", "").strip()
+        cdp_private_key = os.getenv("COINBASE_CDP_PRIVATE_KEY", "").strip()
+
+        if cdp_key_name and cdp_private_key:
+            # Convert escaped \n literals → real newlines (common in .env files)
+            cdp_private_key = cdp_private_key.replace("\\n", "\n")
+            api_key = cdp_key_name
+            api_secret = cdp_private_key
+        else:
+            # Fallback to legacy key pair (market data only)
+            api_key = os.getenv("COINBASE_KEY_ID", "").strip() or None
+            api_secret = os.getenv("COINBASE_KEY_SECRET", "").strip() or None
+
+        super().__init__("coinbase", api_key=api_key, api_secret=api_secret, sandbox=sandbox)
+
+    @classmethod
+    def from_env(cls, sandbox: bool = False) -> "CoinbaseClient":
+        """Convenience constructor identical to ``CoinbaseClient()``."""
+        return cls(sandbox=sandbox)
+
