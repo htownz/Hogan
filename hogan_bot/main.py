@@ -238,7 +238,7 @@ def run(max_loops: int | None = None) -> None:
         "timeframe": config.timeframe,
         "ml_model": "loaded" if ml_model else "no model — retraining needed",
         "ict": "enabled" if config.use_ict else "disabled",
-        "equity": f"${config.starting_balance:,.2f}",
+        "equity": f"${config.starting_balance_usd:,.2f}",
     })
 
     loops = 0
