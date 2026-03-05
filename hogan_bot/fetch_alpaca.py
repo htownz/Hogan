@@ -165,7 +165,10 @@ def fetch_crypto_spread(
         books = client.get_crypto_latest_orderbook(req)
 
         for sym in symbols:
-            book = books.get(sym) if hasattr(books, "get") else None
+            try:
+                book = books[sym]
+            except (KeyError, TypeError):
+                continue
             if book is None:
                 continue
             # Best bid/ask
@@ -231,8 +234,8 @@ def fetch_crypto_bars(
     end = datetime.now(tz=timezone.utc)
     start = end - timedelta(days=days)
 
-    # Alpaca crypto symbols: BTCUSD (no slash)
-    alpaca_symbols = [s_sym.replace("/", "") for s_sym in symbols]
+    # Alpaca crypto API requires BTC/USD format (with slash)
+    alpaca_symbols = symbols
     written: dict[str, int] = {}
 
     try:
@@ -251,8 +254,12 @@ def fetch_crypto_bars(
     conn = sqlite3.connect(db_path)
 
     try:
-        for sym_orig, alpaca_sym in zip(symbols, alpaca_symbols):
-            sym_bars = bars_resp.get(alpaca_sym) if hasattr(bars_resp, "get") else None
+        for sym_orig in symbols:
+            try:
+                sym_bars = bars_resp[sym_orig]
+            except (KeyError, TypeError):
+                written[sym_orig] = 0
+                continue
             if not sym_bars:
                 written[sym_orig] = 0
                 continue
