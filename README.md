@@ -50,7 +50,7 @@ The ML pipeline uses 20 features (momentum, RSI, volatility, candle microstructu
 python -m hogan_bot.train --symbol BTC/USD --timeframe 5m --limit 5000 --cv --cv-splits 5
 ```
 
-Output includes per-fold accuracy and ROC-AUC, plus mean values across folds.
+Output includes per-fold accuracy, ROC-AUC, and Brier score (probability calibration quality), plus mean values across folds.
 
 ### 2. Train a model
 
@@ -124,6 +124,7 @@ HOGAN_EMA_SLOW_LONG=50
 HOGAN_USE_FVG=false
 HOGAN_FVG_MIN_GAP_PCT=0.001
 HOGAN_SIGNAL_MODE=any
+HOGAN_SIGNAL_MIN_VOTE_MARGIN=1
 ```
 
 ### Signal indicator env vars
@@ -138,6 +139,7 @@ HOGAN_SIGNAL_MODE=any
 | `HOGAN_USE_FVG` | `false` | Enable ICT Fair-Value Gap signal |
 | `HOGAN_FVG_MIN_GAP_PCT` | `0.001` | Minimum gap size (fraction of price) to record an FVG |
 | `HOGAN_SIGNAL_MODE` | `any` | `ma_only` / `any` / `all` — how multiple signals are combined |
+| `HOGAN_SIGNAL_MIN_VOTE_MARGIN` | `1` | In `any` mode, minimum buy-vs-sell vote edge required to act; otherwise hold |
 
 ## EMA clouds + FVG workflow
 
@@ -147,6 +149,7 @@ Enable one or both new signal layers in `.env` and backtest before paper-trading
 HOGAN_USE_EMA_CLOUDS=true
 HOGAN_USE_FVG=true
 HOGAN_SIGNAL_MODE=any
+HOGAN_SIGNAL_MIN_VOTE_MARGIN=1
 ```
 
 Backtest with clouds + FVGs enabled:
