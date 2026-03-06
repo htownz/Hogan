@@ -8,6 +8,7 @@ from datetime import datetime
 
 from hogan_bot.config import BotConfig, load_config
 from hogan_bot.decision import apply_ml_filter, ml_confidence
+from hogan_bot.discord_commands import make_command_listener
 from hogan_bot.exchange import ExchangeClient
 from hogan_bot.ml import TrainedModel, load_model, predict_up_probability
 from hogan_bot.notifier import make_notifier
@@ -36,6 +37,7 @@ def run_iteration(
     notifier=None,
     conn=None,
     executor=None,
+    signal_cache: dict | None = None,
 ) -> bool:
     if not is_allowed_trading_time(config.trade_weekends):
         logging.info("Weekend pause enabled; sleeping.")
@@ -197,6 +199,17 @@ def run_iteration(
                 portfolio.cash_usd,
             )
 
+        # Update signal cache for Discord command listener
+        if signal_cache is not None:
+            signal_cache[symbol] = {
+                "action": action,
+                "price": px,
+                "ml_up": up_prob if up_prob is not None else 0.0,
+                "conf": signal.confidence,
+                "vol_ratio": signal.volume_ratio,
+            }
+            signal_cache["_mark_prices"] = mark_prices
+
     return True
 
 
@@ -254,16 +267,41 @@ def run(max_loops: int | None = None) -> None:
         "equity": f"${config.starting_balance_usd:,.2f}",
     })
 
+    # Discord command listener (runs in background thread if DISCORD_BOT_TOKEN set)
+    config_summary = {
+        "mode": mode_str,
+        "symbols": ", ".join(config.symbols),
+        "timeframe": config.timeframe,
+        "model": config.ml_model_path,
+        "signal_mode": config.signal_mode,
+        "use_ict": config.use_ict,
+        "use_ema_clouds": config.use_ema_clouds,
+        "ml_buy_threshold": config.ml_buy_threshold,
+    }
+    signal_cache: dict = {}
+    cmd_listener = make_command_listener(
+        webhook_url=config.webhook_url or "",
+        db_path=config.db_path,
+    )
+    if cmd_listener:
+        cmd_listener.update_state(portfolio, {}, config_summary, signal_cache)
+        cmd_listener.start()
+
     loops = 0
     while True:
         loops += 1
-        keep_running = run_iteration(config, client, portfolio, drawdown_guard, ml_model, notifier=notifier, conn=conn, executor=executor)
+        keep_running = run_iteration(config, client, portfolio, drawdown_guard, ml_model, notifier=notifier, conn=conn, executor=executor, signal_cache=signal_cache)
         if not keep_running:
             break
 
         if max_loops is not None and loops >= max_loops:
             logging.info("Reached max_loops=%s; exiting.", max_loops)
             break
+
+        # Keep Discord command listener state fresh after each loop
+        if cmd_listener:
+            _prices = signal_cache.get("_mark_prices", {})
+            cmd_listener.update_state(portfolio, _prices, config_summary, signal_cache)
 
         time.sleep(config.sleep_seconds)
 
