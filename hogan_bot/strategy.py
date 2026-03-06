@@ -146,8 +146,11 @@ def generate_signal(
         latest_cloud = cloud_signal(enriched).iloc[-1]
         if latest_cloud == "bullish":
             votes.append("buy")
+            # EMA cloud is a persistent trend signal; blend 0.5 baseline confidence
+            confidence = (confidence + 0.5) / 2.0 if confidence > 0 else 0.5
         elif latest_cloud == "bearish":
             votes.append("sell")
+            confidence = (confidence + 0.5) / 2.0 if confidence > 0 else 0.5
         else:
             votes.append("hold")
 
