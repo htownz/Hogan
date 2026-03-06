@@ -439,11 +439,116 @@ def build_training_set(
     return dataset[_FEATURE_COLUMNS], dataset["target"], _FEATURE_COLUMNS
 
 
+def make_paper_trade_labels(
+    db_path: str,
+    candles: pd.DataFrame,
+    symbol: str,
+    min_trades: int = 5,
+) -> tuple[pd.DataFrame, pd.Series] | tuple[None, None]:
+    """Extract feature-label pairs from closed paper trades stored in the DB.
+
+    For each closed paper trade, the candle at the entry timestamp is located
+    and features are extracted using *_feature_frame*.  Labels are assigned
+    based on actual trade outcome (direction correctness):
+
+    * ``long``  + ``realized_pnl > 0``  → label = 1  (price went up, correct)
+    * ``long``  + ``realized_pnl ≤ 0``  → label = 0
+    * ``short`` + ``realized_pnl > 0``  → label = 0  (price fell, correct for short)
+    * ``short`` + ``realized_pnl ≤ 0``  → label = 1
+
+    Returns ``(X_extra, y_extra)`` aligned with ``_FEATURE_COLUMNS``, or
+    ``(None, None)`` when fewer than *min_trades* are available.
+    """
+    import sqlite3 as _sqlite3
+
+    try:
+        conn = _sqlite3.connect(db_path)
+        import pandas as _pd
+        trades_df = _pd.read_sql_query(
+            """SELECT trade_id, symbol, side, realized_pnl, open_ts_ms
+               FROM paper_trades
+               WHERE exit_price IS NOT NULL AND symbol = ?
+               ORDER BY open_ts_ms""",
+            conn,
+            params=(symbol,),
+        )
+        conn.close()
+    except Exception:  # noqa: BLE001
+        return None, None
+
+    if len(trades_df) < min_trades:
+        return None, None
+
+    # Compute full feature matrix once (no look-ahead — safe to use)
+    frame = _feature_frame(candles)
+    candle_ts = candles["ts_ms"].values
+
+    X_rows: list[list[float]] = []
+    y_values: list[int] = []
+
+    for _, trade in trades_df.iterrows():
+        ts = int(trade["open_ts_ms"])
+        # Find the latest candle at or before this timestamp
+        idx = int(np.searchsorted(candle_ts, ts, side="right")) - 1
+        if idx < 1 or idx >= len(frame):
+            continue
+        row = frame[_FEATURE_COLUMNS].iloc[idx]
+        if row.isna().any():
+            continue
+
+        pnl = float(trade["realized_pnl"])
+        side = str(trade["side"])
+        if side == "long":
+            label = 1 if pnl > 0 else 0
+        else:  # short: profits when price falls → direction label 0
+            label = 0 if pnl > 0 else 1
+
+        X_rows.append(row.tolist())
+        y_values.append(label)
+
+    if len(X_rows) < min_trades:
+        return None, None
+
+    X_extra = pd.DataFrame(X_rows, columns=_FEATURE_COLUMNS)
+    y_extra = pd.Series(y_values, name="target", dtype=int)
+    return X_extra, y_extra
+
+
+def _blend_paper_labels(
+    x: pd.DataFrame,
+    y: pd.Series,
+    paper_labels: tuple[pd.DataFrame, pd.Series] | None,
+    weight: float = 3.0,
+) -> tuple[pd.DataFrame, pd.Series, np.ndarray | None]:
+    """Concatenate paper-trade labeled rows into (x, y) and build sample weights.
+
+    Paper-trade rows are appended *after* the canonical rows so they fall into
+    the training split (rows 0..80%).  Returns ``(x_merged, y_merged, weights)``
+    where ``weights`` is ``None`` when no paper labels are provided.
+    """
+    if paper_labels is None:
+        return x, y, None
+    X_extra, y_extra = paper_labels
+    if X_extra is None or len(X_extra) == 0:
+        return x, y, None
+
+    # Put extra rows at the *start* so they land in the 80% train split
+    x_merged = pd.concat([X_extra, x], ignore_index=True)
+    y_merged = pd.concat([y_extra, y], ignore_index=True)
+    weights = np.concatenate([
+        np.full(len(X_extra), weight),
+        np.ones(len(x)),
+    ])
+    return x_merged, y_merged, weights
+
+
 def train_logistic_regression(
     candles: pd.DataFrame,
     model_path: str,
     horizon_bars: int = 3,
     tune_hyperparams: bool = False,
+    paper_labels: tuple[pd.DataFrame, pd.Series] | None = None,
+    paper_labels_weight: float = 3.0,
 ) -> dict[str, object]:
     """Fit a scaled logistic-regression classifier and pickle the artifact.
 
@@ -470,9 +575,12 @@ def train_logistic_regression(
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
+    x, y, sample_weight = _blend_paper_labels(x, y, paper_labels, paper_labels_weight)
+
     split = int(len(x) * 0.8)
     x_train, x_test = x.iloc[:split], x.iloc[split:]
     y_train, y_test = y.iloc[:split], y.iloc[split:]
+    w_train = sample_weight[:split] if sample_weight is not None else None
 
     scaler = StandardScaler()
     x_train_sc = scaler.fit_transform(x_train)
@@ -482,7 +590,7 @@ def train_logistic_regression(
         best_C, best_model, best_acc = 1.0, None, -1.0
         for C in (0.01, 0.1, 1.0, 10.0):
             candidate = LogisticRegression(max_iter=500, C=C, class_weight="balanced")
-            candidate.fit(x_train_sc, y_train)
+            candidate.fit(x_train_sc, y_train, sample_weight=w_train)
             acc = float(accuracy_score(y_test, candidate.predict(x_test_sc)))
             if acc > best_acc:
                 best_acc, best_C, best_model = acc, C, candidate
@@ -490,7 +598,7 @@ def train_logistic_regression(
     else:
         best_C = 1.0
         model = LogisticRegression(max_iter=500, C=best_C, class_weight="balanced")
-        model.fit(x_train_sc, y_train)
+        model.fit(x_train_sc, y_train, sample_weight=w_train)
 
     pred = model.predict(x_test_sc)
     proba = model.predict_proba(x_test_sc)[:, 1]
@@ -519,7 +627,11 @@ def train_logistic_regression(
 
 
 def train_random_forest(
-    candles: pd.DataFrame, model_path: str, horizon_bars: int = 3
+    candles: pd.DataFrame,
+    model_path: str,
+    horizon_bars: int = 3,
+    paper_labels: tuple[pd.DataFrame, pd.Series] | None = None,
+    paper_labels_weight: float = 3.0,
 ) -> dict[str, object]:
     """Fit a Random Forest classifier and pickle the artifact.
 
@@ -543,9 +655,12 @@ def train_random_forest(
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
+    x, y, sample_weight = _blend_paper_labels(x, y, paper_labels, paper_labels_weight)
+
     split = int(len(x) * 0.8)
     x_train, x_test = x.iloc[:split], x.iloc[split:]
     y_train, y_test = y.iloc[:split], y.iloc[split:]
+    w_train = sample_weight[:split] if sample_weight is not None else None
 
     model = RandomForestClassifier(
         n_estimators=200,
@@ -555,7 +670,7 @@ def train_random_forest(
         n_jobs=-1,
         class_weight="balanced_subsample",
     )
-    model.fit(x_train, y_train)
+    model.fit(x_train, y_train, sample_weight=w_train)
     pred = model.predict(x_test)
     proba = model.predict_proba(x_test)[:, 1]
 
@@ -585,7 +700,11 @@ def train_random_forest(
 
 
 def train_xgboost(
-    candles: pd.DataFrame, model_path: str, horizon_bars: int = 3
+    candles: pd.DataFrame,
+    model_path: str,
+    horizon_bars: int = 3,
+    paper_labels: tuple[pd.DataFrame, pd.Series] | None = None,
+    paper_labels_weight: float = 3.0,
 ) -> dict[str, object]:
     """Fit an XGBoost gradient-boosted classifier and pickle the artifact.
 
@@ -614,9 +733,12 @@ def train_xgboost(
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
+    x, y, sample_weight = _blend_paper_labels(x, y, paper_labels, paper_labels_weight)
+
     split = int(len(x) * 0.8)
     x_train, x_test = x.iloc[:split], x.iloc[split:]
     y_train, y_test = y.iloc[:split], y.iloc[split:]
+    w_train = sample_weight[:split] if sample_weight is not None else None
 
     model = XGBClassifier(
         n_estimators=300,
@@ -628,7 +750,7 @@ def train_xgboost(
         random_state=42,
         verbosity=0,
     )
-    model.fit(x_train, y_train)
+    model.fit(x_train, y_train, sample_weight=w_train)
     pred = model.predict(x_test)
     proba = model.predict_proba(x_test)[:, 1]
 

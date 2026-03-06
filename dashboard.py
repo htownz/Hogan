@@ -1,339 +1,556 @@
-"""Hogan monitoring dashboard — run with: streamlit run dashboard.py
+"""Hogan Trading Bot — Live Dashboard
 
-Requires optional dependencies:
-    pip install streamlit plotly
+Launch:
+    streamlit run dashboard.py
+
+Auto-refreshes every 30 seconds. All data comes from the SQLite DB —
+safe to run while the bot is running.
 """
 from __future__ import annotations
 
-try:
-    import streamlit as st
-except ImportError:
-    raise SystemExit(
-        "Streamlit is not installed.\n"
-        "Install it with:  pip install streamlit plotly\n"
-        "Then run:         streamlit run dashboard.py"
-    )
-
 import json
+import pickle
 import sqlite3
+import time
 from pathlib import Path
 
 import pandas as pd
-
-st.set_page_config(page_title="Hogan Dashboard", layout="wide", page_icon="H")
-st.title("Hogan Trading Bot — Dashboard")
-
-# ---------------------------------------------------------------------------
-# Sidebar controls
-# ---------------------------------------------------------------------------
-st.sidebar.header("Settings")
-registry_path = st.sidebar.text_input("Registry file", value="models/registry.jsonl")
-db_path = st.sidebar.text_input("SQLite DB", value="data/hogan.db")
-model_path_input = st.sidebar.text_input("Classical model", value="models/hogan_logreg.pkl")
-rl_model_path = st.sidebar.text_input("RL policy (.zip)", value="models/hogan_rl_policy.zip")
+import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
+from streamlit_autorefresh import st_autorefresh  # type: ignore[import]
 
 # ---------------------------------------------------------------------------
-# Tab layout
+# Page config
 # ---------------------------------------------------------------------------
-tab_rl, tab_classical, tab_exec, tab_data, tab_backtest = st.tabs(
-    ["RL Agent", "Classical Model", "Execution Log", "Data Coverage", "Backtest"]
+st.set_page_config(
+    page_title="Hogan Bot",
+    page_icon="H",
+    layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
+# ---------------------------------------------------------------------------
+# Auto-refresh (every 30 seconds)
+# ---------------------------------------------------------------------------
+try:
+    st_autorefresh(interval=30_000, key="autorefresh")
+except Exception:
+    pass  # streamlit-autorefresh may not be installed
+
+# ---------------------------------------------------------------------------
+# Sidebar — config paths
+# ---------------------------------------------------------------------------
+st.sidebar.header("Config")
+DB_PATH = st.sidebar.text_input("SQLite DB", value="data/hogan.db")
+MODEL_PATH = st.sidebar.text_input("Model", value="models/hogan_logreg.pkl")
+REGISTRY_PATH = st.sidebar.text_input("Registry", value="models/registry.jsonl")
+AUTO_REFRESH = st.sidebar.checkbox("Auto-refresh (30s)", value=True)
+if st.sidebar.button("Refresh now"):
+    st.rerun()
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+_CACHE_TTL = 25  # seconds
+
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _load_equity(db: str, limit: int = 5000) -> pd.DataFrame:
+    try:
+        conn = sqlite3.connect(db)
+        df = pd.read_sql_query(
+            f"SELECT ts_ms, equity_usd, drawdown FROM equity_snapshots ORDER BY ts_ms DESC LIMIT {limit}",
+            conn,
+        )
+        conn.close()
+        df["ts"] = pd.to_datetime(df["ts_ms"], unit="ms", utc=True)
+        return df.sort_values("ts")
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _load_paper_trades(db: str) -> pd.DataFrame:
+    try:
+        conn = sqlite3.connect(db)
+        df = pd.read_sql_query(
+            """SELECT trade_id, symbol, side, entry_price, exit_price, qty,
+                      realized_pnl, pnl_pct, entry_fee, exit_fee,
+                      open_ts_ms, close_ts_ms, close_reason,
+                      ml_up_prob, strategy_conf, vol_ratio
+               FROM paper_trades ORDER BY open_ts_ms DESC""",
+            conn,
+        )
+        conn.close()
+        df["opened"] = pd.to_datetime(df["open_ts_ms"], unit="ms", utc=True)
+        df["closed"] = pd.to_datetime(df["close_ts_ms"], unit="ms", utc=True)
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _load_candles(db: str, symbol: str, limit: int = 200) -> pd.DataFrame:
+    try:
+        conn = sqlite3.connect(db)
+        df = pd.read_sql_query(
+            "SELECT ts_ms, open, high, low, close, volume FROM candles "
+            "WHERE symbol=? ORDER BY ts_ms DESC LIMIT ?",
+            conn, params=(symbol, limit),
+        )
+        conn.close()
+        df["ts"] = pd.to_datetime(df["ts_ms"], unit="ms", utc=True)
+        return df.sort_values("ts")
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _load_onchain_latest(db: str) -> pd.DataFrame:
+    try:
+        conn = sqlite3.connect(db)
+        df = pd.read_sql_query(
+            """SELECT metric, value, date FROM onchain_metrics
+               WHERE (metric, date) IN (
+                   SELECT metric, MAX(date) FROM onchain_metrics GROUP BY metric
+               ) ORDER BY metric""",
+            conn,
+        )
+        conn.close()
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=300)
+def _load_model_info(model_path: str) -> dict:
+    try:
+        with open(model_path, "rb") as f:
+            art = pickle.load(f)
+        info = {"model_type": type(art.model).__name__, "features": len(art.feature_columns)}
+        if hasattr(art.model, "feature_importances_"):
+            import numpy as np
+            info["importances"] = dict(zip(art.feature_columns, art.model.feature_importances_))
+        elif hasattr(art.model, "coef_"):
+            import numpy as np
+            info["importances"] = dict(zip(art.feature_columns, np.abs(art.model.coef_[0])))
+        return info
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@st.cache_data(ttl=300)
+def _load_registry(registry_path: str) -> list[dict]:
+    try:
+        rows = []
+        with open(registry_path) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    rows.append(json.loads(line))
+        return rows
+    except Exception:
+        return []
+
+
+def _pnl_color(val):
+    if pd.isna(val):
+        return ""
+    return "color: #2ecc71" if val >= 0 else "color: #e74c3c"
+
+
+# ---------------------------------------------------------------------------
+# Main tab layout
+# ---------------------------------------------------------------------------
+tab_live, tab_signals, tab_model, tab_data, tab_backtest = st.tabs([
+    "Live Trading", "Signals & Candles", "ML Models", "Data Coverage", "Backtest"
+])
+
 # ===========================================================================
-# TAB 1 — RL Agent
+# TAB 1 — LIVE TRADING
 # ===========================================================================
-with tab_rl:
-    st.header("RL Agent (PPO)")
+with tab_live:
+    st.header("Live Paper Trading")
 
-    rl_path = Path(rl_model_path)
-    best_path = Path(rl_model_path).parent / "best_model.zip"
-    hparams_path = Path(rl_model_path).parent / "best_hparams.json"
+    trades = _load_paper_trades(DB_PATH)
+    equity = _load_equity(DB_PATH)
 
-    col_a, col_b, col_c = st.columns(3)
-    col_a.metric("Policy file", rl_path.name if rl_path.exists() else "NOT FOUND")
-    col_b.metric(
-        "Best model (EvalCallback)",
-        "best_model.zip" if best_path.exists() else "none yet",
-    )
-    col_c.metric(
-        "Tuned hyperparams",
-        "best_hparams.json" if hparams_path.exists() else "defaults",
-    )
+    # ── KPI row ──────────────────────────────────────────────────────────────
+    closed = trades[trades["exit_price"].notna()] if not trades.empty else pd.DataFrame()
+    open_trades = trades[trades["exit_price"].isna()] if not trades.empty else pd.DataFrame()
 
-    if hparams_path.exists():
-        with st.expander("Optuna best hyperparameters", expanded=False):
-            try:
-                hparams = json.loads(hparams_path.read_text())
-                st.json(hparams)
-            except Exception as exc:
-                st.error(f"Could not read hyperparams: {exc}")
+    cur_equity = equity["equity_usd"].iloc[-1] if not equity.empty else 10000.0
+    start_equity = equity["equity_usd"].iloc[0] if not equity.empty else 10000.0
+    total_pnl = cur_equity - start_equity
+    total_pnl_pct = (total_pnl / start_equity * 100) if start_equity else 0.0
 
-    # Checkpoint browser
-    ckpt_dir = Path(rl_model_path).parent / "checkpoints"
-    if ckpt_dir.exists():
-        ckpts = sorted(ckpt_dir.glob("*.zip"), key=lambda p: p.stat().st_mtime, reverse=True)
-        if ckpts:
-            with st.expander(f"Checkpoints ({len(ckpts)} saved)", expanded=False):
-                df_ckpts = pd.DataFrame(
-                    [
-                        {
-                            "file": p.name,
-                            "size_mb": round(p.stat().st_size / 1e6, 2),
-                            "modified": pd.Timestamp(p.stat().st_mtime, unit="s").isoformat()[:19],
-                        }
-                        for p in ckpts[:20]
-                    ]
-                )
-                st.dataframe(df_ckpts, use_container_width=True)
+    win_rate = 0.0
+    avg_win = 0.0
+    avg_loss = 0.0
+    if not closed.empty and "realized_pnl" in closed.columns:
+        wins = closed[closed["realized_pnl"] > 0]
+        losses = closed[closed["realized_pnl"] <= 0]
+        win_rate = len(wins) / len(closed) * 100
+        avg_win = wins["realized_pnl"].mean() if not wins.empty else 0.0
+        avg_loss = losses["realized_pnl"].mean() if not losses.empty else 0.0
 
-    # Training command helper
-    st.subheader("Training commands")
-    obs_mode = st.radio(
-        "Observation mode",
-        ["Base (27-dim)", "Extended (73-dim)"],
-        horizontal=True,
-    )
-    ext_flag = "--ext-features --load-1h --load-15m" if "Extended" in obs_mode else ""
-    reward = st.selectbox("Reward type", ["risk_adjusted", "sharpe", "sortino", "delta_equity"])
-    steps = st.select_slider("Timesteps", options=[100_000, 250_000, 500_000, 1_000_000, 2_000_000], value=500_000)
-    st.code(
-        f"python -m hogan_bot.rl_train --from-db --symbol BTC/USD "
-        f"--reward {reward} --timesteps {steps:,} "
-        f"--eval-freq 10000 --checkpoint-freq 25000 {ext_flag}".strip(),
-        language="bash",
-    )
+    max_dd = equity["drawdown"].max() * 100 if not equity.empty and "drawdown" in equity.columns else 0.0
 
-    st.subheader("Hyperparameter tuning")
-    st.code(
-        "python -m hogan_bot.rl_tune --from-db --symbol BTC/USD --n-trials 50",
-        language="bash",
-    )
+    k1, k2, k3, k4, k5, k6 = st.columns(6)
+    k1.metric("Equity", f"${cur_equity:,.2f}", delta=f"${total_pnl:+,.2f}")
+    k2.metric("Total P&L", f"${total_pnl:+,.2f}", delta=f"{total_pnl_pct:+.2f}%")
+    k3.metric("Win Rate", f"{win_rate:.1f}%", delta=f"{len(closed)} closed trades")
+    k4.metric("Avg Win / Loss", f"${avg_win:.2f} / ${avg_loss:.2f}")
+    k5.metric("Max Drawdown", f"{max_dd:.2f}%")
+    k6.metric("Open Positions", len(open_trades))
 
-# ===========================================================================
-# TAB 2 — Classical Model
-# ===========================================================================
-with tab_classical:
-    st.header("Classical ML Model Registry")
+    st.divider()
 
-    if Path(registry_path).exists():
-        try:
-            from hogan_bot.registry import ModelRegistry
+    # ── Equity curve ─────────────────────────────────────────────────────────
+    col_eq, col_dd = st.columns([3, 1])
+    with col_eq:
+        if not equity.empty:
+            fig_eq = go.Figure()
+            fig_eq.add_trace(go.Scatter(
+                x=equity["ts"], y=equity["equity_usd"],
+                mode="lines", name="Equity",
+                line=dict(color="#3498db", width=2),
+                fill="tozeroy", fillcolor="rgba(52,152,219,0.1)",
+            ))
+            fig_eq.update_layout(
+                title="Equity Curve (USD)", height=280,
+                margin=dict(l=0, r=0, t=30, b=0),
+                xaxis_title=None, yaxis_title="USD",
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            )
+            st.plotly_chart(fig_eq, use_container_width=True)
+        else:
+            st.info("No equity snapshots yet — start the bot.")
 
-            reg = ModelRegistry(registry_path=registry_path)
-            rows = reg.summary()
-            if rows:
-                df_reg = pd.DataFrame(rows)
-                for col in ("accuracy", "roc_auc", "f1"):
-                    if col in df_reg.columns:
-                        df_reg[col] = df_reg[col].map(lambda v: f"{v:.4f}" if v is not None else "—")
-                st.dataframe(df_reg, use_container_width=True)
-                best = reg.best(metric="roc_auc")
-                if best:
-                    st.success(
-                        f"Best by ROC-AUC -> `{best['model_path']}`  "
-                        f"({best['model_type']}, ROC-AUC = {best['metrics'].get('roc_auc', '?')})"
-                    )
-            else:
-                st.info("Registry empty. Run `python -m hogan_bot.train` first.")
-        except Exception as exc:
-            st.error(f"Could not load registry: {exc}")
+    with col_dd:
+        if not equity.empty and "drawdown" in equity.columns:
+            fig_dd = go.Figure()
+            fig_dd.add_trace(go.Scatter(
+                x=equity["ts"], y=equity["drawdown"] * 100,
+                mode="lines", name="Drawdown",
+                line=dict(color="#e74c3c", width=1.5),
+                fill="tozeroy", fillcolor="rgba(231,76,60,0.15)",
+            ))
+            fig_dd.update_layout(
+                title="Drawdown %", height=280,
+                margin=dict(l=0, r=0, t=30, b=0),
+                xaxis_title=None, yaxis_title="%",
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            )
+            st.plotly_chart(fig_dd, use_container_width=True)
+
+    st.divider()
+
+    # ── Open positions ────────────────────────────────────────────────────────
+    st.subheader(f"Open Positions ({len(open_trades)})")
+    if not open_trades.empty:
+        disp = open_trades[[
+            "symbol", "side", "entry_price", "qty", "ml_up_prob", "strategy_conf", "opened"
+        ]].copy()
+        disp["notional_usd"] = (disp["qty"] * disp["entry_price"]).round(2)
+        disp["opened"] = disp["opened"].dt.strftime("%m-%d %H:%M")
+        st.dataframe(disp, use_container_width=True, hide_index=True)
     else:
-        st.info(f"Registry not found at `{registry_path}`.")
+        st.info("No open positions right now.")
 
+    # ── Closed trades ─────────────────────────────────────────────────────────
+    st.subheader(f"Trade Journal — {len(closed)} Closed Trades")
+    if not closed.empty:
+        # P&L over time area chart
+        pnl_cum = closed.sort_values("close_ts_ms").copy()
+        pnl_cum["cumulative_pnl"] = pnl_cum["realized_pnl"].cumsum()
+        pnl_cum["closed_dt"] = pd.to_datetime(pnl_cum["close_ts_ms"], unit="ms", utc=True)
+
+        if len(pnl_cum) >= 2:
+            fig_pnl = go.Figure()
+            colors = ["#2ecc71" if v >= 0 else "#e74c3c" for v in pnl_cum["cumulative_pnl"]]
+            fig_pnl.add_trace(go.Scatter(
+                x=pnl_cum["closed_dt"], y=pnl_cum["cumulative_pnl"],
+                mode="lines+markers", name="Cumulative P&L",
+                line=dict(color="#2ecc71", width=2),
+                fill="tozeroy",
+                fillcolor="rgba(46,204,113,0.12)",
+            ))
+            fig_pnl.update_layout(
+                title="Cumulative Realized P&L", height=220,
+                margin=dict(l=0, r=0, t=30, b=0),
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            )
+            st.plotly_chart(fig_pnl, use_container_width=True)
+
+        # Per-symbol P&L bar
+        sym_pnl = closed.groupby("symbol")["realized_pnl"].sum().reset_index()
+        if len(sym_pnl) > 0:
+            fig_sym = px.bar(
+                sym_pnl, x="symbol", y="realized_pnl",
+                color="realized_pnl", color_continuous_scale=["#e74c3c", "#2ecc71"],
+                title="P&L by Symbol", height=180,
+            )
+            fig_sym.update_layout(
+                margin=dict(l=0, r=0, t=30, b=0), showlegend=False,
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            )
+            st.plotly_chart(fig_sym, use_container_width=True)
+
+        # Close reason breakdown
+        reason_counts = closed.groupby("close_reason").size().reset_index(name="count")
+        fig_reason = px.pie(
+            reason_counts, names="close_reason", values="count",
+            title="Close Reason Breakdown", height=200,
+            color_discrete_sequence=px.colors.qualitative.Set2,
+        )
+        fig_reason.update_layout(margin=dict(l=0, r=0, t=30, b=0))
+        st.plotly_chart(fig_reason, use_container_width=True)
+
+        # Trade table
+        disp2 = closed[[
+            "symbol", "side", "entry_price", "exit_price", "qty",
+            "realized_pnl", "pnl_pct", "close_reason",
+            "ml_up_prob", "strategy_conf", "opened", "closed"
+        ]].copy()
+        disp2["opened"] = disp2["opened"].dt.strftime("%m-%d %H:%M")
+        disp2["closed"] = disp2["closed"].dt.strftime("%m-%d %H:%M")
+        disp2["pnl_pct"] = (disp2["pnl_pct"] * 100).round(3)
+        disp2["realized_pnl"] = disp2["realized_pnl"].round(4)
+        disp2 = disp2.sort_values("closed", ascending=False).head(100)
+        st.dataframe(
+            disp2.style.applymap(_pnl_color, subset=["realized_pnl"]),
+            use_container_width=True, hide_index=True,
+        )
+    else:
+        st.info("No closed trades yet. Positions will appear here once they exit.")
+
+    # ── Win/Loss histogram ────────────────────────────────────────────────────
+    if not closed.empty and len(closed) >= 5:
+        st.subheader("P&L Distribution")
+        fig_hist = px.histogram(
+            closed, x="realized_pnl", nbins=30,
+            color_discrete_sequence=["#3498db"],
+            title="Trade P&L Distribution",
+        )
+        fig_hist.add_vline(x=0, line_dash="dash", line_color="white", opacity=0.5)
+        fig_hist.update_layout(
+            height=220, margin=dict(l=0, r=0, t=30, b=0),
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        )
+        st.plotly_chart(fig_hist, use_container_width=True)
+
+
+# ===========================================================================
+# TAB 2 — SIGNALS & CANDLES
+# ===========================================================================
+with tab_signals:
+    st.header("Signals & Candles")
+
+    sig_sym = st.selectbox("Symbol", ["BTC/USD", "ETH/USD"], key="sig_sym")
+    candles = _load_candles(DB_PATH, sig_sym, limit=288)  # last 24h at 5m
+
+    if candles.empty:
+        st.warning(f"No candles in DB for {sig_sym}")
+    else:
+        # Candlestick chart
+        fig_candle = go.Figure(data=[go.Candlestick(
+            x=candles["ts"],
+            open=candles["open"], high=candles["high"],
+            low=candles["low"], close=candles["close"],
+            increasing_line_color="#2ecc71",
+            decreasing_line_color="#e74c3c",
+            name=sig_sym,
+        )])
+
+        # Overlay EMA cloud (fast 8/9, slow 34/50)
+        import numpy as np
+        for period, color, name in [(8, "#f39c12", "EMA8"), (9, "#e67e22", "EMA9"),
+                                     (34, "#9b59b6", "EMA34"), (50, "#8e44ad", "EMA50")]:
+            ema = candles["close"].ewm(span=period, adjust=False).mean()
+            fig_candle.add_trace(go.Scatter(
+                x=candles["ts"], y=ema, mode="lines",
+                line=dict(width=1, color=color), name=name, opacity=0.6,
+            ))
+
+        fig_candle.update_layout(
+            title=f"{sig_sym} — Last 24h (5m candles)",
+            xaxis_rangeslider_visible=False,
+            height=480,
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=0, r=0, t=30, b=0),
+        )
+        st.plotly_chart(fig_candle, use_container_width=True)
+
+        # Volume bar chart
+        fig_vol = go.Figure()
+        vol_colors = ["#2ecc71" if c >= o else "#e74c3c"
+                      for c, o in zip(candles["close"], candles["open"])]
+        fig_vol.add_trace(go.Bar(x=candles["ts"], y=candles["volume"],
+                                  marker_color=vol_colors, name="Volume"))
+        avg_vol = candles["volume"].rolling(10).mean()
+        fig_vol.add_trace(go.Scatter(x=candles["ts"], y=avg_vol,
+                                      mode="lines", line=dict(color="#3498db", width=1.5),
+                                      name="Avg(10)"))
+        fig_vol.update_layout(
+            title="Volume", height=180,
+            margin=dict(l=0, r=0, t=30, b=0),
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        )
+        st.plotly_chart(fig_vol, use_container_width=True)
+
+        # Latest candle stats
+        last = candles.iloc[-1]
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Last Close", f"${last['close']:,.2f}")
+        prev = candles.iloc[-2]["close"] if len(candles) > 1 else last["close"]
+        c2.metric("Change", f"${last['close'] - prev:+.2f}", delta=f"{(last['close']-prev)/prev*100:+.3f}%")
+        c3.metric("High / Low", f"${last['high']:,.2f} / ${last['low']:,.2f}")
+        avg_v = candles["volume"].rolling(10).mean().iloc[-1]
+        c4.metric("Vol Ratio", f"{last['volume'] / avg_v:.2f}x")
+
+
+# ===========================================================================
+# TAB 3 — ML MODELS
+# ===========================================================================
+with tab_model:
+    st.header("ML Model & Registry")
+
+    # Registry table
+    st.subheader("Model Registry")
+    reg_rows = _load_registry(REGISTRY_PATH)
+    if reg_rows:
+        reg_df = pd.json_normalize(reg_rows)
+        for col in ("new_score", "current_score"):
+            if col in reg_df.columns:
+                reg_df[col] = reg_df[col].map(lambda v: f"{v:.4f}" if v is not None else "—")
+        st.dataframe(reg_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No registry entries found.")
+
+    # Feature importance
     st.subheader("Feature Importances")
-    if Path(model_path_input).exists():
-        try:
-            import pickle
-
-            with open(model_path_input, "rb") as f:
-                artifact = pickle.load(f)
-
-            importances: dict | None = None
-            if hasattr(artifact.model, "feature_importances_"):
-                importances = dict(
-                    zip(artifact.feature_columns, artifact.model.feature_importances_)
-                )
-            elif hasattr(artifact.model, "coef_"):
-                import numpy as np
-                coef = artifact.model.coef_[0]
-                importances = dict(zip(artifact.feature_columns, np.abs(coef)))
-
-            if importances:
-                df_imp = (
-                    pd.DataFrame(
-                        {"feature": list(importances.keys()), "importance": list(importances.values())}
-                    )
-                    .sort_values("importance", ascending=True)
-                    .tail(36)
-                )
-                try:
-                    import plotly.express as px
-                    fig = px.bar(
-                        df_imp, x="importance", y="feature", orientation="h",
-                        title="Feature Importance (top 36)", height=700,
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                except ImportError:
-                    st.bar_chart(df_imp.set_index("feature")["importance"])
-            else:
-                st.info("Model type does not expose feature importances.")
-        except Exception as exc:
-            st.error(f"Could not load model: {exc}")
+    model_info = _load_model_info(MODEL_PATH)
+    if "error" in model_info:
+        st.error(model_info["error"])
     else:
-        st.info(f"Model not found at `{model_path_input}`.")
+        m1, m2 = st.columns(2)
+        m1.metric("Model type", model_info.get("model_type", "unknown"))
+        m2.metric("Feature count", model_info.get("features", "?"))
+
+        if "importances" in model_info:
+            imp_df = (
+                pd.DataFrame({
+                    "feature": list(model_info["importances"].keys()),
+                    "importance": list(model_info["importances"].values()),
+                })
+                .sort_values("importance", ascending=True)
+                .tail(43)
+            )
+            fig_imp = px.bar(
+                imp_df, x="importance", y="feature", orientation="h",
+                title="Feature Importance", height=700,
+                color="importance", color_continuous_scale=["#3498db", "#e74c3c"],
+            )
+            fig_imp.update_layout(
+                margin=dict(l=0, r=0, t=30, b=0),
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            )
+            st.plotly_chart(fig_imp, use_container_width=True)
+
+    # Training commands
+    st.subheader("Retrain commands")
+    st.code(
+        "# Standard retrain (last 25k bars, XGBoost)\n"
+        "python -m hogan_bot.retrain --from-db --window-bars 25000 --model-type xgboost --horizon-bars 12\n\n"
+        "# With paper trade feedback labels (after 50+ closed trades)\n"
+        "python -m hogan_bot.retrain --from-db --window-bars 25000 --model-type xgboost --use-paper-labels\n\n"
+        "# Force promote (override score check)\n"
+        "python -m hogan_bot.retrain --from-db --window-bars 25000 --model-type xgboost --force-promote",
+        language="bash",
+    )
+
 
 # ===========================================================================
-# TAB 3 — Data Coverage
+# TAB 4 — DATA COVERAGE
 # ===========================================================================
 with tab_data:
     st.header("Data Coverage")
 
-    if not Path(db_path).exists():
-        st.warning(f"Database not found at `{db_path}`.")
+    onchain = _load_onchain_latest(DB_PATH)
+
+    if onchain.empty:
+        st.warning("No onchain_metrics data found.")
     else:
-        try:
-            from hogan_bot.storage import available_symbols, get_connection
+        # Group by metric category
+        st.subheader(f"Latest External Metrics ({len(onchain)} metrics)")
+        st.dataframe(onchain, use_container_width=True, hide_index=True)
 
-            conn = get_connection(db_path)
+    # Candle coverage
+    st.subheader("OHLCV Candle Coverage")
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        candle_cov = pd.read_sql_query(
+            """SELECT symbol, timeframe, COUNT(*) as candles,
+                      date(MIN(ts_ms)/1000, 'unixepoch') as earliest,
+                      date(MAX(ts_ms)/1000, 'unixepoch') as latest
+               FROM candles GROUP BY symbol, timeframe ORDER BY symbol, timeframe""",
+            conn,
+        )
+        conn.close()
+        st.dataframe(candle_cov, use_container_width=True, hide_index=True)
+    except Exception as e:
+        st.error(f"Could not load candle coverage: {e}")
 
-            # Candle store
-            st.subheader("OHLCV Candles")
-            series = available_symbols(conn)
-            if series:
-                df_store = pd.DataFrame(series, columns=["symbol", "timeframe", "candles"])
-                st.dataframe(df_store, use_container_width=True)
-            else:
-                st.info("No candles stored yet.")
+    # Refresh commands
+    st.subheader("Refresh commands")
+    st.code(
+        "# Run daily data refresh\npython refresh_daily.py\n\n"
+        "# Backfill 1yr of 5m candles via Alpaca\n"
+        "python -m hogan_bot.fetch_alpaca --backfill-bars 100000 --symbol BTC/USD\n"
+        "python -m hogan_bot.fetch_alpaca --backfill-bars 100000 --symbol ETH/USD",
+        language="bash",
+    )
 
-            # External / on-chain metrics coverage
-            st.subheader("External & On-Chain Metrics")
-            _EXT_METRICS = [
-                # on-chain / derivatives
-                "mvrv_zscore", "sopr", "active_addresses",
-                "funding_rate", "open_interest_pct_change",
-                # coingecko
-                "btc_dominance_pct", "stablecoin_dominance_pct",
-                "global_mcap_change_24h", "defi_dominance_pct",
-                "btc_ath_pct", "coingecko_sentiment",
-                # alternative data
-                "fear_greed_value", "news_sentiment_score",
-                "news_volume_norm", "gpr_index",
-                # glassnode
-                "glassnode_exchange_netflow", "glassnode_realized_dist",
-                "glassnode_puell_multiple",
-                # santiment
-                "santiment_social_vol_chg", "santiment_dev_activity_chg",
-            ]
-            raw_conn = sqlite3.connect(db_path)
-            metric_rows = []
-            for metric in _EXT_METRICS:
-                try:
-                    cur = raw_conn.execute(
-                        "SELECT COUNT(*), MIN(date), MAX(date) FROM onchain_metrics WHERE metric=?",
-                        (metric,),
-                    )
-                    count, min_d, max_d = cur.fetchone()
-                    metric_rows.append({
-                        "metric": metric,
-                        "rows": count or 0,
-                        "earliest": min_d or "—",
-                        "latest": max_d or "—",
-                        "status": "OK" if count else "EMPTY",
-                    })
-                except Exception:
-                    metric_rows.append({
-                        "metric": metric, "rows": 0,
-                        "earliest": "—", "latest": "—", "status": "ERROR",
-                    })
-
-            # derivatives_metrics table
-            try:
-                cur = raw_conn.execute(
-                    "SELECT COUNT(*), MIN(ts_ms), MAX(ts_ms) FROM derivatives_metrics"
-                )
-                count, min_t, max_t = cur.fetchone()
-                def _ms_to_date(ms):
-                    if ms is None:
-                        return "—"
-                    try:
-                        return pd.Timestamp(ms, unit="ms", tz="UTC").strftime("%Y-%m-%d")
-                    except Exception:
-                        return str(ms)[:10]
-                metric_rows.append({
-                    "metric": "derivatives_metrics (table)",
-                    "rows": count or 0,
-                    "earliest": _ms_to_date(min_t),
-                    "latest": _ms_to_date(max_t),
-                    "status": "OK" if count else "EMPTY",
-                })
-            except Exception:
-                pass
-            raw_conn.close()
-
-            df_ext = pd.DataFrame(metric_rows)
-            # colour the status column
-            def _colour_status(val):
-                if val == "OK":
-                    return "color: green"
-                elif val == "EMPTY":
-                    return "color: orange"
-                return "color: red"
-
-            st.dataframe(
-                df_ext.style.applymap(_colour_status, subset=["status"]),
-                use_container_width=True,
-            )
-
-            # Data refresh helper
-            st.subheader("Refresh commands")
-            st.code(
-                "# Refresh all daily data sources (run once per day)\n"
-                "python refresh_daily.py\n\n"
-                "# Or individually:\n"
-                "python -m hogan_bot.fetch_feargreed --days 7\n"
-                "python -m hogan_bot.fetch_coingecko\n"
-                "python -m hogan_bot.fetch_gpr\n"
-                "python -m hogan_bot.fetch_news_sentiment --days 7\n"
-                "python -m hogan_bot.fetch_derivatives\n",
-                language="bash",
-            )
-
-            conn.close()
-        except Exception as exc:
-            st.error(f"Could not open database: {exc}")
 
 # ===========================================================================
-# TAB 4 — Backtest
+# TAB 5 — BACKTEST
 # ===========================================================================
 with tab_backtest:
     st.header("Quick Backtest")
 
-    col1, col2, col3 = st.columns(3)
-    bt_symbol = col1.text_input("Symbol", value="BTC/USD", key="bt_sym")
-    bt_tf = col2.text_input("Timeframe", value="5m", key="bt_tf")
-    bt_limit = col3.number_input("Max bars", value=1000, min_value=100, step=100, key="bt_lim")
+    col1, col2, col3, col4 = st.columns(4)
+    bt_symbol = col1.selectbox("Symbol", ["BTC/USD", "ETH/USD"], key="bt_sym")
+    bt_tf = col2.selectbox("Timeframe", ["5m", "1h", "1d"], key="bt_tf")
+    bt_limit = col3.number_input("Bars", value=2000, min_value=200, step=200, key="bt_lim")
+    bt_use_ml = col4.checkbox("Use ML filter", value=True, key="bt_ml")
 
-    if st.button("Run Backtest"):
-        if not Path(db_path).exists():
-            st.error("No local database found.")
-        else:
+    if st.button("Run Backtest", type="primary"):
+        with st.spinner("Running backtest..."):
             try:
                 from hogan_bot.backtest import run_backtest_on_candles
                 from hogan_bot.config import load_config
                 from hogan_bot.storage import get_connection, load_candles
 
                 cfg = load_config()
-                conn = get_connection(db_path)
-                candles = load_candles(conn, bt_symbol, bt_tf, limit=int(bt_limit))
-                conn.close()
+                conn_bt = get_connection(DB_PATH)
+                bt_candles = load_candles(conn_bt, bt_symbol, bt_tf, limit=int(bt_limit))
+                conn_bt.close()
 
-                if candles.empty:
-                    st.warning(f"No candles found for {bt_symbol} / {bt_tf}.")
+                if bt_candles.empty:
+                    st.warning(f"No candles found for {bt_symbol}/{bt_tf}.")
                 else:
+                    ml_model = None
+                    if bt_use_ml and Path(MODEL_PATH).exists():
+                        import pickle
+                        with open(MODEL_PATH, "rb") as f:
+                            ml_model = pickle.load(f)
+
                     result = run_backtest_on_candles(
-                        candles=candles,
+                        candles=bt_candles,
                         symbol=bt_symbol,
-                        starting_balance_usd=cfg.starting_balance_usd,
+                        starting_balance_usd=10_000.0,
                         aggressive_allocation=cfg.aggressive_allocation,
                         max_risk_per_trade=cfg.max_risk_per_trade,
                         max_drawdown=cfg.max_drawdown,
@@ -343,104 +560,45 @@ with tab_backtest:
                         volume_threshold=cfg.volume_threshold,
                         fee_rate=cfg.fee_rate,
                         use_ema_clouds=cfg.use_ema_clouds,
+                        use_ict=cfg.use_ict,
                         signal_mode=cfg.signal_mode,
+                        min_vote_margin=cfg.signal_min_vote_margin,
                         trailing_stop_pct=cfg.trailing_stop_pct,
                         take_profit_pct=cfg.take_profit_pct,
                     )
 
                     summary = result.summary_dict()
-                    m1, m2, m3, m4 = st.columns(4)
-                    m1.metric("Total Return", f"{summary.get('total_return_pct', 0):.2f}%")
+                    m1, m2, m3, m4, m5 = st.columns(5)
+                    ret = summary.get("total_return_pct", 0)
+                    m1.metric("Return", f"{ret:.2f}%", delta="profit" if ret > 0 else "loss")
                     m2.metric("Sharpe", f"{summary.get('sharpe_ratio', 0):.3f}")
-                    m3.metric("Max Drawdown", f"{summary.get('max_drawdown_pct', 0):.2f}%")
+                    m3.metric("Max DD", f"{summary.get('max_drawdown_pct', 0):.2f}%")
                     m4.metric("Trades", summary.get("total_trades", 0))
+                    m5.metric("Win Rate", f"{summary.get('win_rate_pct', 0):.1f}%")
 
-                    with st.expander("Full metrics", expanded=False):
+                    with st.expander("Full metrics"):
                         st.json(summary)
 
                     if result.equity_curve:
-                        eq_df = pd.DataFrame(
-                            {"bar": range(len(result.equity_curve)),
-                             "equity_usd": result.equity_curve}
+                        eq_df = pd.DataFrame({
+                            "bar": range(len(result.equity_curve)),
+                            "equity_usd": result.equity_curve,
+                        })
+                        fig_bt = px.line(eq_df, x="bar", y="equity_usd", title="Backtest Equity Curve")
+                        fig_bt.update_layout(
+                            height=300, margin=dict(l=0, r=0, t=30, b=0),
+                            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                         )
-                        try:
-                            import plotly.express as px
-                            fig = px.line(eq_df, x="bar", y="equity_usd", title="Equity Curve")
-                            st.plotly_chart(fig, use_container_width=True)
-                        except ImportError:
-                            st.line_chart(eq_df.set_index("bar")["equity_usd"])
+                        st.plotly_chart(fig_bt, use_container_width=True)
 
             except Exception as exc:
                 st.error(f"Backtest failed: {exc}")
-# ===========================================================================
-# TAB 3 — EXECUTION LOG
-# ===========================================================================
-with tab_exec:
-    st.header("Execution Log & Portfolio")
 
-    if not Path(db_path).exists():
-        st.warning(f"Database not found at `{db_path}`.")
-    else:
-        try:
-            from hogan_bot.storage import get_connection, load_positions, load_fills, load_equity
-
-            exec_conn = get_connection(str(db_path))
-
-            positions_df = load_positions(exec_conn)
-            fills_df = load_fills(exec_conn, limit=2000)
-            equity_df = load_equity(exec_conn, limit=2000)
-            exec_conn.close()
-
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Open positions", int((positions_df["qty"] > 0).sum()) if not positions_df.empty else 0)
-            col2.metric("Recent fills", int(len(fills_df)) if fills_df is not None and not fills_df.empty else 0)
-            col3.metric("Equity snapshots", int(len(equity_df)) if equity_df is not None and not equity_df.empty else 0)
-
-            st.subheader("Positions")
-            if not positions_df.empty:
-                st.dataframe(positions_df, use_container_width=True)
-            else:
-                st.info("No open positions.")
-
-            st.subheader("Equity Curve")
-            if equity_df is not None and not equity_df.empty:
-                eq = equity_df.copy()
-                eq["ts"] = pd.to_datetime(eq["ts_ms"], unit="ms", utc=True)
-                try:
-                    import plotly.express as px
-                    fig_eq = px.line(eq, x="ts", y="equity_usd", title="Equity (USD)")
-                    st.plotly_chart(fig_eq, use_container_width=True)
-                    fig_dd = px.area(eq, x="ts", y="drawdown", title="Drawdown fraction",
-                                     color_discrete_sequence=["red"])
-                    st.plotly_chart(fig_dd, use_container_width=True)
-                except ImportError:
-                    st.line_chart(eq.set_index("ts")[["equity_usd"]])
-                    st.line_chart(eq.set_index("ts")[["drawdown"]])
-            else:
-                st.info("No equity snapshots yet. Run the bot to populate.")
-
-            st.subheader("Recent Fills")
-            if fills_df is not None and not fills_df.empty:
-                fd = fills_df.copy()
-                fd["ts"] = pd.to_datetime(fd["ts_ms"], unit="ms", utc=True)
-                # Check for LLM explanation column
-                raw_conn2 = sqlite3.connect(db_path)
-                try:
-                    expl = pd.read_sql_query(
-                        "SELECT fill_id, explanation FROM trade_explanations ORDER BY ts_ms DESC LIMIT 500",
-                        raw_conn2,
-                    )
-                    fd = fd.merge(expl, on="fill_id", how="left")
-                except Exception:
-                    pass
-                finally:
-                    raw_conn2.close()
-                st.dataframe(fd.sort_values("ts_ms", ascending=False).head(200), use_container_width=True)
-            else:
-                st.info("No fills recorded yet.")
-
-        except Exception as exc:
-            st.error(f"Execution log error: {exc}")
-
-
-
+# ---------------------------------------------------------------------------
+# Footer
+# ---------------------------------------------------------------------------
+st.divider()
+st.caption(
+    f"Hogan Trading Bot · Paper Mode · Last refresh: {pd.Timestamp.now('UTC').strftime('%Y-%m-%d %H:%M:%S UTC')} "
+    f"· DB: {DB_PATH}"
+)
