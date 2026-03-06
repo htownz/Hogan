@@ -19,7 +19,7 @@ from hogan_bot.retrain import _get_current_best_score, retrain_once
 # ---------------------------------------------------------------------------
 
 
-def _synthetic_candles(n: int = 400) -> pd.DataFrame:
+def _synthetic_candles(n: int = 900) -> pd.DataFrame:
     rng = np.random.default_rng(42)
     close = 30_000.0 + np.cumsum(rng.normal(0, 50, n))
     close = np.clip(close, 1_000.0, None)
@@ -40,7 +40,7 @@ def _make_args(tmp_path: Path, **overrides) -> argparse.Namespace:
         "symbol": "BTC/USD",
         "timeframe": "5m",
         "exchange": "kraken",
-        "window_bars": 400,
+        "window_bars": 900,
         "horizon_bars": 3,
         "model_type": "logreg",
         "model_path": str(tmp_path / "model.pkl"),

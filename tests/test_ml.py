@@ -58,7 +58,7 @@ class FeatureFrameTests(unittest.TestCase):
             self.assertIn(col, frame.columns, f"Missing new feature: {col}")
 
     def test_feature_column_count(self):
-        self.assertEqual(len(_FEATURE_COLUMNS), 24)
+        self.assertEqual(len(_FEATURE_COLUMNS), 43)
 
     def test_rsi_bounded(self):
         frame = _feature_frame(self.df)
@@ -107,7 +107,7 @@ class BuildTrainingSetTests(unittest.TestCase):
 @unittest.skipUnless(pd is not None, "pandas not installed")
 class LogRegTrainingTests(unittest.TestCase):
     def setUp(self):
-        self.df = _synthetic_candles(n=400)
+        self.df = _synthetic_candles(n=800)
         import tempfile, os
         self.tmp = tempfile.mktemp(suffix=".pkl")
 
@@ -162,7 +162,7 @@ class LogRegTrainingTests(unittest.TestCase):
 @unittest.skipUnless(pd is not None, "pandas not installed")
 class RandomForestTrainingTests(unittest.TestCase):
     def setUp(self):
-        self.df = _synthetic_candles(n=400)
+        self.df = _synthetic_candles(n=800)
         import tempfile
         self.tmp = tempfile.mktemp(suffix=".pkl")
 

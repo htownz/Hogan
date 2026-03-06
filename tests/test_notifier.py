@@ -38,12 +38,17 @@ class TestMakeNotifier:
         assert isinstance(make_notifier(""), NullNotifier)
 
     def test_returns_webhook_for_url(self):
-        assert isinstance(make_notifier("https://hooks.example.com/xyz"), WebhookNotifier)
+        assert isinstance(make_notifier(webhook_url="https://hooks.example.com/xyz"), WebhookNotifier)
 
     def test_webhook_url_stored(self):
         url = "https://hooks.example.com/xyz"
-        n = make_notifier(url)
+        n = make_notifier(webhook_url=url)
         assert n.url == url  # type: ignore[union-attr]
+
+    def test_returns_discord_for_discord_url(self):
+        from hogan_bot.notifier import DiscordNotifier
+        url = "https://discord.com/api/webhooks/123/abc"
+        assert isinstance(make_notifier(discord_webhook_url=url), DiscordNotifier)
 
 
 # ---------------------------------------------------------------------------
