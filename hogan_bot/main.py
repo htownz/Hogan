@@ -165,28 +165,29 @@ def run_iteration(
             )
         elif action == "sell":
             current_qty = portfolio.positions.get(symbol).qty if symbol in portfolio.positions else 0.0
-            sell_qty = min(current_qty, size)
-            if executor:
-                res = executor.sell(symbol, px, sell_qty)
-                executed = bool(res.ok)
-                if executed:
-                    portfolio.execute_sell(symbol, px, sell_qty)
+            if current_qty <= 0:
+                # No position to sell — log as HOLD to keep noise down
+                logging.info(
+                    "HOLD symbol=%s px=%.2f vol_ratio=%.2f conf=%.2f ml_up=%.3f equity=%.2f cash=%.2f (sell skipped — no position)",
+                    symbol, px, signal.volume_ratio, signal.confidence,
+                    up_prob if up_prob is not None else -1.0, equity, portfolio.cash_usd,
+                )
             else:
-                executed = portfolio.execute_sell(symbol, px, sell_qty)
-            if notifier and executed:
-                notifier.notify("sell", {"symbol": symbol, "price": px, "qty": sell_qty, "ml_up_prob": up_prob})
-            logging.info(
-                "SELL symbol=%s px=%.2f qty=%.6f ok=%s vol_ratio=%.2f conf=%.2f ml_up=%.3f equity=%.2f cash=%.2f",
-                symbol,
-                px,
-                sell_qty,
-                executed,
-                signal.volume_ratio,
-                signal.confidence,
-                up_prob if up_prob is not None else -1.0,
-                equity,
-                portfolio.cash_usd,
-            )
+                sell_qty = min(current_qty, size)
+                if executor:
+                    res = executor.sell(symbol, px, sell_qty)
+                    executed = bool(res.ok)
+                    if executed:
+                        portfolio.execute_sell(symbol, px, sell_qty)
+                else:
+                    executed = portfolio.execute_sell(symbol, px, sell_qty)
+                if notifier and executed:
+                    notifier.notify("sell", {"symbol": symbol, "price": px, "qty": sell_qty, "ml_up_prob": up_prob})
+                logging.info(
+                    "SELL symbol=%s px=%.2f qty=%.6f ok=%s vol_ratio=%.2f conf=%.2f ml_up=%.3f equity=%.2f cash=%.2f",
+                    symbol, px, sell_qty, executed, signal.volume_ratio, signal.confidence,
+                    up_prob if up_prob is not None else -1.0, equity, portfolio.cash_usd,
+                )
         else:
             logging.info(
                 "HOLD symbol=%s px=%.2f vol_ratio=%.2f conf=%.2f ml_up=%.3f equity=%.2f cash=%.2f",

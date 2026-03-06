@@ -165,7 +165,7 @@ def load_config() -> BotConfig:
         ict_ote_low=float(os.getenv("HOGAN_ICT_OTE_LOW", "0.62")),
         ict_ote_high=float(os.getenv("HOGAN_ICT_OTE_HIGH", "0.79")),
         ml_confidence_sizing=os.getenv("HOGAN_ML_CONFIDENCE_SIZING", "false").lower() == "true",
-        webhook_url=os.getenv("HOGAN_WEBHOOK_URL", ""),
+        webhook_url=os.getenv("HOGAN_DISCORD_WEBHOOK_URL") or os.getenv("HOGAN_WEBHOOK_URL", ""),
         exchange_id=os.getenv("HOGAN_EXCHANGE", "kraken"),
         quote_currency=os.getenv("HOGAN_QUOTE_CCY", "USD"),
         metrics_port=int(os.getenv("HOGAN_METRICS_PORT", "8000")),
