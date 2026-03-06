@@ -13,6 +13,7 @@ from hogan_bot.exchange import ExchangeClient
 from hogan_bot.ml import TrainedModel, load_model, predict_up_probability
 from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
+from hogan_bot.regime import detect_regime, effective_thresholds, load_regime_signals
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
 from hogan_bot.strategy import generate_signal
 from hogan_bot.storage import (
@@ -22,6 +23,15 @@ from hogan_bot.storage import (
 from hogan_bot.execution import PaperExecution, LiveExecution
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+
+def _null_regime():
+    """Return a no-op RegimeState when regime detection is disabled."""
+    from hogan_bot.regime import RegimeState
+    return RegimeState(
+        regime="ranging", adx=20.0, atr_pct_rank=0.5,
+        trend_direction=0, ma_spread=0.0, confidence=0.0,
+    )
 
 
 def is_allowed_trading_time(trade_weekends: bool) -> bool:
@@ -60,6 +70,11 @@ def run_iteration(
     if not mark_prices:
         logging.warning("No symbols had market data this cycle")
         return True
+
+    # Load macro signals for regime detection once per cycle (cheap DB reads)
+    regime_signals: dict = {}
+    if config.use_regime_detection and conn is not None:
+        regime_signals = load_regime_signals(conn)
 
     equity = portfolio.total_equity(mark_prices)
     if conn is not None:
@@ -102,12 +117,34 @@ def run_iteration(
             notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason, "price": px, "qty": qty})
 
     for symbol, candles in candles_by_symbol.items():
+        # ── Regime detection ───────────────────────────────────────────────
+        regime_state = detect_regime(
+            candles,
+            adx_trending_threshold=config.regime_adx_trending,
+            adx_ranging_threshold=config.regime_adx_ranging,
+            atr_volatile_pct=config.regime_atr_volatile_pct,
+            btc_dominance=regime_signals.get("btc_dominance"),
+            fear_greed=regime_signals.get("fear_greed"),
+        ) if config.use_regime_detection else None
+
+        eff = effective_thresholds(regime_state or _null_regime(), config)
+
+        if regime_state is not None:
+            logging.info(
+                "REGIME symbol=%s regime=%s adx=%.1f atr_rank=%.2f conf=%.2f "
+                "vol_thr=%.2f ml_buy=%.2f ml_sell=%.2f pos_scale=%.2f",
+                symbol, regime_state.regime, regime_state.adx,
+                regime_state.atr_pct_rank, regime_state.confidence,
+                eff["volume_threshold"], eff["ml_buy_threshold"],
+                eff["ml_sell_threshold"], eff["position_scale"],
+            )
+
         signal = generate_signal(
             candles,
             short_window=config.short_ma_window,
             long_window=config.long_ma_window,
             volume_window=config.volume_window,
-            volume_threshold=config.volume_threshold,
+            volume_threshold=eff["volume_threshold"],   # regime-adjusted
             use_ema_clouds=config.use_ema_clouds,
             ema_fast_short=config.ema_fast_short,
             ema_fast_long=config.ema_fast_long,
@@ -118,7 +155,6 @@ def run_iteration(
             signal_mode=config.signal_mode,
             min_vote_margin=config.signal_min_vote_margin,
             atr_stop_multiplier=config.atr_stop_multiplier,
-            # ICT pillars — were previously missing, causing ICT to be silently disabled
             use_ict=config.use_ict,
             ict_swing_left=config.ict_swing_left,
             ict_swing_right=config.ict_swing_right,
@@ -134,13 +170,18 @@ def run_iteration(
         px = mark_prices[symbol]
 
         up_prob = None
-        conf_scale = 1.0
+        conf_scale = eff["position_scale"]   # start from regime position scale
         action = signal.action
         if config.use_ml_filter and ml_model is not None:
             up_prob = predict_up_probability(candles, ml_model)
-            action = apply_ml_filter(signal.action, up_prob, config.ml_buy_threshold, config.ml_sell_threshold)
+            # Use regime-adjusted ML thresholds instead of fixed config values
+            action = apply_ml_filter(
+                signal.action, up_prob,
+                eff["ml_buy_threshold"],
+                eff["ml_sell_threshold"],
+            )
             if config.ml_confidence_sizing:
-                conf_scale = ml_confidence(up_prob)
+                conf_scale = ml_confidence(up_prob) * eff["position_scale"]
 
         size = calculate_position_size(
             equity_usd=equity,
@@ -195,14 +236,14 @@ def run_iteration(
                 # Open long with the now-freed cash
                 ok = portfolio.execute_buy(
                     symbol, px, size,
-                    trailing_stop_pct=config.trailing_stop_pct,
-                    take_profit_pct=config.take_profit_pct,
+                    trailing_stop_pct=eff["trailing_stop_pct"],
+                    take_profit_pct=eff["take_profit_pct"],
                 )
                 if executor:
                     res = executor.buy(symbol, px, size)
                     ok = bool(res.ok)
                     if ok:
-                        portfolio.execute_buy(symbol, px, size, trailing_stop_pct=config.trailing_stop_pct, take_profit_pct=config.take_profit_pct)
+                        portfolio.execute_buy(symbol, px, size, trailing_stop_pct=eff["trailing_stop_pct"], take_profit_pct=eff["take_profit_pct"])
                 if ok:
                     _journal_open("long", size)
                 if notifier and ok:
@@ -214,12 +255,12 @@ def run_iteration(
                     res = executor.buy(symbol, px, size)
                     ok = bool(res.ok)
                     if ok:
-                        portfolio.execute_buy(symbol, px, size, trailing_stop_pct=config.trailing_stop_pct, take_profit_pct=config.take_profit_pct)
+                        portfolio.execute_buy(symbol, px, size, trailing_stop_pct=eff["trailing_stop_pct"], take_profit_pct=eff["take_profit_pct"])
                 else:
                     ok = portfolio.execute_buy(
                         symbol, px, size,
-                        trailing_stop_pct=config.trailing_stop_pct,
-                        take_profit_pct=config.take_profit_pct,
+                        trailing_stop_pct=eff["trailing_stop_pct"],
+                        take_profit_pct=eff["take_profit_pct"],
                     )
                 if ok:
                     _journal_open("long", size)
@@ -250,8 +291,8 @@ def run_iteration(
                 if ok and config.allow_shorts:
                     ok_short = portfolio.execute_short(
                         symbol, px, size,
-                        trailing_stop_pct=config.trailing_stop_pct,
-                        take_profit_pct=config.take_profit_pct,
+                        trailing_stop_pct=eff["trailing_stop_pct"],
+                        take_profit_pct=eff["take_profit_pct"],
                     )
                     if ok_short:
                         _journal_open("short", size)
@@ -262,8 +303,8 @@ def run_iteration(
                 # No position — open short
                 ok = portfolio.execute_short(
                     symbol, px, size,
-                    trailing_stop_pct=config.trailing_stop_pct,
-                    take_profit_pct=config.take_profit_pct,
+                    trailing_stop_pct=eff["trailing_stop_pct"],
+                    take_profit_pct=eff["take_profit_pct"],
                 )
                 if ok:
                     _journal_open("short", size)
@@ -284,6 +325,8 @@ def run_iteration(
                 "ml_up": up_prob if up_prob is not None else 0.0,
                 "conf": signal.confidence,
                 "vol_ratio": signal.volume_ratio,
+                "regime": regime_state.regime if regime_state else "unknown",
+                "adx": regime_state.adx if regime_state else 0.0,
                 "is_long": symbol in portfolio.positions and portfolio.positions[symbol].qty > 0,
                 "is_short": symbol in portfolio.short_positions and portfolio.short_positions[symbol].qty > 0,
             }

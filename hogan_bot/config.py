@@ -84,6 +84,15 @@ class BotConfig:
     # with no existing long position.  Flip from short to long and back on signal change.
     allow_shorts: bool = False
 
+    # ── Regime detection ─────────────────────────────────────────────────────
+    # When enabled, the bot classifies the current market as trending_up,
+    # trending_down, ranging, or volatile each iteration and dynamically
+    # adjusts volume_threshold, ML thresholds, stop-loss, and position scale.
+    use_regime_detection: bool = False
+    regime_adx_trending: float = 25.0    # ADX ≥ this → trending
+    regime_adx_ranging: float = 20.0     # ADX < this → ranging
+    regime_atr_volatile_pct: float = 0.80  # ATR percentile ≥ this → volatile
+
     # Webhook URL for trade/drawdown notifications (empty string = disabled)
     webhook_url: str = ""
 
@@ -174,6 +183,10 @@ def load_config() -> BotConfig:
         ict_ote_high=float(os.getenv("HOGAN_ICT_OTE_HIGH", "0.79")),
         ml_confidence_sizing=os.getenv("HOGAN_ML_CONFIDENCE_SIZING", "false").lower() == "true",
         allow_shorts=os.getenv("HOGAN_ALLOW_SHORTS", "false").lower() == "true",
+        use_regime_detection=os.getenv("HOGAN_USE_REGIME_DETECTION", "false").lower() == "true",
+        regime_adx_trending=float(os.getenv("HOGAN_REGIME_ADX_TRENDING", "25.0")),
+        regime_adx_ranging=float(os.getenv("HOGAN_REGIME_ADX_RANGING", "20.0")),
+        regime_atr_volatile_pct=float(os.getenv("HOGAN_REGIME_ATR_VOLATILE_PCT", "0.80")),
         webhook_url=os.getenv("HOGAN_DISCORD_WEBHOOK_URL") or os.getenv("HOGAN_WEBHOOK_URL", ""),
         exchange_id=os.getenv("HOGAN_EXCHANGE", "kraken"),
         quote_currency=os.getenv("HOGAN_QUOTE_CCY", "USD"),
