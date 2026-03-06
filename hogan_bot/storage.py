@@ -169,6 +169,36 @@ def _create_schema(conn: sqlite3.Connection) -> None:
     )
 
     # -------------------------------------------------------------------
+    # Paper trade journal — persists paper buys/sells/shorts/covers
+    # Survives restarts; feeds ML retraining as additional labeled data
+    # -------------------------------------------------------------------
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS paper_trades (
+            trade_id       TEXT PRIMARY KEY,    -- uuid
+            symbol         TEXT NOT NULL,
+            side           TEXT NOT NULL,       -- long / short
+            entry_price    REAL NOT NULL,
+            exit_price     REAL,               -- NULL while open
+            qty            REAL NOT NULL,
+            entry_fee      REAL NOT NULL DEFAULT 0,
+            exit_fee       REAL NOT NULL DEFAULT 0,
+            realized_pnl   REAL,               -- NULL while open
+            pnl_pct        REAL,               -- NULL while open
+            open_ts_ms     INTEGER NOT NULL,
+            close_ts_ms    INTEGER,            -- NULL while open
+            close_reason   TEXT,               -- signal / trailing_stop / take_profit / auto_exit
+            ml_up_prob     REAL,               -- ML up-probability at entry
+            strategy_conf  REAL,               -- strategy confidence at entry
+            vol_ratio      REAL                -- volume ratio at entry
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pt_symbol ON paper_trades (symbol, open_ts_ms)"
+    )
+
+    # -------------------------------------------------------------------
     # Online / continuous learning buffer
     # -------------------------------------------------------------------
     conn.execute(
@@ -539,3 +569,119 @@ def load_position_state(conn: sqlite3.Connection, symbol: str) -> tuple[float, f
     if not row:
         return None
     return float(row[0]), float(row[1])
+
+
+# ---------------------------------------------------------------------------
+# Paper trade journal helpers
+# ---------------------------------------------------------------------------
+
+import uuid as _uuid
+
+
+def open_paper_trade(
+    conn: sqlite3.Connection,
+    symbol: str,
+    side: str,
+    entry_price: float,
+    qty: float,
+    entry_fee: float,
+    open_ts_ms: int,
+    ml_up_prob: float | None = None,
+    strategy_conf: float | None = None,
+    vol_ratio: float | None = None,
+) -> str:
+    """Insert an open paper trade. Returns the trade_id for later closing."""
+    trade_id = str(_uuid.uuid4())
+    conn.execute(
+        """
+        INSERT INTO paper_trades
+        (trade_id, symbol, side, entry_price, qty, entry_fee,
+         open_ts_ms, ml_up_prob, strategy_conf, vol_ratio)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            trade_id, symbol, side,
+            float(entry_price), float(qty), float(entry_fee),
+            int(open_ts_ms),
+            None if ml_up_prob is None else float(ml_up_prob),
+            None if strategy_conf is None else float(strategy_conf),
+            None if vol_ratio is None else float(vol_ratio),
+        ),
+    )
+    conn.commit()
+    return trade_id
+
+
+def close_paper_trade(
+    conn: sqlite3.Connection,
+    symbol: str,
+    side: str,
+    exit_price: float,
+    exit_fee: float,
+    close_ts_ms: int,
+    close_reason: str = "signal",
+) -> None:
+    """Close the most-recent open paper trade for this symbol/side, recording P&L."""
+    row = conn.execute(
+        """
+        SELECT trade_id, entry_price, qty, entry_fee
+        FROM paper_trades
+        WHERE symbol=? AND side=? AND exit_price IS NULL
+        ORDER BY open_ts_ms DESC
+        LIMIT 1
+        """,
+        (symbol, side),
+    ).fetchone()
+    if not row:
+        return
+
+    trade_id, entry_price, qty, entry_fee = row
+    entry_price = float(entry_price)
+    qty = float(qty)
+
+    if side == "long":
+        raw_pnl = (float(exit_price) - entry_price) * qty
+    else:  # short
+        raw_pnl = (entry_price - float(exit_price)) * qty
+
+    realized_pnl = raw_pnl - float(entry_fee) - float(exit_fee)
+    pnl_pct = realized_pnl / (entry_price * qty) if entry_price * qty > 0 else 0.0
+
+    conn.execute(
+        """
+        UPDATE paper_trades
+        SET exit_price=?, exit_fee=?, realized_pnl=?, pnl_pct=?,
+            close_ts_ms=?, close_reason=?
+        WHERE trade_id=?
+        """,
+        (
+            float(exit_price), float(exit_fee),
+            float(realized_pnl), float(pnl_pct),
+            int(close_ts_ms), close_reason, trade_id,
+        ),
+    )
+    conn.commit()
+
+
+def load_paper_trades(
+    conn: sqlite3.Connection,
+    limit: int = 100,
+    symbol: str | None = None,
+    closed_only: bool = False,
+) -> pd.DataFrame:
+    """Load paper trades for analysis and ML labeling."""
+    where_parts = []
+    params: list = []
+    if symbol:
+        where_parts.append("symbol=?")
+        params.append(symbol)
+    if closed_only:
+        where_parts.append("exit_price IS NOT NULL")
+
+    where = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
+    params.append(int(limit))
+    return pd.read_sql_query(
+        f"SELECT * FROM paper_trades {where} ORDER BY open_ts_ms DESC LIMIT ?",
+        conn,
+        params=params,
+    )

@@ -187,32 +187,43 @@ def cmd_positions(portfolio: "PaperPortfolio | None", mark_prices: dict) -> list
 def cmd_pnl(db_path: str) -> list[dict]:
     try:
         conn = sqlite3.connect(db_path)
-        fills = conn.execute(
-            "SELECT symbol, side, amount, price, fee, ts_ms FROM fills ORDER BY ts_ms DESC LIMIT 50"
+        rows = conn.execute(
+            """SELECT symbol, side, realized_pnl, pnl_pct, entry_fee, exit_fee, close_reason
+               FROM paper_trades
+               WHERE exit_price IS NOT NULL
+               ORDER BY close_ts_ms DESC LIMIT 50"""
         ).fetchall()
         conn.close()
     except Exception as exc:
         return [_embed("P&L", [("Error", str(exc), False)], 0xED4245)]
 
-    if not fills:
-        return [_embed("P&L", [("Realized P&L", "No fills recorded yet", False)], 0xFEE75C)]
+    if not rows:
+        return [_embed("P&L", [("Realized P&L", "No closed trades yet — positions still open or bot just started", False)], 0xFEE75C)]
 
-    # Simple realized P&L: pair buys and sells per symbol
-    realized: dict[str, float] = {}
+    total_pnl = 0.0
     total_fees = 0.0
-    trade_count = 0
-    for sym, side, amt, price, fee, _ in fills:
-        total_fees += (fee or 0.0)
-        trade_count += 1
-        value = amt * price
-        realized[sym] = realized.get(sym, 0.0) + (value if side == "sell" else -value)
+    wins = 0
+    by_symbol: dict[str, float] = {}
+    for sym, side, pnl, pnl_pct, entry_fee, exit_fee, reason in rows:
+        pnl = pnl or 0.0
+        total_pnl += pnl
+        total_fees += (entry_fee or 0.0) + (exit_fee or 0.0)
+        if pnl > 0:
+            wins += 1
+        by_symbol[sym] = by_symbol.get(sym, 0.0) + pnl
 
-    fields = [("Trades Recorded", str(trade_count), True), ("Total Fees Paid", f"${total_fees:.4f}", True)]
-    for sym, pnl in sorted(realized.items()):
+    win_rate = wins / len(rows) * 100 if rows else 0.0
+    color = 0x57F287 if total_pnl >= 0 else 0xED4245
+    fields = [
+        ("Closed Trades", str(len(rows)), True),
+        ("Win Rate", f"{win_rate:.0f}%", True),
+        ("Total Fees", f"${total_fees:.4f}", True),
+        ("Net Realized P&L", f"{'🟢' if total_pnl >= 0 else '🔴'} ${total_pnl:+,.4f}", False),
+    ]
+    for sym, pnl in sorted(by_symbol.items()):
         icon = "🟢" if pnl >= 0 else "🔴"
-        fields.append((sym, f"{icon} ${pnl:+,.2f}", True))
+        fields.append((sym, f"{icon} ${pnl:+,.4f}", True))
 
-    color = 0x57F287 if sum(realized.values()) >= 0 else 0xED4245
     return [_embed("📈 Realized P&L", fields, color)]
 
 
@@ -220,22 +231,33 @@ def cmd_fills(db_path: str) -> list[dict]:
     try:
         conn = sqlite3.connect(db_path)
         rows = conn.execute(
-            "SELECT symbol, side, amount, price, fee, ts_ms FROM fills ORDER BY ts_ms DESC LIMIT 10"
+            """SELECT symbol, side, qty, entry_price, exit_price, realized_pnl, pnl_pct,
+                      open_ts_ms, close_ts_ms, close_reason, ml_up_prob
+               FROM paper_trades
+               ORDER BY open_ts_ms DESC LIMIT 10"""
         ).fetchall()
         conn.close()
     except Exception as exc:
         return [_embed("Fills", [("Error", str(exc), False)], 0xED4245)]
 
     if not rows:
-        return [_embed("Recent Fills", [("Status", "No fills yet — bot is building trade history", False)], 0xFEE75C)]
+        return [_embed("Recent Trades", [("Status", "No paper trades yet — waiting for first signal", False)], 0xFEE75C)]
 
     fields = []
-    for sym, side, amt, price, fee, ts_ms in rows:
-        dt = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).strftime("%m-%d %H:%M")
-        icon = "🟢" if side == "buy" else "🔴"
-        fields.append((f"{icon} {side.upper()} {sym}", f"`${price:,.2f}` × `{amt:.6f}` @ {dt}", False))
+    for sym, side, qty, entry_px, exit_px, pnl, pnl_pct, open_ms, close_ms, reason, ml_prob in rows:
+        dt_open = datetime.fromtimestamp(open_ms / 1000, tz=timezone.utc).strftime("%m-%d %H:%M")
+        if exit_px is not None:
+            dt_close = datetime.fromtimestamp(close_ms / 1000, tz=timezone.utc).strftime("%H:%M") if close_ms else "?"
+            pnl_str = f"P&L ${pnl:+,.4f} ({pnl_pct*100:+.2f}%)" if pnl is not None else ""
+            status = f"CLOSED @ ${exit_px:,.2f} [{reason}] {pnl_str}"
+            icon = "🟢" if (pnl or 0) >= 0 else "🔴"
+        else:
+            status = f"OPEN @ ${entry_px:,.2f} (ml={ml_prob:.2f})" if ml_prob else f"OPEN @ ${entry_px:,.2f}"
+            icon = "🔵"
+        label = f"{icon} {side.upper()} {sym}"
+        fields.append((label, f"`{qty:.6f}` entry ${entry_px:,.2f} — {status} @ {dt_open}", False))
 
-    return [_embed("🧾 Last 10 Fills", fields, 0x5865F2)]
+    return [_embed("🧾 Last 10 Trades", fields, 0x5865F2)]
 
 
 def cmd_status(db_path: str, config_summary: dict) -> list[dict]:
