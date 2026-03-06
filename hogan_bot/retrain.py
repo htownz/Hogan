@@ -57,6 +57,7 @@ import pandas as pd
 
 from hogan_bot.exchange import ExchangeClient
 from hogan_bot.ml import (
+    make_paper_trade_labels,
     train_lightgbm,
     train_logistic_regression,
     train_random_forest,
@@ -176,6 +177,21 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="DELTA",
         help="Minimum metric gain for challenger to be auto-promoted over champion",
     )
+    p.add_argument(
+        "--use-paper-labels",
+        action="store_true",
+        help=(
+            "Blend closed paper-trade outcomes into the training set as additional "
+            "labeled rows (weight 3×).  Requires ≥5 closed paper trades in the DB."
+        ),
+    )
+    p.add_argument(
+        "--paper-labels-weight",
+        type=float,
+        default=3.0,
+        metavar="W",
+        help="Sample weight applied to paper-trade labeled rows (default: 3.0)",
+    )
     return p
 
 
@@ -220,17 +236,33 @@ def _train_to_candidate(args: argparse.Namespace, candles: pd.DataFrame) -> tupl
 
     model_dir.mkdir(parents=True, exist_ok=True)
 
+    # Optionally load paper-trade labels for feedback-loop training
+    paper_labels = None
+    paper_weight = getattr(args, "paper_labels_weight", 3.0)
+    if getattr(args, "use_paper_labels", False):
+        db_path = getattr(args, "db", "data/hogan.db")
+        paper_labels = make_paper_trade_labels(db_path, candles, args.symbol)
+        if paper_labels[0] is not None:
+            logger.info(
+                "Paper-trade feedback: %d labeled rows added (weight=%.1f)",
+                len(paper_labels[0]), paper_weight,
+            )
+        else:
+            logger.info("Paper-trade feedback: fewer than 5 closed trades — skipping.")
+
     if args.model_type == "random_forest":
         metrics = train_random_forest(
-            candles, model_path=candidate_path, horizon_bars=args.horizon_bars
+            candles, model_path=candidate_path, horizon_bars=args.horizon_bars,
+            paper_labels=paper_labels, paper_labels_weight=paper_weight,
         )
     elif args.model_type == "xgboost":
         metrics = train_xgboost(
-            candles, model_path=candidate_path, horizon_bars=args.horizon_bars
+            candles, model_path=candidate_path, horizon_bars=args.horizon_bars,
+            paper_labels=paper_labels, paper_labels_weight=paper_weight,
         )
     elif args.model_type == "lightgbm":
         metrics = train_lightgbm(
-            candles, model_path=candidate_path, horizon_bars=args.horizon_bars
+            candles, model_path=candidate_path, horizon_bars=args.horizon_bars,
         )
     else:
         metrics = train_logistic_regression(
@@ -238,6 +270,8 @@ def _train_to_candidate(args: argparse.Namespace, candles: pd.DataFrame) -> tupl
             model_path=candidate_path,
             horizon_bars=args.horizon_bars,
             tune_hyperparams=args.tune,
+            paper_labels=paper_labels,
+            paper_labels_weight=paper_weight,
         )
 
     return metrics, candidate_path
