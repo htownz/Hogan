@@ -15,7 +15,10 @@ from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
 from hogan_bot.strategy import generate_signal
-from hogan_bot.storage import get_connection, record_equity, upsert_position
+from hogan_bot.storage import (
+    get_connection, record_equity, upsert_position,
+    open_paper_trade, close_paper_trade,
+)
 from hogan_bot.execution import PaperExecution, LiveExecution
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -72,18 +75,25 @@ def run_iteration(
     exits = portfolio.check_exits(mark_prices)
     for exit_symbol, reason in exits:
         px = mark_prices[exit_symbol]
+        now_ms = int(time.time() * 1000)
         if reason in ("trailing_stop", "take_profit"):
             pos = portfolio.positions.get(exit_symbol)
             if pos is None:
                 continue
             qty = pos.qty
             executed = portfolio.execute_sell(exit_symbol, px, qty)
+            if executed and conn is not None:
+                fee = qty * px * config.fee_rate
+                close_paper_trade(conn, exit_symbol, "long", px, fee, now_ms, close_reason=reason)
         else:  # short_trailing_stop or short_take_profit
             pos = portfolio.short_positions.get(exit_symbol)
             if pos is None:
                 continue
             qty = pos.qty
             executed = portfolio.execute_cover(exit_symbol, px, qty)
+            if executed and conn is not None:
+                fee = qty * px * config.fee_rate
+                close_paper_trade(conn, exit_symbol, "short", px, fee, now_ms, close_reason=reason)
         logging.info(
             "AUTO_EXIT symbol=%s reason=%s px=%.2f qty=%.6f ok=%s equity=%.2f",
             exit_symbol, reason, px, qty, executed, portfolio.total_equity(mark_prices),
@@ -143,6 +153,7 @@ def run_iteration(
 
         is_long = symbol in portfolio.positions and portfolio.positions[symbol].qty > 0
         is_short = symbol in portfolio.short_positions and portfolio.short_positions[symbol].qty > 0
+        now_ms = int(time.time() * 1000)
 
         def _log(label, qty=0.0, ok=False):
             logging.info(
@@ -153,6 +164,21 @@ def run_iteration(
                 portfolio.total_equity(mark_prices), portfolio.cash_usd,
             )
 
+        def _journal_open(side: str, entry_qty: float) -> None:
+            if conn is not None:
+                fee = entry_qty * px * config.fee_rate
+                open_paper_trade(
+                    conn, symbol, side, px, entry_qty, fee, now_ms,
+                    ml_up_prob=up_prob,
+                    strategy_conf=signal.confidence,
+                    vol_ratio=signal.volume_ratio,
+                )
+
+        def _journal_close(side: str, close_qty: float, reason: str = "signal") -> None:
+            if conn is not None:
+                fee = close_qty * px * config.fee_rate
+                close_paper_trade(conn, symbol, side, px, fee, now_ms, close_reason=reason)
+
         if action == "buy":
             if is_long:
                 # Already long — don't pyramid, just hold
@@ -161,6 +187,8 @@ def run_iteration(
                 # Cover the short first, then open long in the same candle
                 cover_qty = portfolio.short_positions[symbol].qty
                 ok = portfolio.execute_cover(symbol, px, cover_qty)
+                if ok:
+                    _journal_close("short", cover_qty)
                 _log("COVER", cover_qty, ok)
                 if notifier and ok:
                     notifier.notify("cover", {"symbol": symbol, "price": px, "qty": cover_qty, "ml_up_prob": up_prob})
@@ -175,6 +203,8 @@ def run_iteration(
                     ok = bool(res.ok)
                     if ok:
                         portfolio.execute_buy(symbol, px, size, trailing_stop_pct=config.trailing_stop_pct, take_profit_pct=config.take_profit_pct)
+                if ok:
+                    _journal_open("long", size)
                 if notifier and ok:
                     notifier.notify("buy", {"symbol": symbol, "price": px, "qty": size, "ml_up_prob": up_prob})
                 _log("BUY", size, ok)
@@ -191,6 +221,8 @@ def run_iteration(
                         trailing_stop_pct=config.trailing_stop_pct,
                         take_profit_pct=config.take_profit_pct,
                     )
+                if ok:
+                    _journal_open("long", size)
                 if notifier and ok:
                     notifier.notify("buy", {"symbol": symbol, "price": px, "qty": size, "ml_up_prob": up_prob})
                 _log("BUY", size, ok)
@@ -209,6 +241,8 @@ def run_iteration(
                         portfolio.execute_sell(symbol, px, sell_qty)
                 else:
                     ok = portfolio.execute_sell(symbol, px, sell_qty)
+                if ok:
+                    _journal_close("long", sell_qty)
                 if notifier and ok:
                     notifier.notify("sell", {"symbol": symbol, "price": px, "qty": sell_qty, "ml_up_prob": up_prob})
                 _log("SELL", sell_qty, ok)
@@ -219,6 +253,8 @@ def run_iteration(
                         trailing_stop_pct=config.trailing_stop_pct,
                         take_profit_pct=config.take_profit_pct,
                     )
+                    if ok_short:
+                        _journal_open("short", size)
                     if notifier and ok_short:
                         notifier.notify("short", {"symbol": symbol, "price": px, "qty": size, "ml_up_prob": up_prob})
                     _log("SHORT", size, ok_short)
@@ -229,6 +265,8 @@ def run_iteration(
                     trailing_stop_pct=config.trailing_stop_pct,
                     take_profit_pct=config.take_profit_pct,
                 )
+                if ok:
+                    _journal_open("short", size)
                 if notifier and ok:
                     notifier.notify("short", {"symbol": symbol, "price": px, "qty": size, "ml_up_prob": up_prob})
                 _log("SHORT", size, ok)
