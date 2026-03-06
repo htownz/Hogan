@@ -47,6 +47,32 @@ _DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 _MAX_PROMPT_CHARS = 800
 
 
+def _enforce_two_sentences(text: str) -> str:
+    """Normalize model output to exactly two concise sentences."""
+    cleaned = " ".join((text or "").strip().split())
+    if not cleaned:
+        return ""
+
+    parts: list[str] = []
+    buf = []
+    for ch in cleaned:
+        buf.append(ch)
+        if ch in ".!?":
+            sentence = "".join(buf).strip()
+            if sentence:
+                parts.append(sentence)
+            buf = []
+    if buf:
+        parts.append("".join(buf).strip() + ".")
+
+    if len(parts) >= 2:
+        return f"{parts[0]} {parts[1]}"
+
+    only = parts[0] if parts else cleaned
+    only = only if only.endswith((".", "!", "?")) else f"{only}."
+    return f"{only} Risk controls and position sizing gates were applied before execution."
+
+
 def _build_prompt(
     symbol: str,
     action: str,
@@ -105,7 +131,7 @@ def _call_ollama(prompt: str) -> str | None:
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
-            return data.get("response", "").strip()
+            return _enforce_two_sentences(data.get("response", "").strip())
     except Exception as exc:
         logger.debug("Ollama call failed: %s", exc)
         return None
@@ -143,7 +169,7 @@ def _call_openai(prompt: str) -> str | None:
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
-            return data["choices"][0]["message"]["content"].strip()
+            return _enforce_two_sentences(data["choices"][0]["message"]["content"].strip())
     except Exception as exc:
         logger.debug("OpenAI call failed: %s", exc)
         return None
@@ -203,16 +229,16 @@ def generate_explanation(
     if provider == "ollama":
         text = _call_ollama(prompt)
         if text:
-            return text, f"ollama:{os.getenv('HOGAN_OLLAMA_MODEL', _DEFAULT_OLLAMA_MODEL)}"
+            return _enforce_two_sentences(text), f"ollama:{os.getenv('HOGAN_OLLAMA_MODEL', _DEFAULT_OLLAMA_MODEL)}"
 
     if provider == "openai" or (provider == "ollama" and not text):
         text = _call_openai(prompt)
         if text:
-            return text, f"openai:{os.getenv('OPENAI_MODEL', _DEFAULT_OPENAI_MODEL)}"
+            return _enforce_two_sentences(text), f"openai:{os.getenv('OPENAI_MODEL', _DEFAULT_OPENAI_MODEL)}"
 
     # Template fallback
     text = _template_explanation(symbol, action, price, signal_details)
-    return text, "template"
+    return _enforce_two_sentences(text), "template"
 
 
 def explain_trade(

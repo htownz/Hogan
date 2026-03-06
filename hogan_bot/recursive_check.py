@@ -251,6 +251,7 @@ def dry_run_validate(
                 use_fvg=cfg.use_fvg,
                 fvg_min_gap_pct=cfg.fvg_min_gap_pct,
                 signal_mode=cfg.signal_mode,
+            min_vote_margin=cfg.signal_min_vote_margin,
             )
             actions.append(signal.action)
         except Exception as exc:
