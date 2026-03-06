@@ -27,10 +27,14 @@ _COMPARE_CONFIGS: list[tuple[str, dict]] = [
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run Hogan backtest on Kraken OHLCV")
+    parser = argparse.ArgumentParser(description="Run Hogan backtest on Kraken OHLCV or local DB")
     parser.add_argument("--symbol", default="BTC/USD")
     parser.add_argument("--timeframe", default=None)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--from-db", action="store_true",
+                        help="Load candles from local SQLite DB (data/hogan.db) instead of fetching live")
+    parser.add_argument("--db", default="data/hogan.db",
+                        help="SQLite DB path (used with --from-db)")
     parser.add_argument("--use-ml", action="store_true")
     parser.add_argument("--use-ict", action="store_true", help="Enable ICT signal pillars")
     parser.add_argument("--use-rl", action="store_true", help="Enable trained RL agent vote (requires models/hogan_rl_policy.zip)")
@@ -112,8 +116,18 @@ def main() -> None:
     timeframe = args.timeframe or cfg.timeframe
     limit = args.limit or cfg.ohlcv_limit
 
-    client = ExchangeClient(cfg.exchange_id, cfg.kraken_api_key, cfg.kraken_api_secret)
-    candles = client.fetch_ohlcv_df(args.symbol, timeframe=timeframe, limit=limit)
+    if args.from_db:
+        from hogan_bot.storage import get_connection, load_candles as _load_candles
+        conn = get_connection(args.db)
+        candles = _load_candles(conn, args.symbol, timeframe, limit=limit)
+        conn.close()
+        if candles.empty:
+            print(f"No candles found in DB for {args.symbol}/{timeframe}. Run refresh_daily.py first.")
+            return
+        print(f"Loaded {len(candles)} candles from local DB ({args.symbol}/{timeframe})")
+    else:
+        client = ExchangeClient(cfg.exchange_id, cfg.kraken_api_key, cfg.kraken_api_secret)
+        candles = client.fetch_ohlcv_df(args.symbol, timeframe=timeframe, limit=limit)
 
     ml_model = load_model(cfg.ml_model_path) if args.use_ml else None
 

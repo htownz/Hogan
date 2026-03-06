@@ -47,12 +47,13 @@ logger = logging.getLogger(__name__)
 
 _TIMEOUT = 15
 
-# Oanda uses instrument codes like BTC_USD (not BTC/USD)
+# Oanda only supports forex + metals — crypto CFDs (BTC_USD, ETH_USD) were
+# discontinued by Oanda in 2019.  XAU = Gold (risk-off signal), EUR = DXY proxy.
 _INSTRUMENTS = {
-    "BTC_USD": "oanda_btc_mid",
-    "ETH_USD": "oanda_eth_mid",
     "XAU_USD": "oanda_xau_mid",
     "EUR_USD": "oanda_eur_mid",
+    "GBP_USD": "oanda_gbp_mid",
+    "USD_JPY": "oanda_usdjpy_mid",
 }
 
 _ENVIRONMENTS = {
@@ -66,7 +67,7 @@ _ENVIRONMENTS = {
 # ---------------------------------------------------------------------------
 
 def _get_config() -> tuple[str, str, str]:
-    """Return (access_token, account_id, base_url).  Raises if token missing."""
+    """Return (access_token, account_id, base_url).  Raises if token or account missing."""
     token = os.getenv("OANDA_ACCESS_TOKEN", "").strip()
     if not token:
         raise RuntimeError(
@@ -75,6 +76,12 @@ def _get_config() -> tuple[str, str, str]:
             "Get a token at: https://www.oanda.com/account/#/access/fxtrade/personal-token"
         )
     account_id = os.getenv("OANDA_ACCOUNT_ID", "").strip()
+    if not account_id:
+        raise RuntimeError(
+            "OANDA_ACCOUNT_ID not set.\n"
+            "Run:  python -m hogan_bot.fetch_oanda --list-accounts\n"
+            "Then add to .env:  OANDA_ACCOUNT_ID=<id>  (format: 001-001-XXXXXXX-001)"
+        )
     env = os.getenv("OANDA_ENVIRONMENT", "practice").strip().lower()
     if env not in _ENVIRONMENTS:
         env = "practice"
@@ -84,10 +91,19 @@ def _get_config() -> tuple[str, str, str]:
 
 def _get(path: str, token: str, base_url: str) -> dict:
     """GET from Oanda REST v20 with Bearer auth."""
+    from urllib.error import HTTPError
     url = f"{base_url}{path}"
     req = Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
-    with urlopen(req, timeout=_TIMEOUT) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urlopen(req, timeout=_TIMEOUT) as resp:
+            return json.loads(resp.read().decode())
+    except HTTPError as exc:
+        body = ""
+        try:
+            body = exc.read().decode()[:300]
+        except Exception:
+            pass
+        raise URLError(f"HTTP {exc.code} {exc.reason} — {body}") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -96,8 +112,18 @@ def _get(path: str, token: str, base_url: str) -> dict:
 
 def list_accounts(token: str, base_url: str) -> list[dict]:
     """Return all accounts accessible with this token."""
-    data = _get("/v3/accounts", token, base_url)
-    return data.get("accounts", [])
+    try:
+        data = _get("/v3/accounts", token, base_url)
+        return data.get("accounts", [])
+    except URLError as exc:
+        err_str = str(exc)
+        if "401" in err_str or "Unauthorized" in err_str:
+            raise RuntimeError(
+                "Oanda token is expired or invalid (HTTP 401). "
+                "Generate a new token at: https://www.oanda.com/account/#/access/fxtrade/personal-token  "
+                "Then update OANDA_ACCESS_TOKEN in .env"
+            ) from exc
+        raise
 
 
 def account_summary(token: str, account_id: str, base_url: str) -> dict:
@@ -123,13 +149,19 @@ def fetch_prices(
     account_id : str
         Oanda account ID — required for the v20 pricing endpoint.
     instruments : list[str]
-        Oanda instrument codes, e.g. ``["BTC_USD", "ETH_USD"]``.
+        Oanda instrument codes, e.g. ``["XAU_USD", "EUR_USD"]``.
         Defaults to all instruments in ``_INSTRUMENTS``.
 
     Returns
     -------
     dict
         Mapping of instrument code → mid price.
+
+    Raises
+    ------
+    RuntimeError
+        On 401 Unauthorized (expired/invalid token) so the caller can
+        surface this as a FAIL rather than silently returning empty data.
     """
     instruments = instruments or list(_INSTRUMENTS.keys())
     inst_str = "%2C".join(instruments)   # URL-encoded comma
@@ -138,6 +170,20 @@ def fetch_prices(
     try:
         data = _get(path, token, base_url)
     except URLError as exc:
+        err_str = str(exc)
+        if "401" in err_str or "Unauthorized" in err_str:
+            raise RuntimeError(
+                "Oanda token is expired or invalid (HTTP 401). "
+                "Generate a new token at: https://www.oanda.com/account/#/access/fxtrade/personal-token  "
+                "Then update OANDA_ACCESS_TOKEN in .env"
+            ) from exc
+        if "400" in err_str and "accountID" in err_str:
+            raise RuntimeError(
+                f"Oanda account ID is invalid (HTTP 400): OANDA_ACCOUNT_ID={account_id!r}. "
+                "Oanda IDs use format 001-001-XXXXXXX-001. "
+                "Run:  python -m hogan_bot.fetch_oanda --list-accounts  to find yours, "
+                "then set OANDA_ACCOUNT_ID in .env"
+            ) from exc
         logger.warning("Oanda prices request failed: %s", exc)
         return {}
 

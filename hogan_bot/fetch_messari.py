@@ -40,7 +40,8 @@ from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
-_BASE = "https://data.messari.io/api"
+_BASE = "https://data.messari.io/api/v2"   # v1 is deprecated; v2 requires paid plan
+_BASE_V1 = "https://data.messari.io/api/v1"   # kept for fallback
 _TIMEOUT = 20
 _DEFAULT_DAYS = 30
 
@@ -55,14 +56,25 @@ def _get_key() -> str:
     return key
 
 
-def _get(path: str, api_key: str, params: str = "") -> dict:
+def _get(path: str, api_key: str, params: str = "", base: str | None = None) -> dict:
     """GET from Messari API with auth header and up to 3 retries."""
-    url = f"{_BASE}{path}{('?' + params) if params else ''}"
+    from urllib.error import HTTPError
+    resolved_base = base or _BASE
+    url = f"{resolved_base}{path}{('?' + params) if params else ''}"
     req = Request(url, headers={"x-messari-api-key": api_key})
     for attempt in range(3):
         try:
             with urlopen(req, timeout=_TIMEOUT) as resp:
                 return json.loads(resp.read().decode())
+        except HTTPError as exc:
+            body = ""
+            try:
+                body = exc.read().decode()[:200]
+            except Exception:
+                pass
+            raise RuntimeError(
+                f"Messari request failed: {url}  (HTTP {exc.code}: {exc.reason}) — {body}"
+            ) from exc
         except URLError as exc:
             if attempt == 2:
                 raise RuntimeError(f"Messari request failed: {url}  ({exc})") from exc
@@ -96,14 +108,33 @@ def fetch_market_metrics(
 ) -> list[tuple[str, str, float]]:
     """Fetch current-day market metrics snapshot from Messari.
 
-    Returns a list of (date, metric_name, value) tuples for today only
-    (Messari free tier returns a single snapshot, not historical series).
+    Tries v2 asset metrics endpoint first, then falls back to v1.
+    Returns a list of (date, metric_name, value) tuples for today only.
+
+    Note: Messari v1 API free tier was deprecated; v2 requires a Pro plan.
+    If both return 401, the API key may be invalid or requires upgrading.
     """
     asset = _slug(symbol)
-    try:
-        data = _get(f"/v1/assets/{asset}/metrics", api_key)
-    except RuntimeError as exc:
-        logger.warning("Messari market metrics failed: %s", exc)
+    data: dict = {}
+
+    # Try v2 first, fall back to v1
+    for path, base in [
+        (f"/assets/{asset}/metrics", _BASE),         # v2
+        (f"/v1/assets/{asset}/metrics", _BASE_V1),   # v1 fallback
+    ]:
+        try:
+            data = _get(path, api_key, base=base)
+            if data.get("data"):
+                break
+        except RuntimeError as exc:
+            logger.debug("Messari %s failed: %s", path, exc)
+            continue
+
+    if not data.get("data"):
+        logger.warning(
+            "Messari market metrics: no data returned. "
+            "The free tier may be limited — check https://messari.io/api for plan details."
+        )
         return []
 
     today = datetime.now(timezone.utc).date().isoformat()
@@ -134,58 +165,28 @@ def fetch_roi_metrics(
     api_key: str,
     symbol: str = "BTC/USD",
 ) -> list[tuple[str, str, float]]:
-    """Fetch ROI and volatility metrics."""
-    asset = _slug(symbol)
-    try:
-        data = _get(f"/v1/assets/{asset}/metrics/roi-data", api_key)
-    except RuntimeError as exc:
-        logger.warning("Messari ROI metrics failed: %s", exc)
-        return []
+    """Fetch ROI and volatility metrics.
 
-    today = datetime.now(timezone.utc).date().isoformat()
-    roi_data = data.get("data", {})
-    records: list[tuple[str, str, float]] = []
-
-    def _safe(key: str, name: str) -> None:
-        val = roi_data.get(key)
-        if val is not None:
-            try:
-                records.append((today, name, float(val)))
-            except (TypeError, ValueError):
-                pass
-
-    _safe("percent_change_last_1_week", "messari_roi_1w")
-    _safe("percent_change_last_1_month", "messari_roi_1m")
-    _safe("percent_change_last_3_months", "messari_roi_3m")
-    _safe("volatility_stats.volatility_last_30_days", "messari_vol_30d")
-
-    return records
+    Note: The v1 /metrics/roi-data endpoint was removed.  We extract ROI
+    from the main /metrics response (already fetched by fetch_market_metrics).
+    This function is retained for interface compatibility but always returns [].
+    """
+    # roi-data endpoint was removed from Messari v1 and not re-added in v2.
+    # ROI data (1h/24h/7d changes) is already covered by CoinMarketCap.
+    return []
 
 
 def fetch_developer_activity(
     api_key: str,
     symbol: str = "BTC/USD",
 ) -> list[tuple[str, str, float]]:
-    """Fetch developer activity score (0-100 percentile)."""
-    asset = _slug(symbol)
-    try:
-        data = _get(f"/v1/assets/{asset}/metrics/developer-activity", api_key)
-    except RuntimeError as exc:
-        logger.warning("Messari dev activity failed: %s", exc)
-        return []
+    """Fetch developer activity score (0-100 percentile).
 
-    today = datetime.now(timezone.utc).date().isoformat()
-    dev_data = data.get("data", {})
-    records: list[tuple[str, str, float]] = []
-
-    val = dev_data.get("developer_activity_score")
-    if val is not None:
-        try:
-            records.append((today, "messari_dev_score", float(val)))
-        except (TypeError, ValueError):
-            pass
-
-    return records
+    Note: The v1 /metrics/developer-activity endpoint was removed.
+    Returns [] — this metric is no longer available on the free tier.
+    """
+    # /metrics/developer-activity was removed from Messari v1 and not re-added.
+    return []
 
 
 def fetch_all_messari(
@@ -212,6 +213,7 @@ def fetch_all_messari(
     conn = get_connection(db_path)
     results: dict[str, int] = {}
 
+    total_written = 0
     for group_name, fetch_fn in [
         ("market_metrics", fetch_market_metrics),
         ("roi_metrics", fetch_roi_metrics),
@@ -223,6 +225,7 @@ def fetch_all_messari(
             if records:
                 written = upsert_onchain(conn, symbol, records)
                 results[group_name] = written
+                total_written += written
                 logger.info("  wrote %d rows", written)
             else:
                 results[group_name] = 0
@@ -234,6 +237,14 @@ def fetch_all_messari(
         time.sleep(0.3)  # be polite to the free-tier rate limit
 
     conn.close()
+
+    if total_written == 0:
+        raise RuntimeError(
+            "Messari returned 0 records across all metric groups. "
+            "The API key may be invalid or the free tier is restricted. "
+            "Check your MESSARI_KEY or visit https://messari.io/api"
+        )
+
     return results
 
 
