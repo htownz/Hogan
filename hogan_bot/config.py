@@ -52,6 +52,9 @@ class BotConfig:
 
     # Signal combinator: "ma_only" | "any" | "all"
     signal_mode: str = "any"
+    # Minimum directional vote edge required in "any" mode (buy_votes - sell_votes).
+    # Default 1 = any majority. Set to 2 to require two more votes before trading.
+    signal_min_vote_margin: int = 1
 
     # Exit management (0 = disabled)
     trailing_stop_pct: float = 0.0
@@ -153,6 +156,7 @@ def load_config() -> BotConfig:
         use_fvg=os.getenv("HOGAN_USE_FVG", "false").lower() == "true",
         fvg_min_gap_pct=float(os.getenv("HOGAN_FVG_MIN_GAP_PCT", "0.001")),
         signal_mode=os.getenv("HOGAN_SIGNAL_MODE", "any"),
+        signal_min_vote_margin=max(1, int(os.getenv("HOGAN_SIGNAL_MIN_VOTE_MARGIN", "1"))),
         trailing_stop_pct=float(os.getenv("HOGAN_TRAILING_STOP_PCT", "0.0")),
         take_profit_pct=float(os.getenv("HOGAN_TAKE_PROFIT_PCT", "0.0")),
         atr_stop_multiplier=float(os.getenv("HOGAN_ATR_STOP_MULTIPLIER", "1.5")),
