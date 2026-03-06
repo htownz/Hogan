@@ -42,7 +42,7 @@ python -m hogan_bot.main --max-loops 2
 
 ## ML enhancement workflow (recommended)
 
-The ML pipeline uses 20 features (momentum, RSI, volatility, candle microstructure, volume, EMA cloud direction and width, FVG counts) and supports two classifier types.
+The ML pipeline uses 43 features (momentum, RSI, volatility, candle microstructure, volume, EMA cloud direction/width, FVG counts, OBV, Stochastic RSI, VWAP deviation, MACD, Bollinger Bands, ATR, multi-timeframe features, on-chain/macro signals, and ICT structural features) and supports two classifier types.
 
 ### 1. Validate with walk-forward cross-validation first
 
