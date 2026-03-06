@@ -71,12 +71,19 @@ def run_iteration(
     # Auto-exit positions that have hit their trailing stop or take-profit
     exits = portfolio.check_exits(mark_prices)
     for exit_symbol, reason in exits:
-        pos = portfolio.positions.get(exit_symbol)
-        if pos is None:
-            continue
         px = mark_prices[exit_symbol]
-        qty = pos.qty
-        executed = portfolio.execute_sell(exit_symbol, px, qty)
+        if reason in ("trailing_stop", "take_profit"):
+            pos = portfolio.positions.get(exit_symbol)
+            if pos is None:
+                continue
+            qty = pos.qty
+            executed = portfolio.execute_sell(exit_symbol, px, qty)
+        else:  # short_trailing_stop or short_take_profit
+            pos = portfolio.short_positions.get(exit_symbol)
+            if pos is None:
+                continue
+            qty = pos.qty
+            executed = portfolio.execute_cover(exit_symbol, px, qty)
         logging.info(
             "AUTO_EXIT symbol=%s reason=%s px=%.2f qty=%.6f ok=%s equity=%.2f",
             exit_symbol, reason, px, qty, executed, portfolio.total_equity(mark_prices),
@@ -133,72 +140,102 @@ def run_iteration(
             confidence_scale=conf_scale,
         )
 
+        is_long = symbol in portfolio.positions and portfolio.positions[symbol].qty > 0
+        is_short = symbol in portfolio.short_positions and portfolio.short_positions[symbol].qty > 0
+
+        def _log(label, qty=0.0, ok=False):
+            logging.info(
+                "%s symbol=%s px=%.2f qty=%.6f ok=%s vol_ratio=%.2f conf=%.2f ml_up=%.3f equity=%.2f cash=%.2f",
+                label, symbol, px, qty, ok,
+                signal.volume_ratio, signal.confidence,
+                up_prob if up_prob is not None else -1.0,
+                portfolio.total_equity(mark_prices), portfolio.cash_usd,
+            )
+
         if action == "buy":
-            if executor:
-                res = executor.buy(symbol, px, size)
-                executed = bool(res.ok)
-                # Shadow-accounting so sizing/drawdown guard keep working even in live mode.
-                if executed:
-                    portfolio.execute_buy(symbol, px, size,
-                        trailing_stop_pct=config.trailing_stop_pct,
-                        take_profit_pct=config.take_profit_pct,
-                    )
-            else:
-                executed = portfolio.execute_buy(
+            if is_long:
+                # Already long — don't pyramid, just hold
+                _log("HOLD")
+            elif is_short:
+                # Cover the short first, then open long in the same candle
+                cover_qty = portfolio.short_positions[symbol].qty
+                ok = portfolio.execute_cover(symbol, px, cover_qty)
+                _log("COVER", cover_qty, ok)
+                if notifier and ok:
+                    notifier.notify("cover", {"symbol": symbol, "price": px, "qty": cover_qty, "ml_up_prob": up_prob})
+                # Open long with the now-freed cash
+                ok = portfolio.execute_buy(
                     symbol, px, size,
                     trailing_stop_pct=config.trailing_stop_pct,
                     take_profit_pct=config.take_profit_pct,
                 )
-            if notifier and executed:
-                notifier.notify("buy", {"symbol": symbol, "price": px, "qty": size, "ml_up_prob": up_prob})
-            logging.info(
-                "BUY symbol=%s px=%.2f qty=%.6f ok=%s vol_ratio=%.2f conf=%.2f ml_up=%.3f equity=%.2f cash=%.2f",
-                symbol,
-                px,
-                size,
-                executed,
-                signal.volume_ratio,
-                signal.confidence,
-                up_prob if up_prob is not None else -1.0,
-                equity,
-                portfolio.cash_usd,
-            )
-        elif action == "sell":
-            current_qty = portfolio.positions.get(symbol).qty if symbol in portfolio.positions else 0.0
-            if current_qty <= 0:
-                # No position to sell — log as HOLD to keep noise down
-                logging.info(
-                    "HOLD symbol=%s px=%.2f vol_ratio=%.2f conf=%.2f ml_up=%.3f equity=%.2f cash=%.2f (sell skipped — no position)",
-                    symbol, px, signal.volume_ratio, signal.confidence,
-                    up_prob if up_prob is not None else -1.0, equity, portfolio.cash_usd,
-                )
+                if executor:
+                    res = executor.buy(symbol, px, size)
+                    ok = bool(res.ok)
+                    if ok:
+                        portfolio.execute_buy(symbol, px, size, trailing_stop_pct=config.trailing_stop_pct, take_profit_pct=config.take_profit_pct)
+                if notifier and ok:
+                    notifier.notify("buy", {"symbol": symbol, "price": px, "qty": size, "ml_up_prob": up_prob})
+                _log("BUY", size, ok)
             else:
-                sell_qty = min(current_qty, size)
+                # No position — open long
+                if executor:
+                    res = executor.buy(symbol, px, size)
+                    ok = bool(res.ok)
+                    if ok:
+                        portfolio.execute_buy(symbol, px, size, trailing_stop_pct=config.trailing_stop_pct, take_profit_pct=config.take_profit_pct)
+                else:
+                    ok = portfolio.execute_buy(
+                        symbol, px, size,
+                        trailing_stop_pct=config.trailing_stop_pct,
+                        take_profit_pct=config.take_profit_pct,
+                    )
+                if notifier and ok:
+                    notifier.notify("buy", {"symbol": symbol, "price": px, "qty": size, "ml_up_prob": up_prob})
+                _log("BUY", size, ok)
+
+        elif action == "sell":
+            if is_short:
+                # Already short — don't pyramid, just hold
+                _log("HOLD")
+            elif is_long:
+                # Close the long first, then open short if allowed
+                sell_qty = portfolio.positions[symbol].qty
                 if executor:
                     res = executor.sell(symbol, px, sell_qty)
-                    executed = bool(res.ok)
-                    if executed:
+                    ok = bool(res.ok)
+                    if ok:
                         portfolio.execute_sell(symbol, px, sell_qty)
                 else:
-                    executed = portfolio.execute_sell(symbol, px, sell_qty)
-                if notifier and executed:
+                    ok = portfolio.execute_sell(symbol, px, sell_qty)
+                if notifier and ok:
                     notifier.notify("sell", {"symbol": symbol, "price": px, "qty": sell_qty, "ml_up_prob": up_prob})
-                logging.info(
-                    "SELL symbol=%s px=%.2f qty=%.6f ok=%s vol_ratio=%.2f conf=%.2f ml_up=%.3f equity=%.2f cash=%.2f",
-                    symbol, px, sell_qty, executed, signal.volume_ratio, signal.confidence,
-                    up_prob if up_prob is not None else -1.0, equity, portfolio.cash_usd,
+                _log("SELL", sell_qty, ok)
+                # Optionally flip to short after closing long
+                if ok and config.allow_shorts:
+                    ok_short = portfolio.execute_short(
+                        symbol, px, size,
+                        trailing_stop_pct=config.trailing_stop_pct,
+                        take_profit_pct=config.take_profit_pct,
+                    )
+                    if notifier and ok_short:
+                        notifier.notify("short", {"symbol": symbol, "price": px, "qty": size, "ml_up_prob": up_prob})
+                    _log("SHORT", size, ok_short)
+            elif config.allow_shorts:
+                # No position — open short
+                ok = portfolio.execute_short(
+                    symbol, px, size,
+                    trailing_stop_pct=config.trailing_stop_pct,
+                    take_profit_pct=config.take_profit_pct,
                 )
+                if notifier and ok:
+                    notifier.notify("short", {"symbol": symbol, "price": px, "qty": size, "ml_up_prob": up_prob})
+                _log("SHORT", size, ok)
+            else:
+                _log("HOLD")
+
         else:
-            logging.info(
-                "HOLD symbol=%s px=%.2f vol_ratio=%.2f conf=%.2f ml_up=%.3f equity=%.2f cash=%.2f",
-                symbol,
-                px,
-                signal.volume_ratio,
-                signal.confidence,
-                up_prob if up_prob is not None else -1.0,
-                equity,
-                portfolio.cash_usd,
-            )
+            _log("HOLD")
 
         # Update signal cache for Discord command listener
         if signal_cache is not None:
@@ -208,6 +245,8 @@ def run_iteration(
                 "ml_up": up_prob if up_prob is not None else 0.0,
                 "conf": signal.confidence,
                 "vol_ratio": signal.volume_ratio,
+                "is_long": symbol in portfolio.positions and portfolio.positions[symbol].qty > 0,
+                "is_short": symbol in portfolio.short_positions and portfolio.short_positions[symbol].qty > 0,
             }
             signal_cache["_mark_prices"] = mark_prices
 
