@@ -254,6 +254,7 @@ def run_loop(max_loops: int | None = None) -> None:
                         use_fvg=config.use_fvg,
                         fvg_min_gap_pct=config.fvg_min_gap_pct,
                         signal_mode=config.signal_mode,
+                        min_vote_margin=config.signal_min_vote_margin,
                     )
 
                     action = signal.action
