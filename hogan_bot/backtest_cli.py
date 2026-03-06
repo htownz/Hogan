@@ -84,6 +84,7 @@ def _run_single(cfg, candles, symbol, ml_model, overrides: dict | None = None, u
         use_fvg=ov.get("use_fvg", cfg.use_fvg),
         fvg_min_gap_pct=cfg.fvg_min_gap_pct,
         signal_mode=ov.get("signal_mode", cfg.signal_mode),
+        min_vote_margin=int(ov.get("signal_min_vote_margin", cfg.signal_min_vote_margin)),
         trailing_stop_pct=cfg.trailing_stop_pct,
         take_profit_pct=cfg.take_profit_pct,
         ml_confidence_sizing=cfg.ml_confidence_sizing,

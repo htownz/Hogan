@@ -132,6 +132,7 @@ def tool_get_signal(
             use_fvg=cfg.use_fvg,
             fvg_min_gap_pct=cfg.fvg_min_gap_pct,
             signal_mode=cfg.signal_mode,
+            min_vote_margin=cfg.signal_min_vote_margin,
         )
         return {
             "ok": True,
@@ -183,6 +184,7 @@ def tool_run_backtest(
             fee_rate=cfg.fee_rate,
             use_ema_clouds=cfg.use_ema_clouds,
             signal_mode=cfg.signal_mode,
+            min_vote_margin=cfg.signal_min_vote_margin,
             trailing_stop_pct=cfg.trailing_stop_pct,
             take_profit_pct=cfg.take_profit_pct,
         )

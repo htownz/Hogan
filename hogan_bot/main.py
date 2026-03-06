@@ -106,6 +106,7 @@ def run_iteration(
             use_fvg=config.use_fvg,
             fvg_min_gap_pct=config.fvg_min_gap_pct,
             signal_mode=config.signal_mode,
+            min_vote_margin=config.signal_min_vote_margin,
             atr_stop_multiplier=config.atr_stop_multiplier,
             # ICT pillars — were previously missing, causing ICT to be silently disabled
             use_ict=config.use_ict,
