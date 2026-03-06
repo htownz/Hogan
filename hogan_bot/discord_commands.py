@@ -111,18 +111,25 @@ def cmd_balance(portfolio: "PaperPortfolio | None", mark_prices: dict, db_path: 
 
     equity = portfolio.total_equity(mark_prices)
     cash   = portfolio.cash_usd
-    invested = equity - cash
-    unrealized = sum(
+    long_unrealized = sum(
         pos.qty * (mark_prices.get(sym, pos.avg_entry) - pos.avg_entry)
         for sym, pos in portfolio.positions.items()
     )
+    short_unrealized = sum(
+        (pos.avg_entry - mark_prices.get(sym, pos.avg_entry)) * pos.qty
+        for sym, pos in portfolio.short_positions.items()
+    )
+    unrealized = long_unrealized + short_unrealized
+
+    n_longs = len(portfolio.positions)
+    n_shorts = len(portfolio.short_positions)
+    pos_str = f"{n_longs}L / {n_shorts}S" if n_longs or n_shorts else "None"
 
     fields = [
         ("Total Equity", f"**${equity:,.2f}**", True),
         ("Cash", f"${cash:,.2f}", True),
-        ("Invested", f"${invested:,.2f}", True),
+        ("Open Positions", pos_str, True),
         ("Unrealized P&L", f"{'🟢' if unrealized >= 0 else '🔴'} ${unrealized:+,.2f}", True),
-        ("Open Positions", str(len(portfolio.positions)) or "None", True),
     ]
 
     # Fetch starting balance from equity_snapshots
@@ -143,22 +150,38 @@ def cmd_balance(portfolio: "PaperPortfolio | None", mark_prices: dict, db_path: 
 
 
 def cmd_positions(portfolio: "PaperPortfolio | None", mark_prices: dict) -> list[dict]:
-    if portfolio is None or not portfolio.positions:
+    if portfolio is None:
         return [_embed("Positions", [("Open Positions", "None — no open trades", False)], 0xFEE75C)]
 
     fields = []
+
     for sym, pos in portfolio.positions.items():
         px = mark_prices.get(sym, 0.0)
         pnl = pos.qty * (px - pos.avg_entry)
         pnl_pct = ((px / pos.avg_entry) - 1.0) * 100.0 if pos.avg_entry > 0 else 0.0
         icon = "🟢" if pnl >= 0 else "🔴"
         fields.append((
-            sym,
+            f"LONG {sym}",
             f"Qty: `{pos.qty:.6f}`\nEntry: `${pos.avg_entry:,.2f}`\nNow: `${px:,.2f}`\nP&L: {icon} `${pnl:+,.2f}` (`{pnl_pct:+.2f}%`)",
             True,
         ))
 
-    return [_embed(f"📊 Open Positions ({len(portfolio.positions)})", fields, 0x5865F2)]
+    for sym, pos in portfolio.short_positions.items():
+        px = mark_prices.get(sym, 0.0)
+        pnl = (pos.avg_entry - px) * pos.qty
+        pnl_pct = ((pos.avg_entry / px) - 1.0) * 100.0 if px > 0 else 0.0
+        icon = "🟢" if pnl >= 0 else "🔴"
+        fields.append((
+            f"SHORT {sym}",
+            f"Qty: `{pos.qty:.6f}`\nEntry: `${pos.avg_entry:,.2f}`\nNow: `${px:,.2f}`\nP&L: {icon} `${pnl:+,.2f}` (`{pnl_pct:+.2f}%`)",
+            True,
+        ))
+
+    if not fields:
+        return [_embed("Positions", [("Open Positions", "None — no open trades", False)], 0xFEE75C)]
+
+    total = len(portfolio.positions) + len(portfolio.short_positions)
+    return [_embed(f"📊 Open Positions ({total})", fields, 0x5865F2)]
 
 
 def cmd_pnl(db_path: str) -> list[dict]:

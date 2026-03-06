@@ -77,6 +77,10 @@ class BotConfig:
     # ML confidence-based position sizing: scales size by |prob−0.5|×2
     ml_confidence_sizing: bool = False
 
+    # Short selling in paper mode: open a synthetic short when a SELL signal fires
+    # with no existing long position.  Flip from short to long and back on signal change.
+    allow_shorts: bool = False
+
     # Webhook URL for trade/drawdown notifications (empty string = disabled)
     webhook_url: str = ""
 
@@ -165,6 +169,7 @@ def load_config() -> BotConfig:
         ict_ote_low=float(os.getenv("HOGAN_ICT_OTE_LOW", "0.62")),
         ict_ote_high=float(os.getenv("HOGAN_ICT_OTE_HIGH", "0.79")),
         ml_confidence_sizing=os.getenv("HOGAN_ML_CONFIDENCE_SIZING", "false").lower() == "true",
+        allow_shorts=os.getenv("HOGAN_ALLOW_SHORTS", "false").lower() == "true",
         webhook_url=os.getenv("HOGAN_DISCORD_WEBHOOK_URL") or os.getenv("HOGAN_WEBHOOK_URL", ""),
         exchange_id=os.getenv("HOGAN_EXCHANGE", "kraken"),
         quote_currency=os.getenv("HOGAN_QUOTE_CCY", "USD"),
