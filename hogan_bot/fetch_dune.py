@@ -49,11 +49,17 @@ _POLL_INTERVAL = 3   # seconds between execution status polls
 _MAX_POLLS = 20      # ~60s maximum wait
 
 # Pre-selected public queries mapping (query_id, metric_name, column_with_value)
+#
+# NOTE: Dune public query IDs change over time as authors update their dashboards.
+# If a query fails, browse https://dune.com to find an active replacement and update
+# the ID here or pass a custom query list to fetch_all_dune().
+#
+# Currently configured:
+#   2417357  — BTC exchange net-flow (may need replacement if schema changed)
+# Removed 1258228 (whale count) — was returning HTTP 400 consistently.
 _DEFAULT_QUERIES: list[tuple[int, str, str]] = [
     # BTC net exchange flow — positive = inflow (bearish), negative = outflow (bullish)
     (2417357, "dune_btc_exchange_netflow", "net_flow_btc"),
-    # BTC whale wallet % change
-    (1258228, "dune_btc_whale_pct", "whale_count_change_pct"),
 ]
 
 
@@ -134,6 +140,15 @@ def _extract_latest_value(
 # Public API
 # ---------------------------------------------------------------------------
 
+def _get_cached_results(query_id: int, api_key: str) -> dict:
+    """Fetch the latest cached results for a query without consuming execution credits.
+
+    Uses ``GET /api/v1/query/{id}/results`` — returns the most-recent cached run.
+    Falls back to executing if no cached results exist.
+    """
+    return _get_req(f"/query/{query_id}/results", api_key)
+
+
 def run_query(
     query_id: int,
     metric_name: str,
@@ -141,19 +156,39 @@ def run_query(
     api_key: str,
     symbol: str = "BTC/USD",
 ) -> list[tuple[str, str, float]]:
-    """Execute a Dune query and return (date, metric_name, value) records.
+    """Fetch a Dune query and return (date, metric_name, value) records.
 
-    Only the most-recent row is returned (snapshot pattern, consistent with
-    other fetch modules).  The query result is cached by Dune for 24 h so
-    repeated same-day calls are free and fast.
+    Strategy:
+    1. Try ``GET /query/{id}/results`` for cached results (free, instant).
+    2. Fall back to ``POST /query/{id}/execute`` + poll if no cached data.
+
+    Only the most-recent row is returned (snapshot pattern).
     """
-    logger.info("Dune: executing query %d (%s) ...", query_id, metric_name)
+    logger.info("Dune: fetching query %d (%s) ...", query_id, metric_name)
+
+    result: dict | None = None
+
+    # ── Step 1: try cached results (no credits consumed) ──────────────────
     try:
-        exec_id = _execute_query(query_id, api_key)
-        result = _wait_for_result(exec_id, api_key)
-    except (RuntimeError, TimeoutError, URLError) as exc:
-        logger.warning("Dune query %d failed: %s", query_id, exc)
-        return []
+        result = _get_cached_results(query_id, api_key)
+        rows = result.get("result", {}).get("rows", [])
+        if rows:
+            logger.info("  using cached results (%d rows)", len(rows))
+        else:
+            logger.info("  no cached results — triggering execution")
+            result = None
+    except (URLError, KeyError) as exc:
+        logger.info("  cached results unavailable (%s) — triggering execution", exc)
+        result = None
+
+    # ── Step 2: execute if no cached data ─────────────────────────────────
+    if result is None:
+        try:
+            exec_id = _execute_query(query_id, api_key)
+            result = _wait_for_result(exec_id, api_key)
+        except (RuntimeError, TimeoutError, URLError) as exc:
+            logger.warning("Dune query %d failed: %s", query_id, exc)
+            return []
 
     rows = result.get("result", {}).get("rows", [])
     if not rows:
@@ -199,16 +234,26 @@ def fetch_all_dune(
     active_queries = queries or _DEFAULT_QUERIES
     results: dict[str, int] = {}
 
+    total_written = 0
     for query_id, metric_name, value_col in active_queries:
         records = run_query(query_id, metric_name, value_col, api_key, symbol=symbol)
         if records:
             written = upsert_onchain(conn, symbol, records)
             results[metric_name] = written
+            total_written += written
         else:
             results[metric_name] = 0
         time.sleep(1.0)  # avoid hammering the API
 
     conn.close()
+
+    if active_queries and total_written == 0:
+        raise RuntimeError(
+            "Dune returned 0 records for all queries. "
+            "Query IDs may be outdated — browse https://dune.com to find active replacements. "
+            "Note: Dune metrics are not in the ML feature vector, so this does not affect model quality."
+        )
+
     return results
 
 
