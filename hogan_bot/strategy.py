@@ -59,6 +59,10 @@ def generate_signal(
     rl_candles_15m=None,
     rl_db_conn=None,
     rl_symbol: str = "BTC/USD",
+    # Vote-margin guard for "any" mode: buy/sell only fires when the directional
+    # vote lead is >= this value.  Default 1 = any majority.  Set to 2 to require
+    # at least two more buy than sell votes (or vice-versa) before trading.
+    min_vote_margin: int = 1,
 ) -> StrategySignal:
     """MA crossover + optional EMA clouds / FVG / ICT pillars, combined via votes.
 
@@ -204,12 +208,22 @@ def generate_signal(
             action = "sell"
         else:
             action = "hold"
-    else:  # "any"
-        if "buy" in votes:
+    else:  # "any" with conflict guard
+        buy_votes = sum(1 for v in votes if v == "buy")
+        sell_votes = sum(1 for v in votes if v == "sell")
+        vote_edge = abs(buy_votes - sell_votes)
+
+        if buy_votes > sell_votes and vote_edge >= min_vote_margin:
             action = "buy"
-        elif "sell" in votes:
+        elif sell_votes > buy_votes and vote_edge >= min_vote_margin:
             action = "sell"
         else:
             action = "hold"
+
+        # Penalize confidence when signals disagree (mixed-signal candle)
+        directional_votes = buy_votes + sell_votes
+        if directional_votes > 0:
+            consensus_ratio = max(buy_votes, sell_votes) / directional_votes
+            confidence *= consensus_ratio
 
     return StrategySignal(action, stop_distance_pct, confidence, volume_ratio)

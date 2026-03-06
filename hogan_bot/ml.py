@@ -456,6 +456,7 @@ def train_logistic_regression(
         from sklearn.linear_model import LogisticRegression
         from sklearn.metrics import (
             accuracy_score,
+            brier_score_loss,
             f1_score,
             precision_score,
             recall_score,
@@ -480,7 +481,7 @@ def train_logistic_regression(
     if tune_hyperparams:
         best_C, best_model, best_acc = 1.0, None, -1.0
         for C in (0.01, 0.1, 1.0, 10.0):
-            candidate = LogisticRegression(max_iter=500, C=C)
+            candidate = LogisticRegression(max_iter=500, C=C, class_weight="balanced")
             candidate.fit(x_train_sc, y_train)
             acc = float(accuracy_score(y_test, candidate.predict(x_test_sc)))
             if acc > best_acc:
@@ -488,7 +489,7 @@ def train_logistic_regression(
         model = best_model
     else:
         best_C = 1.0
-        model = LogisticRegression(max_iter=500, C=best_C)
+        model = LogisticRegression(max_iter=500, C=best_C, class_weight="balanced")
         model.fit(x_train_sc, y_train)
 
     pred = model.predict(x_test_sc)
@@ -500,6 +501,7 @@ def train_logistic_regression(
         "best_C": best_C,
         "accuracy": float(accuracy_score(y_test, pred)),
         "roc_auc": auc,
+        "brier": float(brier_score_loss(y_test, proba)),
         "precision": float(precision_score(y_test, pred, zero_division=0)),
         "recall": float(recall_score(y_test, pred, zero_division=0)),
         "f1": float(f1_score(y_test, pred, zero_division=0)),
@@ -551,6 +553,7 @@ def train_random_forest(
         min_samples_leaf=20,
         random_state=42,
         n_jobs=-1,
+        class_weight="balanced_subsample",
     )
     model.fit(x_train, y_train)
     pred = model.predict(x_test)
@@ -799,7 +802,7 @@ def walk_forward_cv(
     """
     try:
         from sklearn.linear_model import LogisticRegression
-        from sklearn.metrics import accuracy_score, roc_auc_score
+        from sklearn.metrics import accuracy_score, brier_score_loss, roc_auc_score
         from sklearn.preprocessing import StandardScaler
     except ModuleNotFoundError as exc:
         raise RuntimeError("scikit-learn is required for walk-forward CV") from exc
@@ -837,7 +840,7 @@ def walk_forward_cv(
         x_train_sc = scaler.fit_transform(x_train)
         x_test_sc = scaler.transform(x_test)
 
-        model = LogisticRegression(max_iter=500, C=1.0)
+        model = LogisticRegression(max_iter=500, C=1.0, class_weight="balanced")
         model.fit(x_train_sc, y_train)
         pred = model.predict(x_test_sc)
         proba = model.predict_proba(x_test_sc)[:, 1]
@@ -850,6 +853,7 @@ def walk_forward_cv(
                 "test_rows": len(x_test),
                 "accuracy": float(accuracy_score(y_test, pred)),
                 "roc_auc": auc,
+                "brier": float(brier_score_loss(y_test, proba)),
             }
         )
 
