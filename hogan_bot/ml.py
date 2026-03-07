@@ -386,16 +386,29 @@ def build_feature_row_extended(
     candles_5m: pd.DataFrame,
     candles_1h: pd.DataFrame | None = None,
     candles_15m: pd.DataFrame | None = None,
+    candles_10m: pd.DataFrame | None = None,
+    candles_30m: pd.DataFrame | None = None,
     conn=None,
     symbol: str = "BTC/USD",
+    extended_mtf: bool = False,
 ) -> list[float] | None:
-    """73-dim extended feature vector (36 base + 14 MTF + 20 ext + 3 pos).
-
-    Convenience re-export — delegates to
+    """Extended feature vector — delegates to
     :func:`hogan_bot.features_mtf.build_feature_row_extended`.
+
+    When ``extended_mtf=False`` (default): same size as before (backward-compat).
+    When ``extended_mtf=True``: adds 10m + 30m features (+14 total).
     """
     from hogan_bot.features_mtf import build_feature_row_extended as _ext
-    return _ext(candles_5m, candles_1h, candles_15m, conn=conn, symbol=symbol)
+    return _ext(
+        candles_5m,
+        candles_1h=candles_1h,
+        candles_15m=candles_15m,
+        candles_10m=candles_10m,
+        candles_30m=candles_30m,
+        conn=conn,
+        symbol=symbol,
+        extended_mtf=extended_mtf,
+    )
 
 
 def build_feature_row(candles: pd.DataFrame) -> list[float] | None:
