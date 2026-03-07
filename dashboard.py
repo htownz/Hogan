@@ -224,7 +224,7 @@ with tab_live:
                 xaxis_title=None, yaxis_title="USD",
                 plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
             )
-            st.plotly_chart(fig_eq, use_container_width=True)
+            st.plotly_chart(fig_eq, width='stretch')
         else:
             st.info("No equity snapshots yet — start the bot.")
 
@@ -243,7 +243,7 @@ with tab_live:
                 xaxis_title=None, yaxis_title="%",
                 plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
             )
-            st.plotly_chart(fig_dd, use_container_width=True)
+            st.plotly_chart(fig_dd, width='stretch')
 
     st.divider()
 
@@ -255,7 +255,7 @@ with tab_live:
         ]].copy()
         disp["notional_usd"] = (disp["qty"] * disp["entry_price"]).round(2)
         disp["opened"] = disp["opened"].dt.strftime("%m-%d %H:%M")
-        st.dataframe(disp, use_container_width=True, hide_index=True)
+        st.dataframe(disp, width='stretch', hide_index=True)
     else:
         st.info("No open positions right now.")
 
@@ -282,7 +282,7 @@ with tab_live:
                 margin=dict(l=0, r=0, t=30, b=0),
                 plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
             )
-            st.plotly_chart(fig_pnl, use_container_width=True)
+            st.plotly_chart(fig_pnl, width='stretch')
 
         # Per-symbol P&L bar
         sym_pnl = closed.groupby("symbol")["realized_pnl"].sum().reset_index()
@@ -296,7 +296,7 @@ with tab_live:
                 margin=dict(l=0, r=0, t=30, b=0), showlegend=False,
                 plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
             )
-            st.plotly_chart(fig_sym, use_container_width=True)
+            st.plotly_chart(fig_sym, width='stretch')
 
         # Close reason breakdown
         reason_counts = closed.groupby("close_reason").size().reset_index(name="count")
@@ -306,7 +306,7 @@ with tab_live:
             color_discrete_sequence=px.colors.qualitative.Set2,
         )
         fig_reason.update_layout(margin=dict(l=0, r=0, t=30, b=0))
-        st.plotly_chart(fig_reason, use_container_width=True)
+        st.plotly_chart(fig_reason, width='stretch')
 
         # Trade table
         disp2 = closed[[
@@ -320,8 +320,8 @@ with tab_live:
         disp2["realized_pnl"] = disp2["realized_pnl"].round(4)
         disp2 = disp2.sort_values("closed", ascending=False).head(100)
         st.dataframe(
-            disp2.style.applymap(_pnl_color, subset=["realized_pnl"]),
-            use_container_width=True, hide_index=True,
+            disp2.style.map(_pnl_color, subset=["realized_pnl"]),
+            width='stretch', hide_index=True,
         )
     else:
         st.info("No closed trades yet. Positions will appear here once they exit.")
@@ -339,7 +339,7 @@ with tab_live:
             height=220, margin=dict(l=0, r=0, t=30, b=0),
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_hist, use_container_width=True)
+        st.plotly_chart(fig_hist, width='stretch')
 
 
 # ===========================================================================
@@ -381,7 +381,7 @@ with tab_signals:
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
             margin=dict(l=0, r=0, t=30, b=0),
         )
-        st.plotly_chart(fig_candle, use_container_width=True)
+        st.plotly_chart(fig_candle, width='stretch')
 
         # Volume bar chart
         fig_vol = go.Figure()
@@ -398,7 +398,7 @@ with tab_signals:
             margin=dict(l=0, r=0, t=30, b=0),
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_vol, use_container_width=True)
+        st.plotly_chart(fig_vol, width='stretch')
 
         # Latest candle stats
         last = candles.iloc[-1]
@@ -425,7 +425,7 @@ with tab_model:
         for col in ("new_score", "current_score"):
             if col in reg_df.columns:
                 reg_df[col] = reg_df[col].map(lambda v: f"{v:.4f}" if v is not None else "—")
-        st.dataframe(reg_df, use_container_width=True, hide_index=True)
+        st.dataframe(reg_df, width='stretch', hide_index=True)
     else:
         st.info("No registry entries found.")
 
@@ -457,7 +457,7 @@ with tab_model:
                 margin=dict(l=0, r=0, t=30, b=0),
                 plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
             )
-            st.plotly_chart(fig_imp, use_container_width=True)
+            st.plotly_chart(fig_imp, width='stretch')
 
     # Training commands
     st.subheader("Retrain commands")
@@ -485,7 +485,7 @@ with tab_data:
     else:
         # Group by metric category
         st.subheader(f"Latest External Metrics ({len(onchain)} metrics)")
-        st.dataframe(onchain, use_container_width=True, hide_index=True)
+        st.dataframe(onchain, width='stretch', hide_index=True)
 
     # Candle coverage
     st.subheader("OHLCV Candle Coverage")
@@ -499,7 +499,7 @@ with tab_data:
             conn,
         )
         conn.close()
-        st.dataframe(candle_cov, use_container_width=True, hide_index=True)
+        st.dataframe(candle_cov, width='stretch', hide_index=True)
     except Exception as e:
         st.error(f"Could not load candle coverage: {e}")
 
@@ -593,7 +593,7 @@ with tab_backtest:
                             height=300, margin=dict(l=0, r=0, t=30, b=0),
                             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                         )
-                        st.plotly_chart(fig_bt, use_container_width=True)
+                        st.plotly_chart(fig_bt, width='stretch')
 
             except Exception as exc:
                 st.error(f"Backtest failed: {exc}")
