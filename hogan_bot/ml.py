@@ -372,9 +372,20 @@ _FEATURE_COLUMNS: list[str] = [
     "ict_swing_low_dist",   # % above nearest 14-bar swing low (sell-side liquidity)
     "ict_pdh_dist",         # % below previous-day high (PDH)
     "ict_pdl_dist",         # % above previous-day low (PDL)
+    # Macro-asset context (10) — from SPY/QQQ/GLD/TLT/UUP/VIX/TNX candles
+    "macro_spy_trend",      # SPY daily close > 20d SMA (0/1)
+    "macro_spy_ret",        # SPY 1d return ÷ 5, clipped [-1, +1]
+    "macro_vix_norm",       # VIX daily close ÷ 40, clipped [0, 1.5]
+    "macro_vix_high",       # VIX > 20 threshold (0/1)
+    "macro_gld_trend",      # GLD daily close > 20d SMA (0/1)
+    "macro_tlt_ret",        # TLT 1d return ÷ 3, clipped [-1, +1]
+    "macro_uup_trend",      # UUP daily close > 20d SMA (0/1)
+    "macro_tnx_norm",       # TNX daily close ÷ 7, clipped [0, 1]
+    "macro_risk_off",       # Composite risk-off: (VIX>20)+GLD+TLT-SPY ÷ 3
+    "macro_qqq_spy_rel",    # QQQ 5d return − SPY 5d return (tech divergence)
 ]
 
-assert len(_FEATURE_COLUMNS) == 43, f"Expected 43 features, got {len(_FEATURE_COLUMNS)}"
+assert len(_FEATURE_COLUMNS) == 53, f"Expected 53 features, got {len(_FEATURE_COLUMNS)}"
 
 
 # ---------------------------------------------------------------------------
@@ -411,20 +422,38 @@ def build_feature_row_extended(
     )
 
 
-def build_feature_row(candles: pd.DataFrame) -> list[float] | None:
+def build_feature_row(
+    candles: pd.DataFrame,
+    db_conn=None,
+) -> list[float] | None:
     """Return the feature vector for the **last bar** in *candles*.
 
-    Used by :class:`~hogan_bot.rl_env.TradingEnv` at every environment step
-    to build the ML-feature portion of the observation vector.
+    When *db_conn* is provided, the 10 macro-asset features are populated
+    from the DB (SPY/VIX/GLD etc.); otherwise they default to 0.
 
-    Returns ``None`` when there is insufficient history to compute all features
-    (fewer than 60 bars).  The caller is expected to substitute zeros.
-    ADX and Stochastic RSI both need ~28 bars of warmup; 60 is conservative.
+    Returns ``None`` when there is insufficient history (< 60 bars).
     """
     if len(candles) < 60:
         return None
     try:
+        from hogan_bot.macro_features import MACRO_FEATURE_NAMES
         frame = _feature_frame(candles)
+
+        if db_conn is not None:
+            from hogan_bot.macro_features import get_macro_feature_row
+            ts_ms = None
+            if "ts_ms" in frame.columns:
+                ts_ms = int(frame["ts_ms"].iloc[-1])
+            elif "timestamp" in frame.columns:
+                import pandas as _pd
+                ts_ms = int(_pd.Timestamp(frame["timestamp"].iloc[-1]).timestamp() * 1000)
+            macro_vals = get_macro_feature_row(db_conn, ts_ms=ts_ms)
+            for col, val in zip(MACRO_FEATURE_NAMES, macro_vals):
+                frame[col] = val
+        else:
+            for col in MACRO_FEATURE_NAMES:
+                frame[col] = 0.0
+
         last = frame[_FEATURE_COLUMNS].iloc[-1]
         if last.isna().any():
             return None
@@ -434,14 +463,41 @@ def build_feature_row(candles: pd.DataFrame) -> list[float] | None:
 
 
 def build_training_set(
-    candles: pd.DataFrame, horizon_bars: int = 3
+    candles: pd.DataFrame,
+    horizon_bars: int = 3,
+    db_conn=None,
 ) -> tuple[pd.DataFrame | None, pd.Series | None, list[str]]:
     """Construct feature matrix *X* and label vector *y* from *candles*.
+
+    When *db_conn* is provided, joins in 10 macro-asset features
+    (SPY/QQQ/GLD/TLT/UUP/VIX/TNX) via :func:`~hogan_bot.macro_features.add_macro_features`.
+    These are aligned by timestamp with no look-ahead leakage.
 
     Returns ``(None, None, feature_columns)`` when the dataset is empty after
     dropping NaN rows.
     """
     frame = _feature_frame(candles)
+
+    # Join macro features when DB connection is available
+    if db_conn is not None:
+        try:
+            from hogan_bot.macro_features import add_macro_features, MACRO_FEATURE_NAMES
+            frame = add_macro_features(frame, db_conn)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Macro feature join failed: %s — training without macro context", exc
+            )
+            # Ensure columns exist as zeros so _FEATURE_COLUMNS still matches
+            for col in MACRO_FEATURE_NAMES:
+                if col not in frame.columns:
+                    frame[col] = 0.0
+    else:
+        # Fill macro slots with zeros so the feature count stays consistent
+        from hogan_bot.macro_features import MACRO_FEATURE_NAMES
+        for col in MACRO_FEATURE_NAMES:
+            frame[col] = 0.0
+
     future_ret = frame["close"].shift(-horizon_bars) / frame["close"] - 1.0
     frame["target"] = (future_ret > 0).astype(int)
 
@@ -562,6 +618,7 @@ def train_logistic_regression(
     tune_hyperparams: bool = False,
     paper_labels: tuple[pd.DataFrame, pd.Series] | None = None,
     paper_labels_weight: float = 3.0,
+    db_conn=None,
 ) -> dict[str, object]:
     """Fit a scaled logistic-regression classifier and pickle the artifact.
 
@@ -584,7 +641,7 @@ def train_logistic_regression(
     except ModuleNotFoundError as exc:
         raise RuntimeError("scikit-learn is required for training") from exc
 
-    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars)
+    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn)
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
@@ -645,6 +702,7 @@ def train_random_forest(
     horizon_bars: int = 3,
     paper_labels: tuple[pd.DataFrame, pd.Series] | None = None,
     paper_labels_weight: float = 3.0,
+    db_conn=None,
 ) -> dict[str, object]:
     """Fit a Random Forest classifier and pickle the artifact.
 
@@ -664,7 +722,7 @@ def train_random_forest(
     except ModuleNotFoundError as exc:
         raise RuntimeError("scikit-learn is required for training") from exc
 
-    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars)
+    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn)
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
@@ -718,6 +776,7 @@ def train_xgboost(
     horizon_bars: int = 3,
     paper_labels: tuple[pd.DataFrame, pd.Series] | None = None,
     paper_labels_weight: float = 3.0,
+    db_conn=None,
 ) -> dict[str, object]:
     """Fit an XGBoost gradient-boosted classifier and pickle the artifact.
 
@@ -742,7 +801,7 @@ def train_xgboost(
     except ModuleNotFoundError as exc:
         raise RuntimeError("scikit-learn is required for metrics") from exc
 
-    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars)
+    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn)
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
@@ -792,7 +851,7 @@ def train_xgboost(
 
 
 def train_lightgbm(
-    candles: pd.DataFrame, model_path: str, horizon_bars: int = 3
+    candles: pd.DataFrame, model_path: str, horizon_bars: int = 3, db_conn=None
 ) -> dict[str, object]:
     """Fit a LightGBM gradient-boosted classifier and pickle the artifact.
 
@@ -817,7 +876,7 @@ def train_lightgbm(
     except ModuleNotFoundError as exc:
         raise RuntimeError("scikit-learn is required for metrics") from exc
 
-    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars)
+    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn)
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 

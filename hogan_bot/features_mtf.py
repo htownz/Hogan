@@ -363,6 +363,63 @@ def build_ext_features(
             if prev_close > 0:
                 result[5] = (curr_close - prev_close) / prev_close
 
+        # ── Fill previously-zero slots from macro candles ────────────────
+        # These slots were being read from onchain_metrics (mostly empty due to
+        # paid-API failures). We now read directly from the candles table which
+        # is populated by fetch_macro_candles.py (free, via yfinance).
+        #
+        # Slot 20: dxy_close  → UUP/USD 1d close ÷ 120 (dollar proxy)
+        # Slot 21: vix_close  → VIX/USD 1d close ÷ 100
+        # Slot 22: spy_return_pct → SPY/USD 1d 1-day return ÷ 10
+        # Slot 28: fred_dgs10 → TNX/USD 1d close ÷ 10 (10Y yield)
+
+        def _latest_candle_close(symbol: str, timeframe: str = "1d") -> float | None:
+            row = conn.execute(
+                """SELECT close FROM candles
+                   WHERE symbol = ? AND timeframe = ? AND ts_ms <= ?
+                   ORDER BY ts_ms DESC LIMIT 1""",
+                (symbol, timeframe, ts_ms),
+            ).fetchone()
+            return float(row[0]) if row else None
+
+        def _prev_candle_close(symbol: str, timeframe: str = "1d") -> float | None:
+            rows = conn.execute(
+                """SELECT close FROM candles
+                   WHERE symbol = ? AND timeframe = ? AND ts_ms <= ?
+                   ORDER BY ts_ms DESC LIMIT 2""",
+                (symbol, timeframe, ts_ms),
+            ).fetchall()
+            return float(rows[1][0]) if len(rows) >= 2 else None
+
+        # DXY proxy via UUP (slot 20) — only overwrite if still zero
+        if result[20] == 0.0:
+            uup = _latest_candle_close("UUP/USD")
+            if uup is not None:
+                result[20] = float(np.clip(uup / 120.0, 0.7, 1.0))
+
+        # VIX (slot 21) — only overwrite if still zero
+        if result[21] == 0.0:
+            vix = _latest_candle_close("VIX/USD")
+            if vix is not None:
+                result[21] = float(np.clip(vix / 100.0, 0.05, 1.0))
+
+        # SPY return (slot 22) — only overwrite if still zero
+        if result[22] == 0.0 and result[5] != 0.0:
+            # slot 5 already has SPY ret; slot 22 is same thing ÷ 10
+            result[22] = float(np.clip(result[5] / 10.0, -1.0, 1.0))
+        elif result[22] == 0.0:
+            spy_curr = _latest_candle_close("SPY/USD")
+            spy_prev = _prev_candle_close("SPY/USD")
+            if spy_curr and spy_prev and spy_prev > 0:
+                ret = (spy_curr - spy_prev) / spy_prev
+                result[22] = float(np.clip(ret / 10.0, -1.0, 1.0))
+
+        # 10Y Treasury yield via TNX (slot 28) — only overwrite if still zero
+        if result[28] == 0.0:
+            tnx = _latest_candle_close("TNX/USD")
+            if tnx is not None:
+                result[28] = float(np.clip(tnx / 10.0, 0.0, 2.0))
+
         return result
 
     except Exception:
