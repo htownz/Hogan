@@ -173,7 +173,7 @@ def run_iteration(
         conf_scale = eff["position_scale"]   # start from regime position scale
         action = signal.action
         if config.use_ml_filter and ml_model is not None:
-            up_prob = predict_up_probability(candles, ml_model)
+            up_prob = predict_up_probability(candles, ml_model, db_conn=conn)
             # Use regime-adjusted ML thresholds instead of fixed config values
             action = apply_ml_filter(
                 signal.action, up_prob,

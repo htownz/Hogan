@@ -1062,9 +1062,50 @@ def load_model(model_path: str) -> TrainedModel:
     return model
 
 
-def predict_up_probability(candles: pd.DataFrame, trained_model: TrainedModel) -> float:
+def predict_up_probability(
+    candles: pd.DataFrame,
+    trained_model: TrainedModel,
+    db_conn=None,
+) -> float:
+    """Return P(next move is up) for the most recent bar in *candles*.
+
+    When *db_conn* is provided and the model was trained with macro features,
+    the macro context (VIX, SPY, GLD, etc.) is fetched from the candles table
+    so inference is consistent with training.  If unavailable, macro slots are
+    filled with zeros (graceful degradation for models without macro features).
+    """
     frame = _feature_frame(candles)
-    latest = frame[trained_model.feature_columns].dropna().tail(1)
+
+    # Inject macro features when the model expects them
+    feature_cols = trained_model.feature_columns
+    from hogan_bot.macro_features import MACRO_FEATURE_NAMES
+    macro_cols_needed = [c for c in feature_cols if c in MACRO_FEATURE_NAMES]
+    if macro_cols_needed:
+        if db_conn is not None:
+            try:
+                from hogan_bot.macro_features import get_macro_feature_row
+                ts_ms = None
+                if "ts_ms" in frame.columns:
+                    ts_ms = int(frame["ts_ms"].iloc[-1])
+                elif "timestamp" in frame.columns:
+                    ts_ms = int(
+                        pd.Timestamp(frame["timestamp"].iloc[-1]).timestamp() * 1000
+                    )
+                macro_vals = get_macro_feature_row(db_conn, ts_ms=ts_ms)
+                for col, val in zip(MACRO_FEATURE_NAMES, macro_vals):
+                    frame[col] = val
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "predict_up_probability: macro fetch failed (%s) — using zeros", exc
+                )
+                for col in macro_cols_needed:
+                    frame[col] = 0.0
+        else:
+            for col in macro_cols_needed:
+                frame[col] = 0.0
+
+    latest = frame[feature_cols].dropna().tail(1)
     if latest.empty:
         return 0.5
     # Use getattr for backward compatibility with pre-scaler pickled artifacts.
