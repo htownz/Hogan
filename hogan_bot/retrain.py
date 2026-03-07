@@ -290,7 +290,8 @@ def _build_multi_symbol_dataset(
             if df.empty:
                 logger.warning("No candles in DB for %s / %s — skipping", sym, args.timeframe)
                 continue
-            x_sym, y_sym, fc = build_training_set(df, horizon_bars=args.horizon_bars)
+            # Pass db_conn so macro features (SPY/VIX/GLD…) are joined during training
+            x_sym, y_sym, fc = build_training_set(df, horizon_bars=args.horizon_bars, db_conn=conn)
             if x_sym is not None:
                 x_frames.append(x_sym)
                 y_frames.append(y_sym)
@@ -378,29 +379,42 @@ def _train_to_candidate(args: argparse.Namespace, candles: pd.DataFrame) -> tupl
             model_path=candidate_path,
             tune=getattr(args, "tune", False),
         )
-    elif args.model_type == "random_forest":
-        metrics = train_random_forest(
-            candles, model_path=candidate_path, horizon_bars=args.horizon_bars,
-            paper_labels=paper_labels, paper_labels_weight=paper_weight,
-        )
-    elif args.model_type == "xgboost":
-        metrics = train_xgboost(
-            candles, model_path=candidate_path, horizon_bars=args.horizon_bars,
-            paper_labels=paper_labels, paper_labels_weight=paper_weight,
-        )
-    elif args.model_type == "lightgbm":
-        metrics = train_lightgbm(
-            candles, model_path=candidate_path, horizon_bars=args.horizon_bars,
-        )
-    else:
-        metrics = train_logistic_regression(
-            candles,
-            model_path=candidate_path,
-            horizon_bars=args.horizon_bars,
-            tune_hyperparams=getattr(args, "tune", False),
-            paper_labels=paper_labels,
-            paper_labels_weight=paper_weight,
-        )
+    # Open DB connection for macro feature enrichment (single-symbol path)
+    _db_conn = None
+    if getattr(args, "from_db", False):
+        _db_conn = get_connection(getattr(args, "db", "data/hogan.db"))
+
+    try:
+        if args.model_type == "random_forest":
+            metrics = train_random_forest(
+                candles, model_path=candidate_path, horizon_bars=args.horizon_bars,
+                paper_labels=paper_labels, paper_labels_weight=paper_weight,
+                db_conn=_db_conn,
+            )
+        elif args.model_type == "xgboost":
+            metrics = train_xgboost(
+                candles, model_path=candidate_path, horizon_bars=args.horizon_bars,
+                paper_labels=paper_labels, paper_labels_weight=paper_weight,
+                db_conn=_db_conn,
+            )
+        elif args.model_type == "lightgbm":
+            metrics = train_lightgbm(
+                candles, model_path=candidate_path, horizon_bars=args.horizon_bars,
+                db_conn=_db_conn,
+            )
+        else:
+            metrics = train_logistic_regression(
+                candles,
+                model_path=candidate_path,
+                horizon_bars=args.horizon_bars,
+                tune_hyperparams=getattr(args, "tune", False),
+                paper_labels=paper_labels,
+                paper_labels_weight=paper_weight,
+                db_conn=_db_conn,
+            )
+    finally:
+        if _db_conn is not None:
+            _db_conn.close()
 
     return metrics, candidate_path
 
