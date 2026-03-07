@@ -475,19 +475,10 @@ def _train_from_xy(
         clf = LogisticRegression(max_iter=500, C=C, class_weight="balanced")
         clf.fit(X_train_sc, y_train)
         proba = clf.predict_proba(X_test_sc)[:, 1]
-        from dataclasses import dataclass
 
-        @dataclass
-        class _Pkg:
-            scaler: object
-            model: object
-            feature_columns: list
-        artifact = _Pkg(scaler=scaler, model=clf, feature_columns=feature_cols)
-
-    # For non-LR models, wrap in the same TrainedModel dataclass
-    if model_type != "logreg":
-        from hogan_bot.ml import TrainedModel
-        artifact = TrainedModel(scaler=scaler, model=clf, feature_columns=feature_cols)
+    # Wrap all model types in TrainedModel for consistent pickling
+    from hogan_bot.ml import TrainedModel
+    artifact = TrainedModel(scaler=scaler, model=clf, feature_columns=feature_cols)
 
     Path(model_path).parent.mkdir(parents=True, exist_ok=True)
     with open(model_path, "wb") as fh:
