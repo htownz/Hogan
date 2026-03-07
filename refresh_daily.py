@@ -18,9 +18,11 @@ Refreshes all external data sources in dependency order:
   15. CoinMarketCap             (free key — BTC/ETH dominance, total mcap, DeFi%)
   16. Alpaca market data        (free key — SPY/QQQ close + BTC/ETH spread +
                                   incremental MTF candles 10m/30m/1h/1d for
-                                  BTC/USD, ETH/USD, SOL/USD, SPY, QQQ, GLD, TLT)
-  17. Dune Analytics on-chain   (paid — skipped if DUNE_API_KEY absent)
-  18. Oanda prices              (OANDA_ACCESS_TOKEN required — BTC/ETH/XAU/EUR)
+                                  BTC/USD, ETH/USD, SOL/USD)
+  17. Macro OHLCV candles       (yfinance, no key — SPY, QQQ, GLD, SLV, TLT,
+                                  UUP, VIX, TNX at 1d + 1h)
+  18. Dune Analytics on-chain   (paid — skipped if DUNE_API_KEY absent)
+  19. Oanda prices              (OANDA_ACCESS_TOKEN required — BTC/ETH/XAU/EUR)
 
 Usage
 -----
@@ -246,6 +248,15 @@ def _refresh_cmc() -> None:
     print(f"  CMC: global metrics + BTC/ETH quotes — {total} records stored")
 
 
+def _refresh_macro_candles() -> None:
+    """Fetch daily + hourly OHLCV for SPY, QQQ, GLD, SLV, TLT, UUP, VIX, TNX (yfinance, free)."""
+    from hogan_bot.fetch_macro_candles import fetch_all_macro_candles
+    result = fetch_all_macro_candles(db_path=_db_path())
+    total = sum(result.values())
+    assets = len([v for v in result.values() if v > 0])
+    print(f"  Macro candles: {total} rows across {assets} series (SPY/QQQ/GLD/SLV/TLT/UUP/VIX/TNX)")
+
+
 def _refresh_alpaca() -> None:
     """Fetch SPY/QQQ close, crypto spread, and incremental MTF candles from Alpaca."""
     k = os.getenv("ALPACA_API_KEY", "").strip()
@@ -283,6 +294,7 @@ _SOURCES: list[tuple[str, str, Callable]] = [
     ("defillama",    "DeFi TVL + stablecoin mcap (DeFi Llama, no key)",        _refresh_defillama),
     ("spy",          "SPY daily macro candles (yfinance, free)",                _refresh_spy),
     ("openbb",       "OpenBB macro: DXY, VIX, SPY return, FOMC (yfinance)",   _refresh_openbb),
+    ("macro_candles","Macro OHLCV candles: SPY/QQQ/GLD/SLV/TLT/UUP/VIX/TNX (yfinance, free)", _refresh_macro_candles),
     # ── Free with API key ────────────────────────────────────────────────────
     ("coingecko",    "CoinGecko market intelligence (COINGECKO_KEY)",          _refresh_coingecko),
     ("cmc",          "CoinMarketCap: BTC/ETH dominance, market cap, DeFi% (CMC_API_KEY)", _refresh_cmc),

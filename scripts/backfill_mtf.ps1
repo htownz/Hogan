@@ -97,19 +97,30 @@ if (-not $env:ALPACA_API_KEY -or -not $env:ALPACA_SECRET_KEY) {
 }
 
 # ── Run bulk backfill ────────────────────────────────────────────────────────
-Write-Host "Starting bulk backfill (this may take 1-3 minutes)..." -ForegroundColor Yellow
 $StartTime = Get-Date
 
+# ── Step 1: Crypto MTF candles (BTC/ETH/SOL × 10m/30m/1h/1d) ────────────────
+Write-Host "Step 1/2 — Crypto MTF candles (BTC/ETH/SOL × 10m/30m/1h/1d)..." -ForegroundColor Yellow
 & $PythonExe -m hogan_bot.fetch_alpaca --backfill-all --days $Days --db $Db
 $ExitCode = $LASTEXITCODE
 if ($ExitCode -ne 0) {
-    Write-Host "Backfill failed with exit code $ExitCode" -ForegroundColor Red
+    Write-Host "Crypto backfill failed with exit code $ExitCode" -ForegroundColor Red
+    exit $ExitCode
+}
+
+# ── Step 2: Macro asset candles (SPY/QQQ/GLD/SLV/TLT/UUP/VIX/TNX × 1d + 1h) ─
+Write-Host ""
+Write-Host "Step 2/2 — Macro candles (SPY/QQQ/GLD/SLV/TLT/UUP/VIX/TNX × 1d + 1h)..." -ForegroundColor Yellow
+& $PythonExe -m hogan_bot.fetch_macro_candles --backfill --db $Db
+$ExitCode = $LASTEXITCODE
+if ($ExitCode -ne 0) {
+    Write-Host "Macro candle backfill failed with exit code $ExitCode" -ForegroundColor Red
     exit $ExitCode
 }
 
 $Elapsed = [math]::Round(((Get-Date) - $StartTime).TotalSeconds, 1)
 Write-Host ""
-Write-Host "Backfill complete in ${Elapsed}s" -ForegroundColor Green
+Write-Host "All backfills complete in ${Elapsed}s" -ForegroundColor Green
 Write-Host ""
 
 # ── Show DB summary ──────────────────────────────────────────────────────────
@@ -121,9 +132,9 @@ Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "  1. Retrain on expanded multi-symbol dataset:"
 Write-Host "       $PythonExe -m hogan_bot.retrain --from-db --symbols BTC/USD,ETH/USD,SOL/USD --force-promote" -ForegroundColor White
 Write-Host ""
-Write-Host "  2. (Optional) Enable extended MTF features in .env after retraining:"
-Write-Host "       HOGAN_USE_MTF_EXTENDED=true" -ForegroundColor White
+Write-Host "  2. (Optional) Add macro symbols to training in .env:"
 Write-Host "       HOGAN_TRAINING_SYMBOLS=BTC/USD,ETH/USD,SOL/USD" -ForegroundColor White
+Write-Host "       HOGAN_USE_MTF_EXTENDED=true  (after retraining)" -ForegroundColor White
 Write-Host ""
 Write-Host "  3. Restart the bot:"
 Write-Host "       $PythonExe -m hogan_bot.main" -ForegroundColor White
