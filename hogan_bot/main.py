@@ -11,6 +11,7 @@ from hogan_bot.decision import apply_ml_filter, ml_confidence
 from hogan_bot.discord_commands import make_command_listener
 from hogan_bot.exchange import ExchangeClient
 from hogan_bot.ml import TrainedModel, load_model, predict_up_probability
+from hogan_bot.trade_explainer import explain_trade as _explain_trade
 from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.regime import detect_regime, effective_thresholds, load_regime_signals
@@ -214,6 +215,19 @@ def run_iteration(
                     strategy_conf=signal.confidence,
                     vol_ratio=signal.volume_ratio,
                 )
+                # LLM explanation — fire-and-forget, never blocks the trade loop
+                try:
+                    fill_id = f"{symbol}_{now_ms}"
+                    signal_details = {
+                        "action": side,
+                        "confidence": signal.confidence,
+                        "explanation": getattr(signal, "explanation", ""),
+                        "tech": {"action": side, "confidence": signal.confidence},
+                        "macro": {"regime": regime_state.regime if regime_state else "unknown"},
+                    }
+                    _explain_trade(fill_id, symbol, side, px, signal_details, conn=conn)
+                except Exception:
+                    pass
 
         def _journal_close(side: str, close_qty: float, reason: str = "signal") -> None:
             if conn is not None:
