@@ -84,6 +84,12 @@ if (Test-Path $EnvFile) {
     Write-Host "Loaded .env" -ForegroundColor DarkGray
 }
 
+# ── Resolve Python executable (prefer .venv) ────────────────────────────────
+$VenvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
+$PythonExe = if (Test-Path $VenvPython) { $VenvPython } else { "python" }
+Write-Host "  Python : $PythonExe" -ForegroundColor DarkGray
+Write-Host ""
+
 # ── Check Alpaca keys ────────────────────────────────────────────────────────
 if (-not $env:ALPACA_API_KEY -or -not $env:ALPACA_SECRET_KEY) {
     Write-Error "ALPACA_API_KEY and ALPACA_SECRET_KEY must be set in .env or environment."
@@ -94,10 +100,11 @@ if (-not $env:ALPACA_API_KEY -or -not $env:ALPACA_SECRET_KEY) {
 Write-Host "Starting bulk backfill (this may take 1-3 minutes)..." -ForegroundColor Yellow
 $StartTime = Get-Date
 
-$Result = python -m hogan_bot.fetch_alpaca --backfill-all --days $Days --db $Db 2>&1
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Backfill failed with exit code $LASTEXITCODE:`n$Result"
-    exit $LASTEXITCODE
+& $PythonExe -m hogan_bot.fetch_alpaca --backfill-all --days $Days --db $Db
+$ExitCode = $LASTEXITCODE
+if ($ExitCode -ne 0) {
+    Write-Host "Backfill failed with exit code $ExitCode" -ForegroundColor Red
+    exit $ExitCode
 }
 
 $Elapsed = [math]::Round(((Get-Date) - $StartTime).TotalSeconds, 1)
@@ -107,34 +114,17 @@ Write-Host ""
 
 # ── Show DB summary ──────────────────────────────────────────────────────────
 Write-Host "Database candle summary:" -ForegroundColor Cyan
-python -c "
-import sqlite3, os
-db = r'$Db'
-conn = sqlite3.connect(db)
-rows = conn.execute('''
-    SELECT symbol, timeframe, COUNT(*) as n,
-           datetime(MIN(ts_ms)/1000, ''unixepoch'') as oldest,
-           datetime(MAX(ts_ms)/1000, ''unixepoch'') as newest
-    FROM candles
-    GROUP BY symbol, timeframe
-    ORDER BY symbol, timeframe
-''').fetchall()
-print(f'{\"Symbol\":<14} {\"TF\":<6} {\"Bars\":>8}  {\"Oldest\":<20} {\"Newest\"}')
-print('-' * 70)
-for sym, tf, n, old, new in rows:
-    print(f'{sym:<14} {tf:<6} {n:>8}  {str(old):<20} {new}')
-conn.close()
-"
+& $PythonExe scripts\list_candles.py --db $Db
 
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "  1. Retrain on expanded multi-symbol dataset:"
-Write-Host "       python -m hogan_bot.retrain --from-db --symbols BTC/USD,ETH/USD,SOL/USD --force-promote" -ForegroundColor White
+Write-Host "       $PythonExe -m hogan_bot.retrain --from-db --symbols BTC/USD,ETH/USD,SOL/USD --force-promote" -ForegroundColor White
 Write-Host ""
 Write-Host "  2. (Optional) Enable extended MTF features in .env after retraining:"
 Write-Host "       HOGAN_USE_MTF_EXTENDED=true" -ForegroundColor White
 Write-Host "       HOGAN_TRAINING_SYMBOLS=BTC/USD,ETH/USD,SOL/USD" -ForegroundColor White
 Write-Host ""
 Write-Host "  3. Restart the bot:"
-Write-Host "       python -m hogan_bot.main" -ForegroundColor White
+Write-Host "       $PythonExe -m hogan_bot.main" -ForegroundColor White
 Write-Host ""
