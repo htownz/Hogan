@@ -377,15 +377,25 @@ def build_feature_row_extended(
     candles_5m: pd.DataFrame,
     candles_1h: pd.DataFrame | None = None,
     candles_15m: pd.DataFrame | None = None,
+    candles_10m: pd.DataFrame | None = None,
+    candles_30m: pd.DataFrame | None = None,
     conn=None,
     symbol: str = "BTC/USD",
+    extended_mtf: bool = False,
 ) -> list[float] | None:
-    """Return the 70-element extended feature vector for the last bar.
+    """Return the extended feature vector for the last bar.
 
-    Computes:
-    * 36 base 5m features  via :func:`~hogan_bot.ml.build_feature_row`
-    * 14 MTF features       (7 from 1h + 7 from 15m; zeros when unavailable)
-    * 20 ext features       (from DB; zeros when unavailable)
+    Standard mode (``extended_mtf=False``, default — backward compatible):
+        36 base 5m  +  7 (1h)  +  7 (15m)  +  N ext  =  N+50 features
+
+    Extended MTF mode (``extended_mtf=True`` — requires retraining):
+        36 base 5m  +  7 (1h)  +  7 (30m)  +  7 (15m)  +  7 (10m)  +  N ext
+        =  N+64 features
+
+    The two modes produce **different-length vectors** and are therefore
+    not interchangeable.  Enable ``extended_mtf`` only after retraining
+    with ``python -m hogan_bot.retrain --from-db --force-promote
+    --use-extended-mtf``.
 
     Parameters
     ----------
@@ -395,26 +405,42 @@ def build_feature_row_extended(
         1-hour OHLCV window up to current bar (or ``None``).
     candles_15m:
         15-minute OHLCV window up to current bar (or ``None``).
+    candles_10m:
+        10-minute OHLCV window up to current bar (or ``None``).
+        Only used when ``extended_mtf=True``.
+    candles_30m:
+        30-minute OHLCV window up to current bar (or ``None``).
+        Only used when ``extended_mtf=True``.
     conn:
         Open SQLite connection for ext feature lookup (or ``None``).
     symbol:
         Trading symbol for DB lookups.
+    extended_mtf:
+        When ``True``, include 10m and 30m features (+14 features total).
+        Requires a model retrained with the same flag.
 
     Returns
     -------
-    list[float] of length 70, or ``None`` when base features cannot be computed.
+    list[float] or ``None`` when base features cannot be computed.
     """
-    # 36 base 5m features
+    # Base 5m features
     base = build_feature_row(candles_5m)
     if base is None:
         return None
 
-    # 14 MTF features — 7 from 1h
+    # Standard MTF: 1h + 15m
     h1_feats = _compute_tf_features(candles_1h) or [0.0] * 7
-    # 7 from 15m
     m15_feats = _compute_tf_features(candles_15m) or [0.0] * 7
 
-    # 28 ext features (6 on-chain/macro + 6 CoinGecko + 8 alt/sentiment/geo + 8 OpenBB)
+    # Extended MTF: additionally 30m + 10m
+    if extended_mtf:
+        m30_feats = _compute_tf_features(candles_30m) or [0.0] * 7
+        m10_feats = _compute_tf_features(candles_10m) or [0.0] * 7
+    else:
+        m30_feats = []
+        m10_feats = []
+
+    # External features from DB
     ts = (
         candles_5m["ts_ms"].iloc[-1]
         if "ts_ms" in candles_5m.columns
@@ -424,11 +450,16 @@ def build_feature_row_extended(
     )
     ext = build_ext_features(ts, conn=conn, symbol=symbol)
 
-    combined = base + h1_feats + m15_feats + ext  # 36 + 7 + 7 + 28 = 78
+    # Order: base | 1h | 30m | 15m | 10m | ext
+    combined = base + h1_feats + m30_feats + m15_feats + m10_feats + ext
     return combined
 
 
-# Feature column names for documentation / debugging
+# ---------------------------------------------------------------------------
+# Feature column name lists
+# ---------------------------------------------------------------------------
+
+# Standard MTF (1h + 15m only)
 MTF_FEATURE_COLUMNS: list[str] = [
     "h1_ret_1", "h1_rsi_14", "h1_atr_pct", "h1_macd_hist",
     "h1_bb_pct_b", "h1_vol_ratio", "h1_trend_up",
@@ -436,8 +467,25 @@ MTF_FEATURE_COLUMNS: list[str] = [
     "m15_bb_pct_b", "m15_vol_ratio", "m15_trend_up",
 ]
 
+# Extended MTF (1h + 30m + 15m + 10m)
+MTF_FEATURE_COLUMNS_EXTENDED: list[str] = [
+    "h1_ret_1", "h1_rsi_14", "h1_atr_pct", "h1_macd_hist",
+    "h1_bb_pct_b", "h1_vol_ratio", "h1_trend_up",
+    "m30_ret_1", "m30_rsi_14", "m30_atr_pct", "m30_macd_hist",
+    "m30_bb_pct_b", "m30_vol_ratio", "m30_trend_up",
+    "m15_ret_1", "m15_rsi_14", "m15_atr_pct", "m15_macd_hist",
+    "m15_bb_pct_b", "m15_vol_ratio", "m15_trend_up",
+    "m10_ret_1", "m10_rsi_14", "m10_atr_pct", "m10_macd_hist",
+    "m10_bb_pct_b", "m10_vol_ratio", "m10_trend_up",
+]
+
 EXTENDED_FEATURE_COLUMNS: list[str] = (
-    # base 24 — imported from ml.py at runtime to avoid circular import
+    # base columns — imported from ml.py at runtime to avoid circular import
     MTF_FEATURE_COLUMNS
+    + EXT_FEATURE_NAMES
+)
+
+EXTENDED_FEATURE_COLUMNS_V2: list[str] = (
+    MTF_FEATURE_COLUMNS_EXTENDED
     + EXT_FEATURE_NAMES
 )

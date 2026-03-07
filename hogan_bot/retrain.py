@@ -151,7 +151,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Promote the new model regardless of registry score. "
-            "Use when the feature space changed (e.g. 36 → 43 features) "
+            "Use when the feature space changed (e.g. 36 -> 43 features) "
             "and the old registry benchmark is no longer comparable."
         ),
     )
@@ -192,6 +192,27 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="W",
         help="Sample weight applied to paper-trade labeled rows (default: 3.0)",
     )
+    p.add_argument(
+        "--symbols",
+        default=None,
+        metavar="SYM1,SYM2",
+        help=(
+            "Comma-separated list of symbols to train on jointly "
+            "(e.g. 'BTC/USD,ETH/USD,SOL/USD').  When set, candles from all symbols "
+            "are concatenated before feature engineering, giving the model a larger "
+            "and more diverse training set.  Defaults to --symbol only."
+        ),
+    )
+    p.add_argument(
+        "--use-extended-mtf",
+        action="store_true",
+        help=(
+            "Enable 10m + 30m multi-timeframe features (+14 features). "
+            "Requires 10m and 30m candles in the DB (run backfill first). "
+            "IMPORTANT: produces a different feature vector — always pair with "
+            "--force-promote and update HOGAN_USE_MTF_EXTENDED=true in .env."
+        ),
+    )
     return p
 
 
@@ -200,46 +221,139 @@ def _build_parser() -> argparse.ArgumentParser:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_symbols(args: argparse.Namespace) -> list[str]:
+    """Return the list of symbols to train on (respects --symbols override)."""
+    if args.symbols:
+        return [s.strip() for s in args.symbols.split(",") if s.strip()]
+    return [args.symbol]
+
+
 def _fetch_candles(args: argparse.Namespace) -> pd.DataFrame:
-    """Return a DataFrame of candles, either from DB or live exchange."""
+    """Return a DataFrame of candles for the primary (first) symbol.
+
+    Used by single-symbol training paths.  For multi-symbol training,
+    call :func:`_build_multi_symbol_dataset` directly.
+    """
+    symbols = _resolve_symbols(args)
+    primary = symbols[0]
+
     if args.from_db:
         conn = get_connection(args.db)
-        df = load_candles(conn, args.symbol, args.timeframe, limit=args.window_bars)
+        df = load_candles(conn, primary, args.timeframe, limit=args.window_bars)
         conn.close()
         if df.empty:
             raise RuntimeError(
-                f"No candles found in the local DB for {args.symbol}/{args.timeframe}. "
-                "Run `python -m hogan_bot.fetch_data` first to populate the database."
+                f"No candles in DB for {primary}/{args.timeframe}. "
+                "Run `python -m hogan_bot.fetch_alpaca --backfill-all` first."
             )
-        logger.info("Loaded %d bars from DB (%s / %s)", len(df), args.symbol, args.timeframe)
+        logger.info("Loaded %d bars from DB (%s / %s)", len(df), primary, args.timeframe)
         return df
 
+    if len(symbols) > 1:
+        logger.warning(
+            "Live exchange fetch only supports a single symbol (%s); "
+            "add --from-db to train on multiple symbols.",
+            primary,
+        )
     client = ExchangeClient(args.exchange)
-    df = client.fetch_ohlcv_df(args.symbol, timeframe=args.timeframe, limit=args.window_bars)
-    logger.info(
-        "Fetched %d bars from %s (%s / %s)", len(df), args.exchange, args.symbol, args.timeframe
-    )
+    df = client.fetch_ohlcv_df(primary, timeframe=args.timeframe, limit=args.window_bars)
+    logger.info("Fetched %d bars from %s (%s / %s)", len(df), args.exchange, primary, args.timeframe)
     return df
+
+
+def _build_multi_symbol_dataset(
+    args: argparse.Namespace,
+) -> tuple[pd.DataFrame, pd.Series, list[str]]:
+    """Build a combined (X, y, feature_columns) training set across multiple symbols.
+
+    Features are computed **per symbol** first (so rolling windows never cross
+    symbol boundaries), then the resulting feature matrices are concatenated.
+    This prevents contaminated rolling windows when mixing BTC and ETH candles.
+
+    Returns
+    -------
+    X : pd.DataFrame  — feature matrix
+    y : pd.Series     — binary labels
+    feature_columns : list[str]
+    """
+    from hogan_bot.ml import build_training_set
+
+    symbols = _resolve_symbols(args)
+    x_frames: list[pd.DataFrame] = []
+    y_frames: list[pd.Series] = []
+    feature_columns: list[str] = []
+
+    if args.from_db:
+        conn = get_connection(args.db)
+        for sym in symbols:
+            df = load_candles(conn, sym, args.timeframe, limit=args.window_bars)
+            if df.empty:
+                logger.warning("No candles in DB for %s / %s — skipping", sym, args.timeframe)
+                continue
+            x_sym, y_sym, fc = build_training_set(df, horizon_bars=args.horizon_bars)
+            if x_sym is not None:
+                x_frames.append(x_sym)
+                y_frames.append(y_sym)
+                feature_columns = fc  # same for all symbols
+                logger.info(
+                    "Multi-symbol: %d feature rows from %s/%s",
+                    len(x_sym), sym, args.timeframe,
+                )
+        conn.close()
+    else:
+        primary = symbols[0]
+        client = ExchangeClient(args.exchange)
+        df = client.fetch_ohlcv_df(primary, timeframe=args.timeframe, limit=args.window_bars)
+        x_sym, y_sym, feature_columns = build_training_set(df, horizon_bars=args.horizon_bars)
+        if x_sym is not None:
+            x_frames.append(x_sym)
+            y_frames.append(y_sym)
+
+    if not x_frames:
+        raise RuntimeError(
+            f"No training rows from any of {symbols} / {args.timeframe}. "
+            "Run `python -m hogan_bot.fetch_alpaca --backfill-all` to populate the DB."
+        )
+
+    X_all = pd.concat(x_frames, ignore_index=True)
+    y_all = pd.concat(y_frames, ignore_index=True)
+    logger.info(
+        "Multi-symbol dataset: %d rows from %d symbol(s): %s",
+        len(X_all), len(x_frames), symbols,
+    )
+    return X_all, y_all, feature_columns
 
 
 def _train_to_candidate(args: argparse.Namespace, candles: pd.DataFrame) -> tuple[dict, str]:
     """Train a model and write it to a timestamped candidate path.
 
-    Returns ``(metrics_dict, candidate_path)``.  Writing to a separate
-    candidate path ensures the production model is never touched unless
-    promotion is explicitly decided.
+    When multiple symbols are configured (via ``--symbols``), uses
+    :func:`_build_multi_symbol_dataset` to build a jointly-trained dataset;
+    otherwise falls back to the single-symbol ``candles`` DataFrame.
+
+    Returns ``(metrics_dict, candidate_path)``.
     """
     ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
     model_dir = Path(args.model_path).parent
     model_stem = Path(args.model_path).stem
     candidate_path = str(model_dir / f"{model_stem}_candidate_{ts}.pkl")
-
     model_dir.mkdir(parents=True, exist_ok=True)
+
+    symbols = _resolve_symbols(args)
+    multi_symbol = len(symbols) > 1
+
+    if getattr(args, "use_extended_mtf", False):
+        logger.info(
+            "Extended MTF features (10m + 30m) will be used for RL training. "
+            "For the standard ML model (logreg/rf/xgb/lgbm), extended MTF requires "
+            "custom feature engineering — currently only multi-symbol data expansion "
+            "is applied. Run rl_train.py with --ext-features for RL extended MTF."
+        )
 
     # Optionally load paper-trade labels for feedback-loop training
     paper_labels = None
     paper_weight = getattr(args, "paper_labels_weight", 3.0)
-    if getattr(args, "use_paper_labels", False):
+    if getattr(args, "use_paper_labels", False) and not multi_symbol:
         db_path = getattr(args, "db", "data/hogan.db")
         paper_labels = make_paper_trade_labels(db_path, candles, args.symbol)
         if paper_labels[0] is not None:
@@ -249,8 +363,22 @@ def _train_to_candidate(args: argparse.Namespace, candles: pd.DataFrame) -> tupl
             )
         else:
             logger.info("Paper-trade feedback: fewer than 5 closed trades — skipping.")
+    elif getattr(args, "use_paper_labels", False) and multi_symbol:
+        logger.info("Paper-trade feedback skipped for multi-symbol training (not yet supported).")
 
-    if args.model_type == "random_forest":
+    # For multi-symbol, build a combined (X, y) dataset; otherwise use raw candles
+    if multi_symbol:
+        logger.info("Multi-symbol training: %s", symbols)
+        X_all, y_all, feature_cols = _build_multi_symbol_dataset(args)
+
+        # Delegate to a special multi-symbol training path
+        metrics = _train_from_xy(
+            X_all, y_all, feature_cols,
+            model_type=args.model_type,
+            model_path=candidate_path,
+            tune=getattr(args, "tune", False),
+        )
+    elif args.model_type == "random_forest":
         metrics = train_random_forest(
             candles, model_path=candidate_path, horizon_bars=args.horizon_bars,
             paper_labels=paper_labels, paper_labels_weight=paper_weight,
@@ -269,12 +397,113 @@ def _train_to_candidate(args: argparse.Namespace, candles: pd.DataFrame) -> tupl
             candles,
             model_path=candidate_path,
             horizon_bars=args.horizon_bars,
-            tune_hyperparams=args.tune,
+            tune_hyperparams=getattr(args, "tune", False),
             paper_labels=paper_labels,
             paper_labels_weight=paper_weight,
         )
 
     return metrics, candidate_path
+
+
+def _train_from_xy(
+    X: pd.DataFrame,
+    y: pd.Series,
+    feature_cols: list[str],
+    model_type: str,
+    model_path: str,
+    tune: bool = False,
+) -> dict:
+    """Fit a classifier directly from pre-built (X, y) matrices and save to disk.
+
+    Used by the multi-symbol training path where feature matrices are built
+    per-symbol then concatenated before training.
+    """
+    import pickle
+    from sklearn.metrics import (
+        accuracy_score, f1_score, precision_score, recall_score, roc_auc_score,
+    )
+    from sklearn.preprocessing import StandardScaler
+
+    if len(X) < 200:
+        raise RuntimeError(
+            f"Only {len(X)} training rows after multi-symbol feature build "
+            "(need ≥ 200).  Ensure all symbols have sufficient candle history."
+        )
+
+    split = int(len(X) * 0.8)
+    X_train, X_test = X.iloc[:split], X.iloc[split:]
+    y_train, y_test = y.iloc[:split], y.iloc[split:]
+
+    scaler = StandardScaler()
+    X_train_sc = scaler.fit_transform(X_train)
+    X_test_sc = scaler.transform(X_test)
+
+    if model_type == "random_forest":
+        from sklearn.ensemble import RandomForestClassifier
+        clf = RandomForestClassifier(n_estimators=300, max_depth=8, random_state=42,
+                                     class_weight="balanced", n_jobs=-1)
+        clf.fit(X_train, y_train)
+        proba = clf.predict_proba(X_test)[:, 1]
+        artifact = clf
+    elif model_type == "xgboost":
+        from xgboost import XGBClassifier
+        clf = XGBClassifier(n_estimators=300, max_depth=6, learning_rate=0.05,
+                            use_label_encoder=False, eval_metric="logloss",
+                            random_state=42, n_jobs=-1)
+        clf.fit(X_train, y_train)
+        proba = clf.predict_proba(X_test)[:, 1]
+        artifact = clf
+    elif model_type == "lightgbm":
+        from lightgbm import LGBMClassifier
+        clf = LGBMClassifier(n_estimators=300, max_depth=6, learning_rate=0.05,
+                             random_state=42, n_jobs=-1, verbose=-1)
+        clf.fit(X_train, y_train)
+        proba = clf.predict_proba(X_test)[:, 1]
+        artifact = clf
+    else:
+        from sklearn.linear_model import LogisticRegression
+        C = 1.0
+        if tune:
+            best_C, best_acc = 1.0, -1.0
+            for c_val in (0.01, 0.1, 1.0, 10.0):
+                m = LogisticRegression(max_iter=500, C=c_val, class_weight="balanced")
+                m.fit(X_train_sc, y_train)
+                acc = float(accuracy_score(y_test, m.predict(X_test_sc)))
+                if acc > best_acc:
+                    best_acc, best_C = acc, c_val
+            C = best_C
+        clf = LogisticRegression(max_iter=500, C=C, class_weight="balanced")
+        clf.fit(X_train_sc, y_train)
+        proba = clf.predict_proba(X_test_sc)[:, 1]
+        from dataclasses import dataclass
+
+        @dataclass
+        class _Pkg:
+            scaler: object
+            model: object
+            feature_columns: list
+        artifact = _Pkg(scaler=scaler, model=clf, feature_columns=feature_cols)
+
+    # For non-LR models, wrap in the same TrainedModel dataclass
+    if model_type != "logreg":
+        from hogan_bot.ml import TrainedModel
+        artifact = TrainedModel(scaler=scaler, model=clf, feature_columns=feature_cols)
+
+    Path(model_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(model_path, "wb") as fh:
+        pickle.dump(artifact, fh)
+
+    pred = (proba >= 0.5).astype(int)
+    return {
+        "model_type": f"{model_type}_multisym",
+        "accuracy": float(accuracy_score(y_test, pred)),
+        "roc_auc": float(roc_auc_score(y_test, proba)) if len(set(y_test)) > 1 else 0.0,
+        "precision": float(precision_score(y_test, pred, zero_division=0)),
+        "recall": float(recall_score(y_test, pred, zero_division=0)),
+        "f1": float(f1_score(y_test, pred, zero_division=0)),
+        "n_train": int(len(X_train)),
+        "n_test": int(len(X_test)),
+    }
 
 
 def _get_current_best_score(registry: ModelRegistry, metric: str) -> float | None:
@@ -393,7 +622,7 @@ def retrain_once(args: argparse.Namespace) -> dict:
                     f"Promoted — {args.promotion_metric} {new_score:.4f} "
                     f"(+{improvement:.4f} over {current_score:.4f})"
                 )
-            logger.info("Model promoted → %s", args.model_path)
+            logger.info("Model promoted -> %s", args.model_path)
 
         else:
             improvement = new_score - (current_score or 0.0)

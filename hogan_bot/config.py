@@ -106,6 +106,17 @@ class BotConfig:
     retrain_promotion_metric: str = "roc_auc"
     retrain_schedule_hours: float = 24.0
 
+    # Multi-symbol training: comma-separated symbols for joint model training.
+    # When set, candles from all symbols are used to build a larger training set.
+    # Example: "BTC/USD,ETH/USD,SOL/USD"
+    training_symbols: list[str] = field(default_factory=lambda: ["BTC/USD", "ETH/USD"])
+
+    # Extended MTF features: when True, includes 10m + 30m timeframe features
+    # in build_feature_row_extended (+14 features vs standard 1h/15m only).
+    # REQUIRES retraining with --force-promote before enabling in production.
+    # Set HOGAN_USE_MTF_EXTENDED=true in .env after retraining.
+    use_mtf_extended: bool = False
+
     # Reinforcement Learning agent
     use_rl_agent: bool = False
     rl_model_path: str = "models/hogan_rl_policy.zip"
@@ -202,6 +213,10 @@ def load_config() -> BotConfig:
         retrain_min_improvement=float(os.getenv("HOGAN_RETRAIN_MIN_IMPROVEMENT", "0.005")),
         retrain_promotion_metric=os.getenv("HOGAN_RETRAIN_PROMOTION_METRIC", "roc_auc"),
         retrain_schedule_hours=float(os.getenv("HOGAN_RETRAIN_SCHEDULE_HOURS", "24.0")),
+        training_symbols=_split_symbols(
+            os.getenv("HOGAN_TRAINING_SYMBOLS", "BTC/USD,ETH/USD")
+        ),
+        use_mtf_extended=os.getenv("HOGAN_USE_MTF_EXTENDED", "false").lower() == "true",
         use_rl_agent=os.getenv("HOGAN_USE_RL_AGENT", "false").lower() == "true",
         rl_model_path=os.getenv("HOGAN_RL_MODEL_PATH", "models/hogan_rl_policy.zip"),
         rl_reward_type=os.getenv("HOGAN_RL_REWARD_TYPE", "risk_adjusted"),

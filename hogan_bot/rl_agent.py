@@ -80,10 +80,13 @@ def predict_rl_action(
     unrealized_pnl_pct: float = 0.0,
     bars_in_trade: int = 0,
     max_bars_in_trade: int = 100,
-    # Extended 73-dim obs mode — set when policy was trained with --ext-features
+    # Extended obs mode — set when policy was trained with --ext-features
     use_ext_features: bool = False,
     candles_1h: pd.DataFrame | None = None,
     candles_15m: pd.DataFrame | None = None,
+    candles_10m: pd.DataFrame | None = None,
+    candles_30m: pd.DataFrame | None = None,
+    extended_mtf: bool = False,
     db_conn: Any | None = None,
     symbol: str = "BTC/USD",
 ) -> str:
@@ -139,8 +142,11 @@ def predict_rl_action(
             candles,
             candles_1h=candles_1h,
             candles_15m=candles_15m,
+            candles_10m=candles_10m,
+            candles_30m=candles_30m,
             conn=db_conn,
             symbol=symbol,
+            extended_mtf=extended_mtf,
         )
         n_ml = N_ML_FEATURES_EXTENDED
         n_obs = N_OBS_EXTENDED
