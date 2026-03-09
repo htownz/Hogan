@@ -257,6 +257,20 @@ def _refresh_macro_candles() -> None:
     print(f"  Macro candles: {total} rows across {assets} series (SPY/QQQ/GLD/SLV/TLT/UUP/VIX/TNX)")
 
 
+def _refresh_crypto_candles() -> None:
+    """Fetch latest 5m candles for all crypto symbols from Kraken."""
+    import subprocess
+    symbols = os.getenv("HOGAN_SYMBOLS", "BTC/USD,ETH/USD,SOL/USD").split(",")
+    symbols = [s.strip() for s in symbols if s.strip()]
+    args = [sys.executable, "-m", "hogan_bot.fetch_data",
+            "--symbol"] + symbols + ["--timeframe", "5m", "--limit", "5000"]
+    result = subprocess.run(args, capture_output=True, text=True, timeout=120)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "crypto candle fetch failed")
+    for line in result.stdout.strip().splitlines():
+        print(f"  {line}")
+
+
 def _refresh_alpaca() -> None:
     """Fetch SPY/QQQ close, crypto spread, and incremental MTF candles from Alpaca."""
     k = os.getenv("ALPACA_API_KEY", "").strip()
@@ -286,6 +300,8 @@ def _refresh_alpaca() -> None:
 # ---------------------------------------------------------------------------
 
 _SOURCES: list[tuple[str, str, Callable]] = [
+    # ── Crypto OHLCV candles (always first) ──────────────────────────────────
+    ("crypto",       "Crypto 5m candles: BTC/ETH/SOL from Kraken (no key)",    _refresh_crypto_candles),
     # ── Completely free (no key) ─────────────────────────────────────────────
     ("feargreed",    "Fear & Greed Index (Alternative.me, no key)",            _refresh_feargreed),
     ("gpr",          "GPR Index (Caldara & Iacoviello, free download)",        _refresh_gpr),

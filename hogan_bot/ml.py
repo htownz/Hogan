@@ -383,9 +383,26 @@ _FEATURE_COLUMNS: list[str] = [
     "macro_tnx_norm",       # TNX daily close ÷ 7, clipped [0, 1]
     "macro_risk_off",       # Composite risk-off: (VIX>20)+GLD+TLT-SPY ÷ 3
     "macro_qqq_spy_rel",    # QQQ 5d return − SPY 5d return (tech divergence)
+    # On-chain features (4)
+    "onchain_hashrate_trend",   # BTC hash rate 7d SMA direction (0/1)
+    "onchain_addr_trend",       # active address 7d SMA direction (0/1)
+    "onchain_mempool_norm",     # mempool MB / 100, clipped [0, 1]
+    "onchain_fee_norm",         # avg fee USD / 10, clipped [0, 1]
+    # Sentiment features (4)
+    "sent_fear_greed_norm",     # Fear & Greed index / 100 [0, 1]
+    "sent_btc_dominance",       # BTC dominance / 100 [0, 1]
+    "sent_defi_tvl_change",     # DeFi TVL 7d % change / 100
+    "sent_stablecoin_norm",     # stablecoin mcap / 500B [0, 1]
+    # Derivatives features (2)
+    "deriv_funding_rate",       # normalised funding rate [-1, 1]
+    "deriv_oi_change",          # OI % change [-1, 1]
+    # Inter-market features (3)
+    "intermarket_dxy_trend",    # DXY > 20d SMA (0/1)
+    "intermarket_spy_btc_corr", # 20-day SPY-BTC return correlation
+    "intermarket_gold_btc_rel", # GLD 5d ret - BTC 5d ret
 ]
 
-assert len(_FEATURE_COLUMNS) == 53, f"Expected 53 features, got {len(_FEATURE_COLUMNS)}"
+assert len(_FEATURE_COLUMNS) == 66, f"Expected 66 features, got {len(_FEATURE_COLUMNS)}"
 
 
 # ---------------------------------------------------------------------------
