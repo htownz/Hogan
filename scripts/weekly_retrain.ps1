@@ -27,9 +27,10 @@ Add-Content $LOG_FILE "═══════════════════
 Set-Location $HOGAN_ROOT
 
 # ── Step 1: backfill last 30 days of 5m candles from Alpaca ─────────────────
+# NOTE: --stock-only was WRONG (skips crypto). Use --crypto-bars without it.
 Add-Content $LOG_FILE ""
 Add-Content $LOG_FILE "[1/3] Backfilling Alpaca 5m candles (30 days)..."
-& $VENV_PYTHON -m hogan_bot.fetch_alpaca --crypto-bars --timeframe 5Min --crypto-days 30 --stock-only 2>&1 |
+& $VENV_PYTHON -m hogan_bot.fetch_alpaca --crypto-bars --timeframe 5Min --crypto-days 30 --symbols "BTC/USD,ETH/USD" 2>&1 |
     Tee-Object -Append -FilePath $LOG_FILE
 
 # ── Step 2: daily data refresh (ensure latest macro signals) ─────────────────
@@ -38,13 +39,16 @@ Add-Content $LOG_FILE "[2/3] Running daily data refresh..."
 & $VENV_PYTHON refresh_daily.py 2>&1 | Tee-Object -Append -FilePath $LOG_FILE
 
 # ── Step 3: retrain XGBoost on full history ───────────────────────────────────
+# Multi-symbol + paper labels (when 5+ closed trades exist)
 Add-Content $LOG_FILE ""
 Add-Content $LOG_FILE "[3/3] Retraining XGBoost model (100k bars, 1h horizon)..."
 & $VENV_PYTHON -m hogan_bot.retrain `
     --from-db `
+    --symbols "BTC/USD,ETH/USD" `
     --window-bars 100000 `
     --model-type xgboost `
     --horizon-bars 12 `
+    --use-paper-labels `
     2>&1 | Tee-Object -Append -FilePath $LOG_FILE
 
 $exit_code = $LASTEXITCODE
