@@ -189,7 +189,7 @@ class TestEffectiveThresholds:
         state = detect_regime(df, adx_trending_threshold=20.0)
         eff = effective_thresholds(state, cfg)
         if state.regime == "trending_up":
-            assert eff["volume_threshold"] < cfg.volume_threshold
+            assert eff["volume_threshold"] == 1.2
 
     def test_volatile_halves_position_scale(self):
         cfg = _FakeConfig()

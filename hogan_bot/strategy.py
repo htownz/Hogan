@@ -105,11 +105,13 @@ def generate_signal(
     long_ma = close.rolling(long_window).mean()
     avg_volume = volume.rolling(volume_window).mean()
 
-    # MA trend state: "buy" when short MA is above long MA (bullish), "sell" otherwise.
-    # This is intentionally trend-state rather than crossover-only so the signal persists
-    # for the duration of the trend.  The position guard in main.py prevents pyramiding.
-    bullish_trend = short_ma.iloc[-1] > long_ma.iloc[-1]
-    bearish_trend = short_ma.iloc[-1] < long_ma.iloc[-1]
+    # MA crossover detection: signal only on the bar where the MAs actually cross,
+    # not on every bar where the trend holds.  This prevents entering at random
+    # points within an established trend.
+    cur_above = short_ma.iloc[-1] > long_ma.iloc[-1]
+    prev_above = short_ma.iloc[-2] > long_ma.iloc[-2]
+    bullish_cross = cur_above and not prev_above
+    bearish_cross = (not cur_above) and prev_above
 
     volume_ratio = float(volume.iloc[-1] / max(avg_volume.iloc[-1], 1e-9))
     volume_confirmed = volume_ratio >= volume_threshold
@@ -121,9 +123,9 @@ def generate_signal(
     atr_stop = float(atr_series.iloc[-1] / max(close.iloc[-1], 1e-9)) * atr_stop_multiplier
     stop_distance_pct = max(0.004, min(0.03, atr_stop))
 
-    if bullish_trend and volume_confirmed:
+    if bullish_cross and volume_confirmed:
         ma_action = "buy"
-    elif bearish_trend and volume_confirmed:
+    elif bearish_cross and volume_confirmed:
         ma_action = "sell"
     else:
         ma_action = "hold"

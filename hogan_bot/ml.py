@@ -464,10 +464,16 @@ def build_feature_row(
 
 def build_training_set(
     candles: pd.DataFrame,
-    horizon_bars: int = 3,
+    horizon_bars: int = 12,
     db_conn=None,
+    fee_rate: float = 0.0026,
 ) -> tuple[pd.DataFrame | None, pd.Series | None, list[str]]:
     """Construct feature matrix *X* and label vector *y* from *candles*.
+
+    Labels use a fee-aware threshold: a bar is labelled 1 only when the future
+    return exceeds ``2 * fee_rate`` (round-trip cost).  Bars where the future
+    return falls in the ambiguous dead zone ``(-2*fee, +2*fee)`` are dropped
+    so the model only learns from clearly profitable or clearly losing moves.
 
     When *db_conn* is provided, joins in 10 macro-asset features
     (SPY/QQQ/GLD/TLT/UUP/VIX/TNX) via :func:`~hogan_bot.macro_features.add_macro_features`.
@@ -478,7 +484,6 @@ def build_training_set(
     """
     frame = _feature_frame(candles)
 
-    # Join macro features when DB connection is available
     if db_conn is not None:
         try:
             from hogan_bot.macro_features import add_macro_features, MACRO_FEATURE_NAMES
@@ -488,20 +493,24 @@ def build_training_set(
             logging.getLogger(__name__).warning(
                 "Macro feature join failed: %s — training without macro context", exc
             )
-            # Ensure columns exist as zeros so _FEATURE_COLUMNS still matches
             for col in MACRO_FEATURE_NAMES:
                 if col not in frame.columns:
                     frame[col] = 0.0
     else:
-        # Fill macro slots with zeros so the feature count stays consistent
         from hogan_bot.macro_features import MACRO_FEATURE_NAMES
         for col in MACRO_FEATURE_NAMES:
             frame[col] = 0.0
 
     future_ret = frame["close"].shift(-horizon_bars) / frame["close"] - 1.0
-    frame["target"] = (future_ret > 0).astype(int)
+    min_move = 2.0 * fee_rate
+
+    frame["target"] = np.where(
+        future_ret > min_move, 1,
+        np.where(future_ret < -min_move, 0, np.nan),
+    )
 
     dataset = frame[_FEATURE_COLUMNS + ["target"]].dropna().copy()
+    dataset["target"] = dataset["target"].astype(int)
     if dataset.empty:
         return None, None, _FEATURE_COLUMNS
 
@@ -676,14 +685,61 @@ def _blend_paper_labels(
     return x_merged, y_merged, weights
 
 
+def select_features(
+    x: pd.DataFrame,
+    y: pd.Series,
+    max_features: int = 25,
+    min_importance: float = 0.005,
+) -> list[str]:
+    """Return the top features ranked by tree-based importance.
+
+    Uses a quick Random Forest fit on the full dataset to rank features,
+    then keeps up to *max_features* that exceed *min_importance*.  Also
+    drops features with >50% NaN rate or near-zero variance.
+    """
+    try:
+        from sklearn.ensemble import RandomForestClassifier
+    except ImportError:
+        return list(x.columns)
+
+    keep_cols = []
+    for col in x.columns:
+        nan_rate = x[col].isna().mean()
+        if nan_rate > 0.5:
+            continue
+        if x[col].std() < 1e-8:
+            continue
+        keep_cols.append(col)
+
+    if len(keep_cols) <= max_features:
+        return keep_cols
+
+    x_clean = x[keep_cols].fillna(0.0)
+    rf = RandomForestClassifier(
+        n_estimators=100, max_depth=4, min_samples_leaf=20,
+        random_state=42, n_jobs=-1,
+    )
+    rf.fit(x_clean, y)
+
+    importances = sorted(
+        zip(keep_cols, rf.feature_importances_),
+        key=lambda t: t[1],
+        reverse=True,
+    )
+    selected = [col for col, imp in importances[:max_features] if imp >= min_importance]
+    return selected if selected else keep_cols[:max_features]
+
+
 def train_logistic_regression(
     candles: pd.DataFrame,
     model_path: str,
-    horizon_bars: int = 3,
+    horizon_bars: int = 12,
     tune_hyperparams: bool = False,
     paper_labels: tuple[pd.DataFrame, pd.Series] | None = None,
     paper_labels_weight: float = 3.0,
     db_conn=None,
+    prune_features: bool = True,
+    max_features: int = 25,
 ) -> dict[str, object]:
     """Fit a scaled logistic-regression classifier and pickle the artifact.
 
@@ -709,6 +765,11 @@ def train_logistic_regression(
     x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn)
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
+
+    if prune_features and len(x) >= 500:
+        selected = select_features(x, y, max_features=max_features)
+        x = x[selected]
+        feature_columns = selected
 
     x, y, sample_weight = _blend_paper_labels(x, y, paper_labels, paper_labels_weight)
 
@@ -764,10 +825,12 @@ def train_logistic_regression(
 def train_random_forest(
     candles: pd.DataFrame,
     model_path: str,
-    horizon_bars: int = 3,
+    horizon_bars: int = 12,
     paper_labels: tuple[pd.DataFrame, pd.Series] | None = None,
     paper_labels_weight: float = 3.0,
     db_conn=None,
+    prune_features: bool = True,
+    max_features: int = 25,
 ) -> dict[str, object]:
     """Fit a Random Forest classifier and pickle the artifact.
 
@@ -790,6 +853,11 @@ def train_random_forest(
     x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn)
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
+
+    if prune_features and len(x) >= 500:
+        selected = select_features(x, y, max_features=max_features)
+        x = x[selected]
+        feature_columns = selected
 
     x, y, sample_weight = _blend_paper_labels(x, y, paper_labels, paper_labels_weight)
 
@@ -838,10 +906,12 @@ def train_random_forest(
 def train_xgboost(
     candles: pd.DataFrame,
     model_path: str,
-    horizon_bars: int = 3,
+    horizon_bars: int = 12,
     paper_labels: tuple[pd.DataFrame, pd.Series] | None = None,
     paper_labels_weight: float = 3.0,
     db_conn=None,
+    prune_features: bool = True,
+    max_features: int = 25,
 ) -> dict[str, object]:
     """Fit an XGBoost gradient-boosted classifier and pickle the artifact.
 
@@ -869,6 +939,11 @@ def train_xgboost(
     x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn)
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
+
+    if prune_features and len(x) >= 500:
+        selected = select_features(x, y, max_features=max_features)
+        x = x[selected]
+        feature_columns = selected
 
     x, y, sample_weight = _blend_paper_labels(x, y, paper_labels, paper_labels_weight)
 
@@ -916,7 +991,7 @@ def train_xgboost(
 
 
 def train_lightgbm(
-    candles: pd.DataFrame, model_path: str, horizon_bars: int = 3, db_conn=None
+    candles: pd.DataFrame, model_path: str, horizon_bars: int = 12, db_conn=None
 ) -> dict[str, object]:
     """Fit a LightGBM gradient-boosted classifier and pickle the artifact.
 
@@ -992,7 +1067,7 @@ def train_lightgbm(
 def calibrate_model(
     candles: pd.DataFrame,
     model_path: str,
-    horizon_bars: int = 3,
+    horizon_bars: int = 12,
     method: str = "sigmoid",
     calibration_fraction: float = 0.2,
 ) -> dict[str, object]:
@@ -1051,22 +1126,32 @@ def calibrate_model(
 
 
 def walk_forward_cv(
-    candles: pd.DataFrame, horizon_bars: int = 3, n_splits: int = 5
+    candles: pd.DataFrame,
+    horizon_bars: int = 12,
+    n_splits: int = 5,
+    model_type: str = "logreg",
+    db_conn=None,
+    fee_rate: float = 0.0026,
 ) -> list[dict[str, object]]:
-    """Walk-forward time-series cross-validation using logistic regression.
+    """Purged walk-forward time-series cross-validation.
 
-    Each fold trains on all data up to a cutpoint and tests on the next
-    segment, mirroring live deployment.  Returns a list of per-fold dicts
-    with ``fold``, ``train_rows``, ``test_rows``, ``accuracy``, ``roc_auc``.
+    Supports ``model_type`` in ``{"logreg", "random_forest", "xgboost",
+    "lightgbm", "histgb"}``.
+
+    An embargo gap of ``horizon_bars`` rows is inserted between each
+    train/test boundary to prevent information leakage from overlapping
+    prediction horizons.
+
+    Returns a list of per-fold dicts with ``fold``, ``train_rows``,
+    ``test_rows``, ``accuracy``, ``roc_auc``.
     """
     try:
-        from sklearn.linear_model import LogisticRegression
         from sklearn.metrics import accuracy_score, brier_score_loss, roc_auc_score
         from sklearn.preprocessing import StandardScaler
     except ModuleNotFoundError as exc:
         raise RuntimeError("scikit-learn is required for walk-forward CV") from exc
 
-    x, y, _ = build_training_set(candles, horizon_bars=horizon_bars)
+    x, y, _ = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn, fee_rate=fee_rate)
     if x is None or y is None or len(x) < 200:
         raise RuntimeError(
             "Not enough labelled rows for walk-forward CV. "
@@ -1082,27 +1167,39 @@ def walk_forward_cv(
             "Increase OHLCV history or reduce n_splits."
         )
 
+    embargo = horizon_bars
+
     results: list[dict[str, object]] = []
     for i in range(n_splits):
         train_end = min_train + fold_size * i
-        test_end = min(train_end + fold_size, n)
+        test_start = train_end + embargo
+        test_end = min(test_start + fold_size, n)
+
+        if test_start >= n or test_end - test_start < 10:
+            continue
 
         x_train = x.iloc[:train_end]
         y_train = y.iloc[:train_end]
-        x_test = x.iloc[train_end:test_end]
-        y_test = y.iloc[train_end:test_end]
+        x_test = x.iloc[test_start:test_end]
+        y_test = y.iloc[test_start:test_end]
 
         if len(x_test) < 10:
             continue
 
-        scaler = StandardScaler()
-        x_train_sc = scaler.fit_transform(x_train)
-        x_test_sc = scaler.transform(x_test)
+        use_scaler = model_type == "logreg"
+        scaler = None
+        if use_scaler:
+            scaler = StandardScaler()
+            x_train_arr = scaler.fit_transform(x_train)
+            x_test_arr = scaler.transform(x_test)
+        else:
+            x_train_arr = x_train
+            x_test_arr = x_test
 
-        model = LogisticRegression(max_iter=500, C=1.0, class_weight="balanced")
-        model.fit(x_train_sc, y_train)
-        pred = model.predict(x_test_sc)
-        proba = model.predict_proba(x_test_sc)[:, 1]
+        model = _make_cv_model(model_type)
+        model.fit(x_train_arr, y_train)
+        pred = model.predict(x_test_arr)
+        proba = model.predict_proba(x_test_arr)[:, 1]
 
         auc = float(roc_auc_score(y_test, proba)) if len(set(y_test)) > 1 else 0.5
         results.append(
@@ -1117,6 +1214,41 @@ def walk_forward_cv(
         )
 
     return results
+
+
+def _make_cv_model(model_type: str):
+    """Instantiate a classifier for cross-validation."""
+    if model_type == "logreg":
+        from sklearn.linear_model import LogisticRegression
+        return LogisticRegression(max_iter=500, C=1.0, class_weight="balanced")
+    elif model_type == "random_forest":
+        from sklearn.ensemble import RandomForestClassifier
+        return RandomForestClassifier(
+            n_estimators=200, max_depth=6, min_samples_leaf=20,
+            class_weight="balanced_subsample", random_state=42,
+        )
+    elif model_type == "xgboost":
+        from xgboost import XGBClassifier
+        return XGBClassifier(
+            n_estimators=300, max_depth=4, learning_rate=0.05,
+            subsample=0.8, colsample_bytree=0.8, eval_metric="logloss",
+            use_label_encoder=False, random_state=42,
+        )
+    elif model_type == "lightgbm":
+        from lightgbm import LGBMClassifier
+        return LGBMClassifier(
+            n_estimators=300, max_depth=5, learning_rate=0.05,
+            subsample=0.8, colsample_bytree=0.8, min_child_samples=20,
+            random_state=42, verbose=-1,
+        )
+    elif model_type == "histgb":
+        from sklearn.ensemble import HistGradientBoostingClassifier
+        return HistGradientBoostingClassifier(
+            max_depth=6, learning_rate=0.05, max_iter=400, random_state=42,
+        )
+    else:
+        from sklearn.linear_model import LogisticRegression
+        return LogisticRegression(max_iter=500, C=1.0, class_weight="balanced")
 
 
 def load_model(model_path: str) -> TrainedModel:
@@ -1187,7 +1319,7 @@ def predict_up_probability(
 def train_hist_gradient_boosting(
     candles: pd.DataFrame,
     model_path: str,
-    horizon_bars: int = 3,
+    horizon_bars: int = 12,
     max_depth: int = 6,
     learning_rate: float = 0.05,
     max_iter: int = 400,

@@ -87,19 +87,19 @@ class FeatureFrameTests(unittest.TestCase):
 class BuildTrainingSetTests(unittest.TestCase):
     def test_returns_correct_shapes(self):
         df = _synthetic_candles(n=300)
-        x, y, cols = build_training_set(df, horizon_bars=3)
+        x, y, cols = build_training_set(df, horizon_bars=3, fee_rate=0.0)
         self.assertIsNotNone(x)
         self.assertEqual(len(x), len(y))
         self.assertEqual(list(x.columns), cols)
 
     def test_feature_columns_match_constant(self):
         df = _synthetic_candles(n=300)
-        _, _, cols = build_training_set(df, horizon_bars=3)
+        _, _, cols = build_training_set(df, horizon_bars=3, fee_rate=0.0)
         self.assertEqual(cols, _FEATURE_COLUMNS)
 
     def test_no_nan_in_output(self):
         df = _synthetic_candles(n=300)
-        x, y, _ = build_training_set(df, horizon_bars=3)
+        x, y, _ = build_training_set(df, horizon_bars=3, fee_rate=0.0)
         self.assertFalse(x.isnull().any().any())
         self.assertFalse(y.isnull().any())
 
@@ -206,32 +206,32 @@ class RandomForestTrainingTests(unittest.TestCase):
 class WalkForwardCVTests(unittest.TestCase):
     def test_returns_correct_number_of_folds(self):
         df = _synthetic_candles(n=800)
-        results = walk_forward_cv(df, horizon_bars=3, n_splits=4)
+        results = walk_forward_cv(df, horizon_bars=3, n_splits=4, fee_rate=0.0)
         self.assertEqual(len(results), 4)
 
     def test_fold_structure(self):
         df = _synthetic_candles(n=600)
-        results = walk_forward_cv(df, horizon_bars=3, n_splits=3)
+        results = walk_forward_cv(df, horizon_bars=3, n_splits=3, fee_rate=0.0)
         for fold in results:
             for key in ("fold", "train_rows", "test_rows", "accuracy", "roc_auc"):
                 self.assertIn(key, fold)
 
     def test_train_rows_increase_across_folds(self):
         df = _synthetic_candles(n=800)
-        results = walk_forward_cv(df, horizon_bars=3, n_splits=4)
+        results = walk_forward_cv(df, horizon_bars=3, n_splits=4, fee_rate=0.0)
         train_sizes = [f["train_rows"] for f in results]
         self.assertEqual(train_sizes, sorted(train_sizes))
 
     def test_accuracy_is_valid_probability(self):
         df = _synthetic_candles(n=600)
-        results = walk_forward_cv(df, horizon_bars=3, n_splits=3)
+        results = walk_forward_cv(df, horizon_bars=3, n_splits=3, fee_rate=0.0)
         for fold in results:
             self.assertGreaterEqual(fold["accuracy"], 0.0)
             self.assertLessEqual(fold["accuracy"], 1.0)
 
     def test_roc_auc_bounded(self):
         df = _synthetic_candles(n=600)
-        results = walk_forward_cv(df, horizon_bars=3, n_splits=3)
+        results = walk_forward_cv(df, horizon_bars=3, n_splits=3, fee_rate=0.0)
         for fold in results:
             self.assertGreaterEqual(fold["roc_auc"], 0.0)
             self.assertLessEqual(fold["roc_auc"], 1.0)
@@ -239,7 +239,7 @@ class WalkForwardCVTests(unittest.TestCase):
     def test_insufficient_data_raises(self):
         df = _synthetic_candles(n=30)
         with self.assertRaises(RuntimeError):
-            walk_forward_cv(df, horizon_bars=3, n_splits=5)
+            walk_forward_cv(df, horizon_bars=3, n_splits=5, fee_rate=0.0)
 
 
 @unittest.skipUnless(_HAS_LIGHTGBM, "lightgbm not installed")

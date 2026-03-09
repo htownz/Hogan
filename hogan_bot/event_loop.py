@@ -42,7 +42,7 @@ from hogan_bot.ml import TrainedModel, load_model, predict_up_probability
 from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
-from hogan_bot.storage import get_connection, record_equity, upsert_position
+from hogan_bot.storage import get_connection, record_equity, upsert_position, open_paper_trade, close_paper_trade
 from hogan_bot.strategy import generate_signal
 
 logger = logging.getLogger(__name__)
@@ -279,9 +279,15 @@ async def run_event_loop(
                         trailing_stop_pct=config.trailing_stop_pct,
                         take_profit_pct=config.take_profit_pct,
                     )
-                if notifier and executed:
-                    notifier.notify("buy", {"symbol": symbol, "price": px,
-                                            "qty": size, "ml_up_prob": up_prob})
+                if executed:
+                    now_ms = int(time.time() * 1000)
+                    fee = size * px * config.fee_rate
+                    open_paper_trade(conn, symbol, "buy", px, size, fee, now_ms,
+                                     ml_up_prob=up_prob, strategy_conf=0.0,
+                                     vol_ratio=0.0)
+                    if notifier:
+                        notifier.notify("buy", {"symbol": symbol, "price": px,
+                                                "qty": size, "ml_up_prob": up_prob})
                 logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
                             symbol, px, size, up_prob or -1, equity)
 
@@ -295,9 +301,13 @@ async def run_event_loop(
                         portfolio.execute_sell(symbol, px, sell_qty)
                 else:
                     executed = portfolio.execute_sell(symbol, px, sell_qty)
-                if notifier and executed:
-                    notifier.notify("sell", {"symbol": symbol, "price": px,
-                                             "qty": sell_qty, "ml_up_prob": up_prob})
+                if executed:
+                    now_ms = int(time.time() * 1000)
+                    exit_fee = sell_qty * px * config.fee_rate
+                    close_paper_trade(conn, symbol, "buy", px, exit_fee, now_ms, close_reason="signal")
+                    if notifier:
+                        notifier.notify("sell", {"symbol": symbol, "price": px,
+                                                 "qty": sell_qty, "ml_up_prob": up_prob})
                 logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
                             symbol, px, sell_qty, up_prob or -1, equity)
             else:
