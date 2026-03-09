@@ -3,6 +3,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+import pandas as pd
+
 from hogan_bot.decision import apply_ml_filter, ml_confidence
 from hogan_bot.ml import TrainedModel, predict_up_probability
 from hogan_bot.paper import PaperPortfolio
@@ -12,6 +14,17 @@ from hogan_bot.strategy import generate_signal
 # Annualisation constant for 5-minute 24/7 crypto bars.
 # 365 days × 24 hours × 12 five-minute intervals = 105 120 bars/year.
 _BARS_PER_YEAR_5M: float = 105_120.0
+
+
+def _bar_ts_ms(candles: pd.DataFrame, bar_idx: int) -> int:
+    """Return ts_ms for the bar at bar_idx (candles may have 'timestamp' or 'ts_ms')."""
+    row = candles.iloc[bar_idx]
+    if "ts_ms" in row.index:
+        return int(row["ts_ms"])
+    ts = row.get("timestamp", row)
+    if hasattr(ts, "timestamp"):
+        return int(ts.timestamp() * 1000)
+    return int(ts)
 
 
 @dataclass
@@ -28,6 +41,9 @@ class BacktestResult:
     calmar_ratio: float | None = None
     equity_curve: list[float] = field(default_factory=list)
     trade_log: list[dict] = field(default_factory=list)
+    # Full closed-trade records for ML learning: entry_bar_idx, entry_ts_ms, exit_bar_idx,
+    # exit_ts_ms, side, entry_price, exit_price, qty, pnl_usd, pnl_pct
+    closed_trades: list[dict] = field(default_factory=list)
 
     def summary_dict(self) -> dict:
         """Return all scalar fields as a plain dict (omits large lists)."""
@@ -260,6 +276,10 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     trades = 0
     equity_curve: list[float] = []
     trade_log: list[dict] = []
+    closed_trades: list[dict] = []
+
+    # Track entry bar index for each symbol (for closed_trades / ML learning)
+    _entry_bar: dict[str, int] = {}
 
     # RL position-state tracking (used in generate_signal RL vote)
     _rl_bars_in_trade: int = 0
@@ -279,6 +299,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 continue
             qty = pos.qty
             avg_entry = pos.avg_entry
+            entry_bar = _entry_bar.pop(exit_symbol, None)
             if portfolio.execute_sell(exit_symbol, px, qty):
                 trades += 1
                 closed += 1
@@ -293,6 +314,24 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         "qty": qty,
                     }
                 )
+                if entry_bar is not None:
+                    entry_bar_idx = entry_bar
+                    exit_bar_idx = min(i, len(candles) - 1)
+                    fee = qty * (avg_entry + px) * fee_rate
+                    pnl_usd = (px - avg_entry) * qty - fee
+                    pnl_pct = (px - avg_entry) / avg_entry * 100 if avg_entry else 0
+                    closed_trades.append({
+                        "entry_bar_idx": entry_bar_idx,
+                        "exit_bar_idx": exit_bar_idx,
+                        "entry_ts_ms": _bar_ts_ms(candles, entry_bar_idx),
+                        "exit_ts_ms": _bar_ts_ms(candles, exit_bar_idx),
+                        "side": "long",
+                        "entry_price": avg_entry,
+                        "exit_price": px,
+                        "qty": qty,
+                        "pnl_usd": pnl_usd,
+                        "pnl_pct": pnl_pct,
+                    })
 
         # Build RL position state for this bar
         _rl_pos = portfolio.positions.get(symbol)
@@ -368,6 +407,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 take_profit_pct=take_profit_pct,
             ):
                 trades += 1
+                _entry_bar[symbol] = i
                 trade_log.append(
                     {"bar": bar_ts, "action": "buy", "reason": "signal", "price": px, "qty": size}
                 )
@@ -380,6 +420,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 continue
             sell_qty = min(qty, size)
             avg_entry = pos.avg_entry
+            entry_bar_idx = _entry_bar.pop(symbol, None)
             if portfolio.execute_sell(symbol, px, sell_qty):
                 trades += 1
                 closed += 1
@@ -394,6 +435,23 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         "qty": sell_qty,
                     }
                 )
+                if entry_bar_idx is not None:
+                    exit_bar_idx = min(i, len(candles) - 1)
+                    fee = sell_qty * (avg_entry + px) * fee_rate
+                    pnl_usd = (px - avg_entry) * sell_qty - fee
+                    pnl_pct = (px - avg_entry) / avg_entry * 100 if avg_entry else 0
+                    closed_trades.append({
+                        "entry_bar_idx": entry_bar_idx,
+                        "exit_bar_idx": exit_bar_idx,
+                        "entry_ts_ms": _bar_ts_ms(candles, entry_bar_idx),
+                        "exit_ts_ms": _bar_ts_ms(candles, exit_bar_idx),
+                        "side": "long",
+                        "entry_price": avg_entry,
+                        "exit_price": px,
+                        "qty": sell_qty,
+                        "pnl_usd": pnl_usd,
+                        "pnl_pct": pnl_pct,
+                    })
 
     if not equity_curve:
         equity_curve = [starting_balance_usd]
@@ -417,4 +475,5 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         calmar_ratio=compute_calmar(total_return_pct, max_dd_pct),
         equity_curve=equity_curve,
         trade_log=trade_log,
+        closed_trades=closed_trades,
     )
