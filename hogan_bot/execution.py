@@ -41,8 +41,19 @@ class PaperExecution(ExecutionEngine):
         self.conn = conn
         self.exchange_id = exchange_id
 
-    def buy(self, symbol: str, price: float, qty: float) -> ExecResult:
-        ok = self.portfolio.execute_buy(symbol, price, qty)
+    def buy(
+        self,
+        symbol: str,
+        price: float,
+        qty: float,
+        trailing_stop_pct: float = 0.0,
+        take_profit_pct: float = 0.0,
+    ) -> ExecResult:
+        ok = self.portfolio.execute_buy(
+            symbol, price, qty,
+            trailing_stop_pct=trailing_stop_pct,
+            take_profit_pct=take_profit_pct,
+        )
         if ok and self.conn is not None:
             ts_ms = int(time.time() * 1000)
             upsert_position(

@@ -5,6 +5,7 @@ import argparse
 import logging
 import os
 import time
+from datetime import datetime
 
 from hogan_bot.config import load_config
 from hogan_bot.decision import apply_ml_filter, ml_confidence
@@ -16,12 +17,35 @@ from hogan_bot.ml import load_model as load_simple_model, predict_up_probability
 from hogan_bot.ml_advanced import load_artifact as load_adv_artifact, predict_up_probability as predict_adv
 from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
+from hogan_bot.regime import detect_regime, effective_thresholds, load_regime_signals, RegimeState
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
-from hogan_bot.storage import get_connection, record_equity, upsert_position, upsert_position_state, load_position_state, load_latest_fill_ts, record_fill, open_paper_trade, close_paper_trade
+from hogan_bot.storage import (
+    get_connection, record_equity, upsert_position,
+    upsert_position_state, load_position_state,
+    load_latest_fill_ts, record_fill,
+    open_paper_trade, close_paper_trade,
+)
 from hogan_bot.strategy import generate_signal
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("hogan.trader")
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _null_regime() -> RegimeState:
+    return RegimeState(
+        regime="ranging", adx=20.0, atr_pct_rank=0.5,
+        trend_direction=0, ma_spread=0.0, confidence=0.0,
+    )
+
+
+def is_allowed_trading_time(trade_weekends: bool) -> bool:
+    if trade_weekends:
+        return True
+    return datetime.utcnow().weekday() < 5
 
 
 def _live_safety_latch(config) -> None:
@@ -40,16 +64,15 @@ def _load_any_model(path: str):
         return load_simple_model(path)
 
 
-def _predict_up(model_obj, candles):
+def _predict_up(model_obj, candles, db_conn=None):
     if model_obj is None:
         return None
     if getattr(model_obj, "artifact_type", "").startswith("advanced_ensemble"):
         return predict_adv(model_obj, candles)
-    return predict_simple(candles, model_obj)
+    return predict_simple(candles, model_obj, db_conn=db_conn)
 
 
 def sync_fills_deterministic(conn, client: ExchangeClient, exchange_id: str, symbols: list[str]) -> int:
-    """Pull trades since last stored ts (per exchange) and journal idempotently."""
     since = load_latest_fill_ts(conn, exchange_id, symbol=None)
     since = max(0, int(since) + 1)
     new = 0
@@ -68,7 +91,11 @@ def sync_fills_deterministic(conn, client: ExchangeClient, exchange_id: str, sym
     return new
 
 
-def run_loop(max_loops: int | None = None) -> None:
+# ---------------------------------------------------------------------------
+# Main loop
+# ---------------------------------------------------------------------------
+
+def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
     config = load_config()
     _live_safety_latch(config)
 
@@ -99,22 +126,52 @@ def run_loop(max_loops: int | None = None) -> None:
         email=email_cfg,
     )
 
-    # Risk guard uses live equity in live mode, paper equity in paper mode.
     guard = DrawdownGuard(starting_equity=config.starting_balance_usd, max_drawdown=config.max_drawdown)
 
-    # Portfolio abstraction:
     paper_port = PaperPortfolio(cash_usd=config.starting_balance_usd, fee_rate=config.fee_rate)
-    executor = PaperExecution(paper_port, conn=conn)  # default
     mode = "paper"
     if (not config.paper_mode) and config.live_mode:
         executor = LiveExecution(client, conn=conn, exchange_id=config.exchange_id)
         mode = "live"
+    else:
+        executor = PaperExecution(paper_port, conn=conn)
 
     model_obj = _load_any_model(config.ml_model_path) if config.use_ml_filter else None
 
-    # ── Dry-run validation gate (Freqtrade-inspired) ──────────────────────
-    # Run 10 signal evaluations on recent bars BEFORE starting the main loop.
-    # Abort if any exceptions occur or all signals are "hold".
+    # ── Trade explainer (LLM, fire-and-forget) ────────────────────────────
+    _explain_trade = None
+    try:
+        from hogan_bot.trade_explainer import explain_trade as _explain_trade
+    except ImportError:
+        pass
+
+    # ── Discord command listener ──────────────────────────────────────────
+    signal_cache: dict = {}
+    cmd_listener = None
+    mode_str = "LIVE" if mode == "live" else "PAPER"
+    config_summary = {
+        "mode": mode_str,
+        "symbols": ", ".join(config.symbols),
+        "timeframe": config.timeframe,
+        "model": config.ml_model_path,
+        "signal_mode": config.signal_mode,
+        "use_ict": config.use_ict,
+        "use_ema_clouds": config.use_ema_clouds,
+        "ml_buy_threshold": config.ml_buy_threshold,
+    }
+    try:
+        from hogan_bot.discord_commands import make_command_listener
+        cmd_listener = make_command_listener(
+            webhook_url=config.webhook_url or "",
+            db_path=config.db_path,
+        )
+        if cmd_listener:
+            cmd_listener.update_state(paper_port, {}, config_summary, signal_cache)
+            cmd_listener.start()
+    except Exception:
+        pass
+
+    # ── Dry-run validation gate ───────────────────────────────────────────
     try:
         from hogan_bot.storage import load_candles as _load_candles
         from hogan_bot.recursive_check import dry_run_validate as _dry_run
@@ -144,6 +201,19 @@ def run_loop(max_loops: int | None = None) -> None:
     except Exception as exc:
         logger.warning("Dry-run validation error (non-fatal): %s", exc)
 
+    # ── Startup notification ──────────────────────────────────────────────
+    notifier.notify("info", {
+        "status": f"Hogan trader_service {'LIVE' if mode == 'live' else 'PAPER'} started",
+        "symbols": ", ".join(config.symbols),
+        "timeframe": config.timeframe,
+        "ml_model": "loaded" if model_obj else "no model",
+        "regime": "enabled" if config.use_regime_detection else "disabled",
+        "equity": f"${config.starting_balance_usd:,.2f}",
+    })
+
+    # ── Loss cooldown state ───────────────────────────────────────────────
+    _cooldown_remaining: int = 0
+
     loop = 0
     while True:
         if max_loops is not None and loop >= max_loops:
@@ -152,10 +222,21 @@ def run_loop(max_loops: int | None = None) -> None:
 
         try:
             with LoopTimer():
-                # Always journal fills in live mode (deterministic reconciliation)
+                # ── Weekend gate ──────────────────────────────────────
+                if not is_allowed_trading_time(config.trade_weekends):
+                    logger.info("Weekend pause enabled; sleeping.")
+                    time.sleep(config.sleep_seconds)
+                    continue
+
+                # Decrement cooldown each loop iteration
+                if _cooldown_remaining > 0:
+                    _cooldown_remaining -= 1
+
+                # ── Live fill sync ────────────────────────────────────
                 if mode == "live":
                     sync_fills_deterministic(conn, client, config.exchange_id, config.symbols)
 
+                # ── Fetch candles ─────────────────────────────────────
                 candles_by_symbol = {}
                 mark_prices = {}
                 for symbol in config.symbols:
@@ -169,11 +250,11 @@ def run_loop(max_loops: int | None = None) -> None:
                     time.sleep(config.sleep_seconds)
                     continue
 
+                # ── Equity calculation ────────────────────────────────
                 if mode == "live":
                     state = fetch_account_state(client, config.symbols, quote_ccy=config.quote_currency)
                     equity = state.equity_quote
                     cash = state.cash_quote
-                    # persist positions and maintain peak/entry state for stops
                     for sym, pos in state.positions.items():
                         upsert_position(conn, sym, pos.qty, 0.0, state.ts_ms)
                         ps = load_position_state(conn, sym)
@@ -189,7 +270,7 @@ def run_loop(max_loops: int | None = None) -> None:
                     cash = paper_port.cash_usd
 
                 dd = 0.0 if guard.peak_equity <= 0 else max(0.0, (guard.peak_equity - equity) / guard.peak_equity)
-                record_equity(conn, int(time.time()*1000), cash, equity, dd)
+                record_equity(conn, int(time.time() * 1000), cash, equity, dd)
                 EQUITY.set(equity)
                 CASH.set(cash)
                 DRAWDOWN.set(dd)
@@ -199,53 +280,129 @@ def run_loop(max_loops: int | None = None) -> None:
                     notifier.notify("drawdown_breach", {"equity": equity, "peak": guard.peak_equity})
                     break
 
-                # Stops / take-profit (live + paper)
-                if (config.trailing_stop_pct > 0) or (config.take_profit_pct > 0):
+                # ── Load regime signals (DB macro data) ───────────────
+                regime_signals: dict = {}
+                if config.use_regime_detection and conn is not None:
+                    try:
+                        regime_signals = load_regime_signals(conn)
+                    except Exception:
+                        pass
+
+                # ── Paper exit management (trailing stop, take profit, max hold) ──
+                if mode == "paper":
+                    exits = paper_port.check_exits(mark_prices, max_hold_bars=config.max_hold_bars)
+                    for exit_symbol, reason in exits:
+                        exit_px = mark_prices.get(exit_symbol, 0.0)
+                        now_ms = int(time.time() * 1000)
+                        if reason in ("trailing_stop", "take_profit", "max_hold_time"):
+                            pos = paper_port.positions.get(exit_symbol)
+                            if pos is None:
+                                continue
+                            qty = pos.qty
+                            avg_entry = pos.avg_entry
+                            ok = paper_port.execute_sell(exit_symbol, exit_px, qty)
+                            if ok:
+                                fee = qty * exit_px * config.fee_rate
+                                close_paper_trade(conn, exit_symbol, "long", exit_px, fee, now_ms, close_reason=reason)
+                                is_loss = exit_px < avg_entry
+                                if is_loss and config.loss_cooldown_bars > 0:
+                                    _cooldown_remaining = config.loss_cooldown_bars
+                                ORDERS.labels(side="sell", mode=mode, exchange="paper").inc()
+                                notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason, "price": exit_px, "qty": qty})
+                                logger.info("AUTO_EXIT symbol=%s reason=%s px=%.2f qty=%.6f equity=%.2f",
+                                            exit_symbol, reason, exit_px, qty, paper_port.total_equity(mark_prices))
+                        elif reason in ("short_trailing_stop", "short_take_profit"):
+                            pos = paper_port.short_positions.get(exit_symbol)
+                            if pos is None:
+                                continue
+                            qty = pos.qty
+                            ok = paper_port.execute_cover(exit_symbol, exit_px, qty)
+                            if ok:
+                                fee = qty * exit_px * config.fee_rate
+                                close_paper_trade(conn, exit_symbol, "short", exit_px, fee, now_ms, close_reason=reason)
+                                ORDERS.labels(side="cover", mode=mode, exchange="paper").inc()
+                                notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason, "price": exit_px, "qty": qty})
+                                logger.info("AUTO_EXIT_SHORT symbol=%s reason=%s px=%.2f qty=%.6f",
+                                            exit_symbol, reason, exit_px, qty)
+
+                # ── Live exit management (trailing stop, take profit via DB state) ──
+                elif mode == "live" and (config.trailing_stop_pct > 0 or config.take_profit_pct > 0):
                     for sym in list(mark_prices.keys()):
                         px = mark_prices[sym]
-                        qty_live = 0.0
-                        if mode == "live":
-                            # if we hold it, evaluate stop
-                            row = conn.execute("SELECT qty FROM positions WHERE symbol=?", (sym,)).fetchone()
-                            qty_live = float(row[0]) if row else 0.0
-                            if qty_live <= 0:
-                                continue
-                            ps = load_position_state(conn, sym)
-                            if ps:
-                                entry, peak = ps
-                                peak = max(peak, px)
-                                upsert_position_state(conn, sym, entry_price=entry, peak_price=peak, updated_ms=int(time.time()*1000))
-                                if config.trailing_stop_pct > 0:
-                                    stop = peak * (1 - config.trailing_stop_pct)
-                                    if px <= stop:
-                                        ORDERS.labels(side="sell", mode=mode, exchange=config.exchange_id).inc()
-                                        res = executor.sell(sym, px, qty_live)
-                                        if not res.ok:
-                                            ORDER_FAILS.labels(side="sell", mode=mode, exchange=config.exchange_id).inc()
-                                        else:
-                                            notifier.notify("trailing_stop_exit", {"symbol": sym, "price": px, "qty": qty_live})
-                                if config.take_profit_pct > 0 and entry > 0:
-                                    tp = entry * (1 + config.take_profit_pct)
-                                    if px >= tp:
-                                        ORDERS.labels(side="sell", mode=mode, exchange=config.exchange_id).inc()
-                                        res = executor.sell(sym, px, qty_live)
-                                        if not res.ok:
-                                            ORDER_FAILS.labels(side="sell", mode=mode, exchange=config.exchange_id).inc()
-                                        else:
-                                            notifier.notify("take_profit_exit", {"symbol": sym, "price": px, "qty": qty_live})
-                        else:
-                            # paper exits handled inside PaperPortfolio
-                            pass
+                        row = conn.execute("SELECT qty FROM positions WHERE symbol=?", (sym,)).fetchone()
+                        qty_live = float(row[0]) if row else 0.0
+                        if qty_live <= 0:
+                            continue
+                        ps = load_position_state(conn, sym)
+                        if ps:
+                            entry, peak = ps
+                            peak = max(peak, px)
+                            upsert_position_state(conn, sym, entry_price=entry, peak_price=peak, updated_ms=int(time.time() * 1000))
+                            if config.trailing_stop_pct > 0:
+                                stop = peak * (1 - config.trailing_stop_pct)
+                                if px <= stop:
+                                    ORDERS.labels(side="sell", mode=mode, exchange=config.exchange_id).inc()
+                                    res = executor.sell(sym, px, qty_live)
+                                    if res.ok:
+                                        now_ms = int(time.time() * 1000)
+                                        fee = qty_live * px * config.fee_rate
+                                        close_paper_trade(conn, sym, "long", px, fee, now_ms, close_reason="trailing_stop")
+                                        notifier.notify("trailing_stop_exit", {"symbol": sym, "price": px, "qty": qty_live})
+                                    else:
+                                        ORDER_FAILS.labels(side="sell", mode=mode, exchange=config.exchange_id).inc()
+                                    continue
+                            if config.take_profit_pct > 0 and entry > 0:
+                                tp = entry * (1 + config.take_profit_pct)
+                                if px >= tp:
+                                    ORDERS.labels(side="sell", mode=mode, exchange=config.exchange_id).inc()
+                                    res = executor.sell(sym, px, qty_live)
+                                    if res.ok:
+                                        now_ms = int(time.time() * 1000)
+                                        fee = qty_live * px * config.fee_rate
+                                        close_paper_trade(conn, sym, "long", px, fee, now_ms, close_reason="take_profit")
+                                        notifier.notify("take_profit_exit", {"symbol": sym, "price": px, "qty": qty_live})
+                                    else:
+                                        ORDER_FAILS.labels(side="sell", mode=mode, exchange=config.exchange_id).inc()
 
-                # Main decision loop
+                # ── Main decision loop ────────────────────────────────
                 for symbol, candles in candles_by_symbol.items():
                     px = mark_prices[symbol]
+
+                    # ── Regime detection ──────────────────────────────
+                    regime_state = None
+                    if config.use_regime_detection:
+                        try:
+                            regime_state = detect_regime(
+                                candles,
+                                adx_trending_threshold=config.regime_adx_trending,
+                                adx_ranging_threshold=config.regime_adx_ranging,
+                                atr_volatile_pct=config.regime_atr_volatile_pct,
+                                btc_dominance=regime_signals.get("btc_dominance"),
+                                fear_greed=regime_signals.get("fear_greed"),
+                            )
+                        except Exception:
+                            pass
+
+                    eff = effective_thresholds(regime_state or _null_regime(), config)
+
+                    if regime_state is not None:
+                        logger.info(
+                            "REGIME symbol=%s regime=%s adx=%.1f conf=%.2f "
+                            "vol_thr=%.2f ml_buy=%.2f ml_sell=%.2f ts=%.3f tp=%.3f pos_scale=%.2f",
+                            symbol, regime_state.regime, regime_state.adx,
+                            regime_state.confidence,
+                            eff["volume_threshold"], eff["ml_buy_threshold"],
+                            eff["ml_sell_threshold"], eff["trailing_stop_pct"],
+                            eff["take_profit_pct"], eff["position_scale"],
+                        )
+
+                    # ── Signal generation (all params) ────────────────
                     signal = generate_signal(
                         candles,
                         short_window=config.short_ma_window,
                         long_window=config.long_ma_window,
                         volume_window=config.volume_window,
-                        volume_threshold=config.volume_threshold,
+                        volume_threshold=eff["volume_threshold"],
                         use_ema_clouds=config.use_ema_clouds,
                         ema_fast_short=config.ema_fast_short,
                         ema_fast_long=config.ema_fast_long,
@@ -255,73 +412,203 @@ def run_loop(max_loops: int | None = None) -> None:
                         fvg_min_gap_pct=config.fvg_min_gap_pct,
                         signal_mode=config.signal_mode,
                         min_vote_margin=config.signal_min_vote_margin,
+                        atr_stop_multiplier=config.atr_stop_multiplier,
+                        use_ict=config.use_ict,
+                        ict_swing_left=config.ict_swing_left,
+                        ict_swing_right=config.ict_swing_right,
+                        ict_eq_tolerance_pct=config.ict_eq_tolerance_pct,
+                        ict_min_displacement_pct=config.ict_min_displacement_pct,
+                        ict_require_time_window=config.ict_require_time_window,
+                        ict_time_windows=config.ict_time_windows,
+                        ict_require_pd=config.ict_require_pd,
+                        ict_ote_enabled=config.ict_ote_enabled,
+                        ict_ote_low=config.ict_ote_low,
+                        ict_ote_high=config.ict_ote_high,
                     )
 
                     action = signal.action
                     up_prob = None
-                    conf_scale = 1.0
+                    conf_scale = eff["position_scale"]
 
+                    # ── ML filter with regime-adjusted thresholds ─────
                     if config.use_ml_filter and model_obj is not None:
-                        up_prob = _predict_up(model_obj, candles)
+                        up_prob = _predict_up(model_obj, candles, db_conn=conn)
                         action = apply_ml_filter(
-                            action,
-                            up_prob,
-                            config.ml_buy_threshold,
-                            config.ml_sell_threshold,
+                            action, up_prob,
+                            eff["ml_buy_threshold"],
+                            eff["ml_sell_threshold"],
                         )
                         if config.ml_confidence_sizing and up_prob is not None:
-                            conf_scale = ml_confidence(up_prob)
+                            conf_scale = ml_confidence(up_prob) * eff["position_scale"]
 
                     if action == "hold":
                         continue
 
-                    # Determine current position + cash
+                    # ── Position state ────────────────────────────────
                     if mode == "live":
                         row = conn.execute("SELECT qty FROM positions WHERE symbol=?", (symbol,)).fetchone()
                         cur_qty = float(row[0]) if row else 0.0
-                        cash_avail = cash
                     else:
                         cur_qty = paper_port.positions.get(symbol).qty if symbol in paper_port.positions else 0.0
-                        cash_avail = paper_port.cash_usd
 
+                    is_long = cur_qty > 0
+                    is_short = symbol in paper_port.short_positions and paper_port.short_positions[symbol].qty > 0
+
+                    size = calculate_position_size(
+                        equity_usd=equity,
+                        price=px,
+                        stop_distance_pct=signal.stop_distance_pct,
+                        max_risk_per_trade=config.max_risk_per_trade,
+                        max_allocation_pct=config.aggressive_allocation,
+                        confidence_scale=conf_scale,
+                    )
+
+                    now_ms = int(time.time() * 1000)
+                    ts_pct = eff["trailing_stop_pct"]
+                    tp_pct = eff["take_profit_pct"]
+
+                    # ── BUY action ────────────────────────────────────
                     if action == "buy":
-                        qty = calculate_position_size(
-                            equity_usd=equity,
-                            price=px,
-                            stop_distance_pct=signal.stop_distance_pct,
-                            max_risk_per_trade=config.max_risk_per_trade,
-                            max_allocation_pct=config.aggressive_allocation,
-                            confidence_scale=conf_scale,
-                        )
-                        if qty <= 0:
-                            continue
-                        ORDERS.labels(side="buy", mode=mode, exchange=config.exchange_id).inc()
-                        res = executor.buy(symbol, px, qty)
-                        if not res.ok:
-                            ORDER_FAILS.labels(side="buy", mode=mode, exchange=config.exchange_id).inc()
-                            notifier.notify("order_failed", {"side": "buy", "symbol": symbol, "error": res.error})
+                        if is_long:
+                            logger.debug("HOLD %s — already long", symbol)
+                        elif _cooldown_remaining > 0:
+                            logger.debug("COOLDOWN %s — %d bars remaining", symbol, _cooldown_remaining)
+                        elif is_short:
+                            # Cover short first, then open long
+                            cover_qty = paper_port.short_positions[symbol].qty
+                            ok = paper_port.execute_cover(symbol, px, cover_qty)
+                            if ok:
+                                fee = cover_qty * px * config.fee_rate
+                                close_paper_trade(conn, symbol, "short", px, fee, now_ms, close_reason="signal")
+                                ORDERS.labels(side="cover", mode=mode, exchange=config.exchange_id).inc()
+                                notifier.notify("cover", {"symbol": symbol, "price": px, "qty": cover_qty, "ml_up_prob": up_prob})
+                                logger.info("COVER %s px=%.2f qty=%.6f", symbol, px, cover_qty)
+                            # Now open long
+                            if size <= 0:
+                                continue
+                            ORDERS.labels(side="buy", mode=mode, exchange=config.exchange_id).inc()
+                            res = executor.buy(symbol, px, size, trailing_stop_pct=ts_pct, take_profit_pct=tp_pct)
+                            if not res.ok:
+                                ORDER_FAILS.labels(side="buy", mode=mode, exchange=config.exchange_id).inc()
+                            else:
+                                fee = size * px * config.fee_rate
+                                open_paper_trade(conn, symbol, "long", px, size, fee, now_ms,
+                                                 ml_up_prob=up_prob, strategy_conf=signal.confidence,
+                                                 vol_ratio=signal.volume_ratio)
+                                notifier.notify("buy", {"symbol": symbol, "price": px, "qty": size, "up_prob": up_prob})
+                                logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
+                                            symbol, px, size, up_prob or -1, equity)
+                                if _explain_trade:
+                                    try:
+                                        fill_id = f"{symbol}_{now_ms}"
+                                        sig_details = {
+                                            "action": "long", "confidence": signal.confidence,
+                                            "tech": {"action": "long", "confidence": signal.confidence},
+                                            "macro": {"regime": regime_state.regime if regime_state else "unknown"},
+                                        }
+                                        _explain_trade(fill_id, symbol, "long", px, sig_details, conn=conn)
+                                    except Exception:
+                                        pass
                         else:
-                            now_ms = int(time.time() * 1000)
-                            fee = qty * px * config.fee_rate
-                            open_paper_trade(conn, symbol, "buy", px, qty, fee, now_ms,
-                                             ml_up_prob=up_prob, strategy_conf=signal.confidence,
-                                             vol_ratio=signal.volume_ratio)
-                            notifier.notify("buy", {"symbol": symbol, "price": px, "qty": qty, "up_prob": up_prob})
+                            # No position — open long
+                            if size <= 0:
+                                continue
+                            ORDERS.labels(side="buy", mode=mode, exchange=config.exchange_id).inc()
+                            res = executor.buy(symbol, px, size, trailing_stop_pct=ts_pct, take_profit_pct=tp_pct)
+                            if not res.ok:
+                                ORDER_FAILS.labels(side="buy", mode=mode, exchange=config.exchange_id).inc()
+                                notifier.notify("order_failed", {"side": "buy", "symbol": symbol, "error": res.error})
+                            else:
+                                fee = size * px * config.fee_rate
+                                open_paper_trade(conn, symbol, "long", px, size, fee, now_ms,
+                                                 ml_up_prob=up_prob, strategy_conf=signal.confidence,
+                                                 vol_ratio=signal.volume_ratio)
+                                notifier.notify("buy", {"symbol": symbol, "price": px, "qty": size, "up_prob": up_prob})
+                                logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
+                                            symbol, px, size, up_prob or -1, equity)
+                                if _explain_trade:
+                                    try:
+                                        fill_id = f"{symbol}_{now_ms}"
+                                        sig_details = {
+                                            "action": "long", "confidence": signal.confidence,
+                                            "tech": {"action": "long", "confidence": signal.confidence},
+                                            "macro": {"regime": regime_state.regime if regime_state else "unknown"},
+                                        }
+                                        _explain_trade(fill_id, symbol, "long", px, sig_details, conn=conn)
+                                    except Exception:
+                                        pass
 
+                    # ── SELL action ────────────────────────────────────
                     elif action == "sell":
-                        qty = cur_qty
-                        if qty <= 0:
-                            continue
-                        ORDERS.labels(side="sell", mode=mode, exchange=config.exchange_id).inc()
-                        res = executor.sell(symbol, px, qty)
-                        if not res.ok:
-                            ORDER_FAILS.labels(side="sell", mode=mode, exchange=config.exchange_id).inc()
-                            notifier.notify("order_failed", {"side": "sell", "symbol": symbol, "error": res.error})
+                        if is_short:
+                            logger.debug("HOLD %s — already short", symbol)
+                        elif is_long:
+                            # Close long
+                            sell_qty = cur_qty
+                            ORDERS.labels(side="sell", mode=mode, exchange=config.exchange_id).inc()
+                            res = executor.sell(symbol, px, sell_qty)
+                            if not res.ok:
+                                ORDER_FAILS.labels(side="sell", mode=mode, exchange=config.exchange_id).inc()
+                                notifier.notify("order_failed", {"side": "sell", "symbol": symbol, "error": res.error})
+                            else:
+                                fee = sell_qty * px * config.fee_rate
+                                close_paper_trade(conn, symbol, "long", px, fee, now_ms, close_reason="signal")
+                                notifier.notify("sell", {"symbol": symbol, "price": px, "qty": sell_qty, "up_prob": up_prob})
+                                logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
+                                            symbol, px, sell_qty, up_prob or -1, equity)
+                            # Optionally flip to short
+                            if config.allow_shorts and size > 0:
+                                ok_short = paper_port.execute_short(
+                                    symbol, px, size,
+                                    trailing_stop_pct=ts_pct, take_profit_pct=tp_pct,
+                                )
+                                if ok_short:
+                                    fee = size * px * config.fee_rate
+                                    open_paper_trade(conn, symbol, "short", px, size, fee, now_ms,
+                                                     ml_up_prob=up_prob, strategy_conf=signal.confidence,
+                                                     vol_ratio=signal.volume_ratio)
+                                    ORDERS.labels(side="short", mode=mode, exchange=config.exchange_id).inc()
+                                    notifier.notify("short", {"symbol": symbol, "price": px, "qty": size, "ml_up_prob": up_prob})
+                                    logger.info("SHORT %s px=%.2f qty=%.6f", symbol, px, size)
+                        elif config.allow_shorts:
+                            # No position — open short
+                            if _cooldown_remaining > 0:
+                                logger.debug("COOLDOWN %s — %d bars remaining", symbol, _cooldown_remaining)
+                                continue
+                            ok_short = paper_port.execute_short(
+                                symbol, px, size,
+                                trailing_stop_pct=ts_pct, take_profit_pct=tp_pct,
+                            )
+                            if ok_short:
+                                fee = size * px * config.fee_rate
+                                open_paper_trade(conn, symbol, "short", px, size, fee, now_ms,
+                                                 ml_up_prob=up_prob, strategy_conf=signal.confidence,
+                                                 vol_ratio=signal.volume_ratio)
+                                ORDERS.labels(side="short", mode=mode, exchange=config.exchange_id).inc()
+                                notifier.notify("short", {"symbol": symbol, "price": px, "qty": size, "ml_up_prob": up_prob})
+                                logger.info("SHORT %s px=%.2f qty=%.6f", symbol, px, size)
                         else:
-                            now_ms = int(time.time() * 1000)
-                            exit_fee = qty * px * config.fee_rate
-                            close_paper_trade(conn, symbol, "buy", px, exit_fee, now_ms, close_reason="signal")
-                            notifier.notify("sell", {"symbol": symbol, "price": px, "qty": qty, "up_prob": up_prob})
+                            logger.debug("HOLD %s — sell signal but no long position and shorts disabled", symbol)
+
+                    # ── Update signal cache for Discord ───────────────
+                    signal_cache[symbol] = {
+                        "action": action, "price": px,
+                        "ml_up": up_prob if up_prob is not None else 0.0,
+                        "conf": signal.confidence, "vol_ratio": signal.volume_ratio,
+                        "regime": regime_state.regime if regime_state else "unknown",
+                        "adx": regime_state.adx if regime_state else 0.0,
+                        "is_long": symbol in paper_port.positions and paper_port.positions[symbol].qty > 0,
+                        "is_short": symbol in paper_port.short_positions and paper_port.short_positions[symbol].qty > 0,
+                    }
+                    signal_cache["_mark_prices"] = mark_prices
+
+                # ── Update Discord command listener state ─────────────
+                if cmd_listener:
+                    try:
+                        _prices = signal_cache.get("_mark_prices", {})
+                        cmd_listener.update_state(paper_port, _prices, config_summary, signal_cache)
+                    except Exception:
+                        pass
 
             time.sleep(config.sleep_seconds)
 
