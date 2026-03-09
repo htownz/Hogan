@@ -100,7 +100,7 @@ def run_loop(max_loops: int | None = None) -> None:
     )
 
     # Risk guard uses live equity in live mode, paper equity in paper mode.
-    guard = DrawdownGuard(max_drawdown=config.max_drawdown)
+    guard = DrawdownGuard(starting_equity=config.starting_balance_usd, max_drawdown=config.max_drawdown)
 
     # Portfolio abstraction:
     paper_port = PaperPortfolio(starting_cash=config.starting_balance_usd)
