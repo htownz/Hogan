@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 from hogan_bot.ict import ict_setup_signal, parse_time_windows
@@ -229,13 +230,13 @@ def generate_signal(
             consensus_ratio = max(buy_votes, sell_votes) / directional_votes
             confidence *= consensus_ratio
 
-    # ── ATR minimum-move guard ────────────────────────────────────────────────
-    # Only trade when the expected 1-bar move (ATR) exceeds the round-trip fee
-    # hurdle (default 1.1%).  This prevents the fee from eating the entire move
-    # on low-volatility 5-minute candles.
-    atr_pct = float(atr_series.iloc[-1] / max(close.iloc[-1], 1e-9))
-    min_atr_pct = 0.011  # 1.1% ≈ 2× round-trip Kraken fee (0.52%)
-    if action != "hold" and atr_pct < min_atr_pct:
-        action = "hold"
+    # ── ATR minimum-move guard (optional) ───────────────────────────────────────
+    # Skip trade only when volatility is extremely low (dead candles).
+    # 0.15% = typical 5m BTC ATR floor; set HOGAN_ATR_MIN_PCT=0 to disable.
+    min_atr_pct = float(os.getenv("HOGAN_ATR_MIN_PCT", "0.0015"))  # 0.15%
+    if min_atr_pct > 0 and action != "hold":
+        atr_pct = float(atr_series.iloc[-1] / max(close.iloc[-1], 1e-9))
+        if atr_pct < min_atr_pct:
+            action = "hold"
 
     return StrategySignal(action, stop_distance_pct, confidence, volume_ratio)
