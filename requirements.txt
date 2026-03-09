@@ -19,7 +19,7 @@ scikit-learn>=1.4.0
 
 # ML backends
 xgboost>=2.0.0
-# lightgbm>=4.0.0  (optional — install if needed)
+lightgbm>=4.0.0
 
 # Optional dashboard
 # streamlit>=1.32.0
