@@ -261,16 +261,16 @@ _REGIME_OVERRIDES: dict[str, dict[str, float]] = {
         "position_scale":    1.00,
     },
     "ranging": {
-        "volume_threshold":  0.50,  # moderate — need some confirmation in choppy market
-        "ml_buy_threshold":  0.54,  # slightly above neutral
-        "ml_sell_threshold": 0.50,  # standard
+        "volume_threshold":  0.35,  # data-gathering — was 0.50 blocking most candles
+        "ml_buy_threshold":  0.51,  # permissive — was 0.54
+        "ml_sell_threshold": 0.49,  # permissive — was 0.50
         "trailing_stop_pct": 0.018, # tight — range is narrow, exit fast if wrong
         "take_profit_pct":   0.04,  # small targets in ranging market
         "position_scale":    0.75,  # reduce size — chop is dangerous
     },
     "volatile": {
-        "volume_threshold":  0.70,  # require high volume before entering
-        "ml_buy_threshold":  0.57,  # high conviction required
+        "volume_threshold":  0.50,  # data-gathering — was 0.70 blocking
+        "ml_buy_threshold":  0.52,  # permissive — was 0.57
         "ml_sell_threshold": 0.48,  # high conviction required
         "trailing_stop_pct": 0.03,  # existing setting — balanced
         "take_profit_pct":   0.08,  # existing setting

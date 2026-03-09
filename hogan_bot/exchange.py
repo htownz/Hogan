@@ -28,6 +28,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+
 # OHLCV column names matching the CCXT standard.
 _OHLCV_COLS = ["timestamp", "open", "high", "low", "close", "volume"]
 
@@ -98,6 +99,7 @@ class ExchangeClient:
                 "apiKey": api_key,
                 "secret": api_secret,
                 "enableRateLimit": True,
+                "timeout": 30_000,  # 30s — Kraken can be slow; avoids ReadTimeout crash
             }
         )
         if sandbox:
@@ -137,11 +139,24 @@ class ExchangeClient:
                 f"Supported timeframes: {supported_list}"
             )
 
+        def _fetch_with_retry(**kwargs):
+            for attempt in range(3):
+                try:
+                    return self._exchange.fetch_ohlcv(symbol, timeframe=timeframe, **kwargs)
+                except (ccxt.RequestTimeout, ccxt.NetworkError) as e:
+                    if attempt < 2:
+                        delay = 2 ** attempt
+                        logger.warning(
+                            "Exchange %s timeout (attempt %d/3), retry in %ds: %s",
+                            self.exchange_id, attempt + 1, delay, e,
+                        )
+                        time.sleep(delay)
+                    else:
+                        raise
+
         # ── Fast path: single request is enough ─────────────────────────────
         if limit <= _MAX_BARS_PER_REQUEST or since is not None:
-            rows = self._exchange.fetch_ohlcv(
-                symbol,
-                timeframe=timeframe,
+            rows = _fetch_with_retry(
                 limit=min(limit, _MAX_BARS_PER_REQUEST),
                 since=since,
             )
@@ -152,9 +167,7 @@ class ExchangeClient:
         all_rows: list[list] = []
 
         # Step 1 — most-recent batch (no since)
-        batch = self._exchange.fetch_ohlcv(
-            symbol, timeframe=timeframe, limit=_MAX_BARS_PER_REQUEST
-        )
+        batch = _fetch_with_retry(limit=_MAX_BARS_PER_REQUEST)
         if not batch:
             return self._rows_to_df([])
 
@@ -172,12 +185,7 @@ class ExchangeClient:
         while len(all_rows) < limit and page <= _MAX_PAGES:
             oldest_ts: int = all_rows[0][0]
             fetch_since = oldest_ts - _MAX_BARS_PER_REQUEST * bar_ms
-            batch = self._exchange.fetch_ohlcv(
-                symbol,
-                timeframe=timeframe,
-                limit=_MAX_BARS_PER_REQUEST,
-                since=fetch_since,
-            )
+            batch = _fetch_with_retry(limit=_MAX_BARS_PER_REQUEST, since=fetch_since)
             if not batch:
                 break
 
