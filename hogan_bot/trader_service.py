@@ -103,7 +103,7 @@ def run_loop(max_loops: int | None = None) -> None:
     guard = DrawdownGuard(starting_equity=config.starting_balance_usd, max_drawdown=config.max_drawdown)
 
     # Portfolio abstraction:
-    paper_port = PaperPortfolio(starting_cash=config.starting_balance_usd)
+    paper_port = PaperPortfolio(cash_usd=config.starting_balance_usd, fee_rate=config.fee_rate)
     executor = PaperExecution(paper_port, conn=conn)  # default
     mode = "paper"
     if (not config.paper_mode) and config.live_mode:
