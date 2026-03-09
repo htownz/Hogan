@@ -18,10 +18,10 @@ class BotConfig:
 
     timeframe: str = "5m"
     ohlcv_limit: int = 500
-    short_ma_window: int = 20
-    long_ma_window: int = 50
+    short_ma_window: int = 12
+    long_ma_window: int = 79
     volume_window: int = 20
-    volume_threshold: float = 1.2
+    volume_threshold: float = 1.8
 
     fee_rate: float = 0.0026
     sleep_seconds: int = 30
@@ -36,11 +36,11 @@ class BotConfig:
 
     use_ml_filter: bool = False
     ml_model_path: str = "models/hogan_logreg.pkl"
-    ml_buy_threshold: float = 0.55
-    ml_sell_threshold: float = 0.45
+    ml_buy_threshold: float = 0.60
+    ml_sell_threshold: float = 0.40
 
     # Ripster EMA cloud settings
-    use_ema_clouds: bool = False
+    use_ema_clouds: bool = True
     ema_fast_short: int = 8
     ema_fast_long: int = 9
     ema_slow_short: int = 34
@@ -57,11 +57,19 @@ class BotConfig:
     signal_min_vote_margin: int = 1
 
     # Exit management (0 = disabled)
-    trailing_stop_pct: float = 0.0
-    take_profit_pct: float = 0.0
+    trailing_stop_pct: float = 0.02
+    take_profit_pct: float = 0.054
 
     # ATR stop-distance multiplier (strategy.py line: ATR × multiplier)
-    atr_stop_multiplier: float = 1.5
+    atr_stop_multiplier: float = 2.5
+
+    # Maximum bars to hold a position before force-closing (0 = disabled).
+    # 144 bars on 5m = 12 hours.
+    max_hold_bars: int = 144
+
+    # Cooldown bars after a losing trade before the next entry (0 = disabled).
+    # 12 bars on 5m = 1 hour.
+    loss_cooldown_bars: int = 12
 
     # ICT (Inner Circle Trader) signal pillars
     use_ict: bool = False
@@ -78,7 +86,7 @@ class BotConfig:
     ict_ote_high: float = 0.79
 
     # ML confidence-based position sizing: scales size by |prob−0.5|×2
-    ml_confidence_sizing: bool = False
+    ml_confidence_sizing: bool = True
 
     # Short selling in paper mode: open a synthetic short when a SELL signal fires
     # with no existing long position.  Flip from short to long and back on signal change.
@@ -88,7 +96,7 @@ class BotConfig:
     # When enabled, the bot classifies the current market as trending_up,
     # trending_down, ranging, or volatile each iteration and dynamically
     # adjusts volume_threshold, ML thresholds, stop-loss, and position scale.
-    use_regime_detection: bool = False
+    use_regime_detection: bool = True
     regime_adx_trending: float = 25.0    # ADX ≥ this → trending
     regime_adx_ranging: float = 20.0     # ADX < this → ranging
     regime_atr_volatile_pct: float = 0.80  # ATR percentile ≥ this → volatile
@@ -100,7 +108,7 @@ class BotConfig:
     exchange_id: str = "kraken"
 
     # Walk-forward retraining defaults (used by hogan_bot.retrain)
-    retrain_window_bars: int = 5000
+    retrain_window_bars: int = 50000
     retrain_model_type: str = "logreg"
     retrain_min_improvement: float = 0.005
     retrain_promotion_metric: str = "roc_auc"
@@ -109,7 +117,7 @@ class BotConfig:
     # Multi-symbol training: comma-separated symbols for joint model training.
     # When set, candles from all symbols are used to build a larger training set.
     # Example: "BTC/USD,ETH/USD,SOL/USD"
-    training_symbols: list[str] = field(default_factory=lambda: ["BTC/USD", "ETH/USD"])
+    training_symbols: list[str] = field(default_factory=lambda: ["BTC/USD", "ETH/USD", "SOL/USD"])
 
     # Extended MTF features: when True, includes 10m + 30m timeframe features
     # in build_feature_row_extended (+14 features vs standard 1h/15m only).
@@ -154,10 +162,10 @@ def load_config() -> BotConfig:
         symbols=_split_symbols(os.getenv("HOGAN_SYMBOLS", "BTC/USD,ETH/USD")),
         timeframe=os.getenv("HOGAN_TIMEFRAME", "5m"),
         ohlcv_limit=int(os.getenv("HOGAN_OHLCV_LIMIT", "500")),
-        short_ma_window=int(os.getenv("HOGAN_SHORT_MA", "20")),
-        long_ma_window=int(os.getenv("HOGAN_LONG_MA", "50")),
+        short_ma_window=int(os.getenv("HOGAN_SHORT_MA", "12")),
+        long_ma_window=int(os.getenv("HOGAN_LONG_MA", "79")),
         volume_window=int(os.getenv("HOGAN_VOLUME_WINDOW", "20")),
-        volume_threshold=float(os.getenv("HOGAN_VOLUME_THRESHOLD", "1.2")),
+        volume_threshold=float(os.getenv("HOGAN_VOLUME_THRESHOLD", "1.8")),
         fee_rate=float(os.getenv("HOGAN_FEE_RATE", "0.0026")),
         sleep_seconds=int(os.getenv("HOGAN_SLEEP_SECONDS", "30")),
         trade_weekends=os.getenv("HOGAN_TRADE_WEEKENDS", "false").lower() == "true",
@@ -166,9 +174,9 @@ def load_config() -> BotConfig:
         live_mode=os.getenv("HOGAN_LIVE_MODE", "false").lower() == "true",
         use_ml_filter=os.getenv("HOGAN_USE_ML_FILTER", "false").lower() == "true",
         ml_model_path=os.getenv("HOGAN_ML_MODEL_PATH", "models/hogan_logreg.pkl"),
-        ml_buy_threshold=float(os.getenv("HOGAN_ML_BUY_THRESHOLD", "0.55")),
-        ml_sell_threshold=float(os.getenv("HOGAN_ML_SELL_THRESHOLD", "0.45")),
-        use_ema_clouds=os.getenv("HOGAN_USE_EMA_CLOUDS", "false").lower() == "true",
+        ml_buy_threshold=float(os.getenv("HOGAN_ML_BUY_THRESHOLD", "0.60")),
+        ml_sell_threshold=float(os.getenv("HOGAN_ML_SELL_THRESHOLD", "0.40")),
+        use_ema_clouds=os.getenv("HOGAN_USE_EMA_CLOUDS", "true").lower() == "true",
         ema_fast_short=int(os.getenv("HOGAN_EMA_FAST_SHORT", "8")),
         ema_fast_long=int(os.getenv("HOGAN_EMA_FAST_LONG", "9")),
         ema_slow_short=int(os.getenv("HOGAN_EMA_SLOW_SHORT", "34")),
@@ -177,9 +185,11 @@ def load_config() -> BotConfig:
         fvg_min_gap_pct=float(os.getenv("HOGAN_FVG_MIN_GAP_PCT", "0.001")),
         signal_mode=os.getenv("HOGAN_SIGNAL_MODE", "any"),
         signal_min_vote_margin=max(1, int(os.getenv("HOGAN_SIGNAL_MIN_VOTE_MARGIN", "1"))),
-        trailing_stop_pct=float(os.getenv("HOGAN_TRAILING_STOP_PCT", "0.0")),
-        take_profit_pct=float(os.getenv("HOGAN_TAKE_PROFIT_PCT", "0.0")),
-        atr_stop_multiplier=float(os.getenv("HOGAN_ATR_STOP_MULTIPLIER", "1.5")),
+        trailing_stop_pct=float(os.getenv("HOGAN_TRAILING_STOP_PCT", "0.02")),
+        take_profit_pct=float(os.getenv("HOGAN_TAKE_PROFIT_PCT", "0.054")),
+        atr_stop_multiplier=float(os.getenv("HOGAN_ATR_STOP_MULTIPLIER", "2.5")),
+        max_hold_bars=int(os.getenv("HOGAN_MAX_HOLD_BARS", "144")),
+        loss_cooldown_bars=int(os.getenv("HOGAN_LOSS_COOLDOWN_BARS", "12")),
         use_ict=os.getenv("HOGAN_USE_ICT", "false").lower() == "true",
         ict_model=os.getenv("HOGAN_ICT_MODEL", "silver_bullet"),
         ict_swing_left=int(os.getenv("HOGAN_ICT_SWING_LEFT", "2")),
@@ -192,9 +202,9 @@ def load_config() -> BotConfig:
         ict_ote_enabled=os.getenv("HOGAN_ICT_OTE_ENABLED", "false").lower() == "true",
         ict_ote_low=float(os.getenv("HOGAN_ICT_OTE_LOW", "0.62")),
         ict_ote_high=float(os.getenv("HOGAN_ICT_OTE_HIGH", "0.79")),
-        ml_confidence_sizing=os.getenv("HOGAN_ML_CONFIDENCE_SIZING", "false").lower() == "true",
+        ml_confidence_sizing=os.getenv("HOGAN_ML_CONFIDENCE_SIZING", "true").lower() == "true",
         allow_shorts=os.getenv("HOGAN_ALLOW_SHORTS", "false").lower() == "true",
-        use_regime_detection=os.getenv("HOGAN_USE_REGIME_DETECTION", "false").lower() == "true",
+        use_regime_detection=os.getenv("HOGAN_USE_REGIME_DETECTION", "true").lower() == "true",
         regime_adx_trending=float(os.getenv("HOGAN_REGIME_ADX_TRENDING", "25.0")),
         regime_adx_ranging=float(os.getenv("HOGAN_REGIME_ADX_RANGING", "20.0")),
         regime_atr_volatile_pct=float(os.getenv("HOGAN_REGIME_ATR_VOLATILE_PCT", "0.80")),
@@ -208,13 +218,13 @@ def load_config() -> BotConfig:
         email_password=os.getenv("HOGAN_EMAIL_PASSWORD", ""),
         email_from=os.getenv("HOGAN_EMAIL_FROM", ""),
         email_to=os.getenv("HOGAN_EMAIL_TO", ""),
-        retrain_window_bars=int(os.getenv("HOGAN_RETRAIN_WINDOW_BARS", "5000")),
+        retrain_window_bars=int(os.getenv("HOGAN_RETRAIN_WINDOW_BARS", "50000")),
         retrain_model_type=os.getenv("HOGAN_RETRAIN_MODEL_TYPE", "logreg"),
         retrain_min_improvement=float(os.getenv("HOGAN_RETRAIN_MIN_IMPROVEMENT", "0.005")),
         retrain_promotion_metric=os.getenv("HOGAN_RETRAIN_PROMOTION_METRIC", "roc_auc"),
         retrain_schedule_hours=float(os.getenv("HOGAN_RETRAIN_SCHEDULE_HOURS", "24.0")),
         training_symbols=_split_symbols(
-            os.getenv("HOGAN_TRAINING_SYMBOLS", "BTC/USD,ETH/USD")
+            os.getenv("HOGAN_TRAINING_SYMBOLS", "BTC/USD,ETH/USD,SOL/USD")
         ),
         use_mtf_extended=os.getenv("HOGAN_USE_MTF_EXTENDED", "false").lower() == "true",
         use_rl_agent=os.getenv("HOGAN_USE_RL_AGENT", "false").lower() == "true",

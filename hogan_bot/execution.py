@@ -101,22 +101,20 @@ class LiveExecution(ExecutionEngine):
             logger.exception("Live sell failed: %s", exc)
             return ExecResult(ok=False, error=str(exc))
 
-    
-def _sync_fills(self, symbol: str | None = None) -> int:
-    """Fetch and journal fills since the last recorded fill timestamp.
+    def _sync_fills(self, symbol: str | None = None) -> int:
+        """Fetch and journal fills since the last recorded fill timestamp.
 
-    Returns number of new fills recorded.
-    """
-    from hogan_bot.storage import load_latest_fill_ts
+        Returns number of new fills recorded.
+        """
+        from hogan_bot.storage import load_latest_fill_ts
 
-    since = load_latest_fill_ts(self.conn, self.exchange_id, symbol=symbol)
-    # CCXT 'since' is inclusive. Add 1ms to reduce duplicates.
-    since = max(0, int(since) + 1)
-    new = 0
-    trades = self.client.fetch_my_trades(symbol=symbol, since=since, limit=200)
-    for t in trades:
-        td = dict(t)
-        td["exchange"] = self.exchange_id
-        record_fill(self.conn, td)
-        new += 1
-    return new
+        since = load_latest_fill_ts(self.conn, self.exchange_id, symbol=symbol)
+        since = max(0, int(since) + 1)
+        new = 0
+        trades = self.client.fetch_my_trades(symbol=symbol, since=since, limit=200)
+        for t in trades:
+            td = dict(t)
+            td["exchange"] = self.exchange_id
+            record_fill(self.conn, td)
+            new += 1
+        return new

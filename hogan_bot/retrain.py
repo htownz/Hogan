@@ -92,11 +92,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--window-bars",
         type=int,
-        default=5000,
+        default=50000,
         metavar="N",
         help="Rolling window size: train on the N most recent bars",
     )
-    p.add_argument("--horizon-bars", type=int, default=3, help="Prediction horizon in bars")
+    p.add_argument("--horizon-bars", type=int, default=12, help="Prediction horizon in bars")
     p.add_argument(
         "--model-type",
         choices=["logreg", "random_forest", "xgboost", "lightgbm"],

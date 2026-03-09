@@ -245,35 +245,35 @@ def detect_regime(
 # Keys map directly to BotConfig attribute names.
 _REGIME_OVERRIDES: dict[str, dict[str, float]] = {
     "trending_up": {
-        "volume_threshold":  0.20,  # loose — trend is confirmed, noise filter not needed
-        "ml_buy_threshold":  0.50,  # any positive ML lean is sufficient
-        "ml_sell_threshold": 0.52,  # need more conviction to short against uptrend
+        "volume_threshold":  1.2,   # lower bar — trend is confirmed
+        "ml_buy_threshold":  0.55,  # relax in confirmed uptrend
+        "ml_sell_threshold": 0.52,  # need conviction to exit uptrend
         "trailing_stop_pct": 0.04,  # wide stop — let the trend breathe
         "take_profit_pct":   0.12,  # wide target — let it ride
         "position_scale":    1.00,
     },
     "trending_down": {
-        "volume_threshold":  0.20,  # loose — trend is confirmed
-        "ml_buy_threshold":  0.58,  # require strong conviction to buy into downtrend
-        "ml_sell_threshold": 0.47,  # short freely in downtrend
+        "volume_threshold":  1.2,   # lower bar — trend is confirmed
+        "ml_buy_threshold":  0.65,  # require strong conviction to buy into downtrend
+        "ml_sell_threshold": 0.35,  # sell freely in downtrend
         "trailing_stop_pct": 0.04,  # wide stop
         "take_profit_pct":   0.10,
         "position_scale":    1.00,
     },
     "ranging": {
-        "volume_threshold":  0.35,  # data-gathering — was 0.50 blocking most candles
-        "ml_buy_threshold":  0.51,  # permissive — was 0.54
-        "ml_sell_threshold": 0.49,  # permissive — was 0.50
+        "volume_threshold":  2.0,   # strict — only trade on volume spikes in chop
+        "ml_buy_threshold":  0.62,  # strict — ranging is dangerous
+        "ml_sell_threshold": 0.38,
         "trailing_stop_pct": 0.018, # tight — range is narrow, exit fast if wrong
         "take_profit_pct":   0.04,  # small targets in ranging market
         "position_scale":    0.75,  # reduce size — chop is dangerous
     },
     "volatile": {
-        "volume_threshold":  0.50,  # data-gathering — was 0.70 blocking
-        "ml_buy_threshold":  0.52,  # permissive — was 0.57
-        "ml_sell_threshold": 0.48,  # high conviction required
-        "trailing_stop_pct": 0.03,  # existing setting — balanced
-        "take_profit_pct":   0.08,  # existing setting
+        "volume_threshold":  1.5,   # moderate filter
+        "ml_buy_threshold":  0.63,  # require conviction during high vol
+        "ml_sell_threshold": 0.37,
+        "trailing_stop_pct": 0.03,
+        "take_profit_pct":   0.08,
         "position_scale":    0.50,  # half size — protect capital during volatility spikes
     },
 }

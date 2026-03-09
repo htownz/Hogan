@@ -14,6 +14,8 @@ class Position:
     take_profit_pct: float = 0.0
     # High-water mark updated by check_exits(); initialised to avg_entry.
     peak_price: float = 0.0
+    # Bars held since entry (incremented each check_exits call).
+    bars_held: int = 0
 
 
 @dataclass
@@ -147,12 +149,17 @@ class PaperPortfolio:
             self.short_positions[symbol] = pos
         return True
 
-    def check_exits(self, mark_prices: dict[str, float]) -> list[tuple[str, str]]:
+    def check_exits(
+        self,
+        mark_prices: dict[str, float],
+        max_hold_bars: int = 0,
+    ) -> list[tuple[str, str]]:
         """Check open long and short positions and return exit signals.
 
         Returns a list of ``(symbol, reason)`` tuples where ``reason`` is one of:
-        ``"trailing_stop"``, ``"take_profit"``, ``"short_trailing_stop"``, or
-        ``"short_take_profit"``.  Positions are *not* automatically closed.
+        ``"trailing_stop"``, ``"take_profit"``, ``"max_hold_time"``,
+        ``"short_trailing_stop"``, or ``"short_take_profit"``.
+        Positions are *not* automatically closed.
         """
         exits: list[tuple[str, str]] = []
 
@@ -160,6 +167,10 @@ class PaperPortfolio:
         for symbol, pos in list(self.positions.items()):
             px = mark_prices.get(symbol, 0.0)
             if px <= 0:
+                continue
+            pos.bars_held += 1
+            if max_hold_bars > 0 and pos.bars_held >= max_hold_bars:
+                exits.append((symbol, "max_hold_time"))
                 continue
             if pos.trailing_stop_pct > 0:
                 if px > pos.peak_price:

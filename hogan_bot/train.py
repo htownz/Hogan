@@ -21,8 +21,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train Hogan ML directional model")
     parser.add_argument("--symbol", default="BTC/USD")
     parser.add_argument("--timeframe", default="5m")
-    parser.add_argument("--limit", type=int, default=5000)
-    parser.add_argument("--horizon-bars", type=int, default=3)
+    parser.add_argument("--limit", type=int, default=50000)
+    parser.add_argument("--horizon-bars", type=int, default=12)
     parser.add_argument("--model-path", default="models/hogan_logreg.pkl")
     parser.add_argument(
         "--model-type",

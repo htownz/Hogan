@@ -17,7 +17,7 @@ from hogan_bot.ml_advanced import load_artifact as load_adv_artifact, predict_up
 from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
-from hogan_bot.storage import get_connection, record_equity, upsert_position, upsert_position_state, load_position_state, load_latest_fill_ts, record_fill
+from hogan_bot.storage import get_connection, record_equity, upsert_position, upsert_position_state, load_position_state, load_latest_fill_ts, record_fill, open_paper_trade, close_paper_trade
 from hogan_bot.strategy import generate_signal
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -286,11 +286,12 @@ def run_loop(max_loops: int | None = None) -> None:
 
                     if action == "buy":
                         qty = calculate_position_size(
-                            cash_balance=cash_avail,
+                            equity_usd=equity,
                             price=px,
-                            aggressive_allocation=config.aggressive_allocation * conf_scale,
+                            stop_distance_pct=signal.stop_distance_pct,
                             max_risk_per_trade=config.max_risk_per_trade,
-                            stop_distance=signal.stop_distance,
+                            max_allocation_pct=config.aggressive_allocation,
+                            confidence_scale=conf_scale,
                         )
                         if qty <= 0:
                             continue
@@ -300,6 +301,11 @@ def run_loop(max_loops: int | None = None) -> None:
                             ORDER_FAILS.labels(side="buy", mode=mode, exchange=config.exchange_id).inc()
                             notifier.notify("order_failed", {"side": "buy", "symbol": symbol, "error": res.error})
                         else:
+                            now_ms = int(time.time() * 1000)
+                            fee = qty * px * config.fee_rate
+                            open_paper_trade(conn, symbol, "buy", px, qty, fee, now_ms,
+                                             ml_up_prob=up_prob, strategy_conf=signal.confidence,
+                                             vol_ratio=signal.volume_ratio)
                             notifier.notify("buy", {"symbol": symbol, "price": px, "qty": qty, "up_prob": up_prob})
 
                     elif action == "sell":
@@ -312,6 +318,9 @@ def run_loop(max_loops: int | None = None) -> None:
                             ORDER_FAILS.labels(side="sell", mode=mode, exchange=config.exchange_id).inc()
                             notifier.notify("order_failed", {"side": "sell", "symbol": symbol, "error": res.error})
                         else:
+                            now_ms = int(time.time() * 1000)
+                            exit_fee = qty * px * config.fee_rate
+                            close_paper_trade(conn, symbol, "buy", px, exit_fee, now_ms, close_reason="signal")
                             notifier.notify("sell", {"symbol": symbol, "price": px, "qty": qty, "up_prob": up_prob})
 
             time.sleep(config.sleep_seconds)
