@@ -55,8 +55,11 @@ from pathlib import Path
 
 import pandas as pd
 
+from hogan_bot.backtest import run_backtest_on_candles
+from hogan_bot.config import load_config
 from hogan_bot.exchange import ExchangeClient
 from hogan_bot.ml import (
+    make_backtest_labels,
     make_paper_trade_labels,
     train_lightgbm,
     train_logistic_regression,
@@ -191,6 +194,15 @@ def _build_parser() -> argparse.ArgumentParser:
         default=3.0,
         metavar="W",
         help="Sample weight applied to paper-trade labeled rows (default: 3.0)",
+    )
+    p.add_argument(
+        "--use-backtest-labels",
+        action="store_true",
+        help=(
+            "Run a backtest on the training candles and blend closed-trade outcomes "
+            "into the training set (same weight as paper labels).  Requires ≥5 closed "
+            "backtest trades.  Use with --use-paper-labels to combine both sources."
+        ),
     )
     p.add_argument(
         "--symbols",
@@ -351,7 +363,7 @@ def _train_to_candidate(args: argparse.Namespace, candles: pd.DataFrame) -> tupl
             "is applied. Run rl_train.py with --ext-features for RL extended MTF."
         )
 
-    # Optionally load paper-trade labels for feedback-loop training
+    # Optionally load paper-trade and/or backtest labels for feedback-loop training
     paper_labels = None
     paper_weight = getattr(args, "paper_labels_weight", 3.0)
     if getattr(args, "use_paper_labels", False) and not multi_symbol:
@@ -366,6 +378,64 @@ def _train_to_candidate(args: argparse.Namespace, candles: pd.DataFrame) -> tupl
             logger.info("Paper-trade feedback: fewer than 5 closed trades — skipping.")
     elif getattr(args, "use_paper_labels", False) and multi_symbol:
         logger.info("Paper-trade feedback skipped for multi-symbol training (not yet supported).")
+
+    # Optionally run backtest and blend closed-trade outcomes into training
+    if getattr(args, "use_backtest_labels", False) and not multi_symbol:
+        cfg = load_config()
+        ml_model = None
+        if cfg.use_ml_filter:
+            from hogan_bot.ml import load_model
+            ml_model = load_model(cfg.ml_model_path)
+        bt_result = run_backtest_on_candles(
+            candles=candles,
+            symbol=args.symbol,
+            starting_balance_usd=cfg.starting_balance_usd,
+            aggressive_allocation=cfg.aggressive_allocation,
+            max_risk_per_trade=cfg.max_risk_per_trade,
+            max_drawdown=cfg.max_drawdown,
+            short_ma_window=cfg.short_ma_window,
+            long_ma_window=cfg.long_ma_window,
+            volume_window=cfg.volume_window,
+            volume_threshold=cfg.volume_threshold,
+            fee_rate=cfg.fee_rate,
+            ml_model=ml_model,
+            ml_buy_threshold=cfg.ml_buy_threshold,
+            ml_sell_threshold=cfg.ml_sell_threshold,
+            use_ema_clouds=cfg.use_ema_clouds,
+            ema_fast_short=cfg.ema_fast_short,
+            ema_fast_long=cfg.ema_fast_long,
+            ema_slow_short=cfg.ema_slow_short,
+            ema_slow_long=cfg.ema_slow_long,
+            use_fvg=cfg.use_fvg,
+            fvg_min_gap_pct=cfg.fvg_min_gap_pct,
+            signal_mode=cfg.signal_mode,
+            min_vote_margin=cfg.signal_min_vote_margin,
+            trailing_stop_pct=cfg.trailing_stop_pct,
+            take_profit_pct=cfg.take_profit_pct,
+        )
+        _db = get_connection(getattr(args, "db", "data/hogan.db")) if getattr(args, "from_db", False) else None
+        try:
+            bt_labels = make_backtest_labels(bt_result, candles, args.symbol, db_conn=_db)
+        finally:
+            if _db is not None:
+                _db.close()
+        if bt_labels[0] is not None:
+            logger.info(
+                "Backtest feedback: %d labeled rows from %d closed trades (weight=%.1f)",
+                len(bt_labels[0]), len(bt_result.closed_trades), paper_weight,
+            )
+            if paper_labels is not None and paper_labels[0] is not None:
+                X_merged = pd.concat([paper_labels[0], bt_labels[0]], ignore_index=True)
+                y_merged = pd.concat([paper_labels[1], bt_labels[1]], ignore_index=True)
+                paper_labels = (X_merged, y_merged)
+                logger.info("Merged paper + backtest: %d total labeled rows", len(X_merged))
+            else:
+                paper_labels = bt_labels
+        else:
+            logger.info(
+                "Backtest feedback: fewer than 5 closed trades (%d) — skipping.",
+                len(bt_result.closed_trades),
+            )
 
     # For multi-symbol, build a combined (X, y) dataset; otherwise use raw candles
     if multi_symbol:

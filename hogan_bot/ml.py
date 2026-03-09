@@ -583,6 +583,71 @@ def make_paper_trade_labels(
     return X_extra, y_extra
 
 
+def make_backtest_labels(
+    result: object,
+    candles: pd.DataFrame,
+    symbol: str,
+    min_trades: int = 5,
+    db_conn=None,
+) -> tuple[pd.DataFrame, pd.Series] | tuple[None, None]:
+    """Extract feature-label pairs from backtest closed trades.
+
+    For each closed trade in *result.closed_trades*, features are taken from
+    the entry bar. Labels follow the same convention as paper trades:
+    long + pnl > 0 → 1, long + pnl ≤ 0 → 0.
+
+    When *db_conn* is provided, macro features are joined; otherwise zeros.
+
+    Returns ``(X_extra, y_extra)`` aligned with ``_FEATURE_COLUMNS``, or
+    ``(None, None)`` when fewer than *min_trades* are available.
+    """
+    closed = getattr(result, "closed_trades", None)
+    if not closed or len(closed) < min_trades:
+        return None, None
+
+    frame = _feature_frame(candles)
+    if db_conn is not None:
+        try:
+            from hogan_bot.macro_features import add_macro_features, MACRO_FEATURE_NAMES
+            frame = add_macro_features(frame, db_conn)
+        except Exception:
+            from hogan_bot.macro_features import MACRO_FEATURE_NAMES
+            for col in MACRO_FEATURE_NAMES:
+                if col not in frame.columns:
+                    frame[col] = 0.0
+    else:
+        from hogan_bot.macro_features import MACRO_FEATURE_NAMES
+        for col in MACRO_FEATURE_NAMES:
+            frame[col] = 0.0
+    X_rows: list[list[float]] = []
+    y_values: list[int] = []
+
+    for trade in closed:
+        idx = int(trade.get("entry_bar_idx", -1))
+        if idx < 1 or idx >= len(frame):
+            continue
+        row = frame[_FEATURE_COLUMNS].iloc[idx]
+        if row.isna().any():
+            continue
+
+        pnl = float(trade.get("pnl_usd", 0.0))
+        side = str(trade.get("side", "long"))
+        if side == "long":
+            label = 1 if pnl > 0 else 0
+        else:
+            label = 0 if pnl > 0 else 1
+
+        X_rows.append(row.tolist())
+        y_values.append(label)
+
+    if len(X_rows) < min_trades:
+        return None, None
+
+    X_extra = pd.DataFrame(X_rows, columns=_FEATURE_COLUMNS)
+    y_extra = pd.Series(y_values, name="target", dtype=int)
+    return X_extra, y_extra
+
+
 def _blend_paper_labels(
     x: pd.DataFrame,
     y: pd.Series,
