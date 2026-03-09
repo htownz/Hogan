@@ -124,7 +124,11 @@ class BotConfig:
     # in build_feature_row_extended (+14 features vs standard 1h/15m only).
     # REQUIRES retraining with --force-promote before enabling in production.
     # Set HOGAN_USE_MTF_EXTENDED=true in .env after retraining.
-    use_mtf_extended: bool = False
+    use_mtf_extended: bool = True
+
+    # Online learning
+    use_online_learning: bool = False
+    online_learning_interval: int = 50
 
     # Reinforcement Learning agent
     use_rl_agent: bool = False
@@ -227,7 +231,9 @@ def load_config() -> BotConfig:
         training_symbols=_split_symbols(
             os.getenv("HOGAN_TRAINING_SYMBOLS", "BTC/USD,ETH/USD,SOL/USD")
         ),
-        use_mtf_extended=os.getenv("HOGAN_USE_MTF_EXTENDED", "false").lower() == "true",
+        use_mtf_extended=os.getenv("HOGAN_USE_MTF_EXTENDED", "true").lower() == "true",
+        use_online_learning=os.getenv("HOGAN_USE_ONLINE_LEARNING", "false").lower() == "true",
+        online_learning_interval=int(os.getenv("HOGAN_ONLINE_LEARNING_INTERVAL", "50")),
         use_rl_agent=os.getenv("HOGAN_USE_RL_AGENT", "false").lower() == "true",
         rl_model_path=os.getenv("HOGAN_RL_MODEL_PATH", "models/hogan_rl_policy.zip"),
         rl_reward_type=os.getenv("HOGAN_RL_REWARD_TYPE", "risk_adjusted"),

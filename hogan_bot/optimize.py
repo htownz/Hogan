@@ -1,8 +1,7 @@
-"""Random-search parameter optimizer for the Hogan trading bot.
+"""Bayesian + random-search parameter optimizer for the Hogan trading bot.
 
-Finds the best strategy configuration for a given symbol/timeframe by running
-many backtests over a randomized parameter grid and ranking the results by a
-chosen metric.
+Uses Optuna (TPE sampler) for efficient Bayesian hyperparameter search when
+available, with fallback to pure random search.
 
 Usage
 -----
@@ -11,10 +10,13 @@ Usage
     python -m hogan_bot.optimize \\
         --symbol  BTC/USD \\
         --timeframe 5m \\
-        --limit  20000 \\
+        --limit  50000 \\
         --trials 200 \\
         --metric sharpe \\
         --max-drawdown 0.20
+
+    # Force random search (skip Optuna)
+    python -m hogan_bot.optimize --engine random --trials 200
 
 Output is written to ``models/opt_{SYMBOL}_{TF}.json`` and echoed to stdout.
 
@@ -250,7 +252,145 @@ def _satisfies_constraints(row: dict, constraints: dict[str, float]) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Main optimizer
+# Optuna Bayesian optimizer
+# ---------------------------------------------------------------------------
+
+def _optuna_objective(
+    trial,
+    candles: pd.DataFrame,
+    symbol: str,
+    base_cfg,
+    metric: str,
+    constraints: dict[str, float],
+) -> float:
+    """Optuna objective: suggest params, run backtest, return score."""
+    cfg_dict: dict[str, Any] = {}
+
+    cfg_dict["short_ma_window"] = trial.suggest_int("short_ma_window", 5, 25)
+    cfg_dict["long_ma_window"] = trial.suggest_int("long_ma_window", 30, 120)
+    cfg_dict["volume_threshold"] = trial.suggest_float("volume_threshold", 0.8, 2.5)
+    cfg_dict["atr_stop_multiplier"] = trial.suggest_float("atr_stop_multiplier", 0.5, 3.5)
+    cfg_dict["use_ema_clouds"] = trial.suggest_categorical("use_ema_clouds", [True, False])
+    cfg_dict["signal_mode"] = trial.suggest_categorical("signal_mode", ["ma_only", "any", "all"])
+    cfg_dict["trailing_stop_pct"] = trial.suggest_float("trailing_stop_pct", 0.0, 0.05)
+    cfg_dict["take_profit_pct"] = trial.suggest_float("take_profit_pct", 0.0, 0.10)
+    cfg_dict["use_ict"] = trial.suggest_categorical("use_ict", [True, False])
+
+    if cfg_dict["use_ict"]:
+        cfg_dict["ict_swing_left"] = trial.suggest_int("ict_swing_left", 1, 5)
+        cfg_dict["ict_swing_right"] = trial.suggest_int("ict_swing_right", 1, 5)
+        cfg_dict["ict_eq_tolerance_pct"] = trial.suggest_float("ict_eq_tolerance_pct", 0.0003, 0.002)
+        cfg_dict["ict_min_displacement_pct"] = trial.suggest_float("ict_min_displacement_pct", 0.001, 0.01)
+        cfg_dict["ict_require_time_window"] = trial.suggest_categorical("ict_require_time_window", [True, False])
+        cfg_dict["ict_require_pd"] = trial.suggest_categorical("ict_require_pd", [True, False])
+        cfg_dict["ict_ote_enabled"] = trial.suggest_categorical("ict_ote_enabled", [True, False])
+    else:
+        cfg_dict["ict_swing_left"] = 2
+        cfg_dict["ict_swing_right"] = 2
+        cfg_dict["ict_eq_tolerance_pct"] = 0.0008
+        cfg_dict["ict_min_displacement_pct"] = 0.003
+        cfg_dict["ict_require_time_window"] = True
+        cfg_dict["ict_require_pd"] = True
+        cfg_dict["ict_ote_enabled"] = False
+
+    if cfg_dict["long_ma_window"] <= cfg_dict["short_ma_window"] + 5:
+        return float("-inf")
+
+    row = _run_trial(candles, symbol, cfg_dict, base_cfg)
+
+    if "error" in row:
+        return float("-inf")
+    if not _satisfies_constraints(row, constraints):
+        return float("-inf")
+
+    score = _score(row, metric)
+    trial.set_user_attr("result", row)
+    trial.set_user_attr("config", cfg_dict)
+    return score
+
+
+def optimize_bayesian(
+    candles: pd.DataFrame,
+    symbol: str,
+    base_cfg,
+    *,
+    trials: int = 200,
+    metric: str = "sharpe",
+    constraints: dict[str, float] | None = None,
+    top_k: int = 10,
+    seed: int | None = None,
+    verbose: bool = True,
+) -> dict[str, Any]:
+    """Optuna TPE-based Bayesian hyperparameter optimization."""
+    import optuna
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+    if constraints is None:
+        constraints = {}
+
+    actual_seed = seed if seed is not None else random.randint(0, 2**32 - 1)
+    sampler = optuna.samplers.TPESampler(seed=actual_seed)
+
+    study = optuna.create_study(
+        direction="maximize",
+        sampler=sampler,
+        study_name=f"hogan_opt_{symbol.replace('/', '_')}",
+    )
+
+    study.optimize(
+        lambda trial: _optuna_objective(trial, candles, symbol, base_cfg, metric, constraints),
+        n_trials=trials,
+        show_progress_bar=verbose,
+    )
+
+    # Extract results
+    all_results = []
+    for t in study.trials:
+        if t.state == optuna.trial.TrialState.COMPLETE:
+            row = t.user_attrs.get("result", {})
+            row["trial"] = t.number
+            row["seed"] = actual_seed
+            row["satisfies_constraints"] = True
+            all_results.append(row)
+
+    feasible = [r for r in all_results if "error" not in r]
+    feasible.sort(key=lambda r: _score(r, metric), reverse=True)
+
+    leaderboard = []
+    for rank, row in enumerate(feasible[:top_k], start=1):
+        entry = {"rank": rank, "config": row.get("config", {}), metric: _score(row, metric)}
+        for extra_key in ("total_return_pct", "max_drawdown_pct", "win_rate", "trades",
+                          "sharpe_ratio", "sortino_ratio", "calmar_ratio", "profit_factor"):
+            if extra_key in row:
+                entry[extra_key] = row[extra_key]
+        leaderboard.append(entry)
+
+    best_config = study.best_trial.user_attrs.get("config", {}) if study.best_trial else {}
+    best_score = study.best_value if study.best_trial else float("-inf")
+
+    commit_hash = None
+    try:
+        commit_hash = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except Exception:
+        pass
+
+    return {
+        "symbol": symbol,
+        "metric": metric,
+        "engine": "optuna_tpe",
+        "trials": trials,
+        "seed": actual_seed,
+        "git_commit": commit_hash,
+        "best_score": best_score,
+        "best_config": best_config,
+        "leaderboard": leaderboard,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Main optimizer (random search fallback)
 # ---------------------------------------------------------------------------
 
 
@@ -425,6 +565,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Path to local SQLite DB (used with --from-db)",
     )
     p.add_argument("--quiet", action="store_true", help="Suppress trial progress output")
+    p.add_argument(
+        "--engine",
+        default="auto",
+        choices=["auto", "optuna", "random"],
+        help="Search engine: 'optuna' (Bayesian TPE), 'random', or 'auto' (Optuna if installed)",
+    )
     return p
 
 
@@ -483,22 +629,47 @@ def main(argv: list[str] | None = None) -> None:
         logger.error("No candles returned — aborting.")
         sys.exit(1)
 
+    # Select optimization engine
+    use_optuna = False
+    if args.engine == "optuna":
+        use_optuna = True
+    elif args.engine == "auto":
+        try:
+            import optuna  # noqa: F401
+            use_optuna = True
+        except ImportError:
+            pass
+
+    engine_name = "Optuna TPE" if use_optuna else "Random Search"
     logger.info(
-        "Loaded %d bars for %s/%s — running %d trials optimising %s",
-        len(candles), args.symbol, args.timeframe, args.trials, args.metric,
+        "Loaded %d bars for %s/%s — running %d trials optimising %s [engine=%s]",
+        len(candles), args.symbol, args.timeframe, args.trials, args.metric, engine_name,
     )
 
-    result = optimize(
-        candles,
-        args.symbol,
-        cfg,
-        trials=args.trials,
-        metric=metric_key,
-        constraints=constraints,
-        top_k=args.top_k,
-        seed=args.seed,
-        verbose=not args.quiet,
-    )
+    if use_optuna:
+        result = optimize_bayesian(
+            candles,
+            args.symbol,
+            cfg,
+            trials=args.trials,
+            metric=metric_key,
+            constraints=constraints,
+            top_k=args.top_k,
+            seed=args.seed,
+            verbose=not args.quiet,
+        )
+    else:
+        result = optimize(
+            candles,
+            args.symbol,
+            cfg,
+            trials=args.trials,
+            metric=metric_key,
+            constraints=constraints,
+            top_k=args.top_k,
+            seed=args.seed,
+            verbose=not args.quiet,
+        )
 
     out_path = _output_path(args.out_dir, args.symbol, args.timeframe)
     with open(out_path, "w") as f:

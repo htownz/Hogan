@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
+import pickle
+import threading
 import time
 from datetime import datetime
 
@@ -92,6 +95,100 @@ def sync_fills_deterministic(conn, client: ExchangeClient, exchange_id: str, sym
 
 
 # ---------------------------------------------------------------------------
+# Online learning helpers (Phase 4)
+# ---------------------------------------------------------------------------
+
+def _write_training_buffer(conn, symbol: str, ts_ms: int, features: list[float]) -> None:
+    """Write a feature vector to the online_training_buffer (label pending)."""
+    try:
+        conn.execute(
+            "INSERT INTO online_training_buffer (symbol, ts_ms, features_json, horizon_bars) VALUES (?, ?, ?, ?)",
+            (symbol, ts_ms, json.dumps(features), 12),
+        )
+        conn.commit()
+    except Exception as exc:
+        logger.debug("Buffer write failed: %s", exc)
+
+
+def _label_buffer_from_trade(conn, symbol: str, entry_ts_ms: int, pnl_pct: float) -> None:
+    """Label the most recent pending buffer row for a symbol after trade closes."""
+    try:
+        label = 1 if pnl_pct > 0 else 0
+        conn.execute(
+            """UPDATE online_training_buffer
+               SET label = ?, pnl_pct = ?, fill_ts_ms = ?
+               WHERE row_id = (
+                   SELECT row_id FROM online_training_buffer
+                   WHERE symbol = ? AND label IS NULL
+                   ORDER BY ts_ms DESC LIMIT 1
+               )""",
+            (label, pnl_pct, int(time.time() * 1000), symbol),
+        )
+        conn.commit()
+    except Exception as exc:
+        logger.debug("Buffer labeling failed: %s", exc)
+
+
+def _start_background_retrain(
+    config, conn, model_holder: dict, model_lock: threading.Lock,
+) -> threading.Thread | None:
+    """Start a background thread that periodically retrains the model."""
+    if not config.retrain_schedule_hours or config.retrain_schedule_hours <= 0:
+        return None
+
+    def _retrain_worker():
+        interval = config.retrain_schedule_hours * 3600
+        while True:
+            time.sleep(interval)
+            try:
+                logger.info("BACKGROUND_RETRAIN starting scheduled retrain...")
+                from hogan_bot.storage import load_candles
+                import pandas as pd
+                all_candles = []
+                retrain_conn = get_connection(config.db_path)
+                for sym in config.training_symbols:
+                    c = load_candles(retrain_conn, sym, config.timeframe, limit=50000)
+                    if not c.empty:
+                        all_candles.append(c)
+                if not all_candles:
+                    logger.warning("BACKGROUND_RETRAIN no candles available")
+                    retrain_conn.close()
+                    continue
+
+                candles_concat = pd.concat(all_candles, ignore_index=True)
+
+                import tempfile
+                tmp_path = os.path.join(tempfile.gettempdir(), "hogan_bg_retrain.pkl")
+                from hogan_bot.ml import train_xgboost
+                result = train_xgboost(
+                    candles_concat, tmp_path, horizon_bars=12,
+                    db_conn=retrain_conn, prune_features=True, max_features=40,
+                )
+                retrain_conn.close()
+
+                if result and os.path.exists(tmp_path):
+                    new_auc = result.get("roc_auc", 0)
+                    old_auc = model_holder.get("roc_auc", 0)
+                    if new_auc > old_auc:
+                        import shutil
+                        shutil.copy2(tmp_path, config.ml_model_path)
+                        new_model = _load_any_model(config.ml_model_path)
+                        with model_lock:
+                            model_holder["model"] = new_model
+                            model_holder["roc_auc"] = new_auc
+                        logger.info("BACKGROUND_RETRAIN promoted new model: auc=%.4f (was %.4f)", new_auc, old_auc)
+                    else:
+                        logger.info("BACKGROUND_RETRAIN candidate not better: %.4f <= %.4f", new_auc, old_auc)
+            except Exception as exc:
+                logger.warning("BACKGROUND_RETRAIN failed: %s", exc)
+
+    thread = threading.Thread(target=_retrain_worker, daemon=True, name="bg-retrain")
+    thread.start()
+    logger.info("Background retrain thread started (every %dh)", config.retrain_schedule_hours)
+    return thread
+
+
+# ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
 
@@ -137,6 +234,20 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
         executor = PaperExecution(paper_port, conn=conn)
 
     model_obj = _load_any_model(config.ml_model_path) if config.use_ml_filter else None
+
+    # ── Online learning setup (Phase 4) ──────────────────────────────────
+    model_lock = threading.Lock()
+    model_holder: dict = {"model": model_obj, "roc_auc": 0.0}
+    online_learner = None
+    if config.use_online_learning:
+        try:
+            from hogan_bot.online_learner import OnlineLearner
+            online_learner = OnlineLearner(db_path=config.db_path, min_batch=20)
+            logger.info("OnlineLearner initialized (interval=%d loops)", config.online_learning_interval)
+        except Exception as exc:
+            logger.warning("OnlineLearner init failed: %s", exc)
+
+    bg_retrain_thread = _start_background_retrain(config, conn, model_holder, model_lock)
 
     # ── Trade explainer (LLM, fire-and-forget) ────────────────────────────
     _explain_trade = None
@@ -431,8 +542,10 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                     conf_scale = eff["position_scale"]
 
                     # ── ML filter with regime-adjusted thresholds ─────
-                    if config.use_ml_filter and model_obj is not None:
-                        up_prob = _predict_up(model_obj, candles, db_conn=conn)
+                    with model_lock:
+                        current_model = model_holder.get("model", model_obj)
+                    if config.use_ml_filter and current_model is not None:
+                        up_prob = _predict_up(current_model, candles, db_conn=conn)
                         action = apply_ml_filter(
                             action, up_prob,
                             eff["ml_buy_threshold"],
@@ -553,6 +666,10 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                             else:
                                 fee = sell_qty * px * config.fee_rate
                                 close_paper_trade(conn, symbol, "long", px, fee, now_ms, close_reason="signal")
+                                # Label the training buffer with trade outcome
+                                pos_entry = mark_prices.get(symbol, px)
+                                pnl_pct = (px - pos_entry) / pos_entry if pos_entry > 0 else 0.0
+                                _label_buffer_from_trade(conn, symbol, now_ms, pnl_pct)
                                 notifier.notify("sell", {"symbol": symbol, "price": px, "qty": sell_qty, "up_prob": up_prob})
                                 logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
                                             symbol, px, sell_qty, up_prob or -1, equity)
@@ -590,6 +707,16 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                         else:
                             logger.debug("HOLD %s — sell signal but no long position and shorts disabled", symbol)
 
+                    # ── Online learning: write features to buffer after trade
+                    if action in ("buy", "sell") and online_learner is not None:
+                        try:
+                            from hogan_bot.ml import build_feature_row
+                            fv = build_feature_row(candles, db_conn=conn)
+                            if fv is not None:
+                                _write_training_buffer(conn, symbol, now_ms, fv)
+                        except Exception:
+                            pass
+
                     # ── Update signal cache for Discord ───────────────
                     signal_cache[symbol] = {
                         "action": action, "price": px,
@@ -609,6 +736,16 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                         cmd_listener.update_state(paper_port, _prices, config_summary, signal_cache)
                     except Exception:
                         pass
+
+                # ── Periodic online learner update (Phase 4b) ─────────
+                if online_learner is not None and loop % config.online_learning_interval == 0:
+                    try:
+                        for sym in config.symbols:
+                            result = online_learner.update(symbol=sym)
+                            if result.get("status") == "updated":
+                                logger.info("ONLINE_LEARN symbol=%s rows=%d", sym, result.get("n_rows", 0))
+                    except Exception as exc:
+                        logger.debug("Online learner update failed: %s", exc)
 
             time.sleep(config.sleep_seconds)
 
