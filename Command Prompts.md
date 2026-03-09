@@ -1,3 +1,10 @@
+START UP
+cd C:\Users\15125\Documents\Hogan\Hogan
+.venv\Scripts\Activate
+python -m hogan_bot.trader_service
+
+
+
 Step 1 — Refresh today's macro data (run this now):
 
 python refresh_daily.py
