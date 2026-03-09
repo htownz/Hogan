@@ -418,7 +418,9 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
 
         if action == "buy":
             buy_px = px * (1.0 + slip_mult)
-            if _cooldown_remaining > 0:
+            if symbol in portfolio.positions:
+                pass
+            elif _cooldown_remaining > 0:
                 pass
             elif portfolio.execute_buy(
                 symbol, buy_px, size,

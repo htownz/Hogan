@@ -135,6 +135,12 @@ def generate_signal(
     if signal_mode == "ma_only" or not extra_enabled:
         return StrategySignal(ma_action, stop_distance_pct, confidence, volume_ratio)
 
+    # Gate: MA crossover is a prerequisite. Other signals can only confirm
+    # a crossover; they cannot independently trigger trades. Without this,
+    # persistent signals like EMA clouds fire on every bar in a trend.
+    if ma_action == "hold":
+        return StrategySignal("hold", stop_distance_pct, 0.0, volume_ratio)
+
     votes: list[str] = [ma_action]
 
     # ── EMA cloud vote ────────────────────────────────────────────────────────

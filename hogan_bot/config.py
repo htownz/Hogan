@@ -39,8 +39,9 @@ class BotConfig:
     ml_buy_threshold: float = 0.60
     ml_sell_threshold: float = 0.40
 
-    # Ripster EMA cloud settings
-    use_ema_clouds: bool = True
+    # Ripster EMA cloud settings (disabled: empirically hurts win rate as
+    # cloud-based confirmation filters out good crossover trades)
+    use_ema_clouds: bool = False
     ema_fast_short: int = 8
     ema_fast_long: int = 9
     ema_slow_short: int = 34
@@ -176,7 +177,7 @@ def load_config() -> BotConfig:
         ml_model_path=os.getenv("HOGAN_ML_MODEL_PATH", "models/hogan_logreg.pkl"),
         ml_buy_threshold=float(os.getenv("HOGAN_ML_BUY_THRESHOLD", "0.60")),
         ml_sell_threshold=float(os.getenv("HOGAN_ML_SELL_THRESHOLD", "0.40")),
-        use_ema_clouds=os.getenv("HOGAN_USE_EMA_CLOUDS", "true").lower() == "true",
+        use_ema_clouds=os.getenv("HOGAN_USE_EMA_CLOUDS", "false").lower() == "true",
         ema_fast_short=int(os.getenv("HOGAN_EMA_FAST_SHORT", "8")),
         ema_fast_long=int(os.getenv("HOGAN_EMA_FAST_LONG", "9")),
         ema_slow_short=int(os.getenv("HOGAN_EMA_SLOW_SHORT", "34")),
