@@ -72,6 +72,7 @@ _TF_LABEL: dict[str, str] = {
     "10Min": "10m",
     "15Min": "15m",
     "30Min": "30m",
+    "45Min": "45m",
     "1Hour": "1h",
     "4Hour": "4h",
     "1Day":  "1d",
@@ -596,7 +597,7 @@ def parse_args() -> argparse.Namespace:
                    help="Days of crypto bars when using --crypto-bars")
     p.add_argument(
         "--timeframe", default="1Day",
-        choices=["1Min", "5Min", "10Min", "15Min", "30Min", "1Hour", "4Hour", "1Day"],
+        choices=["1Min", "5Min", "10Min", "15Min", "30Min", "45Min", "1Hour", "4Hour", "1Day"],
         help="Crypto bar timeframe",
     )
     p.add_argument(
