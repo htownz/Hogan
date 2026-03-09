@@ -82,6 +82,18 @@ def _load_paper_trades(db: str) -> pd.DataFrame:
                FROM paper_trades ORDER BY open_ts_ms DESC""",
             conn,
         )
+        # Join trade explanations (Mistral/Ollama) — fill_id = symbol_open_ts_ms
+        try:
+            expl = pd.read_sql_query(
+                "SELECT fill_id, explanation, model_used FROM trade_explanations",
+                conn,
+            )
+            if not expl.empty:
+                df["fill_id"] = df["symbol"] + "_" + df["open_ts_ms"].astype(str)
+                df = df.merge(expl[["fill_id", "explanation", "model_used"]], on="fill_id", how="left")
+                df = df.drop(columns=["fill_id"], errors="ignore")
+        except Exception:
+            pass
         conn.close()
         df["opened"] = pd.to_datetime(df["open_ts_ms"], unit="ms", utc=True)
         df["closed"] = pd.to_datetime(df["close_ts_ms"], unit="ms", utc=True)
@@ -308,12 +320,15 @@ with tab_live:
         fig_reason.update_layout(margin=dict(l=0, r=0, t=30, b=0))
         st.plotly_chart(fig_reason, width='stretch')
 
-        # Trade table
-        disp2 = closed[[
+        # Trade table (include explanation if available)
+        base_cols = [
             "symbol", "side", "entry_price", "exit_price", "qty",
             "realized_pnl", "pnl_pct", "close_reason",
             "ml_up_prob", "strategy_conf", "opened", "closed"
-        ]].copy()
+        ]
+        if "explanation" in closed.columns:
+            base_cols.insert(base_cols.index("close_reason") + 1, "explanation")
+        disp2 = closed[[c for c in base_cols if c in closed.columns]].copy()
         disp2["opened"] = disp2["opened"].dt.strftime("%m-%d %H:%M")
         disp2["closed"] = disp2["closed"].dt.strftime("%m-%d %H:%M")
         disp2["pnl_pct"] = (disp2["pnl_pct"] * 100).round(3)
