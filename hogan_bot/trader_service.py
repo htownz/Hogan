@@ -264,10 +264,10 @@ def run_loop(max_loops: int | None = None) -> None:
                     if config.use_ml_filter and model_obj is not None:
                         up_prob = _predict_up(model_obj, candles)
                         action = apply_ml_filter(
-                            action=action,
-                            up_prob=up_prob,
-                            buy_threshold=config.ml_buy_threshold,
-                            sell_threshold=config.ml_sell_threshold,
+                            action,
+                            up_prob,
+                            config.ml_buy_threshold,
+                            config.ml_sell_threshold,
                         )
                         if config.ml_confidence_sizing and up_prob is not None:
                             conf_scale = ml_confidence(up_prob)
