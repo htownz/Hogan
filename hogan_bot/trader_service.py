@@ -122,7 +122,7 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
             use_tls=True,
         )
     notifier = make_notifier(
-        webhook_url=config.webhook_url or None,
+        discord_webhook_url=config.webhook_url or None,
         email=email_cfg,
     )
 
