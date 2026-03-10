@@ -38,6 +38,7 @@ from hogan_bot.ml import (
     _FEATURE_COLUMNS,
 )
 from hogan_bot.config import load_config
+from hogan_bot.retrain import default_horizon_bars
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("massive_retrain")
@@ -45,6 +46,19 @@ logger = logging.getLogger("massive_retrain")
 MODEL_TYPES = ["logreg", "random_forest", "xgboost", "lightgbm"]
 DEFAULT_HORIZONS = [6, 12, 24, 48]
 DEFAULT_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"]
+
+
+def compute_horizons_for_timeframe(timeframe: str) -> list[int]:
+    """Compute horizon_bars sweep values scaled to the timeframe.
+
+    For intraday timeframes: target 2h, 4h, 6h, 12h.
+    For daily: target 1d, 3d, 5d, 10d.
+    """
+    if timeframe == "1d":
+        return [1, 3, 5, 10]
+    target_hours = [2, 4, 6, 12]
+    horizons = sorted(set(default_horizon_bars(timeframe, h) for h in target_hours))
+    return horizons
 
 
 def refresh_data(db_path: str) -> None:
@@ -183,7 +197,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Massive model retraining pipeline")
     parser.add_argument("--skip-refresh", action="store_true", help="Skip data refresh step")
     parser.add_argument("--symbols", nargs="+", default=DEFAULT_SYMBOLS)
-    parser.add_argument("--horizons", nargs="+", type=int, default=DEFAULT_HORIZONS)
+    parser.add_argument(
+        "--horizons", nargs="+", type=int, default=None,
+        help="Horizons to sweep (default: auto-compute from timeframe targeting 2h/4h/6h/12h)",
+    )
     parser.add_argument("--timeframe", default="5m")
     parser.add_argument("--limit", type=int, default=100000)
     parser.add_argument("--db", default="data/hogan.db")
@@ -191,6 +208,13 @@ def main() -> None:
     parser.add_argument("--model-path", default="models/hogan_logreg.pkl")
     parser.add_argument("--cv-splits", type=int, default=5)
     args = parser.parse_args()
+
+    if args.horizons is None:
+        args.horizons = compute_horizons_for_timeframe(args.timeframe)
+        logger.info(
+            "Auto-computed horizons for %s: %s (targeting 2h/4h/6h/12h)",
+            args.timeframe, args.horizons,
+        )
 
     logger.info("=" * 70)
     logger.info("MASSIVE RETRAINING PIPELINE")

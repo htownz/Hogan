@@ -18,6 +18,7 @@ from hogan_bot.live_account import fetch_account_state
 from hogan_bot.metrics import MetricsServer, LoopTimer, EQUITY, CASH, DRAWDOWN, ORDERS, ORDER_FAILS, EXCEPTIONS, SLIPPAGE_BPS, FILLS
 from hogan_bot.ml import load_model as load_simple_model, predict_up_probability as predict_simple
 from hogan_bot.ml_advanced import load_artifact as load_adv_artifact, predict_up_probability as predict_adv
+from hogan_bot.mtf_ensemble import evaluate_mtf
 from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.regime import detect_regime, effective_thresholds, load_regime_signals, RegimeState
@@ -350,12 +351,28 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                 # ── Fetch candles ─────────────────────────────────────
                 candles_by_symbol = {}
                 mark_prices = {}
+                daily_candles_by_symbol: dict[str, object] = {}
+                m30_candles_by_symbol: dict[str, object] = {}
                 for symbol in config.symbols:
                     candles = client.fetch_ohlcv_df(symbol, timeframe=config.timeframe, limit=config.ohlcv_limit)
                     if candles.empty:
                         continue
                     candles_by_symbol[symbol] = candles
                     mark_prices[symbol] = float(candles["close"].iloc[-1])
+
+                    if config.use_mtf_ensemble:
+                        try:
+                            daily = client.fetch_ohlcv_df(symbol, timeframe=config.mtf_daily_timeframe, limit=60)
+                            if not daily.empty:
+                                daily_candles_by_symbol[symbol] = daily
+                        except Exception:
+                            pass
+                        try:
+                            m30 = client.fetch_ohlcv_df(symbol, timeframe=config.mtf_m30_timeframe, limit=100)
+                            if not m30.empty:
+                                m30_candles_by_symbol[symbol] = m30
+                        except Exception:
+                            pass
 
                 if not mark_prices:
                     time.sleep(config.sleep_seconds)
@@ -558,6 +575,17 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                         )
                         if config.ml_confidence_sizing and up_prob is not None:
                             conf_scale = ml_confidence(up_prob) * eff["position_scale"]
+
+                    # ── MTF ensemble filter ────────────────────────────
+                    if config.use_mtf_ensemble and action != "hold":
+                        mtf_result = evaluate_mtf(
+                            daily_candles=daily_candles_by_symbol.get(symbol),
+                            hourly_action=action,
+                            m30_candles=m30_candles_by_symbol.get(symbol),
+                            unconfirmed_scale=config.mtf_unconfirmed_scale,
+                        )
+                        action = mtf_result.final_action
+                        conf_scale *= mtf_result.confidence_mult
 
                     if action == "hold":
                         continue

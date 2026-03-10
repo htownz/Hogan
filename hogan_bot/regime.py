@@ -240,41 +240,43 @@ def detect_regime(
 # ---------------------------------------------------------------------------
 # Threshold overrides per regime
 # ---------------------------------------------------------------------------
+# Strategy parameters (volume_threshold, trailing_stop, take_profit) use
+# *multipliers* against the per-symbol Optuna base so that each instrument
+# keeps its optimised proportions.  ML thresholds remain absolute because
+# they operate on a fixed 0–1 probability scale.
 
-# Base overrides for each regime — applied on top of .env defaults.
-# Keys map directly to BotConfig attribute names.
 _REGIME_OVERRIDES: dict[str, dict[str, float]] = {
     "trending_up": {
-        "volume_threshold":  1.2,   # lower bar — trend is confirmed
-        "ml_buy_threshold":  0.55,  # relax in confirmed uptrend
-        "ml_sell_threshold": 0.52,  # need conviction to exit uptrend
-        "trailing_stop_pct": 0.04,  # wide stop — let the trend breathe
-        "take_profit_pct":   0.12,  # wide target — let it ride
-        "position_scale":    1.00,
+        "volume_threshold_mult": 0.55,  # loosen volume gate — trend is confirmed
+        "ml_buy_threshold":      0.55,  # relax in confirmed uptrend
+        "ml_sell_threshold":     0.52,  # need conviction to exit uptrend
+        "trailing_stop_mult":    1.30,  # wider stop — let the trend breathe
+        "take_profit_mult":      2.00,  # wider target — let it ride
+        "position_scale":        1.00,
     },
     "trending_down": {
-        "volume_threshold":  1.2,   # lower bar — trend is confirmed
-        "ml_buy_threshold":  0.65,  # require strong conviction to buy into downtrend
-        "ml_sell_threshold": 0.35,  # sell freely in downtrend
-        "trailing_stop_pct": 0.04,  # wide stop
-        "take_profit_pct":   0.10,
-        "position_scale":    1.00,
+        "volume_threshold_mult": 0.55,  # loosen volume gate — trend is confirmed
+        "ml_buy_threshold":      0.65,  # require strong conviction to buy into downtrend
+        "ml_sell_threshold":     0.35,  # sell freely in downtrend
+        "trailing_stop_mult":    1.30,  # wider stop
+        "take_profit_mult":      1.70,
+        "position_scale":        1.00,
     },
     "ranging": {
-        "volume_threshold":  2.0,   # strict — only trade on volume spikes in chop
-        "ml_buy_threshold":  0.62,  # strict — ranging is dangerous
-        "ml_sell_threshold": 0.38,
-        "trailing_stop_pct": 0.018, # tight — range is narrow, exit fast if wrong
-        "take_profit_pct":   0.04,  # small targets in ranging market
-        "position_scale":    0.75,  # reduce size — chop is dangerous
+        "volume_threshold_mult": 1.10,  # slightly stricter — only trade on volume spikes
+        "ml_buy_threshold":      0.62,  # strict — ranging is dangerous
+        "ml_sell_threshold":     0.38,
+        "trailing_stop_mult":    0.50,  # tight — range is narrow, exit fast if wrong
+        "take_profit_mult":      0.70,  # small targets in ranging market
+        "position_scale":        0.75,  # reduce size — chop is dangerous
     },
     "volatile": {
-        "volume_threshold":  1.5,   # moderate filter
-        "ml_buy_threshold":  0.63,  # require conviction during high vol
-        "ml_sell_threshold": 0.37,
-        "trailing_stop_pct": 0.03,
-        "take_profit_pct":   0.08,
-        "position_scale":    0.50,  # half size — protect capital during volatility spikes
+        "volume_threshold_mult": 0.70,  # moderate filter
+        "ml_buy_threshold":      0.63,  # require conviction during high vol
+        "ml_sell_threshold":     0.37,
+        "trailing_stop_mult":    0.80,  # somewhat tighter
+        "take_profit_mult":      1.40,  # wider targets — vol creates opportunity
+        "position_scale":        0.50,  # half size — protect capital
     },
 }
 
@@ -286,9 +288,13 @@ def effective_thresholds(
 ) -> dict[str, float]:
     """Return the effective threshold values for this regime.
 
+    Strategy-specific parameters (``volume_threshold``, ``trailing_stop_pct``,
+    ``take_profit_pct``) are *scaled* from the per-symbol Optuna base via
+    multipliers, so each instrument keeps its optimised proportions.
+    ML thresholds are absolute (fixed probability scale).
+
     When regime ``confidence`` is below *min_confidence* or regime detection
-    is disabled (``config.use_regime_detection == False``), returns the raw
-    config defaults unchanged.
+    is disabled, returns the raw config defaults unchanged.
 
     The returned dict always contains:
     ``volume_threshold``, ``ml_buy_threshold``, ``ml_sell_threshold``,
@@ -310,8 +316,21 @@ def effective_thresholds(
         return defaults
 
     overrides = _REGIME_OVERRIDES.get(state.regime, {})
+    if not overrides:
+        return defaults
+
     result = defaults.copy()
-    result.update(overrides)
+    # Multiplier-based keys: scale from the per-symbol base
+    if "volume_threshold_mult" in overrides:
+        result["volume_threshold"] = defaults["volume_threshold"] * overrides["volume_threshold_mult"]
+    if "trailing_stop_mult" in overrides:
+        result["trailing_stop_pct"] = defaults["trailing_stop_pct"] * overrides["trailing_stop_mult"]
+    if "take_profit_mult" in overrides:
+        result["take_profit_pct"] = defaults["take_profit_pct"] * overrides["take_profit_mult"]
+    # Absolute keys: ML thresholds and position scale
+    for key in ("ml_buy_threshold", "ml_sell_threshold", "position_scale"):
+        if key in overrides:
+            result[key] = overrides[key]
     return result
 
 

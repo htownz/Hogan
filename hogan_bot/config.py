@@ -135,6 +135,14 @@ class BotConfig:
     use_online_learning: bool = False
     online_learning_interval: int = 50
 
+    # Multi-timeframe ensemble: daily + primary + 30m confirmation
+    use_mtf_ensemble: bool = False
+    mtf_daily_timeframe: str = "1d"
+    mtf_m30_timeframe: str = "30m"
+    mtf_daily_fast_ma: int = 10
+    mtf_daily_slow_ma: int = 30
+    mtf_unconfirmed_scale: float = 0.60
+
     # Reinforcement Learning agent
     use_rl_agent: bool = False
     rl_model_path: str = "models/hogan_rl_policy.zip"
@@ -307,6 +315,12 @@ def load_config() -> BotConfig:
             os.getenv("HOGAN_TRAINING_SYMBOLS", "BTC/USD,ETH/USD,SOL/USD")
         ),
         use_mtf_extended=os.getenv("HOGAN_USE_MTF_EXTENDED", "true").lower() == "true",
+        use_mtf_ensemble=os.getenv("HOGAN_USE_MTF_ENSEMBLE", "false").lower() == "true",
+        mtf_daily_timeframe=os.getenv("HOGAN_MTF_DAILY_TF", "1d"),
+        mtf_m30_timeframe=os.getenv("HOGAN_MTF_M30_TF", "30m"),
+        mtf_daily_fast_ma=int(os.getenv("HOGAN_MTF_DAILY_FAST_MA", "10")),
+        mtf_daily_slow_ma=int(os.getenv("HOGAN_MTF_DAILY_SLOW_MA", "30")),
+        mtf_unconfirmed_scale=float(os.getenv("HOGAN_MTF_UNCONFIRMED_SCALE", "0.60")),
         use_online_learning=os.getenv("HOGAN_USE_ONLINE_LEARNING", "false").lower() == "true",
         online_learning_interval=int(os.getenv("HOGAN_ONLINE_LEARNING_INTERVAL", "50")),
         use_rl_agent=os.getenv("HOGAN_USE_RL_AGENT", "false").lower() == "true",
