@@ -228,15 +228,37 @@ async def run_event_loop(
             # Auto-exit trailing stops / take profits
             exits = portfolio.check_exits(mark_prices)
             for exit_symbol, reason in exits:
-                pos = portfolio.positions.get(exit_symbol)
-                if pos is None:
-                    continue
                 ep = mark_prices.get(exit_symbol, 0.0)
-                executed = portfolio.execute_sell(exit_symbol, ep, pos.qty)
-                if notifier and executed:
-                    notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason,
-                                                  "price": ep, "qty": pos.qty})
-                logger.info("AUTO_EXIT %s reason=%s px=%.2f", exit_symbol, reason, ep)
+                now_ms = int(time.time() * 1000)
+
+                if reason in ("trailing_stop", "take_profit"):
+                    pos = portfolio.positions.get(exit_symbol)
+                    if pos is None:
+                        continue
+                    qty = pos.qty
+                    avg_entry = pos.avg_entry
+                    executed = portfolio.execute_sell(exit_symbol, ep, qty)
+                    if executed:
+                        fee = qty * ep * config.fee_rate
+                        close_paper_trade(conn, exit_symbol, "long", ep, fee, now_ms, close_reason=reason)
+                    if notifier and executed:
+                        notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason,
+                                                      "price": ep, "qty": qty})
+                    logger.info("AUTO_EXIT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, ep, qty)
+
+                elif reason in ("short_trailing_stop", "short_take_profit"):
+                    pos = portfolio.short_positions.get(exit_symbol)
+                    if pos is None:
+                        continue
+                    qty = pos.qty
+                    executed = portfolio.execute_cover(exit_symbol, ep, qty)
+                    if executed:
+                        fee = qty * ep * config.fee_rate
+                        close_paper_trade(conn, exit_symbol, "short", ep, fee, now_ms, close_reason=reason)
+                    if notifier and executed:
+                        notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason,
+                                                      "price": ep, "qty": qty})
+                    logger.info("AUTO_EXIT_SHORT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, ep, qty)
 
             # Dead-man's switch check
             stale = engine.check_dead_man()
