@@ -49,6 +49,7 @@ SHARED = dict(
 # ── BEFORE: old settings ──────────────────────────────────────────────────────
 r_before = run_backtest_on_candles(
     **SHARED,
+    timeframe="5m",
     volume_threshold=0.9,      # old: too restrictive
     ml_confidence_sizing=True, # old: shrunk positions to ~1%
 )
@@ -56,6 +57,7 @@ r_before = run_backtest_on_candles(
 # ── AFTER: current settings ───────────────────────────────────────────────────
 r_after = run_backtest_on_candles(
     **SHARED,
+    timeframe="5m",
     volume_threshold=0.3,       # new: allows more trades
     ml_confidence_sizing=False, # new: full position sizing
 )

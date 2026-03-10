@@ -178,12 +178,14 @@ def _run_trial(
     symbol: str,
     cfg_dict: dict[str, Any],
     base_cfg,
+    timeframe: str = "5m",
 ) -> dict[str, Any]:
     """Run one backtest and return the result enriched with computed metrics."""
     try:
         result = run_backtest_on_candles(
             candles,
             symbol=symbol,
+            timeframe=timeframe,
             starting_balance_usd=base_cfg.starting_balance_usd,
             aggressive_allocation=base_cfg.aggressive_allocation,
             max_risk_per_trade=base_cfg.max_risk_per_trade,
@@ -262,6 +264,7 @@ def _optuna_objective(
     base_cfg,
     metric: str,
     constraints: dict[str, float],
+    timeframe: str = "5m",
 ) -> float:
     """Optuna objective: suggest params, run backtest, return score."""
     cfg_dict: dict[str, Any] = {}
@@ -296,7 +299,7 @@ def _optuna_objective(
     if cfg_dict["long_ma_window"] <= cfg_dict["short_ma_window"] + 5:
         return float("-inf")
 
-    row = _run_trial(candles, symbol, cfg_dict, base_cfg)
+    row = _run_trial(candles, symbol, cfg_dict, base_cfg, timeframe=timeframe)
 
     if "error" in row:
         return float("-inf")
@@ -314,6 +317,7 @@ def optimize_bayesian(
     symbol: str,
     base_cfg,
     *,
+    timeframe: str = "5m",
     trials: int = 200,
     metric: str = "sharpe",
     constraints: dict[str, float] | None = None,
@@ -338,7 +342,9 @@ def optimize_bayesian(
     )
 
     study.optimize(
-        lambda trial: _optuna_objective(trial, candles, symbol, base_cfg, metric, constraints),
+        lambda trial: _optuna_objective(
+            trial, candles, symbol, base_cfg, metric, constraints, timeframe=timeframe
+        ),
         n_trials=trials,
         show_progress_bar=verbose,
     )
@@ -399,6 +405,7 @@ def optimize(
     symbol: str,
     base_cfg,
     *,
+    timeframe: str = "5m",
     trials: int = 200,
     metric: str = "sharpe",
     constraints: dict[str, float] | None = None,
@@ -462,7 +469,7 @@ def optimize(
 
     for t in range(trials):
         cfg_dict = sample_config(rng)
-        row = _run_trial(candles, symbol, cfg_dict, base_cfg)
+        row = _run_trial(candles, symbol, cfg_dict, base_cfg, timeframe=timeframe)
 
         # Attach trial metadata
         row["trial"] = t
@@ -651,6 +658,7 @@ def main(argv: list[str] | None = None) -> None:
             candles,
             args.symbol,
             cfg,
+            timeframe=args.timeframe,
             trials=args.trials,
             metric=metric_key,
             constraints=constraints,
@@ -663,6 +671,7 @@ def main(argv: list[str] | None = None) -> None:
             candles,
             args.symbol,
             cfg,
+            timeframe=args.timeframe,
             trials=args.trials,
             metric=metric_key,
             constraints=constraints,
@@ -671,17 +680,45 @@ def main(argv: list[str] | None = None) -> None:
             verbose=not args.quiet,
         )
 
-    out_path = _output_path(args.out_dir, args.symbol, args.timeframe)
-    with open(out_path, "w") as f:
-        json.dump(result, f, indent=2, default=str)
-    logger.info("Results written to %s", out_path)
+    # Add result metadata for versioning and reproducibility
+    from hogan_bot.timeframe_utils import bars_per_year
+    result["metric_version"] = 2
+    result["timeframe"] = args.timeframe
+    result["bars_per_year"] = int(bars_per_year(args.timeframe))
+    result["execution_mode"] = "same_bar"
+    ts_col = "ts_ms" if "ts_ms" in candles.columns else "timestamp"
+    if ts_col in candles.columns:
+        if ts_col == "ts_ms":
+            result["data_start_ts"] = int(candles["ts_ms"].iloc[0])
+            result["data_end_ts"] = int(candles["ts_ms"].iloc[-1])
+        else:
+            first_ts = candles["timestamp"].iloc[0]
+            last_ts = candles["timestamp"].iloc[-1]
+            result["data_start_ts"] = int(pd.Timestamp(first_ts).timestamp() * 1000)
+            result["data_end_ts"] = int(pd.Timestamp(last_ts).timestamp() * 1000)
+    else:
+        result["data_start_ts"] = None
+        result["data_end_ts"] = None
 
-    # Auto-promotion: evaluate whether the new result should become the active config
+    # Write candidate to a separate path so we can compare against incumbent
+    # (incumbent lives at opt_{symbol}_{tf}.json). Previously we wrote over
+    # incumbent before evaluation, neutering the "beat incumbent" logic.
+    from datetime import datetime, timezone
+    candidates_dir = Path(args.out_dir) / "candidates"
+    candidates_dir.mkdir(parents=True, exist_ok=True)
+    ts_str = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
+    safe_sym = args.symbol.replace("/", "-").replace(":", "-")
+    candidate_path = candidates_dir / f"opt_{safe_sym}_{args.timeframe}_{ts_str}.json"
+    with open(candidate_path, "w") as f:
+        json.dump(result, f, indent=2, default=str)
+    logger.info("Results written to %s", candidate_path)
+
+    # Auto-promotion: compare candidate against incumbent, promote only if better
     try:
         from hogan_bot.auto_promote import evaluate_and_promote
         promo = evaluate_and_promote(
             args.symbol, args.timeframe,
-            candidate_path=out_path,
+            candidate_path=str(candidate_path),
             models_dir=args.out_dir,
         )
         if promo.promoted:

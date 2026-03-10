@@ -229,14 +229,15 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
     typical_price = (high + low + close) / 3.0
     pv = typical_price * volume
 
-    # Determine day grouping from available timestamp columns
+    # Determine day grouping from available timestamp columns (UTC calendar day)
     if "ts_ms" in candles.columns:
         day_key = pd.to_datetime(candles["ts_ms"], unit="ms", utc=True).dt.date
     elif "timestamp" in candles.columns:
         day_key = pd.to_datetime(candles["timestamp"], utc=True).dt.date
     else:
-        # Fallback: assume 288 5m bars per day
-        day_key = pd.Series(np.arange(len(close)) // 288, index=close.index)
+        from hogan_bot.timeframe_utils import bars_per_day, infer_timeframe_from_candles
+        tf = infer_timeframe_from_candles(candles) or "5m"
+        day_key = pd.Series(np.arange(len(close)) // bars_per_day(tf), index=close.index)
 
     cum_pv = pv.groupby(day_key).cumsum()
     cum_vol = volume.groupby(day_key).cumsum().clip(lower=1e-9)
@@ -311,16 +312,24 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
 
     # 6 & 7. Previous-day high / low reference levels (PDH / PDL):
     #    Key ICT levels where buy-side and sell-side liquidity rest overnight.
+    #    Uses UTC calendar-day semantics consistently.
     if "ts_ms" in candles.columns:
         day_key = pd.to_datetime(candles["ts_ms"], unit="ms", utc=True).dt.date
     elif "timestamp" in candles.columns:
         day_key = pd.to_datetime(candles["timestamp"], utc=True).dt.date
     else:
-        day_key = pd.Series(np.arange(len(close)) // 288, index=close.index)
+        from hogan_bot.timeframe_utils import bars_per_day, infer_timeframe_from_candles
+        tf = infer_timeframe_from_candles(candles) or "5m"
+        bpd = bars_per_day(tf)
+        day_key = pd.Series(np.arange(len(close)) // bpd, index=close.index)
 
-    day_key_s = pd.Series(day_key.values, index=close.index)
-    prev_day_high = high.groupby(day_key_s).transform("max").shift(288)
-    prev_day_low  = low.groupby(day_key_s).transform("min").shift(288)
+    # Per-day agg; map each bar to previous UTC calendar day's high/low
+    day_high = high.groupby(day_key).max()
+    day_low = low.groupby(day_key).min()
+    prev_day_high_map = day_high.shift(1)
+    prev_day_low_map = day_low.shift(1)
+    prev_day_high = day_key.map(prev_day_high_map)
+    prev_day_low = day_key.map(prev_day_low_map)
     # % distance below PDH (positive = price is below PDH, the "safe" zone)
     frame["ict_pdh_dist"] = (prev_day_high - close) / close.clip(lower=1e-9)
     # % distance above PDL (positive = price is above PDL, the "safe" zone)

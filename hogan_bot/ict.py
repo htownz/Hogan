@@ -155,6 +155,7 @@ def liquidity_pools(
     swing_left: int = 2,
     swing_right: int = 2,
     eq_tolerance_pct: float = 0.0008,
+    timeframe: str | None = None,
 ) -> dict[str, Any]:
     """Aggregate all liquidity pool types into a single snapshot dict.
 
@@ -163,18 +164,45 @@ def liquidity_pools(
     ``recent_swing_high``, ``recent_swing_low``,
     ``prev_day_high``, ``prev_day_low``.
 
-    *prev_day* values approximate the previous 24-hour session using a
-    288-bar rolling window (assuming 5-minute bars; silently omitted for
-    shorter DataFrames).
+    *prev_day* values use the previous UTC calendar day when timestamps exist;
+    otherwise fall back to bars_per_day(timeframe) for bar-based approximation.
     """
     n = len(df)
     sh, sl = find_swings(df, left=swing_left, right=swing_right)
 
     pdh = pdl = None
-    if n >= 288:
-        prev = df.iloc[n - 288 : n - 144]
-        pdh = float(prev["high"].max())
-        pdl = float(prev["low"].min())
+    # Previous UTC calendar day high/low
+    if "ts_ms" in df.columns or "timestamp" in df.columns:
+        ts_col = "ts_ms" if "ts_ms" in df.columns else "timestamp"
+        if ts_col == "ts_ms":
+            dt = pd.to_datetime(df["ts_ms"], unit="ms", utc=True)
+        else:
+            dt = pd.to_datetime(df["timestamp"], utc=True)
+        day_key = dt.dt.date
+        last_date = day_key.iloc[-1]
+        # Find previous calendar day
+        unique_dates = sorted(day_key.unique())
+        prev_date = None
+        for d in reversed(unique_dates):
+            if d < last_date:
+                prev_date = d
+                break
+        if prev_date is not None:
+            prev_mask = day_key == prev_date
+            if prev_mask.any():
+                prev_df = df.loc[prev_mask]
+                pdh = float(prev_df["high"].max())
+                pdl = float(prev_df["low"].min())
+    else:
+        # Fallback: bar-based (previous "day" = previous bpd bars when no timestamps)
+        from hogan_bot.timeframe_utils import bars_per_day, infer_timeframe_from_candles
+        tf = timeframe or infer_timeframe_from_candles(df) or "5m"
+        bpd = bars_per_day(tf)
+        if n >= 2 * bpd:
+            prev = df.iloc[n - 2 * bpd : n - bpd]
+            if len(prev) > 0:
+                pdh = float(prev["high"].max())
+                pdl = float(prev["low"].min())
 
     return {
         "swing_highs": sh,

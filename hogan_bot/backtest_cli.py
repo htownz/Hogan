@@ -58,7 +58,7 @@ def _load_rl_policy(model_path: str):
     return _RL_POLICY_CACHE[model_path]
 
 
-def _run_single(cfg, candles, symbol, ml_model, overrides: dict | None = None, use_ict: bool = False, use_rl_agent: bool = False, rl_policy=None):
+def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, overrides: dict | None = None, use_ict: bool = False, use_rl_agent: bool = False, rl_policy=None):
     """Run one backtest with optional per-key overrides on *cfg*.
 
     Returns the full :class:`~hogan_bot.backtest.BacktestResult` object so
@@ -68,6 +68,7 @@ def _run_single(cfg, candles, symbol, ml_model, overrides: dict | None = None, u
     return run_backtest_on_candles(
         candles=candles,
         symbol=symbol,
+        timeframe=timeframe,
         starting_balance_usd=cfg.starting_balance_usd,
         aggressive_allocation=cfg.aggressive_allocation,
         max_risk_per_trade=cfg.max_risk_per_trade,
@@ -138,7 +139,8 @@ def main() -> None:
         rows = []
         for label, overrides in _COMPARE_CONFIGS:
             result = _run_single(
-                cfg, candles, args.symbol, ml_model, overrides,
+                cfg, candles, args.symbol, ml_model,
+                timeframe=timeframe, overrides=overrides,
                 use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
             )
             rows.append({"config": label, **result.summary_dict()})
@@ -148,6 +150,7 @@ def main() -> None:
     else:
         result = _run_single(
             cfg, candles, args.symbol, ml_model,
+            timeframe=timeframe,
             use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
         )
         print(json.dumps(result.summary_dict(), indent=2))

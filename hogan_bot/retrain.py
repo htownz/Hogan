@@ -68,34 +68,11 @@ from hogan_bot.ml import (
 )
 from hogan_bot.registry import ModelRegistry
 from hogan_bot.storage import get_connection, load_candles
+from hogan_bot.timeframe_utils import default_horizon_bars
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Timeframe-aware default horizon
-# ---------------------------------------------------------------------------
-
-_TF_MINUTES: dict[str, int] = {
-    "1m": 1, "5m": 5, "10m": 10, "15m": 15, "30m": 30,
-    "1h": 60, "2h": 120, "4h": 240, "1d": 1440,
-}
-
 _DEFAULT_HORIZON_HOURS = 6
-
-
-def default_horizon_bars(timeframe: str, target_hours: float = _DEFAULT_HORIZON_HOURS) -> int:
-    """Compute the horizon_bars that targets *target_hours* of real time.
-
-    Different timeframes need different bar counts to represent the same
-    real-world holding period.  For example, 6 hours = 72 bars at 5m,
-    12 bars at 30m, 6 bars at 1h.
-
-    Falls back to 12 if the timeframe is unrecognised.
-    """
-    minutes = _TF_MINUTES.get(timeframe)
-    if minutes is None:
-        return 12
-    return max(1, round(target_hours * 60 / minutes))
 
 
 # ---------------------------------------------------------------------------
@@ -418,6 +395,7 @@ def _train_to_candidate(args: argparse.Namespace, candles: pd.DataFrame) -> tupl
         bt_result = run_backtest_on_candles(
             candles=candles,
             symbol=args.symbol,
+            timeframe=args.timeframe,
             starting_balance_usd=cfg.starting_balance_usd,
             aggressive_allocation=cfg.aggressive_allocation,
             max_risk_per_trade=cfg.max_risk_per_trade,
@@ -889,7 +867,7 @@ def main(argv: list[str] | None = None) -> None:
     args = _build_parser().parse_args(argv)
 
     if args.horizon_bars is None:
-        args.horizon_bars = default_horizon_bars(args.timeframe)
+        args.horizon_bars = default_horizon_bars(args.timeframe, target_hours=_DEFAULT_HORIZON_HOURS)
         logger.info(
             "Auto-computed horizon_bars=%d for timeframe=%s (targeting ~%dh holding period)",
             args.horizon_bars, args.timeframe, _DEFAULT_HORIZON_HOURS,

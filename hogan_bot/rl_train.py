@@ -129,8 +129,11 @@ def _evaluate(env, policy, n_episodes: int = 1) -> dict[str, float]:
     equity = all_equity_curves[0]
     equity_arr = np.array(equity)
     step_returns = np.diff(equity_arr) / np.maximum(equity_arr[:-1], 1e-9)
+    from hogan_bot.timeframe_utils import bars_per_year, infer_timeframe_from_candles
+    tf = infer_timeframe_from_candles(candles) or "5m"
+    bpy = float(bars_per_year(tf))
     sharpe = (
-        float(np.mean(step_returns) / (np.std(step_returns) + 1e-9)) * np.sqrt(252 * 288)
+        float(np.mean(step_returns) / (np.std(step_returns) + 1e-9)) * np.sqrt(bpy)
         if len(step_returns) > 1
         else 0.0
     )

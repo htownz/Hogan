@@ -170,6 +170,8 @@ def run_backtest_comparison(conn, model_path: str, symbol: str = "BTC/USD") -> d
         model = load_model(model_path) if os.path.exists(model_path) else None
         result = run_backtest_on_candles(
             candles,
+            symbol=symbol,
+            timeframe="5m",
             starting_balance_usd=config.starting_balance_usd,
             fee_rate=config.fee_rate,
             short_ma_window=config.short_ma_window,

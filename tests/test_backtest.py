@@ -15,6 +15,7 @@ class BacktestTests(unittest.TestCase):
         result = run_backtest_on_candles(
             candles=df,
             symbol="BTC/USD",
+            timeframe="5m",
             starting_balance_usd=1800,
             aggressive_allocation=0.75,
             max_risk_per_trade=0.03,
