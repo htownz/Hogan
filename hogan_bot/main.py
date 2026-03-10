@@ -10,6 +10,7 @@ from hogan_bot.config import BotConfig, load_config, symbol_config
 from hogan_bot.decision import apply_ml_filter, ml_confidence
 from hogan_bot.discord_commands import make_command_listener
 from hogan_bot.exchange import ExchangeClient
+from hogan_bot.macro_filter import evaluate_macro
 from hogan_bot.ml import TrainedModel, load_model, predict_up_probability
 from hogan_bot.mtf_ensemble import evaluate_mtf
 from hogan_bot.trade_explainer import explain_trade as _explain_trade
@@ -214,6 +215,18 @@ def run_iteration(
             )
             action = mtf_result.final_action
             conf_scale *= mtf_result.confidence_mult
+
+        # ── Macro correlation filter ──────────────────────────────────────
+        if config.use_macro_filter and action != "hold":
+            macro_result = evaluate_macro(
+                conn, action=action,
+                ma_period=config.macro_equity_ma_period,
+                vix_caution=config.macro_vix_caution,
+                vix_block=config.macro_vix_block,
+            )
+            if macro_result.block_longs and action == "buy":
+                action = "hold"
+            conf_scale *= macro_result.confidence_mult
 
         size = calculate_position_size(
             equity_usd=equity,

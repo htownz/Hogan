@@ -15,6 +15,7 @@ from hogan_bot.decision import apply_ml_filter, ml_confidence
 from hogan_bot.exchange import ExchangeClient
 from hogan_bot.execution import LiveExecution, PaperExecution
 from hogan_bot.live_account import fetch_account_state
+from hogan_bot.macro_filter import evaluate_macro
 from hogan_bot.metrics import MetricsServer, LoopTimer, EQUITY, CASH, DRAWDOWN, ORDERS, ORDER_FAILS, EXCEPTIONS, SLIPPAGE_BPS, FILLS
 from hogan_bot.ml import load_model as load_simple_model, predict_up_probability as predict_simple
 from hogan_bot.ml_advanced import load_artifact as load_adv_artifact, predict_up_probability as predict_adv
@@ -587,6 +588,18 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                         )
                         action = mtf_result.final_action
                         conf_scale *= mtf_result.confidence_mult
+
+                    # ── Macro correlation filter ──────────────────────
+                    if config.use_macro_filter and action != "hold":
+                        macro_result = evaluate_macro(
+                            conn, action=action,
+                            ma_period=config.macro_equity_ma_period,
+                            vix_caution=config.macro_vix_caution,
+                            vix_block=config.macro_vix_block,
+                        )
+                        if macro_result.block_longs and action == "buy":
+                            action = "hold"
+                        conf_scale *= macro_result.confidence_mult
 
                     if action == "hold":
                         continue

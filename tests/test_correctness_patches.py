@@ -722,3 +722,116 @@ class TestAutoPromotion:
         results = promote_all(models_dir=str(tmp_path), min_sharpe=2.0)
         assert len(results) == 2
         assert all(r.promoted for r in results)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 10. Macro correlation filter
+# ═══════════════════════════════════════════════════════════════════════════
+
+from hogan_bot.macro_filter import evaluate_macro, _is_bullish
+
+
+def _macro_candles(closes: list[float]) -> pd.DataFrame:
+    return pd.DataFrame({
+        "open": closes,
+        "high": [c * 1.01 for c in closes],
+        "low": [c * 0.99 for c in closes],
+        "close": closes,
+        "volume": [1000.0] * len(closes),
+    })
+
+
+class TestMacroFilter:
+
+    def test_risk_on_full_confidence(self):
+        """SPY bullish + DXY weak + VIX calm → risk_on, confidence ~1.0."""
+        spy = _macro_candles(list(range(400, 430)))
+        qqq = _macro_candles(list(range(350, 380)))
+        uup = _macro_candles(list(range(30, 0, -1)))  # falling DXY
+        vix = _macro_candles([15.0] * 30)
+        gld = _macro_candles([180.0] * 30)
+        r = evaluate_macro(
+            None, action="buy", ma_period=10,
+            spy_candles=spy, qqq_candles=qqq, uup_candles=uup,
+            vix_candles=vix, gld_candles=gld,
+        )
+        assert r.confidence_mult == 1.0
+        assert r.block_longs is False
+        assert r.macro_environment == "risk_on"
+
+    def test_risk_off_spy_qqq_bearish(self):
+        """SPY + QQQ both bearish → strong risk-off, confidence 0.40."""
+        spy = _macro_candles(list(range(430, 400, -1)))
+        qqq = _macro_candles(list(range(380, 350, -1)))
+        r = evaluate_macro(
+            None, action="buy", ma_period=10,
+            spy_candles=spy, qqq_candles=qqq,
+        )
+        assert r.confidence_mult < 0.45
+        assert r.spy_bullish is False
+        assert r.qqq_bullish is False
+
+    def test_vix_caution_reduces_confidence(self):
+        """VIX between caution and block thresholds → 0.70x."""
+        vix = _macro_candles([30.0] * 30)
+        r = evaluate_macro(
+            None, action="buy", ma_period=10,
+            vix_candles=vix, vix_caution=25.0, vix_block=35.0,
+        )
+        assert abs(r.confidence_mult - 0.70) < 0.01
+        assert r.block_longs is False
+
+    def test_vix_spike_blocks_longs(self):
+        """VIX above block threshold → block_longs = True."""
+        vix = _macro_candles([40.0] * 30)
+        r = evaluate_macro(
+            None, action="buy", ma_period=10,
+            vix_candles=vix, vix_caution=25.0, vix_block=35.0,
+        )
+        assert r.block_longs is True
+        assert r.confidence_mult == 0.0
+        assert r.macro_environment == "risk_off"
+
+    def test_gold_btc_divergence(self):
+        """Gold up + SPY down + buy signal → flight-to-safety divergence."""
+        spy = _macro_candles(list(range(430, 400, -1)))
+        gld = _macro_candles(list(range(170, 200)))
+        r = evaluate_macro(
+            None, action="buy", ma_period=10,
+            spy_candles=spy, gld_candles=gld,
+        )
+        assert r.confidence_mult < 0.55  # SPY bearish + gold divergence stacks
+        assert r.gold_bullish is True
+        assert r.spy_bullish is False
+
+    def test_dxy_strong_with_spy_bearish(self):
+        """DXY strong + SPY bearish → compounded headwind."""
+        spy = _macro_candles(list(range(430, 400, -1)))
+        uup = _macro_candles(list(range(24, 54)))
+        r = evaluate_macro(
+            None, action="buy", ma_period=10,
+            spy_candles=spy, uup_candles=uup,
+        )
+        assert r.confidence_mult < 0.50
+        assert r.dxy_strong is True
+
+    def test_missing_candles_neutral(self):
+        """No candles at all → neutral, full confidence, no blocking."""
+        r = evaluate_macro(None, action="buy", ma_period=10)
+        assert r.confidence_mult == 1.0
+        assert r.block_longs is False
+        assert r.macro_environment in ("neutral", "risk_on")
+
+    def test_sell_action_no_gold_divergence(self):
+        """Gold divergence only applies to buy signals, not sell."""
+        spy = _macro_candles(list(range(430, 400, -1)))
+        gld = _macro_candles(list(range(170, 200)))
+        r_buy = evaluate_macro(
+            None, action="buy", ma_period=10,
+            spy_candles=spy, gld_candles=gld,
+        )
+        r_sell = evaluate_macro(
+            None, action="sell", ma_period=10,
+            spy_candles=spy, gld_candles=gld,
+        )
+        assert r_sell.confidence_mult > r_buy.confidence_mult
