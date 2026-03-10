@@ -6,6 +6,10 @@ __pycache__/
 .env
 models/hogan_rl_policy.zip
 
+# SQLite temporary files — auto-generated, environment-specific
+*.db-wal
+*.db-shm
+
 # Secret / key files — NEVER commit these
 API Keys.txt
 *.key
