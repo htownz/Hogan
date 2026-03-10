@@ -144,6 +144,12 @@ class BotConfig:
     mtf_daily_slow_ma: int = 30
     mtf_unconfirmed_scale: float = 0.60
 
+    # Macro correlation filter: SPY/DXY/VIX/Gold risk gates for BTC trades
+    use_macro_filter: bool = False
+    macro_vix_caution: float = 25.0      # VIX above this → reduce confidence
+    macro_vix_block: float = 35.0        # VIX above this → block new longs
+    macro_equity_ma_period: int = 20     # MA period for SPY/QQQ/GLD/UUP trend
+
     # Reinforcement Learning agent
     use_rl_agent: bool = False
     rl_model_path: str = "models/hogan_rl_policy.zip"
@@ -325,6 +331,10 @@ def load_config() -> BotConfig:
         mtf_unconfirmed_scale=float(os.getenv("HOGAN_MTF_UNCONFIRMED_SCALE", "0.60")),
         use_online_learning=os.getenv("HOGAN_USE_ONLINE_LEARNING", "false").lower() == "true",
         online_learning_interval=int(os.getenv("HOGAN_ONLINE_LEARNING_INTERVAL", "50")),
+        use_macro_filter=os.getenv("HOGAN_USE_MACRO_FILTER", "false").lower() == "true",
+        macro_vix_caution=float(os.getenv("HOGAN_MACRO_VIX_CAUTION", "25.0")),
+        macro_vix_block=float(os.getenv("HOGAN_MACRO_VIX_BLOCK", "35.0")),
+        macro_equity_ma_period=int(os.getenv("HOGAN_MACRO_EQUITY_MA", "20")),
         use_rl_agent=os.getenv("HOGAN_USE_RL_AGENT", "false").lower() == "true",
         rl_model_path=os.getenv("HOGAN_RL_MODEL_PATH", "models/hogan_rl_policy.zip"),
         rl_reward_type=os.getenv("HOGAN_RL_REWARD_TYPE", "risk_adjusted"),
