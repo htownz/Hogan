@@ -89,7 +89,7 @@ def _load_from_db(symbol: str, timeframe: str) -> pd.DataFrame:
 # Sharpe evaluation helper
 # ---------------------------------------------------------------------------
 
-def _sharpe_on_env(env, policy) -> float:
+def _sharpe_on_env(env, policy, bars_per_year: float) -> float:
     """Run policy deterministically on env and return annualised Sharpe."""
     obs, _ = env.reset()
     equity_curve: list[float] = [env.starting_balance]
@@ -104,8 +104,7 @@ def _sharpe_on_env(env, policy) -> float:
     rets = np.diff(arr) / np.maximum(arr[:-1], 1e-9)
     if len(rets) < 2 or np.std(rets) < 1e-12:
         return -10.0  # degenerate episode
-    # Annualise for 5m bars: 365 * 24 * 12 = 105_120 bars/year
-    return float(np.mean(rets) / np.std(rets) * np.sqrt(105_120))
+    return float(np.mean(rets) / np.std(rets) * np.sqrt(bars_per_year))
 
 
 # ---------------------------------------------------------------------------
@@ -123,10 +122,13 @@ def _make_objective(
     trial_steps: int,
     seed: int,
     device: str,
+    timeframe: str = "5m",
 ):
     """Return an Optuna objective closure."""
     from hogan_bot.rl_env import TradingEnv
+    from hogan_bot.timeframe_utils import bars_per_year
 
+    bpy = float(bars_per_year(timeframe))
     env_kwargs = dict(
         starting_balance=starting_balance,
         fee_rate=fee_rate,
@@ -171,7 +173,7 @@ def _make_objective(
             model.learn(total_timesteps=trial_steps)
 
         val_env = TradingEnv(val_candles, seed=seed, **env_kwargs)
-        sharpe = _sharpe_on_env(val_env, model)
+        sharpe = _sharpe_on_env(val_env, model, bpy)
         return sharpe
 
     return objective
@@ -184,6 +186,7 @@ def _make_objective(
 def tune(
     candles: pd.DataFrame,
     *,
+    timeframe: str = "5m",
     reward_type: str = "risk_adjusted",
     model_dir: str = "models",
     starting_balance: float = 10_000.0,
@@ -235,6 +238,7 @@ def tune(
         trial_steps=trial_steps,
         seed=seed,
         device=device,
+        timeframe=timeframe,
     )
 
     sampler = optuna.samplers.TPESampler(seed=seed)
@@ -319,6 +323,7 @@ def main() -> None:
 
     tune(
         candles,
+        timeframe=args.timeframe,
         reward_type=args.reward,
         model_dir=args.model_dir,
         starting_balance=args.balance,

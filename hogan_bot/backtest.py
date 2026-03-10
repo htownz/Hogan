@@ -10,8 +10,10 @@ from hogan_bot.ml import TrainedModel, predict_up_probability
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
 from hogan_bot.strategy import generate_signal
+from hogan_bot.timeframe_utils import bars_per_year as tf_bars_per_year
+from hogan_bot.timeframe_utils import infer_timeframe_from_candles
 
-# Annualisation constant for 5-minute 24/7 crypto bars.
+# Annualisation constant for 5-minute 24/7 crypto bars (fallback when timeframe unknown).
 # 365 days × 24 hours × 12 five-minute intervals = 105 120 bars/year.
 _BARS_PER_YEAR_5M: float = 105_120.0
 
@@ -39,6 +41,8 @@ class BacktestResult:
     sharpe_ratio: float | None = None
     sortino_ratio: float | None = None
     calmar_ratio: float | None = None
+    # bars_per_year used for annualization (for result versioning / reproducibility)
+    bars_per_year: float = _BARS_PER_YEAR_5M
     equity_curve: list[float] = field(default_factory=list)
     trade_log: list[dict] = field(default_factory=list)
     # Full closed-trade records for ML learning: entry_bar_idx, entry_ts_ms, exit_bar_idx,
@@ -217,7 +221,8 @@ def evaluate_regimes(
     for eq, lbl in zip(equity, labels):
         regime_bars[lbl].append(eq)
 
-    return {regime: _regime_metrics(bars) for regime, bars in regime_bars.items()}
+    bpy = getattr(result, "bars_per_year", _BARS_PER_YEAR_5M)
+    return {regime: _regime_metrics(bars, bars_per_year=bpy) for regime, bars in regime_bars.items()}
 
 
 def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
@@ -232,6 +237,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     volume_window: int,
     volume_threshold: float,
     fee_rate: float,
+    timeframe: str | None = None,
     ml_model: TrainedModel | None = None,
     ml_buy_threshold: float = 0.55,
     ml_sell_threshold: float = 0.45,
@@ -267,12 +273,22 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     # Loss cooldown
     loss_cooldown_bars: int = 12,
     # Slippage model: basis points added to buys, subtracted from sells
-    slippage_bps: float = 5.0,
+    # Execution: "same_bar" = fill at signal bar close; "next_open" = fill at next bar open
+    execution_mode: str = "same_bar",
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
     if candles.empty:
         return BacktestResult(starting_balance_usd, starting_balance_usd, 0.0, 0.0, 0, 0.0)
+
+    use_next_open = execution_mode == "next_open"
+
+    # Resolve bars_per_year for correct Sharpe/Sortino annualization
+    if timeframe:
+        _bars_per_year = float(tf_bars_per_year(timeframe))
+    else:
+        inferred = infer_timeframe_from_candles(candles)
+        _bars_per_year = float(tf_bars_per_year(inferred)) if inferred else _BARS_PER_YEAR_5M
 
     slip_mult = slippage_bps / 10000.0
     portfolio = PaperPortfolio(cash_usd=starting_balance_usd, fee_rate=fee_rate)
@@ -294,14 +310,60 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     # RL position-state tracking (used in generate_signal RL vote)
     _rl_bars_in_trade: int = 0
 
+    # Next-open execution: pending buys/sells to fill at next bar's open
+    _pending_buys: dict[str, float] = {}
+    _pending_sells: dict[str, tuple[float, float, int | None, str]] = {}
+
     min_rows = max(long_ma_window, volume_window) + 2
     for i in range(min_rows, len(candles) + 1):
         window = candles.iloc[:i]
         px = float(window["close"].iloc[-1])
         bar_ts = str(window["timestamp"].iloc[-1]) if "timestamp" in window.columns else str(i)
+        # Open of current bar (for next_open fills from previous bar's signal)
+        open_px = float(window["open"].iloc[-1]) if "open" in window.columns else px
 
         if _cooldown_remaining > 0:
             _cooldown_remaining -= 1
+
+        # Process pending next_open fills at this bar's open (we have "next bar" data)
+        if use_next_open:
+            for sym, size in list(_pending_buys.items()):
+                _pending_buys.pop(sym, None)
+                buy_px = open_px * (1.0 + slip_mult)
+                if portfolio.execute_buy(sym, buy_px, size, trailing_stop_pct=trailing_stop_pct, take_profit_pct=take_profit_pct):
+                    trades += 1
+                    _entry_bar[sym] = i - 1
+                    trade_log.append({"bar": bar_ts, "action": "buy", "reason": "signal", "price": buy_px, "qty": size})
+            for sym, (qty, avg_entry, entry_bar_idx, reason) in list(_pending_sells.items()):
+                _pending_sells.pop(sym, None)
+                _entry_bar.pop(sym, None)
+                sell_px = open_px * (1.0 - slip_mult)
+                if portfolio.execute_sell(sym, sell_px, qty):
+                    trades += 1
+                    closed += 1
+                    is_win = sell_px > avg_entry
+                    if is_win:
+                        wins += 1
+                    elif loss_cooldown_bars > 0:
+                        _cooldown_remaining = loss_cooldown_bars
+                    trade_log.append({"bar": bar_ts, "action": "sell", "reason": reason, "price": sell_px, "qty": qty})
+                    if entry_bar_idx is not None:
+                        exit_bar_idx = min(i - 1, len(candles) - 1)
+                        fee = qty * (avg_entry + sell_px) * fee_rate
+                        pnl_usd = (sell_px - avg_entry) * qty - fee
+                        pnl_pct = (sell_px - avg_entry) / avg_entry * 100 if avg_entry else 0
+                        closed_trades.append({
+                            "entry_bar_idx": entry_bar_idx,
+                            "exit_bar_idx": exit_bar_idx,
+                            "entry_ts_ms": _bar_ts_ms(candles, entry_bar_idx),
+                            "exit_ts_ms": _bar_ts_ms(candles, exit_bar_idx),
+                            "side": "long",
+                            "entry_price": avg_entry,
+                            "exit_price": sell_px,
+                            "qty": qty,
+                            "pnl_usd": pnl_usd,
+                            "pnl_pct": pnl_pct,
+                        })
 
         mark = {symbol: px}
         exits = portfolio.check_exits(mark, max_hold_bars=max_hold_bars)
@@ -311,43 +373,41 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 continue
             qty = pos.qty
             avg_entry = pos.avg_entry
-            sell_px = px * (1.0 - slip_mult)
-            entry_bar = _entry_bar.pop(exit_symbol, None)
-            if portfolio.execute_sell(exit_symbol, sell_px, qty):
-                trades += 1
-                closed += 1
-                is_win = sell_px > avg_entry
-                if is_win:
-                    wins += 1
-                elif loss_cooldown_bars > 0:
-                    _cooldown_remaining = loss_cooldown_bars
-                trade_log.append(
-                    {
-                        "bar": bar_ts,
-                        "action": "sell",
-                        "reason": reason,
-                        "price": sell_px,
-                        "qty": qty,
-                    }
-                )
-                if entry_bar is not None:
-                    entry_bar_idx = entry_bar
-                    exit_bar_idx = min(i, len(candles) - 1)
-                    fee = qty * (avg_entry + sell_px) * fee_rate
-                    pnl_usd = (sell_px - avg_entry) * qty - fee
-                    pnl_pct = (sell_px - avg_entry) / avg_entry * 100 if avg_entry else 0
-                    closed_trades.append({
-                        "entry_bar_idx": entry_bar_idx,
-                        "exit_bar_idx": exit_bar_idx,
-                        "entry_ts_ms": _bar_ts_ms(candles, entry_bar_idx),
-                        "exit_ts_ms": _bar_ts_ms(candles, exit_bar_idx),
-                        "side": "long",
-                        "entry_price": avg_entry,
-                        "exit_price": sell_px,
-                        "qty": qty,
-                        "pnl_usd": pnl_usd,
-                        "pnl_pct": pnl_pct,
-                    })
+            entry_bar = _entry_bar.get(exit_symbol)
+            if use_next_open and i < len(candles):
+                _pending_sells[exit_symbol] = (qty, avg_entry, entry_bar, reason)
+                _entry_bar.pop(exit_symbol, None)
+            else:
+                sell_px = px * (1.0 - slip_mult)
+                _entry_bar.pop(exit_symbol, None)
+                if portfolio.execute_sell(exit_symbol, sell_px, qty):
+                    trades += 1
+                    closed += 1
+                    is_win = sell_px > avg_entry
+                    if is_win:
+                        wins += 1
+                    elif loss_cooldown_bars > 0:
+                        _cooldown_remaining = loss_cooldown_bars
+                    trade_log.append(
+                        {"bar": bar_ts, "action": "sell", "reason": reason, "price": sell_px, "qty": qty}
+                    )
+                    if entry_bar is not None:
+                        exit_bar_idx = min(i - 1, len(candles) - 1)
+                        fee = qty * (avg_entry + sell_px) * fee_rate
+                        pnl_usd = (sell_px - avg_entry) * qty - fee
+                        pnl_pct = (sell_px - avg_entry) / avg_entry * 100 if avg_entry else 0
+                        closed_trades.append({
+                            "entry_bar_idx": entry_bar,
+                            "exit_bar_idx": exit_bar_idx,
+                            "entry_ts_ms": _bar_ts_ms(candles, entry_bar),
+                            "exit_ts_ms": _bar_ts_ms(candles, exit_bar_idx),
+                            "side": "long",
+                            "entry_price": avg_entry,
+                            "exit_price": sell_px,
+                            "qty": qty,
+                            "pnl_usd": pnl_usd,
+                            "pnl_pct": pnl_pct,
+                        })
 
         # Build RL position state for this bar
         _rl_pos = portfolio.positions.get(symbol)
@@ -417,21 +477,24 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         )
 
         if action == "buy":
-            buy_px = px * (1.0 + slip_mult)
             if symbol in portfolio.positions:
                 pass
             elif _cooldown_remaining > 0:
                 pass
-            elif portfolio.execute_buy(
-                symbol, buy_px, size,
-                trailing_stop_pct=trailing_stop_pct,
-                take_profit_pct=take_profit_pct,
-            ):
-                trades += 1
-                _entry_bar[symbol] = i
-                trade_log.append(
-                    {"bar": bar_ts, "action": "buy", "reason": "signal", "price": buy_px, "qty": size}
-                )
+            elif use_next_open and i < len(candles):
+                _pending_buys[symbol] = size
+            else:
+                buy_px = px * (1.0 + slip_mult)
+                if portfolio.execute_buy(
+                    symbol, buy_px, size,
+                    trailing_stop_pct=trailing_stop_pct,
+                    take_profit_pct=take_profit_pct,
+                ):
+                    trades += 1
+                    _entry_bar[symbol] = i - 1
+                    trade_log.append(
+                        {"bar": bar_ts, "action": "buy", "reason": "signal", "price": buy_px, "qty": size}
+                    )
         elif action == "sell":
             if symbol not in portfolio.positions:
                 continue
@@ -441,42 +504,41 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 continue
             sell_qty = min(qty, size)
             avg_entry = pos.avg_entry
-            sell_px_sig = px * (1.0 - slip_mult)
-            entry_bar_idx = _entry_bar.pop(symbol, None)
-            if portfolio.execute_sell(symbol, sell_px_sig, sell_qty):
-                trades += 1
-                closed += 1
-                is_win = sell_px_sig > avg_entry
-                if is_win:
-                    wins += 1
-                elif loss_cooldown_bars > 0:
-                    _cooldown_remaining = loss_cooldown_bars
-                trade_log.append(
-                    {
-                        "bar": bar_ts,
-                        "action": "sell",
-                        "reason": "signal",
-                        "price": sell_px_sig,
-                        "qty": sell_qty,
-                    }
-                )
-                if entry_bar_idx is not None:
-                    exit_bar_idx = min(i, len(candles) - 1)
-                    fee = sell_qty * (avg_entry + sell_px_sig) * fee_rate
-                    pnl_usd = (sell_px_sig - avg_entry) * sell_qty - fee
-                    pnl_pct = (sell_px_sig - avg_entry) / avg_entry * 100 if avg_entry else 0
-                    closed_trades.append({
-                        "entry_bar_idx": entry_bar_idx,
-                        "exit_bar_idx": exit_bar_idx,
-                        "entry_ts_ms": _bar_ts_ms(candles, entry_bar_idx),
-                        "exit_ts_ms": _bar_ts_ms(candles, exit_bar_idx),
-                        "side": "long",
-                        "entry_price": avg_entry,
-                        "exit_price": sell_px_sig,
-                        "qty": sell_qty,
-                        "pnl_usd": pnl_usd,
-                        "pnl_pct": pnl_pct,
-                    })
+            entry_bar_idx = _entry_bar.get(symbol)
+            if use_next_open and i < len(candles):
+                _pending_sells[symbol] = (sell_qty, avg_entry, entry_bar_idx, "signal")
+                _entry_bar.pop(symbol, None)
+            else:
+                sell_px_sig = px * (1.0 - slip_mult)
+                _entry_bar.pop(symbol, None)
+                if portfolio.execute_sell(symbol, sell_px_sig, sell_qty):
+                    trades += 1
+                    closed += 1
+                    is_win = sell_px_sig > avg_entry
+                    if is_win:
+                        wins += 1
+                    elif loss_cooldown_bars > 0:
+                        _cooldown_remaining = loss_cooldown_bars
+                    trade_log.append(
+                        {"bar": bar_ts, "action": "sell", "reason": "signal", "price": sell_px_sig, "qty": sell_qty}
+                    )
+                    if entry_bar_idx is not None:
+                        exit_bar_idx = min(i - 1, len(candles) - 1)
+                        fee = sell_qty * (avg_entry + sell_px_sig) * fee_rate
+                        pnl_usd = (sell_px_sig - avg_entry) * sell_qty - fee
+                        pnl_pct = (sell_px_sig - avg_entry) / avg_entry * 100 if avg_entry else 0
+                        closed_trades.append({
+                            "entry_bar_idx": entry_bar_idx,
+                            "exit_bar_idx": exit_bar_idx,
+                            "entry_ts_ms": _bar_ts_ms(candles, entry_bar_idx),
+                            "exit_ts_ms": _bar_ts_ms(candles, exit_bar_idx),
+                            "side": "long",
+                            "entry_price": avg_entry,
+                            "exit_price": sell_px_sig,
+                            "qty": sell_qty,
+                            "pnl_usd": pnl_usd,
+                            "pnl_pct": pnl_pct,
+                        })
 
     if not equity_curve:
         equity_curve = [starting_balance_usd]
@@ -495,9 +557,10 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         max_drawdown_pct=max_dd_pct,
         trades=trades,
         win_rate=win_rate,
-        sharpe_ratio=compute_sharpe(equity_curve),
-        sortino_ratio=compute_sortino(equity_curve),
+        sharpe_ratio=compute_sharpe(equity_curve, bars_per_year=_bars_per_year),
+        sortino_ratio=compute_sortino(equity_curve, bars_per_year=_bars_per_year),
         calmar_ratio=compute_calmar(total_return_pct, max_dd_pct),
+        bars_per_year=_bars_per_year,
         equity_curve=equity_curve,
         trade_log=trade_log,
         closed_trades=closed_trades,

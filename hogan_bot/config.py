@@ -77,6 +77,11 @@ class BotConfig:
     # 12 bars on 5m = 1 hour.
     loss_cooldown_bars: int = 12
 
+    # Hour-based overrides: when set, convert to bars using timeframe at runtime.
+    # Ensures parity between backtest and live/paper across different timeframes.
+    max_hold_hours: float = 0.0      # 0 = use max_hold_bars
+    loss_cooldown_hours: float = 0.0  # 0 = use loss_cooldown_bars
+
     # ICT (Inner Circle Trader) signal pillars
     use_ict: bool = False
     ict_model: str = "silver_bullet"          # "silver_bullet" | "killzone"

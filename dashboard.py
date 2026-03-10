@@ -565,6 +565,7 @@ with tab_backtest:
                     result = run_backtest_on_candles(
                         candles=bt_candles,
                         symbol=bt_symbol,
+                        timeframe=bt_tf,
                         starting_balance_usd=10_000.0,
                         aggressive_allocation=cfg.aggressive_allocation,
                         max_risk_per_trade=cfg.max_risk_per_trade,

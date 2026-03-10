@@ -51,6 +51,7 @@ for sym, tf, lim in CONFIGS:
     result = run_backtest_on_candles(
         candles=candles,
         symbol=sym,
+        timeframe=tf,
         starting_balance_usd=cfg.starting_balance_usd,
         aggressive_allocation=cfg.aggressive_allocation,
         max_risk_per_trade=cfg.max_risk_per_trade,
