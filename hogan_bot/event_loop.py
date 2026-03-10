@@ -34,7 +34,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from hogan_bot.config import BotConfig, load_config
+from hogan_bot.config import BotConfig, load_config, symbol_config
 from hogan_bot.data_engine import CandleEvent, LiveDataEngine, CandleRingBuffer
 from hogan_bot.decision import apply_ml_filter, ml_confidence
 from hogan_bot.execution import PaperExecution, LiveExecution
@@ -64,7 +64,7 @@ class SignalEvaluator:
         candles: pd.DataFrame,
         equity: float,
     ) -> tuple[str, float, float | None]:
-        cfg = self.config
+        cfg = symbol_config(self.config, symbol)
         signal = generate_signal(
             candles,
             short_window=cfg.short_ma_window,
