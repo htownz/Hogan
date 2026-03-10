@@ -235,8 +235,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _resolve_symbols(args: argparse.Namespace) -> list[str]:
     """Return the list of symbols to train on (respects --symbols override)."""
-    if args.symbols:
-        return [s.strip() for s in args.symbols.split(",") if s.strip()]
+    syms = getattr(args, "symbols", None)
+    if syms:
+        return [s.strip() for s in syms.split(",") if s.strip()]
     return [args.symbol]
 
 
