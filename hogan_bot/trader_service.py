@@ -415,6 +415,8 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                             if ok:
                                 fee = qty * exit_px * config.fee_rate
                                 close_paper_trade(conn, exit_symbol, "long", exit_px, fee, now_ms, close_reason=reason)
+                                pnl_pct = (exit_px - avg_entry) / avg_entry if avg_entry > 0 else 0.0
+                                _label_buffer_from_trade(conn, exit_symbol, now_ms, pnl_pct)
                                 is_loss = exit_px < avg_entry
                                 if is_loss and config.loss_cooldown_bars > 0:
                                     _cooldown_remaining = config.loss_cooldown_bars
@@ -656,7 +658,9 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                         if is_short:
                             logger.debug("HOLD %s — already short", symbol)
                         elif is_long:
-                            # Close long
+                            # Capture entry price BEFORE the sell mutates position state
+                            _pos = paper_port.positions.get(symbol)
+                            _entry_px = _pos.avg_entry if _pos else px
                             sell_qty = cur_qty
                             ORDERS.labels(side="sell", mode=mode, exchange=config.exchange_id).inc()
                             res = executor.sell(symbol, px, sell_qty)
@@ -666,9 +670,7 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                             else:
                                 fee = sell_qty * px * config.fee_rate
                                 close_paper_trade(conn, symbol, "long", px, fee, now_ms, close_reason="signal")
-                                # Label the training buffer with trade outcome
-                                pos_entry = mark_prices.get(symbol, px)
-                                pnl_pct = (px - pos_entry) / pos_entry if pos_entry > 0 else 0.0
+                                pnl_pct = (px - _entry_px) / _entry_px if _entry_px > 0 else 0.0
                                 _label_buffer_from_trade(conn, symbol, now_ms, pnl_pct)
                                 notifier.notify("sell", {"symbol": symbol, "price": px, "qty": sell_qty, "up_prob": up_prob})
                                 logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
@@ -707,8 +709,8 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                         else:
                             logger.debug("HOLD %s — sell signal but no long position and shorts disabled", symbol)
 
-                    # ── Online learning: write features to buffer after trade
-                    if action in ("buy", "sell") and online_learner is not None:
+                    # ── Online learning: buffer features at entry only (labeled at exit)
+                    if action == "buy" and online_learner is not None:
                         try:
                             from hogan_bot.ml import build_feature_row
                             fv = build_feature_row(candles, db_conn=conn)

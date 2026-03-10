@@ -1,177 +1,156 @@
-# Hogan Enhancement Plan — Take It to the Next Level
+# Hogan Enhancement Plan — Next Level
 
-A prioritized roadmap for immediate improvements and medium-term upgrades. Based on current state: bot is trading (data-gathering mode), backtest ~-20%, ML AUC ~0.53, 101k+ candles in DB.
-
----
-
-## Phase 1: Quick Wins (This Week)
-
-### 1.1 Fix Weekly Retrain Script (Critical Bug)
-**Problem:** `scripts/weekly_retrain.ps1` uses `--stock-only` which **skips crypto bars**. The retrain gets no new BTC/ETH data.
-
-**Fix:** Remove `--stock-only` from the fetch_alpaca call. Use:
-```powershell
-& $VENV_PYTHON -m hogan_bot.fetch_alpaca --crypto-bars --timeframe 5Min --crypto-days 30 2>&1
-```
-Or use `--backfill-all` for full MTF + macro refresh.
-
-**Also:** Add `--symbols "BTC/USD,ETH/USD"` and `--use-paper-labels` to the retrain command so paper-trade feedback is used. (Note: paper labels are currently skipped for multi-symbol — see 2.3.)
+A prioritized roadmap based on deep codebase audit. Current state: bot is paper-trading,
+66 ML features, online learning wired, Optuna optimizer running, multi-symbol training
+across BTC/ETH/SOL, XGBoost promoted as best model.
 
 ---
 
-### 1.2 Ensure ETH Data Is Fetched
-**Problem:** Your fetch loop only ran `BTC/USD`. The bot trades both BTC and ETH. ETH needs candles too.
+## Phase 1: Correctness (DONE — Merged)
 
-**Fix:** Either:
-- Add ETH to your fetch loop: `--symbol ETH/USD` in a second loop, or
-- Use `fetch_data.py` with both symbols, or
-- Run `backfill_mtf.ps1` periodically to keep both symbols + MTF + macro fresh.
+These bugs were identified and fixed. Listed here for audit trail.
+
+### 1.1 ~~Fix duplicate portfolio mutations~~ DONE
+**Problem:** `PaperExecution.buy()` mutated the portfolio, then `main.py`/`event_loop.py`
+called `portfolio.execute_buy()` again — doubling position sizes.
+**Fix:** Executor is now the sole owner of portfolio state. `LiveExecution` also tracks
+the portfolio (receives it via constructor). No caller touches `portfolio.execute_*`
+when an executor is present.
+
+### 1.2 ~~Fix paper journal side mismatch~~ DONE
+**Problem:** `event_loop.py` journaled trades with `side="buy"` but `close_paper_trade`
+queries by `side="long"` and computes P&L only when `side == "long"`. Result: P&L
+computation was wrong and no journal rows ever matched on close.
+**Fix:** Normalized all journal sides to `"long"` / `"short"` across `event_loop.py`.
+
+### 1.3 ~~Fix retrain multi-symbol fall-through~~ DONE
+**Problem:** `retrain.py` multi-symbol path trained a model, then fell through into the
+single-symbol block and overwrote the result. Multi-symbol models were silently replaced
+by single-symbol models.
+**Fix:** Added early `return` after multi-symbol `_train_from_xy()`. Registry now logs
+the full symbol set (`"BTC/USD,ETH/USD,SOL/USD"`) instead of the primary symbol.
+
+### 1.4 ~~Fix online learning label bug~~ DONE
+**Problem:** `_label_buffer_from_trade` used `mark_prices.get(symbol, px)` as entry price.
+Since `mark_prices` holds current prices, P&L was always ~0 and every trade got label=0.
+Also: features were written on both buy AND sell, creating orphaned unlabeled rows.
+Auto-exits never labeled the training buffer at all.
+**Fix:** Entry price captured from `pos.avg_entry` before the sell mutates state. Features
+only written on buy (entry). Auto-exit path now labels the buffer with real P&L.
+
+### 1.5 ~~Guard unfinished feature flags~~ DONE
+**Problem:** `--use-extended-mtf` logged a warning but silently trained a standard model
+without extended features. Users thought they had MTF but didn't.
+**Fix:** Hard `RuntimeError` if flag is used with standard ML training. Clear message
+directs to `rl_train.py --ext-features`.
 
 ---
 
-### 1.3 Add Trade Explanations to Dashboard
-**Problem:** Mistral generates explanations for every trade, but the dashboard doesn't show them.
+## Phase 2: Strategy Evolution (This Week)
 
-**Fix:** In `dashboard.py`, join `trade_explanations` to the trade journal table and add an "Explanation" column to the Trade Journal section. Query:
-```sql
-SELECT fill_id, explanation, model_used FROM trade_explanations
-```
+### 2.1 Regime-Aware Strategy Switching
+**What:** Hogan detects regimes (trending/ranging/volatile) but uses one parameter set
+for all. The Optuna optimizer should produce separate configs per regime.
+**How:**
+1. Run Optuna 3x: once with only trending candles, once ranging, once volatile.
+2. Store top config per regime in `models/regime_configs.json`.
+3. In `trader_service.py`, load the regime-specific config at runtime.
 
----
+### 2.2 Multi-Strategy Ensemble
+**What:** Use the top 5–10 Optuna results as a portfolio of strategies. Allocate capital
+to whichever is performing best in a rolling window.
+**How:**
+1. After Optuna finishes, save top 10 configs.
+2. In each loop, run all configs on the latest candle window. Weight by recent Sharpe.
+3. Blend signals: majority vote or confidence-weighted.
 
-### 1.4 Verify Task Scheduler
-**Action:** Run `scripts\register_tasks.ps1` as Administrator (if not already). Confirm in `taskschd.msc` that:
-- `Hogan_DailyRefresh` runs daily at 7:00 AM
-- `Hogan_WeeklyRetrain` runs Sunday at 3:00 AM
-
----
-
-## Phase 2: Strategy & ML Improvements (2–4 Weeks)
-
-### 2.1 Test 1h Timeframe
-**Why:** 5m moves are often 0.05–0.30%; round-trip fee is 0.52%. You need larger moves to overcome fees. 1h typical moves: 0.5–2%.
-
+### 2.3 Test 1h Timeframe
+**Why:** 5m moves are often 0.05–0.30%; round-trip fee is 0.52%. You need larger moves
+to overcome fees. 1h typical moves: 0.5–2%.
 **How:**
 1. Backfill 1h candles: `python -m hogan_bot.fetch_data --symbol BTC/USD --timeframe 1h --limit 5000`
-2. Retrain on 1h: `python -m hogan_bot.retrain --from-db --symbol BTC/USD --timeframe 1h --window-bars 2000`
-3. Backtest: `python -m hogan_bot.backtest_cli --from-db --symbol BTC/USD --timeframe 1h --limit 2000`
-4. If backtest improves, set `HOGAN_TIMEFRAME=1h` in `.env` and retrain for all symbols.
+2. Retrain on 1h: `python -m hogan_bot.retrain --from-db --symbol BTC/USD --timeframe 1h`
+3. If backtest improves, set `HOGAN_TIMEFRAME=1h` in `.env`.
+
+### 2.4 Paper Labels for Multi-Symbol Retrain
+**Problem:** `--use-paper-labels` is skipped for multi-symbol training.
+**Fix:** For each symbol, call `make_paper_trade_labels(db_path, candles_sym, sym)`,
+concatenate the extra (X, y) rows, and pass to `_train_from_xy`.
 
 ---
 
-### 2.2 Enable Extended MTF (10m + 30m Features)
-**What:** Use 10m and 30m candle features in addition to 5m. More context = better signals.
+## Phase 3: Infrastructure (2–4 Weeks)
 
-**Steps:**
-1. Ensure 10m/30m data exists: `scripts\backfill_mtf.ps1` (already run)
-2. Retrain with extended MTF:
-   ```powershell
-   python -m hogan_bot.retrain --from-db --symbols "BTC/USD,ETH/USD" --use-extended-mtf --force-promote
-   ```
-3. Add to `.env`: `HOGAN_USE_MTF_EXTENDED=true`
-4. Restart bot.
+### 3.1 Freqtrade-Style Evaluation Discipline
+**What:** Import Freqtrade's promotion gate: parameter sweeps, automatic lookahead checks,
+walk-forward validation, promotion only when challenger beats incumbent after
+fees/slippage/drawdown.
+**How:** The retrain pipeline already has promotion gating and walk-forward. Add:
+- Lookahead-bias checker (verify no future data leaks in features)
+- Automatic A/B test: challenger must outperform on out-of-sample window
 
----
+### 3.2 Event-Driven Architecture Cleanup
+**What:** Ensure backtest and live share one event model.
+**Status:** `event_loop.py` (async), `main.py` (sync), `trader_service.py` (sync +
+threads) all exist. Consolidate to one event-driven path that works for both
+backtest and live. Decision flow: MarketData → Signal → RiskDecision → OrderIntent
+→ Fill → PositionUpdate.
 
-### 2.3 Add Paper Labels to Multi-Symbol Retrain
-**Problem:** `HOGAN_RETRAIN_USE_PAPER_LABELS=true` but retrain with `--symbols "BTC/USD,ETH/USD"` skips paper labels (not yet implemented for multi-symbol).
-
-**Fix:** Extend `retrain.py` to support paper labels for multi-symbol: for each symbol, call `make_paper_trade_labels(db_path, candles_sym, symbol)`, concatenate the extra (X_extra, y_extra) rows, and pass to training. Medium effort, high value for feedback loop.
-
----
-
-### 2.4 Wire Online Learner
-**What:** `hogan_bot.online_learner` exists but isn't called. It can incrementally update the model from new trade outcomes.
-
+### 3.3 MLflow Model Governance
+**What:** Every retrain, promotion, and live decision gets traced. Use MLflow for
+experiment tracking instead of JSONL registry.
 **How:**
-- Option A: Run as a separate process: `python -m hogan_bot.online_learner --db data/hogan.db --interval 3600`
-- Option B: Call `OnlineLearner(db_path).update(symbol)` from `main.py` after every N closed trades (e.g. 20). Requires careful integration so it doesn't block the trade loop.
+1. `pip install mlflow`
+2. Wrap `retrain.py` in `mlflow.start_run()`, log metrics/artifacts.
+3. Replace JSONL registry reads with MLflow model registry queries.
 
----
-
-### 2.5 Tune Horizon and Model Type
-**Experiments:**
-- `--horizon-bars 6` (30 min) vs `3` (15 min) vs `12` (1h) — longer horizon may reduce noise
-- Try `--model-type lightgbm` — often faster and comparable to XGBoost
-- Run `--tune` with Optuna for hyperparameter search (already supported in retrain)
-
----
-
-## Phase 3: Observability & Automation (Ongoing)
-
-### 3.1 Run Dashboard Regularly
-**Action:** Start the dashboard when you're monitoring:
-```powershell
-streamlit run dashboard.py
-```
-Or add a Task Scheduler task to keep it running. Auto-refresh (30s) is already built in.
-
----
-
-### 3.2 Add Trade Review to Your Routine
-**Script:** `scripts\trade_review.py` — run weekly to see win rate, P&L by symbol/side, close reasons.
-
-```powershell
-python scripts\trade_review.py
-```
-
----
-
-### 3.3 Shorter Retrain Interval
-**Current:** Weekly retrain. **Proposal:** Retrain every 24–48 hours while gathering data. Use:
-```powershell
-python -m hogan_bot.retrain --from-db --symbols "BTC/USD,ETH/USD" --schedule 24
-```
-Run in a separate terminal or as a scheduled task.
+### 3.4 OpenBB as Analyst Cockpit
+**What:** Expose Hogan as a custom agent inside OpenBB. Answer: "What regime are we in?",
+"Why did we skip this trade?", "Show champion vs challenger."
+**How:** Use `mcp_server` module as the agent surface. OpenBB's AI SDK can query it.
 
 ---
 
 ## Phase 4: Advanced (1–2 Months)
 
-### 4.1 RL Agent as Additional Vote
-**What:** PPO policy can vote alongside MA, EMA cloud, ICT. Requires trained policy.
-
-**Steps:**
-1. Train RL policy: `python -m hogan_bot.rl_train --symbol BTC/USD --timeframe 5m --steps 50000`
-2. Set `HOGAN_USE_RL_AGENT=true` in `.env`
-3. Ensure policy path is correct in config.
-
----
+### 4.1 Reinforcement Learning Agent
+**What:** PPO policy as additional vote alongside MA/EMA/ICT. Learns entry/exit timing
+from reward signals (actual P&L).
+**Status:** RL scaffolding exists (`rl_train.py`, `rl_policy.py`). Needs: training on
+sufficient data, hyperparameter tuning, integration as a signal voter.
 
 ### 4.2 Triple-Barrier Labeling
-**What:** Label trades by profit target, stop loss, and max hold time — not just "price up/down in N bars." Produces cleaner training labels.
+**What:** Label trades by profit target, stop loss, and max hold time — not just
+"price up/down in N bars." Produces cleaner training labels.
 
-**Status:** Check if `labeler.py` or `ml_advanced.py` has triple-barrier; integrate into `build_training_set` if not.
-
----
-
-### 4.3 Champion/Challenger
-**What:** Run two models in parallel; promote challenger only when it outperforms champion on a rolling window. Reduces regret from bad promotions.
-
----
-
-### 4.4 Fee-Aware Backtest
-**What:** Add a "min move" filter in backtest: only count a trade as profitable if price move > 2× round-trip fee. Surfaces whether the strategy has edge after costs.
+### 4.3 Self-Evaluation Loop
+**What:** Hogan periodically backtests its own recent performance, detects when strategy
+is degrading, and triggers a retrain or parameter re-optimization automatically.
 
 ---
 
 ## Summary Checklist
 
-| Priority | Task | Effort | Impact |
+| Priority | Task | Status | Impact |
 |---------|------|--------|--------|
-| P0 | Fix weekly_retrain.ps1 (remove --stock-only) | 5 min | High |
-| P0 | Ensure ETH data fetched | 10 min | High |
-| P1 | Add trade explanations to dashboard | 30 min | Medium |
-| P1 | Verify Task Scheduler | 5 min | Medium |
-| P2 | Test 1h timeframe | 1–2 hrs | High |
-| P2 | Enable extended MTF | 30 min | Medium |
-| P2 | Paper labels for multi-symbol | 2–3 hrs | High |
-| P2 | Wire online learner | 1 hr | Medium |
-| P3 | Run dashboard regularly | 5 min | Medium |
-| P3 | Shorter retrain interval | 15 min | Medium |
-| P4 | RL agent | 4+ hrs | High |
-| P4 | Triple-barrier labeling | 2–4 hrs | High |
+| P0 | Fix duplicate portfolio mutations | DONE | Critical |
+| P0 | Fix paper journal side mismatch | DONE | Critical |
+| P0 | Fix retrain multi-symbol fall-through | DONE | Critical |
+| P0 | Fix online learning label bug | DONE | Critical |
+| P0 | Guard unfinished feature flags | DONE | High |
+| P1 | Regime-aware strategy switching | Next | High |
+| P1 | Multi-strategy ensemble | Next | High |
+| P1 | Test 1h timeframe | Next | High |
+| P2 | Paper labels for multi-symbol | Planned | Medium |
+| P2 | Freqtrade evaluation discipline | Planned | High |
+| P3 | Event-driven architecture cleanup | Planned | Medium |
+| P3 | MLflow model governance | Planned | Medium |
+| P3 | OpenBB analyst cockpit | Planned | Medium |
+| P4 | RL agent training | Planned | High |
+| P4 | Triple-barrier labeling | Planned | High |
+| P4 | Self-evaluation loop | Planned | High |
 
 ---
 
-*Generated from Hogan codebase analysis. Adjust priorities based on your goals.*
+*Updated after deep codebase audit. P0 correctness fixes are merged — all paper trade
+data from this point forward has accurate accounting.*

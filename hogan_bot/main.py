@@ -247,29 +247,30 @@ def run_iteration(
                 _log("COVER", cover_qty, ok)
                 if notifier and ok:
                     notifier.notify("cover", {"symbol": symbol, "price": px, "qty": cover_qty, "ml_up_prob": up_prob})
-                # Open long with the now-freed cash
-                ok = portfolio.execute_buy(
-                    symbol, px, size,
-                    trailing_stop_pct=eff["trailing_stop_pct"],
-                    take_profit_pct=eff["take_profit_pct"],
-                )
+                # Open long with the now-freed cash (executor owns portfolio mutation)
                 if executor:
-                    res = executor.buy(symbol, px, size)
+                    res = executor.buy(symbol, px, size,
+                                       trailing_stop_pct=eff["trailing_stop_pct"],
+                                       take_profit_pct=eff["take_profit_pct"])
                     ok = bool(res.ok)
-                    if ok:
-                        portfolio.execute_buy(symbol, px, size, trailing_stop_pct=eff["trailing_stop_pct"], take_profit_pct=eff["take_profit_pct"])
+                else:
+                    ok = portfolio.execute_buy(
+                        symbol, px, size,
+                        trailing_stop_pct=eff["trailing_stop_pct"],
+                        take_profit_pct=eff["take_profit_pct"],
+                    )
                 if ok:
                     _journal_open("long", size)
                 if notifier and ok:
                     notifier.notify("buy", {"symbol": symbol, "price": px, "qty": size, "ml_up_prob": up_prob})
                 _log("BUY", size, ok)
             else:
-                # No position — open long
+                # No position — open long (executor owns portfolio mutation)
                 if executor:
-                    res = executor.buy(symbol, px, size)
+                    res = executor.buy(symbol, px, size,
+                                       trailing_stop_pct=eff["trailing_stop_pct"],
+                                       take_profit_pct=eff["take_profit_pct"])
                     ok = bool(res.ok)
-                    if ok:
-                        portfolio.execute_buy(symbol, px, size, trailing_stop_pct=eff["trailing_stop_pct"], take_profit_pct=eff["take_profit_pct"])
                 else:
                     ok = portfolio.execute_buy(
                         symbol, px, size,
@@ -287,13 +288,11 @@ def run_iteration(
                 # Already short — don't pyramid, just hold
                 _log("HOLD")
             elif is_long:
-                # Close the long first, then open short if allowed
+                # Close the long first, then open short if allowed (executor owns portfolio mutation)
                 sell_qty = portfolio.positions[symbol].qty
                 if executor:
                     res = executor.sell(symbol, px, sell_qty)
                     ok = bool(res.ok)
-                    if ok:
-                        portfolio.execute_sell(symbol, px, sell_qty)
                 else:
                     ok = portfolio.execute_sell(symbol, px, sell_qty)
                 if ok:
@@ -366,7 +365,7 @@ def run(max_loops: int | None = None) -> None:
 
     if allow_live:
         logging.warning("LIVE TRADING ENABLED on exchange=%s (spot only).", config.exchange_id)
-        executor = LiveExecution(client=client, conn=conn, exchange_id=config.exchange_id)
+        executor = LiveExecution(client=client, conn=conn, exchange_id=config.exchange_id, portfolio=portfolio)
     else:
         if not config.paper_mode:
             logging.warning(
