@@ -361,12 +361,13 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                     mark_prices[symbol] = float(candles["close"].iloc[-1])
 
                     if config.use_mtf_ensemble:
-                        try:
-                            daily = client.fetch_ohlcv_df(symbol, timeframe=config.mtf_daily_timeframe, limit=60)
-                            if not daily.empty:
-                                daily_candles_by_symbol[symbol] = daily
-                        except Exception:
-                            pass
+                        if config.mtf_use_daily_filter:
+                            try:
+                                daily = client.fetch_ohlcv_df(symbol, timeframe=config.mtf_daily_timeframe, limit=60)
+                                if not daily.empty:
+                                    daily_candles_by_symbol[symbol] = daily
+                            except Exception:
+                                pass
                         try:
                             m30 = client.fetch_ohlcv_df(symbol, timeframe=config.mtf_m30_timeframe, limit=100)
                             if not m30.empty:
