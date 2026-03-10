@@ -6,7 +6,7 @@ import logging
 import time
 from datetime import datetime
 
-from hogan_bot.config import BotConfig, load_config
+from hogan_bot.config import BotConfig, load_config, symbol_config
 from hogan_bot.decision import apply_ml_filter, ml_confidence
 from hogan_bot.discord_commands import make_command_listener
 from hogan_bot.exchange import ExchangeClient
@@ -118,17 +118,20 @@ def run_iteration(
             notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason, "price": px, "qty": qty})
 
     for symbol, candles in candles_by_symbol.items():
+        # ── Per-symbol Optuna config overlay ───────────────────────────────
+        cfg = symbol_config(config, symbol)
+
         # ── Regime detection ───────────────────────────────────────────────
         regime_state = detect_regime(
             candles,
-            adx_trending_threshold=config.regime_adx_trending,
-            adx_ranging_threshold=config.regime_adx_ranging,
-            atr_volatile_pct=config.regime_atr_volatile_pct,
+            adx_trending_threshold=cfg.regime_adx_trending,
+            adx_ranging_threshold=cfg.regime_adx_ranging,
+            atr_volatile_pct=cfg.regime_atr_volatile_pct,
             btc_dominance=regime_signals.get("btc_dominance"),
             fear_greed=regime_signals.get("fear_greed"),
-        ) if config.use_regime_detection else None
+        ) if cfg.use_regime_detection else None
 
-        eff = effective_thresholds(regime_state or _null_regime(), config)
+        eff = effective_thresholds(regime_state or _null_regime(), cfg)
 
         if regime_state is not None:
             logging.info(
@@ -142,31 +145,31 @@ def run_iteration(
 
         signal = generate_signal(
             candles,
-            short_window=config.short_ma_window,
-            long_window=config.long_ma_window,
-            volume_window=config.volume_window,
+            short_window=cfg.short_ma_window,
+            long_window=cfg.long_ma_window,
+            volume_window=cfg.volume_window,
             volume_threshold=eff["volume_threshold"],   # regime-adjusted
-            use_ema_clouds=config.use_ema_clouds,
-            ema_fast_short=config.ema_fast_short,
-            ema_fast_long=config.ema_fast_long,
-            ema_slow_short=config.ema_slow_short,
-            ema_slow_long=config.ema_slow_long,
-            use_fvg=config.use_fvg,
-            fvg_min_gap_pct=config.fvg_min_gap_pct,
-            signal_mode=config.signal_mode,
-            min_vote_margin=config.signal_min_vote_margin,
-            atr_stop_multiplier=config.atr_stop_multiplier,
-            use_ict=config.use_ict,
-            ict_swing_left=config.ict_swing_left,
-            ict_swing_right=config.ict_swing_right,
-            ict_eq_tolerance_pct=config.ict_eq_tolerance_pct,
-            ict_min_displacement_pct=config.ict_min_displacement_pct,
-            ict_require_time_window=config.ict_require_time_window,
-            ict_time_windows=config.ict_time_windows,
-            ict_require_pd=config.ict_require_pd,
-            ict_ote_enabled=config.ict_ote_enabled,
-            ict_ote_low=config.ict_ote_low,
-            ict_ote_high=config.ict_ote_high,
+            use_ema_clouds=cfg.use_ema_clouds,
+            ema_fast_short=cfg.ema_fast_short,
+            ema_fast_long=cfg.ema_fast_long,
+            ema_slow_short=cfg.ema_slow_short,
+            ema_slow_long=cfg.ema_slow_long,
+            use_fvg=cfg.use_fvg,
+            fvg_min_gap_pct=cfg.fvg_min_gap_pct,
+            signal_mode=cfg.signal_mode,
+            min_vote_margin=cfg.signal_min_vote_margin,
+            atr_stop_multiplier=cfg.atr_stop_multiplier,
+            use_ict=cfg.use_ict,
+            ict_swing_left=cfg.ict_swing_left,
+            ict_swing_right=cfg.ict_swing_right,
+            ict_eq_tolerance_pct=cfg.ict_eq_tolerance_pct,
+            ict_min_displacement_pct=cfg.ict_min_displacement_pct,
+            ict_require_time_window=cfg.ict_require_time_window,
+            ict_time_windows=cfg.ict_time_windows,
+            ict_require_pd=cfg.ict_require_pd,
+            ict_ote_enabled=cfg.ict_ote_enabled,
+            ict_ote_low=cfg.ict_ote_low,
+            ict_ote_high=cfg.ict_ote_high,
         )
         px = mark_prices[symbol]
 

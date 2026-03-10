@@ -327,3 +327,103 @@ class TestRetrainNoFallthrough:
         mock_logreg.assert_not_called()
         mock_rf.assert_not_called()
         mock_xgb.assert_not_called()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. Per-symbol Optuna config overrides
+# ═══════════════════════════════════════════════════════════════════════════
+
+import json
+import tempfile
+from pathlib import Path
+from hogan_bot.config import (
+    BotConfig, symbol_config, load_symbol_overrides,
+    reload_symbol_configs, _optuna_json_path,
+)
+
+
+class TestPerSymbolConfig:
+    """Verify that per-symbol Optuna JSON files produce correct BotConfig overrides."""
+
+    def _write_optuna_json(self, tmp: Path, symbol: str, tf: str, overrides: dict, score: float = 5.0):
+        path = tmp / f"opt_{symbol.replace('/', '-')}_{tf}.json"
+        data = {"symbol": symbol, "best_score": score, "best_config": overrides}
+        path.write_text(json.dumps(data), encoding="utf-8")
+        return path
+
+    def test_loads_overrides_from_json(self, tmp_path):
+        reload_symbol_configs()
+        self._write_optuna_json(tmp_path, "BTC/USD", "1h", {
+            "short_ma_window": 8,
+            "long_ma_window": 111,
+            "signal_mode": "ma_only",
+        })
+        overrides = load_symbol_overrides("BTC/USD", "1h", str(tmp_path))
+        assert overrides["short_ma_window"] == 8
+        assert overrides["long_ma_window"] == 111
+        assert overrides["signal_mode"] == "ma_only"
+
+    def test_missing_json_returns_empty(self, tmp_path):
+        reload_symbol_configs()
+        overrides = load_symbol_overrides("SOL/USD", "1h", str(tmp_path))
+        assert overrides == {}
+
+    def test_symbol_config_applies_overrides(self, tmp_path):
+        reload_symbol_configs()
+        self._write_optuna_json(tmp_path, "ETH/USD", "1h", {
+            "short_ma_window": 19,
+            "long_ma_window": 63,
+            "volume_threshold": 1.84,
+            "trailing_stop_pct": 0.03,
+            "take_profit_pct": 0.055,
+            "signal_mode": "all",
+        })
+        base = BotConfig(timeframe="1h", short_ma_window=12, long_ma_window=79)
+        # Monkey-patch models dir for the test
+        import hogan_bot.config as cfg_mod
+        orig = cfg_mod._optuna_json_path
+        cfg_mod._optuna_json_path = lambda sym, tf, md="models": tmp_path / f"opt_{sym.replace('/', '-')}_{tf}.json"
+        try:
+            result = symbol_config(base, "ETH/USD")
+            assert result.short_ma_window == 19
+            assert result.long_ma_window == 63
+            assert result.volume_threshold == 1.84
+            assert result.signal_mode == "all"
+            assert result.trailing_stop_pct == 0.03
+            assert result.take_profit_pct == 0.055
+            # Fields not in the override stay at base values
+            assert result.fee_rate == base.fee_rate
+            assert result.max_risk_per_trade == base.max_risk_per_trade
+        finally:
+            cfg_mod._optuna_json_path = orig
+            reload_symbol_configs()
+
+    def test_symbol_config_no_override_returns_base(self, tmp_path):
+        reload_symbol_configs()
+        base = BotConfig(timeframe="1h")
+        import hogan_bot.config as cfg_mod
+        orig = cfg_mod._optuna_json_path
+        cfg_mod._optuna_json_path = lambda sym, tf, md="models": tmp_path / f"opt_{sym.replace('/', '-')}_{tf}.json"
+        try:
+            result = symbol_config(base, "SOL/USD")
+            assert result is base
+        finally:
+            cfg_mod._optuna_json_path = orig
+            reload_symbol_configs()
+
+    def test_ignores_unknown_keys_in_json(self, tmp_path):
+        reload_symbol_configs()
+        self._write_optuna_json(tmp_path, "BTC/USD", "30m", {
+            "short_ma_window": 10,
+            "some_unknown_field": 999,
+        })
+        overrides = load_symbol_overrides("BTC/USD", "30m", str(tmp_path))
+        assert "short_ma_window" in overrides
+        assert "some_unknown_field" not in overrides
+
+    def test_cache_returns_same_result(self, tmp_path):
+        reload_symbol_configs()
+        self._write_optuna_json(tmp_path, "BTC/USD", "1h", {"short_ma_window": 8})
+        r1 = load_symbol_overrides("BTC/USD", "1h", str(tmp_path))
+        r2 = load_symbol_overrides("BTC/USD", "1h", str(tmp_path))
+        assert r1 is r2

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import json
+import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from pathlib import Path
 
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -154,6 +159,76 @@ class BotConfig:
 
 def _split_symbols(raw: str) -> list[str]:
     return [s.strip() for s in raw.split(",") if s.strip()]
+
+
+# ---------------------------------------------------------------------------
+# Per-symbol Optuna config overrides
+# ---------------------------------------------------------------------------
+
+_OPTUNA_OVERRIDE_FIELDS = frozenset({
+    "short_ma_window", "long_ma_window", "volume_threshold",
+    "atr_stop_multiplier", "use_ema_clouds", "signal_mode",
+    "trailing_stop_pct", "take_profit_pct",
+    "use_ict", "ict_swing_left", "ict_swing_right",
+    "ict_eq_tolerance_pct", "ict_min_displacement_pct",
+    "ict_require_time_window", "ict_require_pd", "ict_ote_enabled",
+})
+
+_symbol_config_cache: dict[str, dict] = {}
+
+
+def _optuna_json_path(symbol: str, timeframe: str, models_dir: str = "models") -> Path:
+    slug = symbol.replace("/", "-")
+    return Path(models_dir) / f"opt_{slug}_{timeframe}.json"
+
+
+def load_symbol_overrides(
+    symbol: str,
+    timeframe: str,
+    models_dir: str = "models",
+) -> dict:
+    """Load the Optuna best_config for a symbol/timeframe, or empty dict if absent."""
+    cache_key = f"{symbol}_{timeframe}"
+    if cache_key in _symbol_config_cache:
+        return _symbol_config_cache[cache_key]
+
+    path = _optuna_json_path(symbol, timeframe, models_dir)
+    if not path.exists():
+        _symbol_config_cache[cache_key] = {}
+        return {}
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        best = data.get("best_config", {})
+        overrides = {k: v for k, v in best.items() if k in _OPTUNA_OVERRIDE_FIELDS}
+        _symbol_config_cache[cache_key] = overrides
+        logger.info(
+            "Loaded per-symbol config for %s/%s (%d overrides, sharpe=%.2f)",
+            symbol, timeframe, len(overrides), data.get("best_score", 0),
+        )
+        return overrides
+    except Exception as exc:
+        logger.warning("Failed to load Optuna config from %s: %s", path, exc)
+        _symbol_config_cache[cache_key] = {}
+        return {}
+
+
+def symbol_config(base: BotConfig, symbol: str) -> BotConfig:
+    """Return a BotConfig with per-symbol Optuna overrides applied.
+
+    Reads ``models/opt_{SYMBOL}_{TIMEFRAME}.json`` and overlays the
+    ``best_config`` values onto a copy of *base*.  If no Optuna file
+    exists for the symbol, returns *base* unchanged (no copy needed).
+    """
+    overrides = load_symbol_overrides(symbol, base.timeframe)
+    if not overrides:
+        return base
+    return replace(base, **overrides)
+
+
+def reload_symbol_configs() -> None:
+    """Clear the override cache so the next call re-reads from disk."""
+    _symbol_config_cache.clear()
 
 
 def load_config() -> BotConfig:
