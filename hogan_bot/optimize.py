@@ -676,6 +676,24 @@ def main(argv: list[str] | None = None) -> None:
         json.dump(result, f, indent=2, default=str)
     logger.info("Results written to %s", out_path)
 
+    # Auto-promotion: evaluate whether the new result should become the active config
+    try:
+        from hogan_bot.auto_promote import evaluate_and_promote
+        promo = evaluate_and_promote(
+            args.symbol, args.timeframe,
+            candidate_path=out_path,
+            models_dir=args.out_dir,
+        )
+        if promo.promoted:
+            print(f"\n  >>> AUTO-PROMOTED: {promo.reason}")
+            if promo.backup_file:
+                print(f"  >>> Archived incumbent to {promo.backup_file}")
+            print(f"  >>> Live bot will use new config on next iteration.\n")
+        else:
+            print(f"\n  >>> NOT PROMOTED: {promo.reason}\n")
+    except Exception as exc:
+        logger.warning("Auto-promotion check failed: %s", exc)
+
     # Also pretty-print the leaderboard to stdout
     print(f"\n{'='*70}")
     print(f"  Hogan Optimizer — {args.symbol} / {args.timeframe}")

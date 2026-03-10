@@ -71,6 +71,32 @@ from hogan_bot.storage import get_connection, load_candles
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Timeframe-aware default horizon
+# ---------------------------------------------------------------------------
+
+_TF_MINUTES: dict[str, int] = {
+    "1m": 1, "5m": 5, "10m": 10, "15m": 15, "30m": 30,
+    "1h": 60, "2h": 120, "4h": 240, "1d": 1440,
+}
+
+_DEFAULT_HORIZON_HOURS = 6
+
+
+def default_horizon_bars(timeframe: str, target_hours: float = _DEFAULT_HORIZON_HOURS) -> int:
+    """Compute the horizon_bars that targets *target_hours* of real time.
+
+    Different timeframes need different bar counts to represent the same
+    real-world holding period.  For example, 6 hours = 72 bars at 5m,
+    12 bars at 30m, 6 bars at 1h.
+
+    Falls back to 12 if the timeframe is unrecognised.
+    """
+    minutes = _TF_MINUTES.get(timeframe)
+    if minutes is None:
+        return 12
+    return max(1, round(target_hours * 60 / minutes))
+
 
 # ---------------------------------------------------------------------------
 # Argument parser
@@ -96,7 +122,10 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="Rolling window size: train on the N most recent bars",
     )
-    p.add_argument("--horizon-bars", type=int, default=12, help="Prediction horizon in bars")
+    p.add_argument(
+        "--horizon-bars", type=int, default=None,
+        help="Prediction horizon in bars (default: auto-compute from timeframe to target ~6h)",
+    )
     p.add_argument(
         "--model-type",
         choices=["logreg", "random_forest", "xgboost", "lightgbm"],
@@ -858,6 +887,13 @@ def shadow_eval_cycle(args) -> dict:
 def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = _build_parser().parse_args(argv)
+
+    if args.horizon_bars is None:
+        args.horizon_bars = default_horizon_bars(args.timeframe)
+        logger.info(
+            "Auto-computed horizon_bars=%d for timeframe=%s (targeting ~%dh holding period)",
+            args.horizon_bars, args.timeframe, _DEFAULT_HORIZON_HOURS,
+        )
 
     def _run_one(args):
         if getattr(args, "shadow_eval", False):

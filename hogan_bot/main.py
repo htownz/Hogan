@@ -11,6 +11,7 @@ from hogan_bot.decision import apply_ml_filter, ml_confidence
 from hogan_bot.discord_commands import make_command_listener
 from hogan_bot.exchange import ExchangeClient
 from hogan_bot.ml import TrainedModel, load_model, predict_up_probability
+from hogan_bot.mtf_ensemble import evaluate_mtf
 from hogan_bot.trade_explainer import explain_trade as _explain_trade
 from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
@@ -59,6 +60,8 @@ def run_iteration(
 
     candles_by_symbol = {}
     mark_prices = {}
+    daily_candles_by_symbol: dict[str, object] = {}
+    m30_candles_by_symbol: dict[str, object] = {}
 
     for symbol in config.symbols:
         candles = client.fetch_ohlcv_df(symbol, timeframe=config.timeframe, limit=config.ohlcv_limit)
@@ -67,6 +70,20 @@ def run_iteration(
             continue
         candles_by_symbol[symbol] = candles
         mark_prices[symbol] = float(candles["close"].iloc[-1])
+
+        if config.use_mtf_ensemble:
+            try:
+                daily = client.fetch_ohlcv_df(symbol, timeframe=config.mtf_daily_timeframe, limit=60)
+                if not daily.empty:
+                    daily_candles_by_symbol[symbol] = daily
+            except Exception:
+                pass
+            try:
+                m30 = client.fetch_ohlcv_df(symbol, timeframe=config.mtf_m30_timeframe, limit=100)
+                if not m30.empty:
+                    m30_candles_by_symbol[symbol] = m30
+            except Exception:
+                pass
 
     if not mark_prices:
         logging.warning("No symbols had market data this cycle")
@@ -178,7 +195,6 @@ def run_iteration(
         action = signal.action
         if config.use_ml_filter and ml_model is not None:
             up_prob = predict_up_probability(candles, ml_model, db_conn=conn)
-            # Use regime-adjusted ML thresholds instead of fixed config values
             action = apply_ml_filter(
                 signal.action, up_prob,
                 eff["ml_buy_threshold"],
@@ -186,6 +202,17 @@ def run_iteration(
             )
             if config.ml_confidence_sizing:
                 conf_scale = ml_confidence(up_prob) * eff["position_scale"]
+
+        # ── MTF ensemble filter ────────────────────────────────────────────
+        if config.use_mtf_ensemble and action != "hold":
+            mtf_result = evaluate_mtf(
+                daily_candles=daily_candles_by_symbol.get(symbol),
+                hourly_action=action,
+                m30_candles=m30_candles_by_symbol.get(symbol),
+                unconfirmed_scale=config.mtf_unconfirmed_scale,
+            )
+            action = mtf_result.final_action
+            conf_scale *= mtf_result.confidence_mult
 
         size = calculate_position_size(
             equity_usd=equity,

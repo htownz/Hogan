@@ -427,3 +427,298 @@ class TestPerSymbolConfig:
         r1 = load_symbol_overrides("BTC/USD", "1h", str(tmp_path))
         r2 = load_symbol_overrides("BTC/USD", "1h", str(tmp_path))
         assert r1 is r2
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. Regime multiplier-based overrides
+# ═══════════════════════════════════════════════════════════════════════════
+
+from hogan_bot.regime import effective_thresholds, RegimeState
+
+
+class TestRegimeMultipliers:
+    """Verify regime overrides use multipliers for strategy params."""
+
+    @staticmethod
+    def _make_regime(regime: str, confidence: float = 0.8) -> RegimeState:
+        return RegimeState(
+            regime=regime, adx=30.0, atr_pct_rank=0.5,
+            trend_direction=1, ma_spread=0.01, confidence=confidence,
+        )
+
+    def test_trending_up_scales_from_base(self):
+        cfg = BotConfig(
+            volume_threshold=2.35, trailing_stop_pct=0.05,
+            take_profit_pct=0.059, use_regime_detection=True,
+        )
+        eff = effective_thresholds(self._make_regime("trending_up"), cfg)
+        assert abs(eff["volume_threshold"] - 2.35 * 0.55) < 1e-6
+        assert abs(eff["trailing_stop_pct"] - 0.05 * 1.30) < 1e-6
+        assert abs(eff["take_profit_pct"] - 0.059 * 2.00) < 1e-6
+        assert eff["position_scale"] == 1.0
+
+    def test_ranging_scales_from_base(self):
+        cfg = BotConfig(
+            volume_threshold=1.84, trailing_stop_pct=0.03,
+            take_profit_pct=0.055, use_regime_detection=True,
+        )
+        eff = effective_thresholds(self._make_regime("ranging"), cfg)
+        assert abs(eff["volume_threshold"] - 1.84 * 1.10) < 1e-6
+        assert abs(eff["trailing_stop_pct"] - 0.03 * 0.50) < 1e-6
+        assert abs(eff["take_profit_pct"] - 0.055 * 0.70) < 1e-6
+        assert eff["position_scale"] == 0.75
+
+    def test_low_confidence_returns_base(self):
+        cfg = BotConfig(
+            volume_threshold=2.35, trailing_stop_pct=0.05,
+            take_profit_pct=0.059, use_regime_detection=True,
+        )
+        eff = effective_thresholds(self._make_regime("trending_up", confidence=0.3), cfg)
+        assert eff["volume_threshold"] == 2.35
+        assert eff["trailing_stop_pct"] == 0.05
+        assert eff["take_profit_pct"] == 0.059
+
+    def test_volatile_scales_from_base(self):
+        cfg = BotConfig(
+            volume_threshold=2.0, trailing_stop_pct=0.04,
+            take_profit_pct=0.06, use_regime_detection=True,
+        )
+        eff = effective_thresholds(self._make_regime("volatile"), cfg)
+        assert abs(eff["volume_threshold"] - 2.0 * 0.70) < 1e-6
+        assert abs(eff["trailing_stop_pct"] - 0.04 * 0.80) < 1e-6
+        assert abs(eff["take_profit_pct"] - 0.06 * 1.40) < 1e-6
+        assert eff["position_scale"] == 0.50
+
+    def test_different_symbols_get_different_effective_values(self):
+        btc_cfg = BotConfig(
+            volume_threshold=2.35, trailing_stop_pct=0.05,
+            take_profit_pct=0.059, use_regime_detection=True,
+        )
+        eth_cfg = BotConfig(
+            volume_threshold=1.84, trailing_stop_pct=0.03,
+            take_profit_pct=0.055, use_regime_detection=True,
+        )
+        regime = self._make_regime("trending_up")
+        btc_eff = effective_thresholds(regime, btc_cfg)
+        eth_eff = effective_thresholds(regime, eth_cfg)
+        assert btc_eff["trailing_stop_pct"] != eth_eff["trailing_stop_pct"]
+        assert btc_eff["take_profit_pct"] != eth_eff["take_profit_pct"]
+        assert btc_eff["trailing_stop_pct"] / 0.05 == eth_eff["trailing_stop_pct"] / 0.03
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. Multi-timeframe ensemble
+# ═══════════════════════════════════════════════════════════════════════════
+
+from hogan_bot.mtf_ensemble import daily_trend_bias, m30_confirms, evaluate_mtf
+
+
+def _make_candles(closes: list[float], n: int | None = None) -> pd.DataFrame:
+    """Build a minimal OHLCV DataFrame from a list of closes."""
+    if n is None:
+        n = len(closes)
+    closes = closes[-n:]
+    return pd.DataFrame({
+        "open": closes,
+        "high": [c * 1.01 for c in closes],
+        "low": [c * 0.99 for c in closes],
+        "close": closes,
+        "volume": [100.0] * len(closes),
+    })
+
+
+class TestDailyTrendBias:
+
+    def test_bullish_trend(self):
+        closes = list(range(100, 160))
+        df = _make_candles(closes)
+        assert daily_trend_bias(df, fast_period=5, slow_period=20) == "bullish"
+
+    def test_bearish_trend(self):
+        closes = list(range(160, 100, -1))
+        df = _make_candles(closes)
+        assert daily_trend_bias(df, fast_period=5, slow_period=20) == "bearish"
+
+    def test_neutral_when_insufficient_data(self):
+        df = _make_candles([100, 101, 102])
+        assert daily_trend_bias(df, fast_period=5, slow_period=20) == "neutral"
+
+    def test_neutral_on_none(self):
+        assert daily_trend_bias(None) == "neutral"
+
+
+class TestM30Confirms:
+
+    def test_buy_confirmed_above_ma_rsi_ok(self):
+        closes = list(range(100, 130))
+        df = _make_candles(closes)
+        assert m30_confirms(df, "buy", fast_period=5) is True
+
+    def test_buy_rejected_below_ma(self):
+        closes = list(range(130, 100, -1))
+        df = _make_candles(closes)
+        assert m30_confirms(df, "buy", fast_period=5) is False
+
+    def test_sell_confirmed_below_ma(self):
+        closes = list(range(130, 100, -1))
+        df = _make_candles(closes)
+        assert m30_confirms(df, "sell", fast_period=5) is True
+
+    def test_none_candles_returns_true(self):
+        assert m30_confirms(None, "buy") is True
+
+
+class TestEvaluateMTF:
+
+    def test_hold_input_stays_hold(self):
+        result = evaluate_mtf(None, "hold", None)
+        assert result.final_action == "hold"
+        assert result.confidence_mult == 0.0
+
+    def test_daily_bearish_blocks_buy(self):
+        daily = _make_candles(list(range(160, 100, -1)))
+        result = evaluate_mtf(daily, "buy", None)
+        assert result.final_action == "hold"
+
+    def test_daily_bullish_blocks_sell(self):
+        daily = _make_candles(list(range(100, 160)))
+        result = evaluate_mtf(daily, "sell", None)
+        assert result.final_action == "hold"
+
+    def test_daily_bullish_allows_buy(self):
+        daily = _make_candles(list(range(100, 160)))
+        result = evaluate_mtf(daily, "buy", None)
+        assert result.final_action == "buy"
+        assert result.confidence_mult == 1.0
+
+    def test_neutral_daily_allows_any_direction(self):
+        result = evaluate_mtf(None, "sell", None)
+        assert result.final_action == "sell"
+        assert result.confidence_mult == 1.0
+
+    def test_m30_no_confirm_reduces_confidence(self):
+        daily = _make_candles(list(range(100, 160)))
+        m30 = _make_candles(list(range(130, 100, -1)))
+        result = evaluate_mtf(daily, "buy", m30, unconfirmed_scale=0.5)
+        assert result.final_action == "buy"
+        assert result.confidence_mult == 0.5
+        assert result.m30_confirms is False
+
+    def test_full_alignment_full_confidence(self):
+        daily = _make_candles(list(range(100, 160)))
+        m30 = _make_candles(list(range(100, 130)))
+        result = evaluate_mtf(daily, "buy", m30)
+        assert result.final_action == "buy"
+        assert result.confidence_mult == 1.0
+        assert result.m30_confirms is True
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 8. Timeframe-aware horizon computation
+# ═══════════════════════════════════════════════════════════════════════════
+
+from hogan_bot.retrain import default_horizon_bars
+
+
+class TestHorizonBars:
+
+    def test_5m_targets_6_hours(self):
+        assert default_horizon_bars("5m") == 72  # 6h / 5m = 72
+
+    def test_30m_targets_6_hours(self):
+        assert default_horizon_bars("30m") == 12  # 6h / 30m = 12
+
+    def test_1h_targets_6_hours(self):
+        assert default_horizon_bars("1h") == 6  # 6h / 1h = 6
+
+    def test_custom_target(self):
+        assert default_horizon_bars("1h", target_hours=12) == 12
+
+    def test_unknown_timeframe_defaults_to_12(self):
+        assert default_horizon_bars("weird") == 12
+
+    def test_all_timeframes_produce_positive(self):
+        for tf in ("1m", "5m", "10m", "15m", "30m", "1h", "2h", "4h", "1d"):
+            assert default_horizon_bars(tf) >= 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 9. Auto-promotion pipeline
+# ═══════════════════════════════════════════════════════════════════════════
+
+from hogan_bot.auto_promote import evaluate_and_promote, promote_all
+
+
+class TestAutoPromotion:
+
+    def _write_opt(self, path: Path, score: float, trades: int = 20, dd: float = 1.5):
+        data = {
+            "symbol": "BTC/USD",
+            "best_score": score,
+            "best_config": {"short_ma_window": 8, "long_ma_window": 111},
+            "leaderboard": [{
+                "rank": 1,
+                "config": {"short_ma_window": 8},
+                "sharpe_ratio": score,
+                "total_return_pct": 4.0,
+                "max_drawdown_pct": dd,
+                "win_rate": 0.7,
+                "trades": trades,
+            }],
+        }
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+    def test_promotes_when_score_beats_threshold(self, tmp_path):
+        reload_symbol_configs()
+        self._write_opt(tmp_path / "opt_BTC-USD_1h.json", score=5.0)
+        r = evaluate_and_promote("BTC/USD", "1h", models_dir=str(tmp_path), min_sharpe=2.0)
+        assert r.promoted is True
+
+    def test_rejects_low_sharpe(self, tmp_path):
+        reload_symbol_configs()
+        self._write_opt(tmp_path / "opt_BTC-USD_1h.json", score=1.5)
+        r = evaluate_and_promote("BTC/USD", "1h", models_dir=str(tmp_path), min_sharpe=2.0)
+        assert r.promoted is False
+        assert "minimum" in r.reason
+
+    def test_rejects_few_trades(self, tmp_path):
+        reload_symbol_configs()
+        self._write_opt(tmp_path / "opt_BTC-USD_1h.json", score=5.0, trades=3)
+        r = evaluate_and_promote("BTC/USD", "1h", models_dir=str(tmp_path), min_trades=10)
+        assert r.promoted is False
+        assert "trades" in r.reason
+
+    def test_rejects_high_drawdown(self, tmp_path):
+        reload_symbol_configs()
+        self._write_opt(tmp_path / "opt_BTC-USD_1h.json", score=5.0, dd=20.0)
+        r = evaluate_and_promote("BTC/USD", "1h", models_dir=str(tmp_path), max_drawdown_pct=15.0)
+        assert r.promoted is False
+        assert "drawdown" in r.reason
+
+    def test_missing_file_returns_not_promoted(self, tmp_path):
+        reload_symbol_configs()
+        r = evaluate_and_promote("SOL/USD", "1h", models_dir=str(tmp_path))
+        assert r.promoted is False
+
+    def test_candidate_vs_incumbent_improvement_gate(self, tmp_path):
+        reload_symbol_configs()
+        incumbent = tmp_path / "opt_BTC-USD_1h.json"
+        candidate = tmp_path / "opt_BTC-USD_1h_new.json"
+        self._write_opt(incumbent, score=8.0)
+        self._write_opt(candidate, score=8.3)
+        r = evaluate_and_promote(
+            "BTC/USD", "1h",
+            candidate_path=candidate,
+            models_dir=str(tmp_path),
+            min_improvement=0.5,
+        )
+        assert r.promoted is False
+        assert "Improvement" in r.reason
+
+    def test_promote_all_discovers_files(self, tmp_path):
+        reload_symbol_configs()
+        self._write_opt(tmp_path / "opt_BTC-USD_1h.json", score=10.0)
+        self._write_opt(tmp_path / "opt_ETH-USD_1h.json", score=8.0)
+        results = promote_all(models_dir=str(tmp_path), min_sharpe=2.0)
+        assert len(results) == 2
+        assert all(r.promoted for r in results)

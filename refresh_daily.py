@@ -258,17 +258,25 @@ def _refresh_macro_candles() -> None:
 
 
 def _refresh_crypto_candles() -> None:
-    """Fetch latest 5m candles for all crypto symbols from Kraken."""
+    """Fetch latest candles for all crypto symbols at multiple timeframes from Kraken."""
     import subprocess
     symbols = os.getenv("HOGAN_SYMBOLS", "BTC/USD,ETH/USD,SOL/USD").split(",")
     symbols = [s.strip() for s in symbols if s.strip()]
-    args = [sys.executable, "-m", "hogan_bot.fetch_data",
-            "--symbol"] + symbols + ["--timeframe", "5m", "--limit", "5000"]
-    result = subprocess.run(args, capture_output=True, text=True, timeout=120)
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "crypto candle fetch failed")
-    for line in result.stdout.strip().splitlines():
-        print(f"  {line}")
+    timeframes = [
+        ("5m",  "5000"),
+        ("30m", "2000"),
+        ("1h",  "1000"),
+        ("1d",  "365"),
+    ]
+    for tf, limit in timeframes:
+        args = [sys.executable, "-m", "hogan_bot.fetch_data",
+                "--symbol"] + symbols + ["--timeframe", tf, "--limit", limit]
+        result = subprocess.run(args, capture_output=True, text=True, timeout=180)
+        if result.returncode != 0:
+            print(f"  WARN: {tf} fetch failed: {result.stderr.strip()[:200]}")
+        else:
+            for line in result.stdout.strip().splitlines():
+                print(f"  {line}")
 
 
 def _refresh_alpaca() -> None:
@@ -301,7 +309,7 @@ def _refresh_alpaca() -> None:
 
 _SOURCES: list[tuple[str, str, Callable]] = [
     # ── Crypto OHLCV candles (always first) ──────────────────────────────────
-    ("crypto",       "Crypto 5m candles: BTC/ETH/SOL from Kraken (no key)",    _refresh_crypto_candles),
+    ("crypto",       "Crypto candles: BTC/ETH/SOL 5m/30m/1h/1d from Kraken (no key)", _refresh_crypto_candles),
     # ── Completely free (no key) ─────────────────────────────────────────────
     ("feargreed",    "Fear & Greed Index (Alternative.me, no key)",            _refresh_feargreed),
     ("gpr",          "GPR Index (Caldara & Iacoviello, free download)",        _refresh_gpr),
