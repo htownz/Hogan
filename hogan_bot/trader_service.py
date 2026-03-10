@@ -10,7 +10,7 @@ import threading
 import time
 from datetime import datetime
 
-from hogan_bot.config import load_config, symbol_config
+from hogan_bot.config import load_config, symbol_config, effective_hold_cooldown_bars
 from hogan_bot.decision import apply_ml_filter, ml_confidence
 from hogan_bot.exchange import ExchangeClient
 from hogan_bot.execution import LiveExecution, PaperExecution
@@ -420,7 +420,8 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
 
                 # ── Paper exit management (trailing stop, take profit, max hold) ──
                 if mode == "paper":
-                    exits = paper_port.check_exits(mark_prices, max_hold_bars=config.max_hold_bars)
+                    max_hold_bars, loss_cooldown_bars = effective_hold_cooldown_bars(config, config.timeframe)
+                    exits = paper_port.check_exits(mark_prices, max_hold_bars=max_hold_bars)
                     for exit_symbol, reason in exits:
                         exit_px = mark_prices.get(exit_symbol, 0.0)
                         now_ms = int(time.time() * 1000)
@@ -437,8 +438,8 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                                 pnl_pct = (exit_px - avg_entry) / avg_entry if avg_entry > 0 else 0.0
                                 _label_buffer_from_trade(conn, exit_symbol, now_ms, pnl_pct)
                                 is_loss = exit_px < avg_entry
-                                if is_loss and config.loss_cooldown_bars > 0:
-                                    _cooldown_remaining = config.loss_cooldown_bars
+                                if is_loss and loss_cooldown_bars > 0:
+                                    _cooldown_remaining = loss_cooldown_bars
                                 ORDERS.labels(side="sell", mode=mode, exchange="paper").inc()
                                 notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason, "price": exit_px, "qty": qty})
                                 logger.info("AUTO_EXIT symbol=%s reason=%s px=%.2f qty=%.6f equity=%.2f",
