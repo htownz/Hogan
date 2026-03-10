@@ -181,6 +181,24 @@ def _split_symbols(raw: str) -> list[str]:
     return [s.strip() for s in raw.split(",") if s.strip()]
 
 
+def effective_hold_cooldown_bars(config: BotConfig, timeframe: str) -> tuple[int, int]:
+    """Return (max_hold_bars, loss_cooldown_bars) for the given timeframe.
+
+    When max_hold_hours or loss_cooldown_hours are set, converts hours to bars
+    for parity between backtest and live/paper across timeframes.
+    """
+    from hogan_bot.timeframe_utils import hours_to_bars
+    if config.max_hold_hours > 0:
+        max_hold = hours_to_bars(config.max_hold_hours, timeframe)
+    else:
+        max_hold = config.max_hold_bars
+    if config.loss_cooldown_hours > 0:
+        cooldown = hours_to_bars(config.loss_cooldown_hours, timeframe)
+    else:
+        cooldown = config.loss_cooldown_bars
+    return max_hold, cooldown
+
+
 # ---------------------------------------------------------------------------
 # Per-symbol Optuna config overrides
 # ---------------------------------------------------------------------------
@@ -290,6 +308,8 @@ def load_config() -> BotConfig:
         atr_stop_multiplier=float(os.getenv("HOGAN_ATR_STOP_MULTIPLIER", "2.5")),
         max_hold_bars=int(os.getenv("HOGAN_MAX_HOLD_BARS", "144")),
         loss_cooldown_bars=int(os.getenv("HOGAN_LOSS_COOLDOWN_BARS", "12")),
+        max_hold_hours=float(os.getenv("HOGAN_MAX_HOLD_HOURS", "0")),
+        loss_cooldown_hours=float(os.getenv("HOGAN_LOSS_COOLDOWN_HOURS", "0")),
         use_ict=os.getenv("HOGAN_USE_ICT", "false").lower() == "true",
         ict_model=os.getenv("HOGAN_ICT_MODEL", "silver_bullet"),
         ict_swing_left=int(os.getenv("HOGAN_ICT_SWING_LEFT", "2")),

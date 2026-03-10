@@ -107,6 +107,8 @@ def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, ov
         ict_ote_high=cfg.ict_ote_high,
         use_rl_agent=use_rl_agent or cfg.use_rl_agent,
         rl_policy=rl_policy,
+        max_hold_hours=cfg.max_hold_hours if cfg.max_hold_hours > 0 else None,
+        loss_cooldown_hours=cfg.loss_cooldown_hours if cfg.loss_cooldown_hours > 0 else None,
     )
 
 

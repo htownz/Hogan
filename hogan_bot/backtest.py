@@ -268,11 +268,14 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     # RL agent
     use_rl_agent: bool = False,
     rl_policy=None,
-    # Max hold time
+    # Max hold time (overridden by max_hold_hours when set)
     max_hold_bars: int = 144,
-    # Loss cooldown
+    # Loss cooldown (overridden by loss_cooldown_hours when set)
     loss_cooldown_bars: int = 12,
+    max_hold_hours: float | None = None,
+    loss_cooldown_hours: float | None = None,
     # Slippage model: basis points added to buys, subtracted from sells
+    slippage_bps: float = 5.0,
     # Execution: "same_bar" = fill at signal bar close; "next_open" = fill at next bar open
     execution_mode: str = "same_bar",
 ) -> BacktestResult:
@@ -286,9 +289,19 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     # Resolve bars_per_year for correct Sharpe/Sortino annualization
     if timeframe:
         _bars_per_year = float(tf_bars_per_year(timeframe))
+        _tf = timeframe
     else:
         inferred = infer_timeframe_from_candles(candles)
         _bars_per_year = float(tf_bars_per_year(inferred)) if inferred else _BARS_PER_YEAR_5M
+        _tf = inferred or "5m"
+
+    # Hour-based hold/cooldown override (parity with live/paper)
+    if max_hold_hours is not None and max_hold_hours > 0:
+        from hogan_bot.timeframe_utils import hours_to_bars
+        max_hold_bars = hours_to_bars(max_hold_hours, _tf)
+    if loss_cooldown_hours is not None and loss_cooldown_hours > 0:
+        from hogan_bot.timeframe_utils import hours_to_bars
+        loss_cooldown_bars = hours_to_bars(loss_cooldown_hours, _tf)
 
     slip_mult = slippage_bps / 10000.0
     portfolio = PaperPortfolio(cash_usd=starting_balance_usd, fee_rate=fee_rate)

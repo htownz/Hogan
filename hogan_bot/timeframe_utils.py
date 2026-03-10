@@ -97,5 +97,8 @@ def default_horizon_bars(timeframe: str, target_hours: float = 6.0) -> int:
 
     Different timeframes need different bar counts for the same holding period.
     E.g. 6 hours = 72 bars at 5m, 12 bars at 30m, 6 bars at 1h.
+    Falls back to 12 for unrecognised timeframes (legacy retrain behavior).
     """
+    if timeframe not in _TF_MINUTES:
+        return 12
     return max(1, hours_to_bars(target_hours, timeframe))
