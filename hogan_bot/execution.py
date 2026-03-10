@@ -26,9 +26,14 @@ class ExecutionEngine:
       - paper mode is default
       - live mode requires explicit config + env flag
       - every order is journaled to SQLite
+
+    Both subclasses own portfolio state mutation so callers never need
+    to call ``portfolio.execute_buy/sell`` separately.
     """
 
-    def buy(self, symbol: str, price: float, qty: float) -> ExecResult:  # pragma: no cover
+    def buy(self, symbol: str, price: float, qty: float,
+            trailing_stop_pct: float = 0.0,
+            take_profit_pct: float = 0.0) -> ExecResult:  # pragma: no cover
         raise NotImplementedError
 
     def sell(self, symbol: str, price: float, qty: float) -> ExecResult:  # pragma: no cover
@@ -85,17 +90,27 @@ class LiveExecution(ExecutionEngine):
       - This is intentionally conservative: no leverage, no margin, no derivatives.
     """
 
-    def __init__(self, client: ExchangeClient, conn, exchange_id: str):
+    def __init__(self, client: ExchangeClient, conn, exchange_id: str,
+                 portfolio: PaperPortfolio | None = None):
         self.client = client
         self.conn = conn
         self.exchange_id = exchange_id
+        self.portfolio = portfolio
 
-    def buy(self, symbol: str, price: float, qty: float) -> ExecResult:
+    def buy(self, symbol: str, price: float, qty: float,
+            trailing_stop_pct: float = 0.0,
+            take_profit_pct: float = 0.0) -> ExecResult:
         try:
             order = self.client.create_market_order(symbol=symbol, side="buy", amount=qty)
             order["exchange"] = self.exchange_id
             record_order(self.conn, order)
             self._sync_fills(symbol)
+            if self.portfolio is not None:
+                self.portfolio.execute_buy(
+                    symbol, price, qty,
+                    trailing_stop_pct=trailing_stop_pct,
+                    take_profit_pct=take_profit_pct,
+                )
             return ExecResult(ok=True, order_id=str(order.get("id")))
         except Exception as exc:  # pragma: no cover
             logger.exception("Live buy failed: %s", exc)
@@ -107,6 +122,8 @@ class LiveExecution(ExecutionEngine):
             order["exchange"] = self.exchange_id
             record_order(self.conn, order)
             self._sync_fills(symbol)
+            if self.portfolio is not None:
+                self.portfolio.execute_sell(symbol, price, qty)
             return ExecResult(ok=True, order_id=str(order.get("id")))
         except Exception as exc:  # pragma: no cover
             logger.exception("Live sell failed: %s", exc)

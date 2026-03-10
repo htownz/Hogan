@@ -356,11 +356,10 @@ def _train_to_candidate(args: argparse.Namespace, candles: pd.DataFrame) -> tupl
     multi_symbol = len(symbols) > 1
 
     if getattr(args, "use_extended_mtf", False):
-        logger.info(
-            "Extended MTF features (10m + 30m) will be used for RL training. "
-            "For the standard ML model (logreg/rf/xgb/lgbm), extended MTF requires "
-            "custom feature engineering — currently only multi-symbol data expansion "
-            "is applied. Run rl_train.py with --ext-features for RL extended MTF."
+        raise RuntimeError(
+            "--use-extended-mtf is not yet wired into standard ML training "
+            "(logreg/rf/xgb/lgbm). The flag only works with rl_train.py. "
+            "Remove --use-extended-mtf or run: python -m hogan_bot.rl_train --ext-features"
         )
 
     # Optionally load paper-trade and/or backtest labels for feedback-loop training
@@ -442,14 +441,16 @@ def _train_to_candidate(args: argparse.Namespace, candles: pd.DataFrame) -> tupl
         logger.info("Multi-symbol training: %s", symbols)
         X_all, y_all, feature_cols = _build_multi_symbol_dataset(args)
 
-        # Delegate to a special multi-symbol training path
         metrics = _train_from_xy(
             X_all, y_all, feature_cols,
             model_type=args.model_type,
             model_path=candidate_path,
             tune=getattr(args, "tune", False),
         )
-    # Open DB connection for macro feature enrichment (single-symbol path)
+        metrics["symbols"] = symbols
+        return metrics, candidate_path
+
+    # Single-symbol training path
     _db_conn = None
     if getattr(args, "from_db", False):
         _db_conn = get_connection(getattr(args, "db", "data/hogan.db"))
@@ -676,10 +677,11 @@ def retrain_once(args: argparse.Namespace) -> dict:
 
         elif should_promote:
             shutil.copy2(candidate_path, args.model_path)
+            symbols = _resolve_symbols(args)
             registry.log(
                 metrics,
                 model_path=args.model_path,
-                symbol=args.symbol,
+                symbol=",".join(symbols) if len(symbols) > 1 else args.symbol,
                 timeframe=args.timeframe,
                 horizon_bars=args.horizon_bars,
             )

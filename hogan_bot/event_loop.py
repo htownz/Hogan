@@ -265,14 +265,10 @@ async def run_event_loop(
 
             if action == "buy" and px > 0:
                 if executor:
-                    res = executor.buy(symbol, px, size)
+                    res = executor.buy(symbol, px, size,
+                                       trailing_stop_pct=config.trailing_stop_pct,
+                                       take_profit_pct=config.take_profit_pct)
                     executed = bool(res.ok)
-                    if executed:
-                        portfolio.execute_buy(
-                            symbol, px, size,
-                            trailing_stop_pct=config.trailing_stop_pct,
-                            take_profit_pct=config.take_profit_pct,
-                        )
                 else:
                     executed = portfolio.execute_buy(
                         symbol, px, size,
@@ -282,7 +278,7 @@ async def run_event_loop(
                 if executed:
                     now_ms = int(time.time() * 1000)
                     fee = size * px * config.fee_rate
-                    open_paper_trade(conn, symbol, "buy", px, size, fee, now_ms,
+                    open_paper_trade(conn, symbol, "long", px, size, fee, now_ms,
                                      ml_up_prob=up_prob, strategy_conf=0.0,
                                      vol_ratio=0.0)
                     if notifier:
@@ -297,14 +293,12 @@ async def run_event_loop(
                 if executor:
                     res = executor.sell(symbol, px, sell_qty)
                     executed = bool(res.ok)
-                    if executed:
-                        portfolio.execute_sell(symbol, px, sell_qty)
                 else:
                     executed = portfolio.execute_sell(symbol, px, sell_qty)
                 if executed:
                     now_ms = int(time.time() * 1000)
                     exit_fee = sell_qty * px * config.fee_rate
-                    close_paper_trade(conn, symbol, "buy", px, exit_fee, now_ms, close_reason="signal")
+                    close_paper_trade(conn, symbol, "long", px, exit_fee, now_ms, close_reason="signal")
                     if notifier:
                         notifier.notify("sell", {"symbol": symbol, "price": px,
                                                  "qty": sell_qty, "ml_up_prob": up_prob})
