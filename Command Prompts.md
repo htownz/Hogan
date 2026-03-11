@@ -1,252 +1,279 @@
-START UP
+# Hogan 2.0 Command Reference
+
+## Startup
+
+```powershell
 cd C:\Users\15125\Documents\Hogan\Hogan
-.venv\Scripts\Activate
-python -m hogan_bot.trader_service
-
-
-
-Step 1 — Refresh today's macro data (run this now):
-
-python refresh_daily.py
-Step 2 — Retrain with the full 100k+ bars using the current 43-feature set:
-
-python -m hogan_bot.retrain --from-db --window-bars 100000 --model-type xgboost --horizon-bars 12 --force-promote
-
-Step 3 — Restart the bot with all the overnight fixes active:
-
-python -m hogan_bot.main
-
-Command	What it shows
-!balance	Equity, cash, invested, unrealized P&L, total return
-!positions	Open trades: entry price, qty, current price, P&L %
-!pnl	Realized P&L from fill history
-!fills	Last 10 executed trades
-!status	Mode, model, ICT/EMA cloud enabled, ML thresholds
-!market	Fear & Greed, BTC dominance, yield curve, DeFi TVL, funding rate
-!signals	Live ML up-probability for BTC/USD and ETH/USD
-!help	Full command list
-
-Quick-reference cheat sheet
-What	Command
-Activate venv	.\.venv\Scripts\Activate.ps1
-Fetch latest candles	python -m hogan_bot.fetch_data --symbol BTC/USD --timeframe 5m --limit 720
-Daily data refresh	python refresh_daily.py
-Retrain ML	python -m hogan_bot.retrain
-Train RL (full)	python -m hogan_bot.rl_train --symbol BTC/USD --timeframe 5m --from-db --timesteps 500000
-Backtest	python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000
-Run the bot	python -m hogan_bot.main
-Dashboard	streamlit run dashboard.py
-Run tests	pytest tests/ -q
-Check Oanda account	python -m hogan_bot.fetch_oanda --account-summary
-Recommended terminal layout: open 3 terminals — one for the data loop (Step 2), one for the bot (Step 6), and one free for commands.
-
-**Daily Data Refresh Workflow**
-
-# Run everything at once (recommended):
-
-python refresh_daily.py
-
-# Or run individual free sources:
-
-python -m hogan_bot.fetch_feargreed         # no key
-
-python -m hogan_bot.fetch_coingecko         # COINGECKO_KEY
-
-python -m hogan_bot.fetch_gpr               # no key (cached 30 days)
-
-python -m hogan_bot.fetch_derivatives       # Kraken Futures, no key
-
-python -m hogan_bot.fetch_news_sentiment    # CRYPTOPANIC_KEY (free token)
-
-# Your active paid/keyed sources:
-
-python -m hogan_bot.fetch_messari           # MESSARI_KEY (on-chain: NVT, realized cap)
-
-python -m hogan_bot.fetch_dune              # DUNE_API_KEY (BTC exchange flow, whales)
-
-python -m hogan_bot.fetch_oanda             # OANDA_ACCESS_TOKEN (BTC/ETH/XAU/EUR prices)
-
-# Paid (run daily after subscribing):
-
-python -m hogan_bot.fetch_glassnode         # GLASSNODE_KEY
-
-python -m hogan_bot.fetch_santiment         # SANTIMENT_KEY
-
-
-
-
-
----
-
-**STEP 0 — Open a terminal every time (Windows PowerShell)**
-
-cd C:\Users\15125\Documents\Hogan\Hogan
-
 .\.venv\Scripts\Activate.ps1
-
-# You should see (.venv) at the start of your prompt. If not, run:
-
-python -m venv .venv
-
-pip install -r requirements.txt
+```
 
 ---
 
-**Ubuntu / WSL Terminal Commands**
+## Daily Operations
 
-source ~/hogan-venv/bin/activate
+### Start the bot (paper mode)
 
-cd /mnt/c/Users/15125/Documents/Hogan/Hogan
-
-# Ubuntu Training Command (heavy RL — run here for GPU speed):
-
-python3 -m hogan_bot.rl_train --symbol BTC/USD --timeframe 5m --from-db --timesteps 500000
-
----
-
-All commands below assume you're in the project directory with the venv active:
-
-
-
-**Data accumulation (run continuously)**
-
-while ($true) {
-
-&nbsp;   python -m hogan_bot.fetch_data --symbol BTC/USD --timeframe 5m --limit 720
-
-&nbsp;   Start-Sleep -Seconds 300
-
-}
-
-Fetches the latest candles every 5 minutes and upserts into data/hogan.db. Leave this running in its own terminal.
-
-
-
-**RL training**
-
-# Smoke test (fast, just verifies pipeline works)
-
-python -m hogan_bot.rl_train --symbol BTC/USD --timeframe 5m --from-db --timesteps 5000 --verbose 0
-
-# Real training (~3,000+ bars recommended)
-
-
-
-# Quick re-train as more data accumulates (cheaper update)
-
-python -m hogan_bot.rl_train --symbol BTC/USD --timeframe 5m --from-db --timesteps 200000
-
-Backtesting
-
-
-
-**# Standard backtest**
-
-python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000
-
-# With RL vote enabled (requires trained policy)
-
-python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000 --use-rl
-
-# Compare 5 signal configs side-by-side
-
-python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000 --compare
-
-# With ML filter
-
-python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000 --use-ml
-
-# With ICT signal
-
-python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000 --use-ict
-
-
-
-**ML model retraining**
-
-python -m hogan_bot.retrain
-
-Live / paper bot
-
+```powershell
 python -m hogan_bot.main
+```
 
+### Start the trader service
 
+```powershell
+python -m hogan_bot.trader_service
+```
 
-**Tests**
+### Dashboard
 
-$env:PYTHONPATH = "c:\\Users\\15125\\Documents\\Hogan\\Hogan"
+```powershell
+streamlit run dashboard.py
+```
 
-$env:PATH = "C:\\Users\\15125\\AppData\\Roaming\\Python\\Python311\\Scripts;" + $env:PATH
+### Daily data refresh (all free sources)
 
+```powershell
+python refresh_daily.py
+```
+
+---
+
+## Data
+
+### Fetch latest candles (1h default)
+
+```powershell
+python -m hogan_bot.fetch_data --symbol BTC/USD --timeframe 1h --limit 720
+```
+
+### Backfill deep history (Kraken, paginated)
+
+```powershell
+python -m hogan_bot.fetch_data --symbol BTC/USD --timeframe 1h --backfill --target-bars 20000
+python -m hogan_bot.fetch_data --symbol BTC/USD --timeframe 30m --backfill --target-bars 40000
+```
+
+### Backfill from Yahoo Finance (2 years 1h, no API key)
+
+```powershell
+python -m hogan_bot.backfill --symbol BTC/USD ETH/USD SOL/USD --timeframe 1h --period 2y
+```
+
+### Full multi-source backfill (Alpaca + macro)
+
+```powershell
+.\scripts\backfill_mtf.ps1
+```
+
+### Combined Kraken + Yahoo backfill
+
+```powershell
+.\scripts\backfill_kraken_yahoo.ps1
+```
+
+### Check DB candle counts
+
+```powershell
+python scripts/list_candles.py --db data/hogan.db
+```
+
+### Continuous candle accumulation (background)
+
+```powershell
+while ($true) {
+    python -m hogan_bot.fetch_data --symbol BTC/USD --timeframe 1h --limit 720
+    Start-Sleep -Seconds 3600
+}
+```
+
+### Individual data sources
+
+```powershell
+python -m hogan_bot.fetch_feargreed         # no key
+python -m hogan_bot.fetch_coingecko         # COINGECKO_KEY
+python -m hogan_bot.fetch_gpr               # no key (cached 30 days)
+python -m hogan_bot.fetch_derivatives       # Kraken Futures, no key
+python -m hogan_bot.fetch_news_sentiment    # CRYPTOPANIC_KEY (free)
+python -m hogan_bot.fetch_messari           # MESSARI_KEY
+python -m hogan_bot.fetch_dune              # DUNE_API_KEY
+python -m hogan_bot.fetch_oanda             # OANDA_ACCESS_TOKEN
+python -m hogan_bot.fetch_glassnode         # GLASSNODE_KEY (paid)
+python -m hogan_bot.fetch_santiment         # SANTIMENT_KEY (paid)
+```
+
+---
+
+## Backtesting
+
+### Standard backtest (1h BTC, from DB)
+
+```powershell
+python -m hogan_bot.backtest_cli --symbol BTC/USD --timeframe 1h --from-db --limit 8000
+```
+
+### With ML filter
+
+```powershell
+python -m hogan_bot.backtest_cli --symbol BTC/USD --timeframe 1h --from-db --limit 8000 --use-ml
+```
+
+### With RL vote
+
+```powershell
+python -m hogan_bot.backtest_cli --symbol BTC/USD --timeframe 1h --from-db --limit 8000 --use-rl
+```
+
+### Compare 5 signal configs side-by-side
+
+```powershell
+python -m hogan_bot.backtest_cli --symbol BTC/USD --timeframe 1h --from-db --limit 8000 --compare
+```
+
+### With ICT (experimental only)
+
+```powershell
+python -m hogan_bot.backtest_cli --symbol BTC/USD --timeframe 1h --from-db --limit 8000 --use-ict
+```
+
+### OOS validation
+
+```powershell
+python scripts/validate_oos.py --symbol BTC/USD --timeframe 1h --auto-split
+```
+
+### Full OOS with explicit splits
+
+```powershell
+python scripts/validate_oos.py --symbol BTC/USD --timeframe 1h --train-bars 8000 --val-bars 3000 --test-bars 3000
+```
+
+---
+
+## Optimization
+
+### Default (no ICT in search space)
+
+```powershell
+python -m hogan_bot.optimize --symbol BTC/USD --timeframe 1h --from-db --trials 200 --metric sharpe --max-drawdown 20
+```
+
+### With seed for reproducibility
+
+```powershell
+python -m hogan_bot.optimize --symbol BTC/USD --timeframe 1h --from-db --trials 200 --metric sharpe --max-drawdown 20 --seed 42
+```
+
+### Experimental (includes ICT in search)
+
+```powershell
+python -m hogan_bot.optimize --symbol BTC/USD --timeframe 1h --from-db --trials 200 --metric sharpe --experimental
+```
+
+---
+
+## ML Training
+
+### Retrain (walk-forward, from DB)
+
+```powershell
+python -m hogan_bot.retrain --from-db --window-bars 8000 --model-type xgboost --horizon-bars 12 --force-promote
+```
+
+### Train ML model
+
+```powershell
+python -m hogan_bot.train --symbol BTC/USD --timeframe 1h --from-db
+```
+
+### Massive retrain (multi-symbol, multi-horizon)
+
+```powershell
+python scripts/massive_retrain.py
+```
+
+---
+
+## RL Training
+
+### Smoke test (verify pipeline)
+
+```powershell
+python -m hogan_bot.rl_train --symbol BTC/USD --timeframe 1h --from-db --timesteps 5000 --verbose 0
+```
+
+### Full training
+
+```powershell
+python -m hogan_bot.rl_train --symbol BTC/USD --timeframe 1h --from-db --timesteps 500000
+```
+
+### RL hyperparameter tuning
+
+```powershell
+python -m hogan_bot.rl_tune --symbol BTC/USD --timeframe 1h --from-db
+```
+
+### Ubuntu / WSL (for GPU)
+
+```bash
+source ~/hogan-venv/bin/activate
+cd /mnt/c/Users/15125/Documents/Hogan/Hogan
+python3 -m hogan_bot.rl_train --symbol BTC/USD --timeframe 1h --from-db --timesteps 500000
+```
+
+---
+
+## Tests
+
+```powershell
+$env:PYTHONPATH = "c:\Users\15125\Documents\Hogan\Hogan"
 pytest tests/ -q
+```
 
-Check bar count in DB
+### ICT tests (should still pass after quarantine)
 
-python -c "
+```powershell
+python -m pytest tests/test_ict.py -v
+```
 
-import sqlite3
+---
 
-conn = sqlite3.connect('data/hogan.db')
+## Validation (Phase A)
 
-cur = conn.cursor()
+### Verify config defaults
 
-cur.execute('SELECT symbol, timeframe, COUNT(\*), MIN(ts_ms), MAX(ts_ms) FROM candles GROUP BY symbol, timeframe')
+```powershell
+python -c "from hogan_bot.config import load_config; c = load_config(); print(f'timeframe={c.timeframe}, execution_tf={c.execution_timeframe}')"
+# Expected: timeframe=1h, execution_tf=15m
+```
 
-for row in cur.fetchall(): print(row)
+### Verify feature counts
 
-conn.close()
+```powershell
+python -c "from hogan_bot.ml import _FEATURE_COLUMNS, _EXPERIMENTAL_FEATURES; print(f'Core: {len(_FEATURE_COLUMNS)}, Experimental: {len(_EXPERIMENTAL_FEATURES)}')"
+# Expected: Core: 59, Experimental: 7
+```
 
-"
+---
 
+## Discord Bot Commands
 
+| Command | What it shows |
+|---------|--------------|
+| `!balance` | Equity, cash, invested, unrealized P&L, total return |
+| `!positions` | Open trades: entry price, qty, current price, P&L % |
+| `!pnl` | Realized P&L from fill history |
+| `!fills` | Last 10 executed trades |
+| `!status` | Mode, model, features enabled, ML thresholds |
+| `!market` | Fear & Greed, BTC dominance, yield curve, DeFi TVL, funding |
+| `!signals` | Live ML up-probability for BTC/USD and ETH/USD |
+| `!help` | Full command list |
 
-OPTIMIZATION COMMAND OPTIONS CURRENT - 
+---
 
+## Recommended Terminal Layout
 
-
-python -m hogan_bot.optimize --symbol BTC/USD --timeframe 5m --limit 20000 --trials 200 --metric sharpe --max-drawdown 20
-
-
-
-python -m hogan_bot.optimize --symbol BTC/USD --timeframe 5m --limit 20000 `
-
-&nbsp;   --trials 200 --metric sharpe --max-drawdown 20
-
-
-
-python -m hogan_bot.optimize --symbol BTC/USD --timeframe 5m --limit 5000 --trials 200 --metric sharpe --max-drawdown 20 --seed 42
-
-
-
-**TRAINING WORKFLOW - CURRENT 1:34 3/4**
-
-# 1. Accumulate data (keep running in background)
-
-python -m hogan_bot.fetch_data --symbol BTC/USD --timeframe 5m --limit 720
-
-
-
-# 2. Train (run once you have 3000+ bars for meaningful results)
-
-python -m hogan_bot.rl_train --symbol BTC/USD --timeframe 5m --from-db --timesteps 200000
-
-
-
-# 3. Backtest with RL vote enabled
-
-python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000 --use-rl
-
-
-
-**POLICY TRAINING-**
-
-# Train from the accumulated DB (once you have ~300+ 5m bars)
-
-python -m hogan_bot.rl_train --symbol BTC/USD --timeframe 5m --from-db --timesteps 500000
-
-
-
-# Backtest with the RL vote added
-
-python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000 --use-rl
-
+| Terminal | Purpose |
+|----------|---------|
+| 1 | Candle accumulation loop (fetch_data every hour) |
+| 2 | Bot (`python -m hogan_bot.main`) |
+| 3 | Free for commands, backtests, training |
