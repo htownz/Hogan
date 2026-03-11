@@ -2,30 +2,67 @@
 
 Hogan is a **BTC-first, 1h-led market operating system** — an agent-routed, forecast-and-risk-driven trading system for BTC/USD and major pairs on 110+ exchanges.
 
-## Important safety notes
+## Important Safety Notes
 
 - This build is **paper mode only** (no live order routing yet).
 - If you ever exposed API keys in chat/logs/repo, **rotate them immediately** in Kraken.
 - No strategy guarantees profit; use strict risk controls and human oversight.
 
-## What’s implemented now
+## Architecture Overview
 
+Hogan follows a multi-layer architecture:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    AGENT PIPELINE (Decision Brain)                   │
+│  TechnicalAgent · SentimentAgent · MacroAgent → MetaWeigher          │
+└─────────────────────────────────────────────────────────────────────┘
+         │  weighted decision
+         ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    ML PROBABILITY FILTER (Optional)                  │
+│  66 features · XGBoost/LightGBM/LogReg · Walk-forward retraining    │
+└─────────────────────────────────────────────────────────────────────┘
+         │  calibrated probability
+         ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    RISK MANAGEMENT + EXECUTION                       │
+│  Position sizing · Drawdown guard · Paper/Live execution            │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## What's Implemented Now
+
+### Core Trading System
 - **AgentPipeline** — decision brain: Technical + Sentiment + Macro agents combined by MetaWeigher
-- Agent-routed, forecast-and-risk-driven flow (not signal combinator)
+- Agent-routed, forecast-and-risk-driven flow
 - Default timeframe **1h** (BTC-first)
-- Kraken OHLCV ingestion via `ccxt`
-- Ripster EMA clouds (fast 8/9, slow 34/50) — cloud direction per bar
-- Dynamic stop-distance proxy from recent candle range
+- Multi-exchange support via [CCXT](https://docs.ccxt.com/) (110+ exchanges)
+
+### ML Pipeline
+- **66 ML features** (59 core + 7 experimental): momentum, RSI, volatility, candle microstructure, volume, EMA cloud direction/width, OBV, Stochastic RSI, VWAP deviation, MACD, Bollinger Bands, ATR, multi-timeframe features, on-chain/macro signals
+- Walk-forward cross-validation with champion/challenger model promotion
+- Online learning from paper trade outcomes
+- Model types: LogReg, Random Forest, XGBoost, LightGBM
+
+### Risk Management
 - Position sizing bounded by risk-per-trade and aggressive allocation cap
-- Portfolio simulation with fees (`PaperPortfolio`)
+- Dynamic stop-distance proxy from recent candle range
 - Max drawdown guard to halt trading on breach
-- Optional ML probability filter (logistic model) for buy/sell gating
+- Portfolio simulation with fees (`PaperPortfolio`)
+
+### Infrastructure
 - Backtest engine + CLI to evaluate strategy/ML settings on historical candles
+- SQLite storage for candles and trade journal
+- Ripster EMA clouds (fast 8/9, slow 34/50) — cloud direction per bar
 - 24/5 behavior toggle (`HOGAN_TRADE_WEEKENDS=false` by default)
 - `--max-loops` option for finite test runs
-- **ICT/FVG** — experimental, quarantined (not a core feature)
+- Dashboard and Discord notifications
 
-## Quick start
+### Experimental Features (Quarantined)
+- **ICT/FVG** — experimental, quarantined from the core AgentPipeline decision flow
+
+## Quick Start
 
 ```bash
 python -m venv .venv
@@ -35,9 +72,9 @@ cp .env.example .env
 python -m hogan_bot.main --max-loops 2
 ```
 
-## ML enhancement workflow (recommended)
+## ML Enhancement Workflow (Recommended)
 
-The ML pipeline uses 43 features (momentum, RSI, volatility, candle microstructure, volume, EMA cloud direction/width, OBV, Stochastic RSI, VWAP deviation, MACD, Bollinger Bands, ATR, multi-timeframe features, on-chain/macro signals) and supports two classifier types.
+The ML pipeline uses **66 features** (59 core + 7 experimental ICT features) covering momentum, RSI, volatility, candle microstructure, volume, EMA cloud direction/width, OBV, Stochastic RSI, VWAP deviation, MACD, Bollinger Bands, ATR, multi-timeframe features, and on-chain/macro signals. It supports multiple classifier types: LogReg, Random Forest, XGBoost, and LightGBM.
 
 ### 1. Validate with walk-forward cross-validation first
 
@@ -85,7 +122,7 @@ python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000 --use-ml
 python -m hogan_bot.main --max-loops 200
 ```
 
-## Environment config
+## Environment Config
 
 `.env.example`:
 
@@ -134,7 +171,7 @@ HOGAN_SIGNAL_MODE=any
 | `HOGAN_FVG_MIN_GAP_PCT` | `0.001` | Minimum gap size (fraction of price) to record an FVG |
 | `HOGAN_SIGNAL_MODE` | `any` | `ma_only` / `any` / `all` — legacy signal combinator (secondary to AgentPipeline) |
 
-## EMA clouds workflow
+## EMA Clouds Workflow
 
 Enable EMA clouds in `.env` and backtest before paper-trading:
 
@@ -162,7 +199,7 @@ python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000 --use-ml
 
 **ICT/FVG** is experimental and quarantined. Use `HOGAN_USE_FVG=true` only for testing; it is not part of the core AgentPipeline decision flow.
 
-## Multi-exchange support
+## Multi-Exchange Support
 
 Hogan is powered by [CCXT](https://docs.ccxt.com/) (110+ exchanges).  The active exchange is
 controlled by a single environment variable — no code changes needed.
@@ -248,7 +285,7 @@ for eid, r in rates.items():
 Endpoints that are not supported by a specific exchange return `None` gracefully
 — you never need to check `exchange.has` manually.
 
-## Walk-forward retraining (`hogan_bot.retrain`)
+## Walk-Forward Retraining (`hogan_bot.retrain`)
 
 The bot adapts to changing market regimes by periodically retraining on the
 most recent N bars (rolling window).  A new model only **replaces** the
@@ -332,7 +369,7 @@ HOGAN_RETRAIN_PROMOTION_METRIC=roc_auc
 HOGAN_RETRAIN_SCHEDULE_HOURS=24
 ```
 
-## How to further enhance ML abilities next
+## Future Enhancements
 
 - Funding rates and open interest (now available via `multi_exchange`) can be
   added as ML features — high positive funding is a crowded-long signal.
@@ -340,3 +377,26 @@ HOGAN_RETRAIN_SCHEDULE_HOURS=24
 - Confidence-based position sizing: `HOGAN_ML_CONFIDENCE_SIZING=true`.
 - Try gradient boosted trees: `--model-type xgboost` or `--model-type lightgbm`.
 - Promote only models that beat baseline after fees/slippage using the model registry.
+
+## Roadmap
+
+See `docs/` for detailed architecture and planning documents:
+
+| Phase | Focus | Status |
+|-------|-------|--------|
+| **Phase A** | Simplify live path — quarantine ICT, 1h default | ✅ Complete |
+| **Phase B** | Build market-state feature spine with event-time index | 🔄 In Progress |
+| **Phase C** | Build model stack (regime, forecast, risk, execution) | 📋 Planned |
+| **Phase D** | Build local AI research swarm (7 agents) | 📋 Planned |
+| **Phase E** | Continuous learning with champion/challenger | 📋 Planned |
+
+### Key Architecture Documents
+
+- `docs/HOGAN_2_ARCHITECTURE.md` — Full Hogan 2.0 vision and design
+- `docs/NEXT_STEPS_PLAN.md` — Prioritized enhancement roadmap
+- `docs/QUARANTINE_LIST.md` — What's quarantined vs. active in champion path
+- `docs/VALIDATION_COMMANDS.md` — Commands to validate system health
+
+## License
+
+This project is proprietary. All rights reserved.
