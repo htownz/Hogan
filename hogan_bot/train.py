@@ -71,7 +71,7 @@ def main() -> None:
     candles = client.fetch_ohlcv_df(args.symbol, timeframe=args.timeframe, limit=args.limit)
 
     if args.cv:
-        folds = walk_forward_cv(candles, horizon_bars=args.horizon_bars, n_splits=args.cv_splits)
+        folds = walk_forward_cv(candles, horizon_bars=args.horizon_bars, n_splits=args.cv_splits, model_type=args.model_type)
         output: dict = (
             {
                 "cv_folds": folds,

@@ -1274,7 +1274,7 @@ def _make_cv_model(model_type: str):
             subsample=0.8, colsample_bytree=0.8, min_child_samples=20,
             random_state=42, verbose=-1,
         )
-    elif model_type == "histgb":
+    elif model_type in ("histgb", "hist_gb"):
         from sklearn.ensemble import HistGradientBoostingClassifier
         return HistGradientBoostingClassifier(
             max_depth=6, learning_rate=0.05, max_iter=400, random_state=42,
