@@ -536,7 +536,8 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                         )
 
                     # ── Agent Pipeline decision ────────────────────────
-                    signal = pipeline.run(candles, symbol=symbol, config_override=cfg)
+                    _regime_name = regime_state.regime if regime_state else None
+                    signal = pipeline.run(candles, symbol=symbol, config_override=cfg, regime=_regime_name)
 
                     action = signal.action
                     up_prob = None
@@ -548,18 +549,18 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                             symbol, action, signal.confidence, signal.explanation,
                         )
 
-                    # ── ML filter with regime-adjusted thresholds ─────
+                    # ── ML filter: soft confidence scaler (not hard gate) ─
                     with model_lock:
                         current_model = model_holder.get("model", model_obj)
                     if config.use_ml_filter and current_model is not None:
                         up_prob = _predict_up(current_model, candles, db_conn=conn)
-                        action = apply_ml_filter(
-                            action, up_prob,
-                            eff["ml_buy_threshold"],
-                            eff["ml_sell_threshold"],
-                        )
-                        if config.ml_confidence_sizing and up_prob is not None:
-                            conf_scale = ml_confidence(up_prob) * eff["position_scale"]
+                        if up_prob is not None:
+                            if action == "buy" and up_prob < eff["ml_buy_threshold"]:
+                                conf_scale *= 0.5
+                            elif action == "sell" and up_prob > eff["ml_sell_threshold"]:
+                                conf_scale *= 0.5
+                            if config.ml_confidence_sizing:
+                                conf_scale *= ml_confidence(up_prob)
 
                     # ── MTF ensemble filter ────────────────────────────
                     if config.use_mtf_ensemble and action != "hold":
@@ -572,17 +573,17 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                         action = mtf_result.final_action
                         conf_scale *= mtf_result.confidence_mult
 
-                    # ── Macro correlation filter ──────────────────────
-                    if config.use_macro_filter and action != "hold":
+                    # Macro correlation handled by AgentPipeline's MacroAgent.
+                    # Keeping VIX hard-block as final safety net only.
+                    if config.use_macro_filter and action == "buy":
                         macro_result = evaluate_macro(
                             conn, action=action,
                             ma_period=config.macro_equity_ma_period,
                             vix_caution=config.macro_vix_caution,
                             vix_block=config.macro_vix_block,
                         )
-                        if macro_result.block_longs and action == "buy":
+                        if macro_result.block_longs:
                             action = "hold"
-                        conf_scale *= macro_result.confidence_mult
 
                     if action == "hold":
                         continue

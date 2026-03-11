@@ -130,13 +130,50 @@ def generate_signal(
     else:
         ma_action = "hold"
 
+    # ── Trend continuation: pullback entries during strong, established trends ──
+    # Only fires when:
+    #   1) MA spread > 1% (confirmed strong trend, not a fresh/weak crossover)
+    #   2) Price spent 2+ bars on the wrong side of the short MA (real pullback)
+    #   3) Current bar reclaims the short MA with volume
+    trend_action = "hold"
+    if ma_action == "hold" and len(candles) >= long_window + 5:
+        in_uptrend = cur_above
+        price_now = float(close.iloc[-1])
+        sma_now = float(short_ma.iloc[-1])
+        lma_now = float(long_ma.iloc[-1])
+
+        ma_spread_pct = abs(sma_now - lma_now) / max(lma_now, 1e-9)
+        trend_strong = ma_spread_pct > 0.01
+
+        if trend_strong and in_uptrend:
+            bars_below = sum(
+                1 for j in range(-4, -1)
+                if float(close.iloc[j]) < float(short_ma.iloc[j])
+            )
+            reclaimed = price_now > sma_now
+            if bars_below >= 2 and reclaimed and volume_confirmed:
+                trend_action = "buy"
+                confidence = max(confidence, 0.8)
+        elif trend_strong and not in_uptrend:
+            bars_above = sum(
+                1 for j in range(-4, -1)
+                if float(close.iloc[j]) > float(short_ma.iloc[j])
+            )
+            reclaimed = price_now < sma_now
+            if bars_above >= 2 and reclaimed and volume_confirmed:
+                trend_action = "sell"
+                confidence = max(confidence, 0.8)
+
     # Fast path: MA-only mode or no extras enabled
     extra_enabled = use_ema_clouds or (use_fvg and not use_ict) or use_ict or use_rl_agent
-    if signal_mode == "ma_only" or not extra_enabled:
-        return StrategySignal(ma_action, stop_distance_pct, confidence, volume_ratio)
+    if signal_mode == "ma_only":
+        if ma_action != "hold":
+            return StrategySignal(ma_action, stop_distance_pct, confidence, volume_ratio)
+        return StrategySignal(trend_action, stop_distance_pct, confidence, volume_ratio)
 
     # ── Collect votes from all providers (no MA gatekeeper) ────────────────
-    votes: list[str] = [ma_action]
+    effective_ma = ma_action if ma_action != "hold" else trend_action
+    votes: list[str] = [effective_ma]
 
     # ── EMA cloud vote ────────────────────────────────────────────────────────
     if use_ema_clouds:
