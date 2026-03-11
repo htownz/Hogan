@@ -12,11 +12,11 @@ Typical workflow::
     # Populate from exchange
     from hogan_bot.exchange import KrakenClient
     client = KrakenClient(None, None)
-    df = client.fetch_ohlcv_df("BTC/USD", timeframe="5m", limit=5000)
-    upsert_candles(conn, "BTC/USD", "5m", df)
+    df = client.fetch_ohlcv_df("BTC/USD", timeframe="1h", limit=5000)
+    upsert_candles(conn, "BTC/USD", "1h", df)
 
     # Load back for training / backtesting
-    candles = load_candles(conn, "BTC/USD", "5m")
+    candles = load_candles(conn, "BTC/USD", "1h")
 """
 from __future__ import annotations
 

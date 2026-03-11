@@ -92,20 +92,22 @@ class AgentSignal:
 # ---------------------------------------------------------------------------
 
 class TechnicalAgent:
-    """Runs ICT, EMA clouds, FVG, ADX, ATR and produces a TechSignal."""
+    """Wraps generate_signal() as one sub-brain — MA, EMA clouds, FVG, ICT, RL."""
 
     def __init__(self, config) -> None:
         self.config = config
 
-    def analyze(self, candles: pd.DataFrame) -> TechSignal:
+    def analyze(self, candles: pd.DataFrame, **runtime_state) -> TechSignal:
+        """Produce a TechSignal. ``runtime_state`` passes dynamic per-bar RL
+        fields (rl_in_position, rl_unrealized_pnl, rl_bars_in_trade)."""
         cfg = self.config
         if candles.empty or len(candles) < max(cfg.long_ma_window, 20):
             return TechSignal(action="hold", confidence=0.0)
 
         try:
             from hogan_bot.strategy import generate_signal
-            raw = generate_signal(
-                candles,
+
+            kwargs: dict[str, Any] = dict(
                 short_window=cfg.short_ma_window,
                 long_window=cfg.long_ma_window,
                 volume_window=cfg.volume_window,
@@ -119,10 +121,30 @@ class TechnicalAgent:
                 fvg_min_gap_pct=cfg.fvg_min_gap_pct,
                 signal_mode=cfg.signal_mode,
                 min_vote_margin=cfg.signal_min_vote_margin,
+                atr_stop_multiplier=getattr(cfg, "atr_stop_multiplier", 1.5),
+                use_ict=getattr(cfg, "use_ict", False),
+                ict_swing_left=getattr(cfg, "ict_swing_left", 2),
+                ict_swing_right=getattr(cfg, "ict_swing_right", 2),
+                ict_eq_tolerance_pct=getattr(cfg, "ict_eq_tolerance_pct", 0.0008),
+                ict_min_displacement_pct=getattr(cfg, "ict_min_displacement_pct", 0.003),
+                ict_require_time_window=getattr(cfg, "ict_require_time_window", True),
+                ict_time_windows=getattr(cfg, "ict_time_windows", "03:00-04:00,10:00-11:00,14:00-15:00"),
+                ict_require_pd=getattr(cfg, "ict_require_pd", True),
+                ict_ote_enabled=getattr(cfg, "ict_ote_enabled", False),
+                ict_ote_low=getattr(cfg, "ict_ote_low", 0.62),
+                ict_ote_high=getattr(cfg, "ict_ote_high", 0.79),
+                use_rl_agent=getattr(cfg, "use_rl_agent", False),
+                rl_policy=getattr(cfg, "rl_policy", None),
             )
+            kwargs.update(runtime_state)
+
+            raw = generate_signal(candles, **kwargs)
+            conf = float(raw.confidence)
+            if raw.action != "hold" and conf <= 0.0:
+                conf = 1.0
             return TechSignal(
                 action=raw.action,
-                confidence=float(raw.confidence),
+                confidence=conf,
                 stop_distance_pct=float(raw.stop_distance_pct),
                 volume_ratio=float(raw.volume_ratio),
                 details={"source": "strategy.generate_signal"},
@@ -412,9 +434,10 @@ class AgentPipeline:
         candles: pd.DataFrame,
         symbol: str = "BTC/USD",
         features: list[float] | None = None,
+        **runtime_state,
     ) -> AgentSignal:
         """Run all agents and return a combined AgentSignal."""
-        tech = self.tech_agent.analyze(candles)
+        tech = self.tech_agent.analyze(candles, **runtime_state)
         sent = self.sent_agent.analyze()
         macro = self.macro_agent.analyze()
 

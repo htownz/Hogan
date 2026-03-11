@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 import math
+import types
 from dataclasses import dataclass, field
 
 import pandas as pd
 
+from hogan_bot.agent_pipeline import AgentPipeline
 from hogan_bot.decision import apply_ml_filter, ml_confidence
 from hogan_bot.ml import TrainedModel, predict_up_probability
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
-from hogan_bot.strategy import generate_signal
 from hogan_bot.timeframe_utils import bars_per_year as tf_bars_per_year
 from hogan_bot.timeframe_utils import infer_timeframe_from_candles
 
-# Annualisation constant for 5-minute 24/7 crypto bars (fallback when timeframe unknown).
-# 365 days × 24 hours × 12 five-minute intervals = 105 120 bars/year.
-_BARS_PER_YEAR_5M: float = 105_120.0
+# Annualisation constant for 1-hour 24/7 crypto bars (fallback when timeframe unknown).
+# 365 days × 24 hours = 8 760 bars/year.
+_BARS_PER_YEAR_DEFAULT: float = 8_760.0
 
 
 def _bar_ts_ms(candles: pd.DataFrame, bar_idx: int) -> int:
@@ -42,7 +43,7 @@ class BacktestResult:
     sortino_ratio: float | None = None
     calmar_ratio: float | None = None
     # bars_per_year used for annualization (for result versioning / reproducibility)
-    bars_per_year: float = _BARS_PER_YEAR_5M
+    bars_per_year: float = _BARS_PER_YEAR_DEFAULT
     equity_curve: list[float] = field(default_factory=list)
     trade_log: list[dict] = field(default_factory=list)
     # Full closed-trade records for ML learning: entry_bar_idx, entry_ts_ms, exit_bar_idx,
@@ -88,7 +89,7 @@ def _equity_returns(equity_curve: list[float]) -> list[float]:
     ]
 
 
-def compute_sharpe(equity_curve: list[float], bars_per_year: float = _BARS_PER_YEAR_5M) -> float | None:
+def compute_sharpe(equity_curve: list[float], bars_per_year: float = _BARS_PER_YEAR_DEFAULT) -> float | None:
     """Annualised Sharpe ratio (zero risk-free rate)."""
     rets = _equity_returns(equity_curve)
     if len(rets) < 2:
@@ -102,7 +103,7 @@ def compute_sharpe(equity_curve: list[float], bars_per_year: float = _BARS_PER_Y
     return mean / std * math.sqrt(bars_per_year)
 
 
-def compute_sortino(equity_curve: list[float], bars_per_year: float = _BARS_PER_YEAR_5M) -> float | None:
+def compute_sortino(equity_curve: list[float], bars_per_year: float = _BARS_PER_YEAR_DEFAULT) -> float | None:
     """Annualised Sortino ratio (zero target return, only downside deviation)."""
     rets = _equity_returns(equity_curve)
     if len(rets) < 2:
@@ -172,7 +173,7 @@ def _classify_regimes(
 
 def _regime_metrics(
     equity_slice: list[float],
-    bars_per_year: float = _BARS_PER_YEAR_5M,
+    bars_per_year: float = _BARS_PER_YEAR_DEFAULT,
 ) -> dict:
     if len(equity_slice) < 2:
         return {"bars": len(equity_slice), "sharpe": None, "total_return_pct": 0.0}
@@ -221,7 +222,7 @@ def evaluate_regimes(
     for eq, lbl in zip(equity, labels):
         regime_bars[lbl].append(eq)
 
-    bpy = getattr(result, "bars_per_year", _BARS_PER_YEAR_5M)
+    bpy = getattr(result, "bars_per_year", _BARS_PER_YEAR_DEFAULT)
     return {regime: _regime_metrics(bars, bars_per_year=bpy) for regime, bars in regime_bars.items()}
 
 
@@ -292,8 +293,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         _tf = timeframe
     else:
         inferred = infer_timeframe_from_candles(candles)
-        _bars_per_year = float(tf_bars_per_year(inferred)) if inferred else _BARS_PER_YEAR_5M
-        _tf = inferred or "5m"
+        _bars_per_year = float(tf_bars_per_year(inferred)) if inferred else _BARS_PER_YEAR_DEFAULT
+        _tf = inferred or "1h"
 
     # Hour-based hold/cooldown override (parity with live/paper)
     if max_hold_hours is not None and max_hold_hours > 0:
@@ -306,6 +307,26 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     slip_mult = slippage_bps / 10000.0
     portfolio = PaperPortfolio(cash_usd=starting_balance_usd, fee_rate=fee_rate)
     guard = DrawdownGuard(starting_balance_usd, max_drawdown)
+
+    _bt_config = types.SimpleNamespace(
+        short_ma_window=short_ma_window, long_ma_window=long_ma_window,
+        volume_window=volume_window, volume_threshold=volume_threshold,
+        use_ema_clouds=use_ema_clouds, ema_fast_short=ema_fast_short,
+        ema_fast_long=ema_fast_long, ema_slow_short=ema_slow_short,
+        ema_slow_long=ema_slow_long, use_fvg=use_fvg,
+        fvg_min_gap_pct=fvg_min_gap_pct, signal_mode=signal_mode,
+        signal_min_vote_margin=min_vote_margin,
+        atr_stop_multiplier=atr_stop_multiplier,
+        use_ict=use_ict, ict_swing_left=ict_swing_left,
+        ict_swing_right=ict_swing_right, ict_eq_tolerance_pct=ict_eq_tolerance_pct,
+        ict_min_displacement_pct=ict_min_displacement_pct,
+        ict_require_time_window=ict_require_time_window,
+        ict_time_windows=ict_time_windows, ict_require_pd=ict_require_pd,
+        ict_ote_enabled=ict_ote_enabled, ict_ote_low=ict_ote_low,
+        ict_ote_high=ict_ote_high, use_rl_agent=use_rl_agent,
+        rl_policy=rl_policy, symbols=[symbol],
+    )
+    _pipeline = AgentPipeline(_bt_config, conn=None)
 
     wins = 0
     closed = 0
@@ -320,7 +341,6 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     # Cooldown: bars remaining before next entry is allowed
     _cooldown_remaining: int = 0
 
-    # RL position-state tracking (used in generate_signal RL vote)
     _rl_bars_in_trade: int = 0
 
     # Next-open execution: pending buys/sells to fill at next bar's open
@@ -432,35 +452,9 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             _rl_upnl = 0.0
             _rl_bars_in_trade = 0
 
-        signal = generate_signal(
+        signal = _pipeline.run(
             window,
-            short_window=short_ma_window,
-            long_window=long_ma_window,
-            volume_window=volume_window,
-            volume_threshold=volume_threshold,
-            use_ema_clouds=use_ema_clouds,
-            ema_fast_short=ema_fast_short,
-            ema_fast_long=ema_fast_long,
-            ema_slow_short=ema_slow_short,
-            ema_slow_long=ema_slow_long,
-            use_fvg=use_fvg,
-            fvg_min_gap_pct=fvg_min_gap_pct,
-            signal_mode=signal_mode,
-            min_vote_margin=min_vote_margin,
-            atr_stop_multiplier=atr_stop_multiplier,
-            use_ict=use_ict,
-            ict_swing_left=ict_swing_left,
-            ict_swing_right=ict_swing_right,
-            ict_eq_tolerance_pct=ict_eq_tolerance_pct,
-            ict_min_displacement_pct=ict_min_displacement_pct,
-            ict_require_time_window=ict_require_time_window,
-            ict_time_windows=ict_time_windows,
-            ict_require_pd=ict_require_pd,
-            ict_ote_enabled=ict_ote_enabled,
-            ict_ote_low=ict_ote_low,
-            ict_ote_high=ict_ote_high,
-            use_rl_agent=use_rl_agent,
-            rl_policy=rl_policy,
+            symbol=symbol,
             rl_in_position=_rl_in_pos,
             rl_unrealized_pnl=_rl_upnl,
             rl_bars_in_trade=_rl_bars_in_trade,

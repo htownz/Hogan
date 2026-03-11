@@ -201,7 +201,7 @@ class DataWatchdog:
             symbol, identifier, age_s, _EXT_METRIC_INTERVAL_SECONDS,
         )
 
-    def check_dead_man(self, symbol: str, timeframe: str = "5m") -> bool:
+    def check_dead_man(self, symbol: str, timeframe: str = "1h") -> bool:
         """Return True if the dead-man switch is triggered (no candle for 15min)."""
         try:
             conn = sqlite3.connect(self.db_path)

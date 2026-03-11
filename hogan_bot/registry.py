@@ -47,7 +47,7 @@ class ModelRegistry:
             "model_hash":    "ab12cd34ef56",
             "model_type":    "logistic_regression",
             "symbol":        "BTC/USD",
-            "timeframe":     "5m",
+            "timeframe":     "1h",
             "horizon_bars":  3,
             "features":      24,
             "metrics": {
@@ -61,7 +61,7 @@ class ModelRegistry:
 
         registry = ModelRegistry()
         registry.log(metrics, model_path="models/hogan_logreg.pkl",
-                     symbol="BTC/USD", timeframe="5m", horizon_bars=3)
+                     symbol="BTC/USD", timeframe="1h", horizon_bars=3)
         best = registry.best(metric="roc_auc")
     """
 
@@ -89,7 +89,7 @@ class ModelRegistry:
         metrics: dict,
         model_path: str,
         symbol: str = "BTC/USD",
-        timeframe: str = "5m",
+        timeframe: str = "1h",
         horizon_bars: int = 3,
         params: dict | None = None,
     ) -> dict:

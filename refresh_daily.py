@@ -263,9 +263,9 @@ def _refresh_crypto_candles() -> None:
     symbols = os.getenv("HOGAN_SYMBOLS", "BTC/USD,ETH/USD,SOL/USD").split(",")
     symbols = [s.strip() for s in symbols if s.strip()]
     timeframes = [
-        ("5m",  "5000"),
+        ("1h",  "5000"),
         ("30m", "2000"),
-        ("1h",  "1000"),
+        ("15m", "5000"),
         ("1d",  "365"),
     ]
     for tf, limit in timeframes:

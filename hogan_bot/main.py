@@ -18,7 +18,7 @@ from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.regime import detect_regime, effective_thresholds, load_regime_signals
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
-from hogan_bot.strategy import generate_signal
+from hogan_bot.agent_pipeline import AgentPipeline
 from hogan_bot.storage import (
     get_connection, record_equity, upsert_position,
     open_paper_trade, close_paper_trade,
@@ -54,6 +54,7 @@ def run_iteration(
     conn=None,
     executor=None,
     signal_cache: dict | None = None,
+    pipeline: AgentPipeline | None = None,
 ) -> bool:
     if not is_allowed_trading_time(config.trade_weekends):
         logging.info("Weekend pause enabled; sleeping.")
@@ -162,39 +163,21 @@ def run_iteration(
                 eff["ml_sell_threshold"], eff["position_scale"],
             )
 
-        signal = generate_signal(
-            candles,
-            short_window=cfg.short_ma_window,
-            long_window=cfg.long_ma_window,
-            volume_window=cfg.volume_window,
-            volume_threshold=eff["volume_threshold"],   # regime-adjusted
-            use_ema_clouds=cfg.use_ema_clouds,
-            ema_fast_short=cfg.ema_fast_short,
-            ema_fast_long=cfg.ema_fast_long,
-            ema_slow_short=cfg.ema_slow_short,
-            ema_slow_long=cfg.ema_slow_long,
-            use_fvg=cfg.use_fvg,
-            fvg_min_gap_pct=cfg.fvg_min_gap_pct,
-            signal_mode=cfg.signal_mode,
-            min_vote_margin=cfg.signal_min_vote_margin,
-            atr_stop_multiplier=cfg.atr_stop_multiplier,
-            use_ict=cfg.use_ict,
-            ict_swing_left=cfg.ict_swing_left,
-            ict_swing_right=cfg.ict_swing_right,
-            ict_eq_tolerance_pct=cfg.ict_eq_tolerance_pct,
-            ict_min_displacement_pct=cfg.ict_min_displacement_pct,
-            ict_require_time_window=cfg.ict_require_time_window,
-            ict_time_windows=cfg.ict_time_windows,
-            ict_require_pd=cfg.ict_require_pd,
-            ict_ote_enabled=cfg.ict_ote_enabled,
-            ict_ote_low=cfg.ict_ote_low,
-            ict_ote_high=cfg.ict_ote_high,
-        )
+        # ── Agent Pipeline decision ────────────────────────────────────────
+        if pipeline is None:
+            pipeline = AgentPipeline(config, conn=conn)
+        signal = pipeline.run(candles, symbol=symbol)
         px = mark_prices[symbol]
 
         up_prob = None
-        conf_scale = eff["position_scale"]   # start from regime position scale
+        conf_scale = (signal.confidence or 1.0) * eff["position_scale"]
         action = signal.action
+
+        if action != "hold":
+            logging.info(
+                "PIPELINE %s action=%s conf=%.2f | %s",
+                symbol, action, signal.confidence, signal.explanation,
+            )
         if config.use_ml_filter and ml_model is not None:
             up_prob = predict_up_probability(candles, ml_model, db_conn=conn)
             action = apply_ml_filter(
@@ -439,10 +422,10 @@ def run(max_loops: int | None = None) -> None:
     )
     notifier.notify("info", {
         "status": f"Hogan {mode_str} started",
+        "brain": "AgentPipeline (Tech + Sentiment + Macro)",
         "symbols": ", ".join(config.symbols),
         "timeframe": config.timeframe,
         "ml_model": "loaded" if ml_model else "no model — retraining needed",
-        "ict": "enabled" if config.use_ict else "disabled",
         "equity": f"${config.starting_balance_usd:,.2f}",
     })
 
@@ -466,10 +449,12 @@ def run(max_loops: int | None = None) -> None:
         cmd_listener.update_state(portfolio, {}, config_summary, signal_cache)
         cmd_listener.start()
 
+    pipeline = AgentPipeline(config, conn=conn)
+
     loops = 0
     while True:
         loops += 1
-        keep_running = run_iteration(config, client, portfolio, drawdown_guard, ml_model, notifier=notifier, conn=conn, executor=executor, signal_cache=signal_cache)
+        keep_running = run_iteration(config, client, portfolio, drawdown_guard, ml_model, notifier=notifier, conn=conn, executor=executor, signal_cache=signal_cache, pipeline=pipeline)
         if not keep_running:
             break
 

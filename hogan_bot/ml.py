@@ -236,7 +236,7 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
         day_key = pd.to_datetime(candles["timestamp"], utc=True).dt.date
     else:
         from hogan_bot.timeframe_utils import bars_per_day, infer_timeframe_from_candles
-        tf = infer_timeframe_from_candles(candles) or "5m"
+        tf = infer_timeframe_from_candles(candles) or "1h"
         day_key = pd.Series(np.arange(len(close)) // bars_per_day(tf), index=close.index)
 
     cum_pv = pv.groupby(day_key).cumsum()
@@ -319,7 +319,7 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
         day_key = pd.to_datetime(candles["timestamp"], utc=True).dt.date
     else:
         from hogan_bot.timeframe_utils import bars_per_day, infer_timeframe_from_candles
-        tf = infer_timeframe_from_candles(candles) or "5m"
+        tf = infer_timeframe_from_candles(candles) or "1h"
         bpd = bars_per_day(tf)
         day_key = pd.Series(np.arange(len(close)) // bpd, index=close.index)
 

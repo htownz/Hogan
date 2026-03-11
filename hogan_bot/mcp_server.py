@@ -100,7 +100,7 @@ def tool_get_portfolio(db_path: str | None = None) -> dict:
 
 def tool_get_signal(
     symbol: str = "BTC/USD",
-    timeframe: str = "5m",
+    timeframe: str = "1h",
     db_path: str | None = None,
 ) -> dict:
     """Generate a trading signal for the given symbol/timeframe."""
@@ -151,7 +151,7 @@ def tool_get_signal(
 
 def tool_run_backtest(
     symbol: str = "BTC/USD",
-    timeframe: str = "5m",
+    timeframe: str = "1h",
     limit: int = 1000,
     db_path: str | None = None,
 ) -> dict:
@@ -258,7 +258,7 @@ def tool_get_data_coverage(db_path: str | None = None) -> dict:
 
 def tool_trigger_retrain(
     symbol: str = "BTC/USD",
-    timeframe: str = "5m",
+    timeframe: str = "1h",
     model_type: str = "logreg",
     db_path: str | None = None,
 ) -> dict:
@@ -348,7 +348,7 @@ _TOOLS = [
             "type": "object",
             "properties": {
                 "symbol": {"type": "string", "default": "BTC/USD"},
-                "timeframe": {"type": "string", "default": "5m"},
+                "timeframe": {"type": "string", "default": "1h"},
             }
         },
     },
@@ -359,7 +359,7 @@ _TOOLS = [
             "type": "object",
             "properties": {
                 "symbol": {"type": "string", "default": "BTC/USD"},
-                "timeframe": {"type": "string", "default": "5m"},
+                "timeframe": {"type": "string", "default": "1h"},
                 "limit": {"type": "integer", "default": 1000},
             }
         },
@@ -381,7 +381,7 @@ _TOOLS = [
             "type": "object",
             "properties": {
                 "symbol": {"type": "string", "default": "BTC/USD"},
-                "timeframe": {"type": "string", "default": "5m"},
+                "timeframe": {"type": "string", "default": "1h"},
                 "model_type": {
                     "type": "string",
                     "enum": ["logreg", "random_forest", "xgboost", "lightgbm"],

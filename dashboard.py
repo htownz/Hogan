@@ -537,7 +537,7 @@ with tab_backtest:
 
     col1, col2, col3, col4 = st.columns(4)
     bt_symbol = col1.selectbox("Symbol", ["BTC/USD", "ETH/USD"], key="bt_sym")
-    bt_tf = col2.selectbox("Timeframe", ["5m", "1h", "1d"], key="bt_tf")
+    bt_tf = col2.selectbox("Timeframe", ["1h", "4h", "1d"], key="bt_tf")
     bt_limit = col3.number_input("Bars", value=2000, min_value=200, step=200, key="bt_lim")
     bt_use_ml = col4.checkbox("Use ML filter", value=True, key="bt_ml")
 

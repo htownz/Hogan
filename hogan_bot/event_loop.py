@@ -34,6 +34,7 @@ from datetime import datetime
 
 import pandas as pd
 
+from hogan_bot.agent_pipeline import AgentPipeline
 from hogan_bot.config import BotConfig, load_config, symbol_config
 from hogan_bot.data_engine import CandleEvent, LiveDataEngine, CandleRingBuffer
 from hogan_bot.decision import apply_ml_filter, ml_confidence
@@ -43,7 +44,6 @@ from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
 from hogan_bot.storage import get_connection, record_equity, upsert_position, open_paper_trade, close_paper_trade
-from hogan_bot.strategy import generate_signal
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +52,12 @@ logger = logging.getLogger(__name__)
 # Signal evaluator — stateless, one call per candle event
 # ---------------------------------------------------------------------------
 class SignalEvaluator:
-    """Wraps strategy + ML gate; returns (action, size, up_prob)."""
+    """Routes decisions through AgentPipeline — Technical + Sentiment + Macro."""
 
-    def __init__(self, config: BotConfig, ml_model: TrainedModel | None) -> None:
+    def __init__(self, config: BotConfig, ml_model: TrainedModel | None, conn=None) -> None:
         self.config = config
         self.ml_model = ml_model
+        self.pipeline = AgentPipeline(config, conn=conn)
 
     def evaluate(
         self,
@@ -65,42 +66,34 @@ class SignalEvaluator:
         equity: float,
     ) -> tuple[str, float, float | None]:
         cfg = symbol_config(self.config, symbol)
-        signal = generate_signal(
-            candles,
-            short_window=cfg.short_ma_window,
-            long_window=cfg.long_ma_window,
-            volume_window=cfg.volume_window,
-            volume_threshold=cfg.volume_threshold,
-            use_ema_clouds=cfg.use_ema_clouds,
-            ema_fast_short=cfg.ema_fast_short,
-            ema_fast_long=cfg.ema_fast_long,
-            ema_slow_short=cfg.ema_slow_short,
-            ema_slow_long=cfg.ema_slow_long,
-            use_fvg=cfg.use_fvg,
-            fvg_min_gap_pct=cfg.fvg_min_gap_pct,
-            signal_mode=cfg.signal_mode,
-            min_vote_margin=cfg.signal_min_vote_margin,
-        )
+        result = self.pipeline.run(candles, symbol=symbol)
         px = float(candles["close"].iloc[-1])
 
         up_prob = None
-        conf_scale = 1.0
-        action = signal.action
+        conf_scale = result.confidence or 1.0
+        action = result.action
 
         if cfg.use_ml_filter and self.ml_model is not None:
             up_prob = predict_up_probability(candles, self.ml_model)
             action = apply_ml_filter(action, up_prob, cfg.ml_buy_threshold, cfg.ml_sell_threshold)
             if cfg.ml_confidence_sizing:
-                conf_scale = ml_confidence(up_prob)
+                conf_scale = ml_confidence(up_prob) * (result.confidence or 1.0)
 
         size = calculate_position_size(
             equity_usd=equity,
             price=px,
-            stop_distance_pct=signal.stop_distance_pct,
+            stop_distance_pct=result.stop_distance_pct,
             max_risk_per_trade=cfg.max_risk_per_trade,
             max_allocation_pct=cfg.aggressive_allocation,
             confidence_scale=conf_scale,
         )
+
+        if action != "hold":
+            logger.info(
+                "PIPELINE %s action=%s conf=%.2f | %s",
+                symbol, action, result.confidence, result.explanation,
+            )
+
         return action, size, up_prob
 
 
@@ -145,7 +138,7 @@ async def run_event_loop(
         except Exception as exc:
             logger.warning("ML model load error: %s", exc)
 
-    evaluator = SignalEvaluator(config, ml_model)
+    evaluator = SignalEvaluator(config, ml_model, conn=conn)
     buffer = CandleRingBuffer(maxlen=config.ohlcv_limit)
 
     try:

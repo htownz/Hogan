@@ -282,7 +282,7 @@ def _main() -> None:
     p = argparse.ArgumentParser(description="Recursive formula checker")
     p.add_argument("--db", default="data/hogan.db")
     p.add_argument("--symbol", default="BTC/USD")
-    p.add_argument("--timeframe", default="5m")
+    p.add_argument("--timeframe", default="1h")
     p.add_argument("--limit", type=int, default=500)
     p.add_argument("--dry-run-validate", action="store_true",
                    help="Also run the dry-run validation gate")

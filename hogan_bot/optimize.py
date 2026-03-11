@@ -192,7 +192,7 @@ def _run_trial(
     symbol: str,
     cfg_dict: dict[str, Any],
     base_cfg,
-    timeframe: str = "5m",
+    timeframe: str = "1h",
 ) -> dict[str, Any]:
     """Run one backtest and return the result enriched with computed metrics."""
     try:

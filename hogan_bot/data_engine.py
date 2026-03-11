@@ -134,7 +134,7 @@ class LiveDataEngine(DataEngineBase):
     ) -> None:
         super().__init__(
             symbols=symbols or ["BTC/USD"],
-            timeframes=timeframes or ["5m"],
+            timeframes=timeframes or ["1h"],
             queue_maxsize=queue_maxsize,
         )
         self.exchange_id = exchange_id

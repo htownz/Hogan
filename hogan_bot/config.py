@@ -70,17 +70,15 @@ class BotConfig:
     atr_stop_multiplier: float = 2.5
 
     # Maximum bars to hold a position before force-closing (0 = disabled).
-    # 144 bars on 5m = 12 hours.
-    max_hold_bars: int = 144
+    max_hold_bars: int = 24          # 24 bars on 1h = 24 hours
 
     # Cooldown bars after a losing trade before the next entry (0 = disabled).
-    # 12 bars on 5m = 1 hour.
-    loss_cooldown_bars: int = 12
+    loss_cooldown_bars: int = 2      # 2 bars on 1h = 2 hours
 
-    # Hour-based overrides: when set, convert to bars using timeframe at runtime.
+    # Hour-based overrides (preferred): convert to bars using timeframe at runtime.
     # Ensures parity between backtest and live/paper across different timeframes.
-    max_hold_hours: float = 0.0      # 0 = use max_hold_bars
-    loss_cooldown_hours: float = 0.0  # 0 = use loss_cooldown_bars
+    max_hold_hours: float = 24.0     # 24h max hold (canonical)
+    loss_cooldown_hours: float = 2.0 # 2h cooldown (canonical)
 
     # Execution timeframe — used by the 15m execution model for entry/exit timing
     execution_timeframe: str = "15m"

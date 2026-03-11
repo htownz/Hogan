@@ -163,7 +163,7 @@ def run_backtest_comparison(conn, model_path: str, symbol: str = "BTC/USD") -> d
     try:
         from hogan_bot.backtest import run_backtest_on_candles
         from hogan_bot.ml import load_model
-        candles = load_candles(conn, symbol, "5m", limit=10000)
+        candles = load_candles(conn, symbol, "1h", limit=10000)
         if candles.empty:
             return {}
         config = load_config()
@@ -171,7 +171,7 @@ def run_backtest_comparison(conn, model_path: str, symbol: str = "BTC/USD") -> d
         result = run_backtest_on_candles(
             candles,
             symbol=symbol,
-            timeframe="5m",
+            timeframe="1h",
             starting_balance_usd=config.starting_balance_usd,
             fee_rate=config.fee_rate,
             short_ma_window=config.short_ma_window,
@@ -203,7 +203,7 @@ def main() -> None:
         "--horizons", nargs="+", type=int, default=None,
         help="Horizons to sweep (default: auto-compute from timeframe targeting 2h/4h/6h/12h)",
     )
-    parser.add_argument("--timeframe", default="5m")
+    parser.add_argument("--timeframe", default="1h")
     parser.add_argument("--limit", type=int, default=100000)
     parser.add_argument("--db", default="data/hogan.db")
     parser.add_argument("--fee-rate", type=float, default=0.0026)

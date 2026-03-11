@@ -130,7 +130,7 @@ def _evaluate(env, policy, n_episodes: int = 1) -> dict[str, float]:
     equity_arr = np.array(equity)
     step_returns = np.diff(equity_arr) / np.maximum(equity_arr[:-1], 1e-9)
     from hogan_bot.timeframe_utils import bars_per_year, infer_timeframe_from_candles
-    tf = infer_timeframe_from_candles(candles) or "5m"
+    tf = infer_timeframe_from_candles(candles) or "1h"
     bpy = float(bars_per_year(tf))
     sharpe = (
         float(np.mean(step_returns) / (np.std(step_returns) + 1e-9)) * np.sqrt(bpy)
@@ -373,7 +373,7 @@ def train(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train the Hogan RL (PPO) agent")
     parser.add_argument("--symbol", default="BTC/USD")
-    parser.add_argument("--timeframe", default="5m")
+    parser.add_argument("--timeframe", default="1h")
     parser.add_argument(
         "--from-db",
         action="store_true",
