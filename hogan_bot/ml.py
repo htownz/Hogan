@@ -338,8 +338,8 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
-# Feature column order is fixed — 43 features total (36 base + 7 ICT structural).
-# Update _FEATURE_COLUMNS and tests together.
+# Core feature columns — 59 features (36 base + 10 macro + 4 onchain + 4 sentiment + 2 derivatives + 3 intermarket).
+# ICT structural features are quarantined to _EXPERIMENTAL_FEATURES.
 _FEATURE_COLUMNS: list[str] = [
     # momentum (4)
     "ret_1", "ret_3", "ret_6", "ret_12",
@@ -361,7 +361,7 @@ _FEATURE_COLUMNS: list[str] = [
     "cloud_bull", "cloud_bear", "cloud_width_pct",
     # FVG (4)
     "fvg_bull_active", "fvg_bear_active", "in_bull_fvg", "in_bear_fvg",
-    # ADX — trend strength + directional lines (3)
+    # ADX (3)
     "adx_14", "plus_di", "minus_di",
     # Stochastic RSI (2)
     "stoch_rsi_k", "stoch_rsi_d",
@@ -373,45 +373,52 @@ _FEATURE_COLUMNS: list[str] = [
     "keltner_pos",
     # CCI, MFI, CMF, ROC (4)
     "cci_20", "mfi_14", "cmf_20", "roc_10",
-    # ICT structural features (7) — premium/discount, liquidity proximity, PDH/PDL
-    "ict_pd_pct",           # dealing-range position [0=discount, 1=premium]
-    "ict_in_discount",      # 1 if price < range midpoint
-    "ict_in_premium",       # 1 if price > range midpoint
-    "ict_swing_high_dist",  # % below nearest 14-bar swing high (buy-side liquidity)
-    "ict_swing_low_dist",   # % above nearest 14-bar swing low (sell-side liquidity)
-    "ict_pdh_dist",         # % below previous-day high (PDH)
-    "ict_pdl_dist",         # % above previous-day low (PDL)
-    # Macro-asset context (10) — from SPY/QQQ/GLD/TLT/UUP/VIX/TNX candles
-    "macro_spy_trend",      # SPY daily close > 20d SMA (0/1)
-    "macro_spy_ret",        # SPY 1d return ÷ 5, clipped [-1, +1]
-    "macro_vix_norm",       # VIX daily close ÷ 40, clipped [0, 1.5]
-    "macro_vix_high",       # VIX > 20 threshold (0/1)
-    "macro_gld_trend",      # GLD daily close > 20d SMA (0/1)
-    "macro_tlt_ret",        # TLT 1d return ÷ 3, clipped [-1, +1]
-    "macro_uup_trend",      # UUP daily close > 20d SMA (0/1)
-    "macro_tnx_norm",       # TNX daily close ÷ 7, clipped [0, 1]
-    "macro_risk_off",       # Composite risk-off: (VIX>20)+GLD+TLT-SPY ÷ 3
-    "macro_qqq_spy_rel",    # QQQ 5d return − SPY 5d return (tech divergence)
+    # Macro-asset context (10)
+    "macro_spy_trend",
+    "macro_spy_ret",
+    "macro_vix_norm",
+    "macro_vix_high",
+    "macro_gld_trend",
+    "macro_tlt_ret",
+    "macro_uup_trend",
+    "macro_tnx_norm",
+    "macro_risk_off",
+    "macro_qqq_spy_rel",
     # On-chain features (4)
-    "onchain_hashrate_trend",   # BTC hash rate 7d SMA direction (0/1)
-    "onchain_addr_trend",       # active address 7d SMA direction (0/1)
-    "onchain_mempool_norm",     # mempool MB / 100, clipped [0, 1]
-    "onchain_fee_norm",         # avg fee USD / 10, clipped [0, 1]
+    "onchain_hashrate_trend",
+    "onchain_addr_trend",
+    "onchain_mempool_norm",
+    "onchain_fee_norm",
     # Sentiment features (4)
-    "sent_fear_greed_norm",     # Fear & Greed index / 100 [0, 1]
-    "sent_btc_dominance",       # BTC dominance / 100 [0, 1]
-    "sent_defi_tvl_change",     # DeFi TVL 7d % change / 100
-    "sent_stablecoin_norm",     # stablecoin mcap / 500B [0, 1]
+    "sent_fear_greed_norm",
+    "sent_btc_dominance",
+    "sent_defi_tvl_change",
+    "sent_stablecoin_norm",
     # Derivatives features (2)
-    "deriv_funding_rate",       # normalised funding rate [-1, 1]
-    "deriv_oi_change",          # OI % change [-1, 1]
+    "deriv_funding_rate",
+    "deriv_oi_change",
     # Inter-market features (3)
-    "intermarket_dxy_trend",    # DXY > 20d SMA (0/1)
-    "intermarket_spy_btc_corr", # 20-day SPY-BTC return correlation
-    "intermarket_gold_btc_rel", # GLD 5d ret - BTC 5d ret
+    "intermarket_dxy_trend",
+    "intermarket_spy_btc_corr",
+    "intermarket_gold_btc_rel",
 ]
 
-assert len(_FEATURE_COLUMNS) == 66, f"Expected 66 features, got {len(_FEATURE_COLUMNS)}"
+assert len(_FEATURE_COLUMNS) == 59, f"Expected 59 features, got {len(_FEATURE_COLUMNS)}"
+
+# EXPERIMENTAL: ICT structural features — quarantined from champion path.
+# Still computed in _feature_frame() but not included in default training/inference.
+# Use _ALL_FEATURE_COLUMNS when explicitly opting in to ICT features.
+_EXPERIMENTAL_FEATURES: list[str] = [
+    "ict_pd_pct",
+    "ict_in_discount",
+    "ict_in_premium",
+    "ict_swing_high_dist",
+    "ict_swing_low_dist",
+    "ict_pdh_dist",
+    "ict_pdl_dist",
+]
+
+_ALL_FEATURE_COLUMNS: list[str] = _FEATURE_COLUMNS + _EXPERIMENTAL_FEATURES
 
 
 # ---------------------------------------------------------------------------

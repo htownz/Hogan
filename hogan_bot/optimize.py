@@ -68,7 +68,11 @@ _PARAM_SPACE: dict[str, tuple] = {
     "signal_mode":              ("choice", ["ma_only", "any", "all"], None),
     "trailing_stop_pct":        ("float", 0.0,   0.05),
     "take_profit_pct":          ("float", 0.0,   0.10),
-    # ICT
+}
+
+# EXPERIMENTAL: ICT search space — only used with --experimental flag.
+# Quarantined from the champion path until ICT wins cleanly out-of-sample.
+_EXPERIMENTAL_SPACE: dict[str, tuple] = {
     "use_ict":                  ("bool",  None, None),
     "ict_swing_left":           ("int",   1,    5),
     "ict_swing_right":          ("int",   1,    5),
@@ -79,8 +83,6 @@ _PARAM_SPACE: dict[str, tuple] = {
     "ict_ote_enabled":          ("bool",  None, None),
 }
 
-# ICT-specific params only matter when use_ict=True; seed them with their
-# defaults when ICT is disabled so they don't inflate the search noise.
 _ICT_PARAMS = {
     "ict_swing_left",
     "ict_swing_right",
@@ -98,7 +100,11 @@ _ICT_PARAMS = {
 
 
 def _sample_param(name: str, rng: random.Random) -> Any:
-    spec = _PARAM_SPACE[name]
+    return _sample_param_from(name, _PARAM_SPACE, rng)
+
+
+def _sample_param_from(name: str, space: dict[str, tuple], rng: random.Random) -> Any:
+    spec = space[name]
     ptype = spec[0]
     if ptype == "int":
         return rng.randint(spec[1], spec[2])
@@ -111,21 +117,29 @@ def _sample_param(name: str, rng: random.Random) -> Any:
     raise ValueError(f"Unknown param type: {ptype}")
 
 
-def sample_config(rng: random.Random) -> dict[str, Any]:
-    """Draw one random parameter configuration, respecting constraints."""
-    cfg: dict[str, Any] = {}
+def sample_config(rng: random.Random, *, experimental: bool = False) -> dict[str, Any]:
+    """Draw one random parameter configuration, respecting constraints.
 
-    for name in _PARAM_SPACE:
-        cfg[name] = _sample_param(name, rng)
+    When *experimental* is False (default), ICT is excluded from the search
+    space and fixed at disabled defaults.
+    """
+    space = dict(_PARAM_SPACE)
+    if experimental:
+        space.update(_EXPERIMENTAL_SPACE)
+
+    cfg: dict[str, Any] = {}
+    for name in space:
+        cfg[name] = _sample_param_from(name, space, rng)
 
     # Constraint: short_ma < long_ma (resample long until satisfied)
     for _ in range(50):
         if cfg["long_ma_window"] > cfg["short_ma_window"] + 5:
             break
-        cfg["long_ma_window"] = _sample_param("long_ma_window", rng)
+        cfg["long_ma_window"] = _sample_param_from("long_ma_window", space, rng)
 
-    # When ICT is disabled freeze its params at sensible defaults
-    if not cfg["use_ict"]:
+    # When ICT is disabled (or not in search space), freeze its params
+    if not cfg.get("use_ict", False):
+        cfg["use_ict"] = False
         cfg["ict_swing_left"] = 2
         cfg["ict_swing_right"] = 2
         cfg["ict_eq_tolerance_pct"] = 0.0008
@@ -264,7 +278,8 @@ def _optuna_objective(
     base_cfg,
     metric: str,
     constraints: dict[str, float],
-    timeframe: str = "5m",
+    timeframe: str = "1h",
+    experimental: bool = False,
 ) -> float:
     """Optuna objective: suggest params, run backtest, return score."""
     cfg_dict: dict[str, Any] = {}
@@ -277,17 +292,22 @@ def _optuna_objective(
     cfg_dict["signal_mode"] = trial.suggest_categorical("signal_mode", ["ma_only", "any", "all"])
     cfg_dict["trailing_stop_pct"] = trial.suggest_float("trailing_stop_pct", 0.0, 0.05)
     cfg_dict["take_profit_pct"] = trial.suggest_float("take_profit_pct", 0.0, 0.10)
-    cfg_dict["use_ict"] = trial.suggest_categorical("use_ict", [True, False])
 
-    if cfg_dict["use_ict"]:
-        cfg_dict["ict_swing_left"] = trial.suggest_int("ict_swing_left", 1, 5)
-        cfg_dict["ict_swing_right"] = trial.suggest_int("ict_swing_right", 1, 5)
-        cfg_dict["ict_eq_tolerance_pct"] = trial.suggest_float("ict_eq_tolerance_pct", 0.0003, 0.002)
-        cfg_dict["ict_min_displacement_pct"] = trial.suggest_float("ict_min_displacement_pct", 0.001, 0.01)
-        cfg_dict["ict_require_time_window"] = trial.suggest_categorical("ict_require_time_window", [True, False])
-        cfg_dict["ict_require_pd"] = trial.suggest_categorical("ict_require_pd", [True, False])
-        cfg_dict["ict_ote_enabled"] = trial.suggest_categorical("ict_ote_enabled", [True, False])
-    else:
+    # ICT is only in the search space when --experimental is set
+    if experimental:
+        cfg_dict["use_ict"] = trial.suggest_categorical("use_ict", [True, False])
+        if cfg_dict["use_ict"]:
+            cfg_dict["ict_swing_left"] = trial.suggest_int("ict_swing_left", 1, 5)
+            cfg_dict["ict_swing_right"] = trial.suggest_int("ict_swing_right", 1, 5)
+            cfg_dict["ict_eq_tolerance_pct"] = trial.suggest_float("ict_eq_tolerance_pct", 0.0003, 0.002)
+            cfg_dict["ict_min_displacement_pct"] = trial.suggest_float("ict_min_displacement_pct", 0.001, 0.01)
+            cfg_dict["ict_require_time_window"] = trial.suggest_categorical("ict_require_time_window", [True, False])
+            cfg_dict["ict_require_pd"] = trial.suggest_categorical("ict_require_pd", [True, False])
+            cfg_dict["ict_ote_enabled"] = trial.suggest_categorical("ict_ote_enabled", [True, False])
+
+    # Default ICT off when not experimental or not selected
+    if not cfg_dict.get("use_ict", False):
+        cfg_dict["use_ict"] = False
         cfg_dict["ict_swing_left"] = 2
         cfg_dict["ict_swing_right"] = 2
         cfg_dict["ict_eq_tolerance_pct"] = 0.0008
@@ -317,13 +337,14 @@ def optimize_bayesian(
     symbol: str,
     base_cfg,
     *,
-    timeframe: str = "5m",
+    timeframe: str = "1h",
     trials: int = 200,
     metric: str = "sharpe",
     constraints: dict[str, float] | None = None,
     top_k: int = 10,
     seed: int | None = None,
     verbose: bool = True,
+    experimental: bool = False,
 ) -> dict[str, Any]:
     """Optuna TPE-based Bayesian hyperparameter optimization."""
     import optuna
@@ -343,7 +364,8 @@ def optimize_bayesian(
 
     study.optimize(
         lambda trial: _optuna_objective(
-            trial, candles, symbol, base_cfg, metric, constraints, timeframe=timeframe
+            trial, candles, symbol, base_cfg, metric, constraints,
+            timeframe=timeframe, experimental=experimental,
         ),
         n_trials=trials,
         show_progress_bar=verbose,
@@ -405,13 +427,14 @@ def optimize(
     symbol: str,
     base_cfg,
     *,
-    timeframe: str = "5m",
+    timeframe: str = "1h",
     trials: int = 200,
     metric: str = "sharpe",
     constraints: dict[str, float] | None = None,
     top_k: int = 10,
     seed: int | None = None,
     verbose: bool = True,
+    experimental: bool = False,
 ) -> dict[str, Any]:
     """Run random-search optimisation over the parameter space.
 
@@ -468,7 +491,7 @@ def optimize(
     )
 
     for t in range(trials):
-        cfg_dict = sample_config(rng)
+        cfg_dict = sample_config(rng, experimental=experimental)
         row = _run_trial(candles, symbol, cfg_dict, base_cfg, timeframe=timeframe)
 
         # Attach trial metadata
@@ -531,7 +554,7 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--symbol", default="BTC/USD", help="Trading pair, e.g. BTC/USD")
-    p.add_argument("--timeframe", default="5m", help="Bar interval, e.g. 5m 15m 1h")
+    p.add_argument("--timeframe", default="1h", help="Bar interval, e.g. 5m 15m 1h")
     p.add_argument("--limit", type=int, default=10_000, help="Number of OHLCV bars to fetch")
     p.add_argument("--trials", type=int, default=200, help="Number of random trials")
     p.add_argument(
@@ -577,6 +600,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default="auto",
         choices=["auto", "optuna", "random"],
         help="Search engine: 'optuna' (Bayesian TPE), 'random', or 'auto' (Optuna if installed)",
+    )
+    p.add_argument(
+        "--experimental",
+        action="store_true",
+        help="Include ICT in the search space (quarantined from default champion path)",
     )
     return p
 
@@ -665,6 +693,7 @@ def main(argv: list[str] | None = None) -> None:
             top_k=args.top_k,
             seed=args.seed,
             verbose=not args.quiet,
+            experimental=args.experimental,
         )
     else:
         result = optimize(
@@ -678,6 +707,7 @@ def main(argv: list[str] | None = None) -> None:
             top_k=args.top_k,
             seed=args.seed,
             verbose=not args.quiet,
+            experimental=args.experimental,
         )
 
     # Add result metadata for versioning and reproducibility
