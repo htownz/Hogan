@@ -21,7 +21,7 @@ class BotConfig:
     max_drawdown: float = 0.15
     symbols: list[str] = field(default_factory=lambda: ["BTC/USD", "ETH/USD"])
 
-    timeframe: str = "5m"
+    timeframe: str = "1h"
     ohlcv_limit: int = 500
     short_ma_window: int = 12
     long_ma_window: int = 79
@@ -82,7 +82,11 @@ class BotConfig:
     max_hold_hours: float = 0.0      # 0 = use max_hold_bars
     loss_cooldown_hours: float = 0.0  # 0 = use loss_cooldown_bars
 
-    # ICT (Inner Circle Trader) signal pillars
+    # Execution timeframe — used by the 15m execution model for entry/exit timing
+    execution_timeframe: str = "15m"
+
+    # ── EXPERIMENTAL: ICT (Inner Circle Trader) signal pillars ────────────
+    # Quarantined from the champion path. Set HOGAN_USE_ICT=true to opt in.
     use_ict: bool = False
     ict_model: str = "silver_bullet"          # "silver_bullet" | "killzone"
     ict_swing_left: int = 2
@@ -207,6 +211,10 @@ _OPTUNA_OVERRIDE_FIELDS = frozenset({
     "short_ma_window", "long_ma_window", "volume_threshold",
     "atr_stop_multiplier", "use_ema_clouds", "signal_mode",
     "trailing_stop_pct", "take_profit_pct",
+})
+
+# ICT overrides only applied when use_ict=True (experimental)
+_OPTUNA_EXPERIMENTAL_FIELDS = frozenset({
     "use_ict", "ict_swing_left", "ict_swing_right",
     "ict_eq_tolerance_pct", "ict_min_displacement_pct",
     "ict_require_time_window", "ict_require_pd", "ict_ote_enabled",
@@ -238,7 +246,8 @@ def load_symbol_overrides(
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         best = data.get("best_config", {})
-        overrides = {k: v for k, v in best.items() if k in _OPTUNA_OVERRIDE_FIELDS}
+        allowed = _OPTUNA_OVERRIDE_FIELDS | _OPTUNA_EXPERIMENTAL_FIELDS
+        overrides = {k: v for k, v in best.items() if k in allowed}
         _symbol_config_cache[cache_key] = overrides
         logger.info(
             "Loaded per-symbol config for %s/%s (%d overrides, sharpe=%.2f)",
@@ -278,7 +287,8 @@ def load_config() -> BotConfig:
         max_risk_per_trade=float(os.getenv("HOGAN_MAX_RISK_PER_TRADE", "0.03")),
         max_drawdown=float(os.getenv("HOGAN_MAX_DRAWDOWN", "0.15")),
         symbols=_split_symbols(os.getenv("HOGAN_SYMBOLS", "BTC/USD,ETH/USD")),
-        timeframe=os.getenv("HOGAN_TIMEFRAME", "5m"),
+        timeframe=os.getenv("HOGAN_TIMEFRAME", "1h"),
+        execution_timeframe=os.getenv("HOGAN_EXECUTION_TIMEFRAME", "15m"),
         ohlcv_limit=int(os.getenv("HOGAN_OHLCV_LIMIT", "500")),
         short_ma_window=int(os.getenv("HOGAN_SHORT_MA", "12")),
         long_ma_window=int(os.getenv("HOGAN_LONG_MA", "79")),

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
 
-from hogan_bot.ict import ict_setup_signal, parse_time_windows
 from hogan_bot.indicators import (
     cloud_signal,
     compute_atr,
@@ -19,6 +19,20 @@ class StrategySignal:
     stop_distance_pct: float
     confidence: float
     volume_ratio: float
+
+
+@dataclass
+class SignalVote:
+    """A single signal provider's opinion on the current bar."""
+    action: str           # "buy" | "sell" | "hold"
+    confidence: float     # 0.0 – 1.0
+    source: str           # provider name for logging
+
+
+@runtime_checkable
+class SignalProvider(Protocol):
+    """Interface for independent signal providers (Phase A)."""
+    def evaluate(self, candles, **kwargs) -> SignalVote: ...
 
 
 def generate_signal(
@@ -37,7 +51,7 @@ def generate_signal(
     fvg_min_gap_pct: float = 0.001,
     signal_mode: str = "any",
     atr_stop_multiplier: float = 1.5,
-    # ICT pillars
+    # ICT pillars (experimental — quarantined from champion path)
     use_ict: bool = False,
     ict_swing_left: int = 2,
     ict_swing_right: int = 2,
@@ -60,37 +74,27 @@ def generate_signal(
     rl_candles_15m=None,
     rl_db_conn=None,
     rl_symbol: str = "BTC/USD",
-    # Vote-margin guard for "any" mode: buy/sell only fires when the directional
-    # vote lead is >= this value.  Default 1 = any majority.  Set to 2 to require
-    # at least two more buy than sell votes (or vice-versa) before trading.
     min_vote_margin: int = 1,
 ) -> StrategySignal:
-    """MA crossover + optional EMA clouds / FVG / ICT pillars, combined via votes.
+    """Independent vote-based signal generation.
 
-    ICT note
-    --------
-    When ``use_ict=True`` the ICT signal is an additional vote alongside the MA
-    crossover.  The standalone FVG vote (``use_fvg``) is automatically skipped
-    when ICT is enabled because ICT already incorporates FVG internally —
-    enabling both would double-count the same information.
+    All enabled signal providers vote independently.  No single provider is a
+    mandatory gatekeeper — every provider's vote carries equal weight in the
+    aggregation layer.
+
+    Signal providers
+    ----------------
+    - MA crossover (always on)
+    - EMA clouds (``use_ema_clouds``)
+    - FVG (``use_fvg``, skipped when ICT is on)
+    - ICT (``use_ict`` — **experimental**, quarantined from champion path)
+    - RL agent (``use_rl_agent``)
 
     ``signal_mode``
     ---------------
-    ``"ma_only"``  Original MA crossover only; all extra signals ignored.
-    ``"any"``      Buy/sell fires when *any* enabled signal agrees (default).
-    ``"all"``      Buy/sell fires only when *every* enabled signal agrees.
-
-    RL agent note
-    -------------
-    When ``use_rl_agent=True`` the PPO policy is added as an additional vote.
-    Pass ``rl_policy`` as a loaded :class:`~hogan_bot.rl_agent.RLPolicy` object.
-    Position-state context (``rl_in_position``, ``rl_unrealized_pnl``,
-    ``rl_bars_in_trade``) should reflect the live paper portfolio so the agent
-    sees its own state during inference.
-
-    When ``rl_use_ext_features=True`` the policy expects the 73-dim extended obs;
-    pass ``rl_candles_1h``, ``rl_candles_15m``, ``rl_db_conn``, and ``rl_symbol``
-    to supply the MTF and external-data inputs.
+    ``"ma_only"``  Only MA crossover (legacy mode).
+    ``"any"``      Buy/sell fires when majority agrees (default).
+    ``"all"``      Buy/sell fires only when every signal agrees.
     """
     min_len = max(long_window, volume_window) + 2
     if len(candles) < min_len:
@@ -105,9 +109,6 @@ def generate_signal(
     long_ma = close.rolling(long_window).mean()
     avg_volume = volume.rolling(volume_window).mean()
 
-    # MA crossover detection: signal only on the bar where the MAs actually cross,
-    # not on every bar where the trend holds.  This prevents entering at random
-    # points within an established trend.
     cur_above = short_ma.iloc[-1] > long_ma.iloc[-1]
     prev_above = short_ma.iloc[-2] > long_ma.iloc[-2]
     bullish_cross = cur_above and not prev_above
@@ -118,7 +119,6 @@ def generate_signal(
 
     confidence = min(1.0, max(0.0, (volume_ratio - 1.0) / 1.5)) if volume_confirmed else 0.0
 
-    # ATR-based stop distance — multiplier is now configurable
     atr_series = compute_atr(candles, window=14)
     atr_stop = float(atr_series.iloc[-1] / max(close.iloc[-1], 1e-9)) * atr_stop_multiplier
     stop_distance_pct = max(0.004, min(0.03, atr_stop))
@@ -135,12 +135,7 @@ def generate_signal(
     if signal_mode == "ma_only" or not extra_enabled:
         return StrategySignal(ma_action, stop_distance_pct, confidence, volume_ratio)
 
-    # Gate: MA crossover is a prerequisite. Other signals can only confirm
-    # a crossover; they cannot independently trigger trades. Without this,
-    # persistent signals like EMA clouds fire on every bar in a trend.
-    if ma_action == "hold":
-        return StrategySignal("hold", stop_distance_pct, 0.0, volume_ratio)
-
+    # ── Collect votes from all providers (no MA gatekeeper) ────────────────
     votes: list[str] = [ma_action]
 
     # ── EMA cloud vote ────────────────────────────────────────────────────────
@@ -155,7 +150,6 @@ def generate_signal(
         latest_cloud = cloud_signal(enriched).iloc[-1]
         if latest_cloud == "bullish":
             votes.append("buy")
-            # EMA cloud is a persistent trend signal; blend 0.5 baseline confidence
             confidence = (confidence + 0.5) / 2.0 if confidence > 0 else 0.5
         elif latest_cloud == "bearish":
             votes.append("sell")
@@ -169,8 +163,9 @@ def generate_signal(
         last_close = float(close.iloc[-1])
         votes.append(fvg_entry_signal(fvgs, last_close))
 
-    # ── ICT vote (primary signal; incorporates FVG internally) ───────────────
+    # ── ICT vote (EXPERIMENTAL — only when explicitly enabled) ───────────────
     if use_ict:
+        from hogan_bot.ict import ict_setup_signal, parse_time_windows
         tw_list = parse_time_windows(ict_time_windows)
         ict_action, ict_conf, _debug = ict_setup_signal(
             candles,
@@ -186,7 +181,6 @@ def generate_signal(
             ote_high=ict_ote_high,
         )
         votes.append(ict_action)
-        # Blend ICT confidence into the overall confidence metric
         if ict_action != "hold":
             confidence = (confidence + ict_conf) / 2.0
 
@@ -232,16 +226,13 @@ def generate_signal(
         else:
             action = "hold"
 
-        # Penalize confidence when signals disagree (mixed-signal candle)
         directional_votes = buy_votes + sell_votes
         if directional_votes > 0:
             consensus_ratio = max(buy_votes, sell_votes) / directional_votes
             confidence *= consensus_ratio
 
-    # ── ATR minimum-move guard (optional) ───────────────────────────────────────
-    # Skip trade only when volatility is extremely low (dead candles).
-    # 0.15% = typical 5m BTC ATR floor; set HOGAN_ATR_MIN_PCT=0 to disable.
-    min_atr_pct = float(os.getenv("HOGAN_ATR_MIN_PCT", "0.0015"))  # 0.15%
+    # ── ATR minimum-move guard ────────────────────────────────────────────────
+    min_atr_pct = float(os.getenv("HOGAN_ATR_MIN_PCT", "0.0015"))
     if min_atr_pct > 0 and action != "hold":
         atr_pct = float(atr_series.iloc[-1] / max(close.iloc[-1], 1e-9))
         if atr_pct < min_atr_pct:
