@@ -53,6 +53,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--train-bars", type=int, default=8000, help="Train split size (oldest)")
     p.add_argument("--val-bars", type=int, default=2000, help="Validation split size")
     p.add_argument("--test-bars", type=int, default=2000, help="Test split size (newest)")
+    p.add_argument(
+        "--auto-split",
+        action="store_true",
+        help="Scale train/val/test to fit available bars when total < train+val+test",
+    )
     p.add_argument("--trials", type=int, default=50, help="Optuna trials on train split")
     p.add_argument("--metric", default="sharpe", choices=["sharpe", "sortino", "calmar"])
     p.add_argument("--out", default=None, help="Write report JSON to this path")
@@ -76,14 +81,27 @@ def main() -> None:
     train_sz = args.train_bars
     val_sz = args.val_bars
     test_sz = args.test_bars
+    needed = train_sz + val_sz + test_sz
 
-    if n < train_sz + val_sz + test_sz:
-        print(
-            f"ERROR: Need {train_sz + val_sz + test_sz} bars, got {n}. "
-            f"Run: python -m hogan_bot.fetch_data --symbol {args.symbol} "
-            f"--timeframe {args.timeframe} --limit {args.total_bars}"
-        )
-        sys.exit(1)
+    if n < needed:
+        if args.auto_split and n >= 3000:
+            # Scale down proportionally: train/val/test ratio preserved
+            scale = n / needed
+            train_sz = max(2000, int(train_sz * scale))
+            val_sz = max(500, int(val_sz * scale))
+            test_sz = n - train_sz - val_sz
+            if test_sz < 500:
+                test_sz = max(500, n // 5)
+                val_sz = max(500, n // 5)
+                train_sz = n - val_sz - test_sz
+            print(f"Auto-scaled splits to fit {n} bars: train={train_sz} val={val_sz} test={test_sz}")
+        else:
+            print(
+                f"ERROR: Need {needed} bars, got {n}. "
+                f"Use --auto-split to scale down, or run: python -m hogan_bot.fetch_data "
+                f"--symbol {args.symbol} --timeframe {args.timeframe} --limit {args.total_bars}"
+            )
+            sys.exit(1)
 
     # Chronological splits (oldest first)
     train_end = train_sz
