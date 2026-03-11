@@ -4,11 +4,11 @@ Replaces the blocking ``while True`` in ``main.py`` with an ``asyncio``
 pipeline:
 
     LiveDataEngine (WebSocket candles)
-        → CandleEvent queue
-        → SignalEvaluator (strategy + ML)
-        → RiskManager (DrawdownGuard + position sizing)
-        → ExecutionEngine (PaperExecution | LiveExecution)
-        → SQLite journal + Prometheus metrics
+        -> CandleEvent queue
+        -> SignalEvaluator (AgentPipeline + ML filter)
+        -> RiskManager (DrawdownGuard + position sizing)
+        -> ExecutionEngine (PaperExecution | LiveExecution)
+        -> SQLite journal + Prometheus metrics
 
 Each symbol's signal evaluation is wrapped in a per-symbol try/except so a
 single symbol failure never aborts the whole loop (Phase 7 hardening).
