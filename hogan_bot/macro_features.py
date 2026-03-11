@@ -277,6 +277,135 @@ def _load_derivatives_latest(conn: "sqlite3.Connection", metric: str) -> float:
     return float(row[0]) if row else 0.0
 
 
+def _compute_extended_table(conn: "sqlite3.Connection") -> pd.DataFrame | None:
+    """Build a time-series table of extended features aligned to daily timestamps.
+
+    Returns a DataFrame with ``ts_ms`` and one column per extended feature,
+    suitable for ``merge_asof`` against 1h candle timestamps.
+    """
+    try:
+        # Funding rate: stored with ms timestamps in derivatives_metrics
+        fr_rows = conn.execute(
+            "SELECT ts_ms, value FROM derivatives_metrics "
+            "WHERE metric = 'funding_rate' ORDER BY ts_ms"
+        ).fetchall()
+        fr_df = pd.DataFrame(fr_rows, columns=["ts_ms", "deriv_funding_rate"])
+        if not fr_df.empty:
+            fr_df["deriv_funding_rate"] = fr_df["deriv_funding_rate"].astype(float).clip(-1.0, 1.0)
+
+        # OI change
+        oi_rows = conn.execute(
+            "SELECT ts_ms, value FROM derivatives_metrics "
+            "WHERE metric = 'open_interest_pct_change' ORDER BY ts_ms"
+        ).fetchall()
+        oi_df = pd.DataFrame(oi_rows, columns=["ts_ms", "deriv_oi_change"])
+        if not oi_df.empty:
+            oi_df["deriv_oi_change"] = oi_df["deriv_oi_change"].astype(float).clip(-1.0, 1.0)
+
+        # Daily on-chain and sentiment from onchain_metrics
+        daily_metrics = {
+            "fear_greed_value": ("sent_fear_greed_norm", lambda v: np.clip(v / 100.0, 0.0, 1.0)),
+            "btc_hashrate_eh": ("_hashrate_raw", lambda v: v),
+            "btc_active_addr": ("_addr_raw", lambda v: v),
+            "btc_mempool_mb": ("onchain_mempool_norm", lambda v: np.clip(v / 100.0, 0.0, 1.0)),
+            "btc_avg_fee_usd": ("onchain_fee_norm", lambda v: np.clip(v / 10.0, 0.0, 1.0)),
+            "defi_tvl_change_1d": ("sent_defi_tvl_change", lambda v: np.clip(v / 100.0 if abs(v) > 1 else v, -0.5, 0.5)),
+            "defi_stablecoin_b": ("sent_stablecoin_norm", lambda v: np.clip(v / 500.0, 0.0, 1.0)),
+        }
+
+        daily_frames = {}
+        for metric_name, (feat_name, transform) in daily_metrics.items():
+            rows = conn.execute(
+                "SELECT date, value FROM onchain_metrics WHERE metric = ? ORDER BY date",
+                (metric_name,),
+            ).fetchall()
+            if rows:
+                df = pd.DataFrame(rows, columns=["date", feat_name])
+                df["ts_ms"] = (pd.to_datetime(df["date"]).astype("int64") // 1_000_000)
+                df[feat_name] = pd.to_numeric(df[feat_name], errors="coerce").apply(transform)
+                daily_frames[feat_name] = df[["ts_ms", feat_name]]
+
+        # Compute hashrate/addr trends (7d SMA direction)
+        if "_hashrate_raw" in daily_frames:
+            hr = daily_frames.pop("_hashrate_raw")
+            sma7 = hr["_hashrate_raw"].rolling(7, min_periods=3).mean()
+            hr["onchain_hashrate_trend"] = (hr["_hashrate_raw"] > sma7).astype(float)
+            daily_frames["onchain_hashrate_trend"] = hr[["ts_ms", "onchain_hashrate_trend"]]
+
+        if "_addr_raw" in daily_frames:
+            ad = daily_frames.pop("_addr_raw")
+            sma7 = ad["_addr_raw"].rolling(7, min_periods=3).mean()
+            ad["onchain_addr_trend"] = (ad["_addr_raw"] > sma7).astype(float)
+            daily_frames["onchain_addr_trend"] = ad[["ts_ms", "onchain_addr_trend"]]
+
+        # BTC dominance
+        for src_metric in ("cg_btc_dominance", "cmc_btc_dominance"):
+            rows = conn.execute(
+                "SELECT date, value FROM onchain_metrics WHERE metric = ? ORDER BY date",
+                (src_metric,),
+            ).fetchall()
+            if rows and len(rows) > 5:
+                df = pd.DataFrame(rows, columns=["date", "sent_btc_dominance"])
+                df["ts_ms"] = (pd.to_datetime(df["date"]).astype("int64") // 1_000_000)
+                val = pd.to_numeric(df["sent_btc_dominance"], errors="coerce")
+                df["sent_btc_dominance"] = np.where(val > 1, val / 100.0, val).clip(0.0, 1.0)
+                daily_frames["sent_btc_dominance"] = df[["ts_ms", "sent_btc_dominance"]]
+                break
+
+        # Intermarket features (these need more complex computation, keep as latest-value)
+        ext_snapshot = _compute_extended_features(conn)
+        for key in ("intermarket_dxy_trend", "intermarket_spy_btc_corr", "intermarket_gold_btc_rel"):
+            if key not in daily_frames:
+                daily_frames[key] = None
+
+        # Build unified table: merge all daily frames on ts_ms
+        if not daily_frames and fr_df.empty:
+            return None
+
+        # Start with the densest time series
+        all_ts = set()
+        if not fr_df.empty:
+            all_ts.update(fr_df["ts_ms"].tolist())
+        for name, df in daily_frames.items():
+            if df is not None:
+                all_ts.update(df["ts_ms"].tolist())
+
+        if not all_ts:
+            return None
+
+        base = pd.DataFrame({"ts_ms": sorted(all_ts)})
+
+        # Merge funding rate
+        if not fr_df.empty:
+            base = pd.merge_asof(base, fr_df, on="ts_ms", direction="backward")
+
+        # Merge OI
+        if not oi_df.empty:
+            base = pd.merge_asof(base, oi_df, on="ts_ms", direction="backward")
+
+        # Merge daily features
+        for name, df in daily_frames.items():
+            if df is not None and not df.empty:
+                base = pd.merge_asof(base, df.sort_values("ts_ms"), on="ts_ms", direction="backward")
+
+        # Fill intermarket features as constants
+        for key in ("intermarket_dxy_trend", "intermarket_spy_btc_corr", "intermarket_gold_btc_rel"):
+            if key not in base.columns:
+                base[key] = ext_snapshot.get(key, 0.0)
+
+        # Fill missing columns
+        extended_names = MACRO_FEATURE_NAMES[10:]
+        for col in extended_names:
+            if col not in base.columns:
+                base[col] = 0.0
+
+        return base.sort_values("ts_ms").reset_index(drop=True)
+
+    except Exception as exc:
+        logger.warning("_compute_extended_table failed: %s — falling back to snapshot", exc)
+        return None
+
+
 def _compute_extended_features(conn: "sqlite3.Connection") -> dict[str, float]:
     """Compute all extended features (on-chain, sentiment, derivatives, inter-market).
 
@@ -430,16 +559,19 @@ def add_macro_features(
                     pd.to_datetime(out["timestamp"]).astype("int64") // 1_000_000
                 )
 
-            out_sorted = out.sort_values("ts_ms").copy()
+            # Drop pre-initialized zero columns before merge to avoid
+            # suffix collision (merge_asof would rename the real data to
+            # *_macro while keeping the zeros under the original name).
+            out_for_merge = out.drop(columns=_ORIGINAL_10, errors="ignore")
+            out_sorted = out_for_merge.sort_values("ts_ms").copy()
             available_cols = [c for c in _ORIGINAL_10 if c in macro_table.columns]
             macro_sorted = macro_table[["ts_ms"] + available_cols].sort_values("ts_ms")
 
             merged = pd.merge_asof(
-                out_sorted,
+                out_sorted[["ts_ms"]],
                 macro_sorted,
                 on="ts_ms",
                 direction="backward",
-                suffixes=("", "_macro"),
             )
             for col in available_cols:
                 merged[col] = merged[col].fillna(0.0)
@@ -452,12 +584,32 @@ def add_macro_features(
         logger.warning("add_macro_features (original 10) failed: %s", exc)
 
     # Extended features: on-chain, sentiment, derivatives, inter-market
-    # These are point-in-time snapshots (not time-series), broadcast across all rows
+    # Time-align daily on-chain/sentiment data via merge_asof where possible,
+    # fall back to latest-value broadcast for metrics with sparse history.
     try:
-        ext = _compute_extended_features(conn)
-        for col, val in ext.items():
-            if col in MACRO_FEATURE_NAMES:
-                out[col] = val
+        ext_table = _compute_extended_table(conn)
+        if ext_table is not None and not ext_table.empty:
+            if "ts_ms" not in out.columns and "timestamp" in out.columns:
+                out["ts_ms"] = (
+                    pd.to_datetime(out["timestamp"]).astype("int64") // 1_000_000
+                )
+            ext_cols = [c for c in ext_table.columns if c != "ts_ms"]
+            out_sorted = out.sort_values("ts_ms").copy()
+            merged = pd.merge_asof(
+                out_sorted[["ts_ms"]],
+                ext_table.sort_values("ts_ms"),
+                on="ts_ms",
+                direction="backward",
+            )
+            merged = merged.set_index(out_sorted.index).reindex(out.index)
+            for col in ext_cols:
+                vals = merged[col].fillna(0.0).values
+                out[col] = vals
+        else:
+            ext = _compute_extended_features(conn)
+            for col, val in ext.items():
+                if col in MACRO_FEATURE_NAMES:
+                    out[col] = val
     except Exception as exc:
         logger.warning("add_macro_features (extended) failed: %s", exc)
 
