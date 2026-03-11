@@ -175,8 +175,8 @@ def _pnl_color(val):
 # ---------------------------------------------------------------------------
 # Main tab layout
 # ---------------------------------------------------------------------------
-tab_live, tab_signals, tab_model, tab_data, tab_backtest = st.tabs([
-    "Live Trading", "Signals & Candles", "ML Models", "Data Coverage", "Backtest"
+tab_live, tab_os, tab_signals, tab_model, tab_data, tab_backtest = st.tabs([
+    "Live Trading", "Market OS", "Signals & Candles", "ML Models", "Data Coverage", "Backtest"
 ])
 
 # ===========================================================================
@@ -358,7 +358,115 @@ with tab_live:
 
 
 # ===========================================================================
-# TAB 2 — SIGNALS & CANDLES
+# TAB 2 — MARKET OS (Agent Pipeline + Forecast + Risk)
+# ===========================================================================
+with tab_os:
+    st.header("Market Operating System")
+
+    os_sym = st.selectbox("Symbol", ["BTC/USD", "ETH/USD"], key="os_sym")
+    os_candles = _load_candles(DB_PATH, os_sym, limit=200)
+
+    if os_candles.empty:
+        st.info("No candle data available.")
+    else:
+        try:
+            from hogan_bot.forecast import compute_forecast
+            from hogan_bot.risk_head import compute_risk
+            from hogan_bot.regime import detect_regime
+            from hogan_bot.agent_pipeline import SentimentAgent, MacroAgent
+
+            fc = compute_forecast(os_candles)
+            rk = compute_risk(os_candles, stop_pct=0.0184, tp_pct=0.0572)
+
+            st.subheader("Forecast Head")
+            fc_cols = st.columns(4)
+            for i, h in enumerate(["4h", "12h", "24h"]):
+                p = fc.direction_prob.get(h, 0.5)
+                er = fc.expected_return.get(h, 0.0)
+                fc_cols[i].metric(f"Up Prob ({h})", f"{p:.1%}", delta=f"{er:+.2f}% E[R]")
+            fc_cols[3].metric("Trend Persist", f"{fc.trend_persistence:.0%}",
+                              delta=f"conf={fc.confidence:.0%}")
+
+            st.subheader("Risk Head")
+            rk_cols = st.columns(5)
+            rk_cols[0].metric("Ann. Vol", f"{rk.expected_vol_pct:.1f}%")
+            rk_cols[1].metric("Max Adv. Exc.", f"{rk.max_adverse_pct:.2f}%")
+            rk_cols[2].metric("Stop-Hit Prob", f"{rk.stop_hit_prob:.0%}")
+            rk_cols[3].metric("E[Hold]", f"{rk.expected_hold_bars:.0f} bars")
+            rk_cols[4].metric("Risk Regime", rk.regime_risk,
+                              delta=f"scale={rk.position_scale:.0%}")
+
+            st.subheader("Market Regime")
+            try:
+                regime = detect_regime(os_candles)
+                reg_cols = st.columns(4)
+                reg_cols[0].metric("Regime", regime.regime)
+                reg_cols[1].metric("ADX", f"{regime.adx:.1f}")
+                reg_cols[2].metric("ATR Rank", f"{regime.atr_pct_rank:.0%}")
+                reg_cols[3].metric("Confidence", f"{regime.confidence:.0%}")
+            except Exception:
+                st.info("Regime detection requires more data.")
+
+            st.subheader("Agent Votes (Current Bar)")
+            try:
+                conn_os = sqlite3.connect(DB_PATH)
+                sent = SentimentAgent(conn=conn_os, symbol=os_sym).analyze()
+                macro = MacroAgent(conn=conn_os, symbol=os_sym).analyze()
+                conn_os.close()
+
+                ag_cols = st.columns(3)
+                ag_cols[0].metric("Sentiment", f"{sent.bias} ({sent.strength:.2f})")
+                ag_cols[1].metric("Macro", f"{macro.regime}")
+                ag_cols[2].metric("Risk On", str(macro.risk_on))
+
+                if sent.details:
+                    with st.expander("Sentiment Details"):
+                        st.json(sent.details)
+                if macro.details:
+                    with st.expander("Macro Details"):
+                        st.json({k: round(v, 4) if isinstance(v, float) else v
+                                 for k, v in macro.details.items()})
+            except Exception as e:
+                st.warning(f"Agent data unavailable: {e}")
+
+            st.subheader("Feature Freshness")
+            try:
+                conn_fresh = sqlite3.connect(DB_PATH)
+                freshness = pd.read_sql_query("""
+                    SELECT metric,
+                           MAX(date) as latest_date,
+                           COUNT(*) as total_rows
+                    FROM onchain_metrics
+                    WHERE symbol = ?
+                    GROUP BY metric
+                    ORDER BY latest_date DESC
+                """, conn_fresh, params=(os_sym,))
+                deriv_fresh = pd.read_sql_query("""
+                    SELECT metric,
+                           datetime(MAX(ts_ms)/1000, 'unixepoch') as latest_ts,
+                           COUNT(*) as total_rows
+                    FROM derivatives_metrics
+                    WHERE symbol = ?
+                    GROUP BY metric
+                    ORDER BY latest_ts DESC
+                """, conn_fresh, params=(os_sym,))
+                conn_fresh.close()
+
+                if not freshness.empty:
+                    st.dataframe(freshness, use_container_width=True, hide_index=True)
+                if not deriv_fresh.empty:
+                    st.dataframe(deriv_fresh, use_container_width=True, hide_index=True)
+            except Exception:
+                st.info("No feature freshness data available.")
+
+        except ImportError as e:
+            st.error(f"Missing module: {e}")
+        except Exception as e:
+            st.error(f"Market OS error: {e}")
+
+
+# ===========================================================================
+# TAB 3 — SIGNALS & CANDLES
 # ===========================================================================
 with tab_signals:
     st.header("Signals & Candles")

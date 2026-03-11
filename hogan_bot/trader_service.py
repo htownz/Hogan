@@ -544,9 +544,14 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                     conf_scale = (signal.confidence or 1.0) * eff["position_scale"]
 
                     if action != "hold":
+                        fc = signal.forecast
+                        rk = signal.risk_estimate
+                        fc_str = fc.summary() if fc else "n/a"
+                        rk_str = rk.summary() if rk else "n/a"
                         logger.info(
-                            "PIPELINE %s action=%s conf=%.2f | %s",
+                            "PIPELINE %s action=%s conf=%.2f | %s | FC[%s] RK[%s]",
                             symbol, action, signal.confidence, signal.explanation,
+                            fc_str, rk_str,
                         )
 
                     # ── ML filter: soft confidence scaler (not hard gate) ─

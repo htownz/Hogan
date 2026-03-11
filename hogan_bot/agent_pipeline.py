@@ -500,8 +500,43 @@ class AgentPipeline:
                 logger.debug("RAG retrieval failed (non-fatal): %s", exc)
 
         signal = self.meta.combine(tech, sent, macro, rag_context=rag_context, regime=regime)
+
+        # Forecast and risk heads run independently of the vote
+        try:
+            forecast = compute_forecast(candles)
+        except Exception as exc:
+            logger.debug("Forecast head failed (non-fatal): %s", exc)
+            forecast = ForecastResult(confidence=0.0)
+
+        try:
+            stop = signal.stop_distance_pct
+            tp = getattr(self.config, "take_profit_pct", 0.05)
+            mhb = getattr(self.config, "max_hold_bars", 24)
+            risk_est = compute_risk(candles, stop_pct=stop, tp_pct=tp, max_hold_bars=mhb)
+        except Exception as exc:
+            logger.debug("Risk head failed (non-fatal): %s", exc)
+            risk_est = RiskEstimate()
+
+        signal.forecast = forecast
+        signal.risk_estimate = risk_est
+
+        # Forecast-based edge validation: if forecast strongly opposes action, demote
+        if signal.action == "buy" and forecast.confidence > 0.3:
+            if forecast.bullish_12h < 0.40:
+                signal.confidence *= 0.6
+                signal.explanation += f" | Forecast opposes ({forecast.bullish_12h:.0%} up@12h)"
+        elif signal.action == "sell" and forecast.confidence > 0.3:
+            if forecast.bullish_12h > 0.60:
+                signal.explanation += f" | Forecast opposes ({forecast.bullish_12h:.0%} up@12h)"
+                signal.confidence *= 0.6
+
+        # Risk-based position scaling
+        if risk_est.regime_risk == "high":
+            signal.confidence *= risk_est.position_scale
+
         logger.debug(
-            "AgentPipeline: %s | tech=%s sent=%s macro=%s conf=%.2f",
+            "AgentPipeline: %s | tech=%s sent=%s macro=%s conf=%.2f | %s | %s",
             symbol, tech.action, sent.bias, macro.regime, signal.confidence,
+            forecast.summary(), risk_est.summary(),
         )
         return signal
