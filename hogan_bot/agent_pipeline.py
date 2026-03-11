@@ -338,11 +338,13 @@ class MetaWeigher:
         sent_vote = {"bullish": 1.0, "bearish": -1.0, "neutral": 0.0}.get(sentiment.bias, 0.0)
         sent_score = sent_vote * sentiment.strength
 
-        # Macro modifier: risk-off halves bullish signals, holds bearish ones
-        macro_mult = 1.0 if macro.risk_on else 0.5
-        if macro.regime == "risk_off" and tech_score > 0:
-            tech_score *= macro_mult
-            sent_score *= macro_mult
+        # Macro modifier: risk-off halves all bullish components independently
+        if not macro.risk_on:
+            macro_mult = 0.5
+            if tech_score > 0:
+                tech_score *= macro_mult
+            if sent_score > 0:
+                sent_score *= macro_mult
 
         # RAG context boost (optional — from Phase 8b)
         rag_boost = 0.0
