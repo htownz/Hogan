@@ -325,6 +325,18 @@ def candle_count(conn: sqlite3.Connection, symbol: str, timeframe: str) -> int:
     return int(row[0]) if row else 0
 
 
+def oldest_ts_ms(
+    conn: sqlite3.Connection, symbol: str, timeframe: str
+) -> int | None:
+    """Return the oldest candle timestamp (ms) for *symbol* / *timeframe*, or None if empty."""
+    row = conn.execute(
+        "SELECT MIN(ts_ms) FROM candles WHERE symbol = ? AND timeframe = ?",
+        (symbol, timeframe),
+    ).fetchone()
+    val = row[0] if row else None
+    return int(val) if val is not None else None
+
+
 def upsert_derivatives(
     conn: sqlite3.Connection,
     symbol: str,
