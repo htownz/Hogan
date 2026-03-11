@@ -193,6 +193,7 @@ def _run_trial(
     cfg_dict: dict[str, Any],
     base_cfg,
     timeframe: str = "1h",
+    execution_mode: str = "next_open",
 ) -> dict[str, Any]:
     """Run one backtest and return the result enriched with computed metrics."""
     try:
@@ -231,6 +232,7 @@ def _run_trial(
             ict_ote_enabled=cfg_dict["ict_ote_enabled"],
             ict_ote_low=base_cfg.ict_ote_low,
             ict_ote_high=base_cfg.ict_ote_high,
+            execution_mode=execution_mode,
         )
     except Exception as exc:
         logger.debug("Trial raised %s: %s", type(exc).__name__, exc)
@@ -280,6 +282,7 @@ def _optuna_objective(
     constraints: dict[str, float],
     timeframe: str = "1h",
     experimental: bool = False,
+    execution_mode: str = "next_open",
 ) -> float:
     """Optuna objective: suggest params, run backtest, return score."""
     cfg_dict: dict[str, Any] = {}
@@ -319,7 +322,8 @@ def _optuna_objective(
     if cfg_dict["long_ma_window"] <= cfg_dict["short_ma_window"] + 5:
         return float("-inf")
 
-    row = _run_trial(candles, symbol, cfg_dict, base_cfg, timeframe=timeframe)
+    row = _run_trial(candles, symbol, cfg_dict, base_cfg, timeframe=timeframe,
+                     execution_mode=execution_mode)
 
     if "error" in row:
         return float("-inf")
@@ -345,6 +349,7 @@ def optimize_bayesian(
     seed: int | None = None,
     verbose: bool = True,
     experimental: bool = False,
+    execution_mode: str = "next_open",
 ) -> dict[str, Any]:
     """Optuna TPE-based Bayesian hyperparameter optimization."""
     import optuna
@@ -366,6 +371,7 @@ def optimize_bayesian(
         lambda trial: _optuna_objective(
             trial, candles, symbol, base_cfg, metric, constraints,
             timeframe=timeframe, experimental=experimental,
+            execution_mode=execution_mode,
         ),
         n_trials=trials,
         show_progress_bar=verbose,
@@ -435,6 +441,7 @@ def optimize(
     seed: int | None = None,
     verbose: bool = True,
     experimental: bool = False,
+    execution_mode: str = "next_open",
 ) -> dict[str, Any]:
     """Run random-search optimisation over the parameter space.
 
@@ -492,7 +499,8 @@ def optimize(
 
     for t in range(trials):
         cfg_dict = sample_config(rng, experimental=experimental)
-        row = _run_trial(candles, symbol, cfg_dict, base_cfg, timeframe=timeframe)
+        row = _run_trial(candles, symbol, cfg_dict, base_cfg, timeframe=timeframe,
+                         execution_mode=execution_mode)
 
         # Attach trial metadata
         row["trial"] = t
@@ -606,6 +614,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Include ICT in the search space (quarantined from default champion path)",
     )
+    p.add_argument(
+        "--execution-mode",
+        default="next_open",
+        choices=["same_bar", "next_open"],
+        help="Backtest execution mode: 'next_open' (realistic) or 'same_bar' (optimistic)",
+    )
     return p
 
 
@@ -694,6 +708,7 @@ def main(argv: list[str] | None = None) -> None:
             seed=args.seed,
             verbose=not args.quiet,
             experimental=args.experimental,
+            execution_mode=args.execution_mode,
         )
     else:
         result = optimize(
@@ -708,6 +723,7 @@ def main(argv: list[str] | None = None) -> None:
             seed=args.seed,
             verbose=not args.quiet,
             experimental=args.experimental,
+            execution_mode=args.execution_mode,
         )
 
     # Add result metadata for versioning and reproducibility
@@ -715,7 +731,7 @@ def main(argv: list[str] | None = None) -> None:
     result["metric_version"] = 2
     result["timeframe"] = args.timeframe
     result["bars_per_year"] = int(bars_per_year(args.timeframe))
-    result["execution_mode"] = "same_bar"
+    result["execution_mode"] = args.execution_mode
     ts_col = "ts_ms" if "ts_ms" in candles.columns else "timestamp"
     if ts_col in candles.columns:
         if ts_col == "ts_ms":
