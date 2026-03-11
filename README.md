@@ -35,7 +35,7 @@ Hogan follows a multi-layer architecture:
 
 ### Core Trading System
 - **AgentPipeline** — decision brain: Technical + Sentiment + Macro agents combined by MetaWeigher
-- Agent-routed, forecast-and-risk-driven flow (not legacy signal combinator)
+- Agent-routed, forecast-and-risk-driven flow
 - Default timeframe **1h** (BTC-first)
 - Multi-exchange support via [CCXT](https://docs.ccxt.com/) (110+ exchanges)
 
