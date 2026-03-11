@@ -1,31 +1,24 @@
-"""Multi-Agent Signal Pipeline — Phase 8a.
+"""Multi-Agent Signal Pipeline — Hogan Market OS.
 
-Replaces the monolithic ``generate_signal()`` with three specialized analysis
-agents whose outputs are combined by a learned-weight MetaWeigher.
+Four-plane decision architecture:
 
-Architecture (Awesome LLM Apps multi-agent pattern):
+    TechnicalAgent  --+
+    SentimentAgent  --+--> MetaWeigher --> AgentSignal
+    MacroAgent      --+
+    ForecastHead    ------> direction_prob, expected_return, trend_persistence
+    RiskHead        ------> expected_vol, MAE, stop_hit_prob, hold_time
 
-    TechnicalAgent  ─┐
-    SentimentAgent  ─┤──► MetaWeigher ──► AgentSignal(action, confidence, ...)
-    MacroAgent      ─┘
+The MetaWeigher combines agent votes into an action. The forecast and risk
+heads produce independent estimates that the policy layer uses to validate
+*whether there is edge* and *whether size/exits are acceptable*.
 
-Each agent produces a typed signal object.  The MetaWeigher combines them
-using weights that can be updated by the online learner, making the pipeline
-adaptive to changing market regimes.
-
-This is more interpretable than a single ``generate_signal()`` vote count
-and naturally extensible — adding a new agent is a new class, not a
-modification to existing logic.
+Weights are adaptive — updated by the online learner on regime shifts.
 
 Usage::
 
-    from hogan_bot.agent_pipeline import AgentPipeline
-
-    pipeline = AgentPipeline(config, ml_model=..., conn=conn)
-    result = pipeline.run(candles_5m, candles_1h=..., candles_15m=..., symbol="BTC/USD")
-    # result.action in ("buy", "sell", "hold")
-    # result.confidence in [0.0, 1.0]
-    # result.explanation — human-readable summary
+    pipeline = AgentPipeline(config, conn=conn)
+    result = pipeline.run(candles, symbol="BTC/USD")
+    # result.action, result.confidence, result.forecast, result.risk_estimate
 """
 from __future__ import annotations
 
@@ -36,6 +29,9 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+
+from hogan_bot.forecast import ForecastResult, compute_forecast
+from hogan_bot.risk_head import RiskEstimate, compute_risk
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +65,7 @@ class MacroSignal:
 
 @dataclass
 class AgentSignal:
-    """Final combined signal from the MetaWeigher."""
+    """Final combined signal from the MetaWeigher + forecast + risk heads."""
     action: str           # "buy" | "sell" | "hold"
     confidence: float     # [0.0, 1.0]
     stop_distance_pct: float = 0.02
@@ -77,11 +73,12 @@ class AgentSignal:
     tech: TechSignal | None = None
     sentiment: SentimentSignal | None = None
     macro: MacroSignal | None = None
+    forecast: ForecastResult | None = None
+    risk_estimate: RiskEstimate | None = None
     explanation: str = ""
     agent_weights: dict = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
 
-    # Compatibility with existing generate_signal() callers
     @property
     def action_str(self) -> str:
         return self.action
