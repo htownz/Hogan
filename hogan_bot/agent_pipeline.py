@@ -207,8 +207,8 @@ class SentimentAgent:
                 (self.symbol,),
             ).fetchone()
             if row:
-                # Negative funding → bears paying → slightly bullish
-                scores["funding"] = -float(row[0]) * 50  # scale to ≈[-1,1]
+                raw_funding = float(row[0])
+                scores["funding"] = max(-1.0, min(1.0, -raw_funding * 0.5))
 
         except Exception as exc:
             logger.debug("SentimentAgent data lookup failed: %s", exc)
@@ -217,18 +217,22 @@ class SentimentAgent:
             return SentimentSignal(bias="neutral", strength=0.0)
 
         # Weighted composite sentiment score
+        all_keys = ["fear_greed", "news_sentiment", "social_vol", "funding"]
         weights = {"fear_greed": 0.35, "news_sentiment": 0.30,
                    "social_vol": 0.20, "funding": 0.15}
         composite = sum(
             scores.get(k, 0.5 if k == "fear_greed" else 0.0) * w
             for k, w in weights.items()
         )
-        # composite in roughly [-0.5, 0.8]
-        # remap: above 0.5 = bullish, below 0.4 = bearish
+
+        # Scale strength by data coverage — don't claim full confidence
+        # when half the inputs are missing
+        coverage = sum(1 for k in all_keys if k in scores) / len(all_keys)
+
         if composite > 0.55:
-            bias, strength = "bullish", min(1.0, (composite - 0.55) * 4)
+            bias, strength = "bullish", min(1.0, (composite - 0.55) * 4) * coverage
         elif composite < 0.40:
-            bias, strength = "bearish", min(1.0, (0.40 - composite) * 4)
+            bias, strength = "bearish", min(1.0, (0.40 - composite) * 4) * coverage
         else:
             bias, strength = "neutral", 0.0
 
@@ -359,9 +363,10 @@ class MetaWeigher:
             + rag_boost
         )
 
-        # Map combined score to action
-        buy_threshold = 0.20
-        sell_threshold = -0.20
+        # Threshold requires at least mild agreement across agents —
+        # no single agent at its default weight can trigger alone.
+        buy_threshold = 0.30
+        sell_threshold = -0.30
 
         if combined_score >= buy_threshold:
             action = "buy"
@@ -436,10 +441,22 @@ class AgentPipeline:
         candles: pd.DataFrame,
         symbol: str = "BTC/USD",
         features: list[float] | None = None,
+        config_override=None,
         **runtime_state,
     ) -> AgentSignal:
-        """Run all agents and return a combined AgentSignal."""
-        tech = self.tech_agent.analyze(candles, **runtime_state)
+        """Run all agents and return a combined AgentSignal.
+
+        Parameters
+        ----------
+        config_override
+            Per-symbol config (from ``symbol_config()``) that overrides the
+            base config for this run.  When provided, TechnicalAgent uses
+            these params instead of the pipeline's base config.
+        """
+        agent = self.tech_agent
+        if config_override is not None:
+            agent = TechnicalAgent(config_override)
+        tech = agent.analyze(candles, **runtime_state)
         sent = self.sent_agent.analyze()
         macro = self.macro_agent.analyze()
 

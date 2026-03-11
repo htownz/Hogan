@@ -536,7 +536,7 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                         )
 
                     # ── Agent Pipeline decision ────────────────────────
-                    signal = pipeline.run(candles, symbol=symbol)
+                    signal = pipeline.run(candles, symbol=symbol, config_override=cfg)
 
                     action = signal.action
                     up_prob = None

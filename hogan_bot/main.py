@@ -166,7 +166,7 @@ def run_iteration(
         # ── Agent Pipeline decision ────────────────────────────────────────
         if pipeline is None:
             pipeline = AgentPipeline(config, conn=conn)
-        signal = pipeline.run(candles, symbol=symbol)
+        signal = pipeline.run(candles, symbol=symbol, config_override=cfg)
         px = mark_prices[symbol]
 
         up_prob = None

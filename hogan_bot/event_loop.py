@@ -66,7 +66,7 @@ class SignalEvaluator:
         equity: float,
     ) -> tuple[str, float, float | None]:
         cfg = symbol_config(self.config, symbol)
-        result = self.pipeline.run(candles, symbol=symbol)
+        result = self.pipeline.run(candles, symbol=symbol, config_override=cfg)
         px = float(candles["close"].iloc[-1])
 
         up_prob = None

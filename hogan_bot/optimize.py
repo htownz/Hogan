@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 _PARAM_SPACE: dict[str, tuple] = {
     "short_ma_window":          ("int",    5,    25),
     "long_ma_window":           ("int",   30,   120),
-    "volume_threshold":         ("float", 0.8,   2.5),
+    "volume_threshold":         ("float", 0.3,   1.2),
     "atr_stop_multiplier":      ("float", 0.5,   3.5),
     "use_ema_clouds":           ("bool",  None, None),
     "signal_mode":              ("choice", ["ma_only", "any", "all"], None),
@@ -286,7 +286,7 @@ def _optuna_objective(
 
     cfg_dict["short_ma_window"] = trial.suggest_int("short_ma_window", 5, 25)
     cfg_dict["long_ma_window"] = trial.suggest_int("long_ma_window", 30, 120)
-    cfg_dict["volume_threshold"] = trial.suggest_float("volume_threshold", 0.8, 2.5)
+    cfg_dict["volume_threshold"] = trial.suggest_float("volume_threshold", 0.3, 1.2)
     cfg_dict["atr_stop_multiplier"] = trial.suggest_float("atr_stop_multiplier", 0.5, 3.5)
     cfg_dict["use_ema_clouds"] = trial.suggest_categorical("use_ema_clouds", [True, False])
     cfg_dict["signal_mode"] = trial.suggest_categorical("signal_mode", ["ma_only", "any", "all"])
