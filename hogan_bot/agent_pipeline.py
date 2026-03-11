@@ -331,42 +331,71 @@ class MetaWeigher:
         sentiment: SentimentSignal,
         macro: MacroSignal,
         rag_context: dict | None = None,
+        regime: str | None = None,
     ) -> AgentSignal:
-        """Produce a final signal by combining three agent outputs."""
+        """Produce a final signal by combining three agent outputs.
+
+        Parameters
+        ----------
+        regime : str or None
+            Market microstructure regime from ``detect_regime()``:
+            ``"trending_up"`` / ``"trending_down"`` / ``"ranging"`` / ``"volatile"``.
+            Adjusts agent weights dynamically.
+        """
+
+        # Regime-adaptive weights: lean on tech in trends, broaden in range/vol
+        w = dict(self._weights)
+        if regime in ("trending_up", "trending_down"):
+            w["technical"] = min(0.75, w["technical"] + 0.10)
+            w["sentiment"] = max(0.10, w["sentiment"] - 0.05)
+            w["macro"] = max(0.10, w["macro"] - 0.05)
+        elif regime == "volatile":
+            w["technical"] = max(0.35, w["technical"] - 0.10)
+            w["sentiment"] = w["sentiment"] + 0.05
+            w["macro"] = w["macro"] + 0.05
+
+        # Normalize weights
+        total = sum(w.values())
+        if total > 0:
+            w = {k: v / total for k, v in w.items()}
 
         # Convert tech signal to a numeric vote [-1, 0, 1]
         tech_vote = {"buy": 1.0, "sell": -1.0, "hold": 0.0}.get(tech.action, 0.0)
         tech_score = tech_vote * tech.confidence
 
-        # Sentiment → [-1, 1]
+        # Sentiment -> [-1, 1]
         sent_vote = {"bullish": 1.0, "bearish": -1.0, "neutral": 0.0}.get(sentiment.bias, 0.0)
         sent_score = sent_vote * sentiment.strength
 
-        # Macro modifier: risk-off halves all bullish components independently
+        # Macro modifier: risk-off reduces bullish conviction but doesn't crush it
         if not macro.risk_on:
-            macro_mult = 0.5
+            macro_mult = 0.70
             if tech_score > 0:
                 tech_score *= macro_mult
             if sent_score > 0:
                 sent_score *= macro_mult
 
-        # RAG context boost (optional — from Phase 8b)
+        # RAG context boost (optional)
         rag_boost = 0.0
         if rag_context:
             rag_win_rate = float(rag_context.get("similar_win_rate", 0.5))
-            rag_boost = (rag_win_rate - 0.5) * 0.2  # ±0.1 max
+            rag_boost = (rag_win_rate - 0.5) * 0.2
 
-        w = self._weights
         combined_score = (
             w["technical"] * tech_score
             + w["sentiment"] * sent_score
             + rag_boost
         )
 
-        # Threshold requires at least mild agreement across agents —
-        # no single agent at its default weight can trigger alone.
-        buy_threshold = 0.30
-        sell_threshold = -0.30
+        # Thresholds adapt to regime: tighter in volatile, looser in trends
+        buy_threshold = 0.15
+        sell_threshold = -0.15
+        if regime == "volatile":
+            buy_threshold = 0.25
+            sell_threshold = -0.25
+        elif regime in ("trending_up", "trending_down"):
+            buy_threshold = 0.10
+            sell_threshold = -0.10
 
         if combined_score >= buy_threshold:
             action = "buy"
@@ -383,10 +412,12 @@ class MetaWeigher:
             explanation_parts.append(f"Sentiment: {sentiment.bias}({sentiment.strength:.2f})")
         if macro.regime != "neutral":
             explanation_parts.append(f"Macro: {macro.regime}")
+        if regime:
+            explanation_parts.append(f"Regime: {regime}")
         if rag_boost != 0:
             explanation_parts.append(f"RAG: {rag_boost:+.3f}")
         explanation = " | ".join(explanation_parts)
-        explanation += f" → {action.upper()} (conf={confidence:.2f})"
+        explanation += f" -> {action.upper()} (conf={confidence:.2f})"
 
         return AgentSignal(
             action=action,
@@ -442,6 +473,7 @@ class AgentPipeline:
         symbol: str = "BTC/USD",
         features: list[float] | None = None,
         config_override=None,
+        regime: str | None = None,
         **runtime_state,
     ) -> AgentSignal:
         """Run all agents and return a combined AgentSignal.
@@ -452,6 +484,8 @@ class AgentPipeline:
             Per-symbol config (from ``symbol_config()``) that overrides the
             base config for this run.  When provided, TechnicalAgent uses
             these params instead of the pipeline's base config.
+        regime
+            Market microstructure regime (from ``detect_regime()``).
         """
         agent = self.tech_agent
         if config_override is not None:
@@ -468,7 +502,7 @@ class AgentPipeline:
             except Exception as exc:
                 logger.debug("RAG retrieval failed (non-fatal): %s", exc)
 
-        signal = self.meta.combine(tech, sent, macro, rag_context=rag_context)
+        signal = self.meta.combine(tech, sent, macro, rag_context=rag_context, regime=regime)
         logger.debug(
             "AgentPipeline: %s | tech=%s sent=%s macro=%s conf=%.2f",
             symbol, tech.action, sent.bias, macro.regime, signal.confidence,
