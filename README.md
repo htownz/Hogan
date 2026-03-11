@@ -1,6 +1,6 @@
 # Hogan
 
-Hogan is a **paper-trading research bot** for BTC/USD, ETH/USD and any trading pair on 110+ exchanges, aimed at day-trading and short-term strategy iteration.
+Hogan is a **BTC-first, 1h-led market operating system** — an agent-routed, forecast-and-risk-driven trading system for BTC/USD and major pairs on 110+ exchanges.
 
 ## Important safety notes
 
@@ -10,25 +10,20 @@ Hogan is a **paper-trading research bot** for BTC/USD, ETH/USD and any trading p
 
 ## What’s implemented now
 
+- **AgentPipeline** — decision brain: Technical + Sentiment + Macro agents combined by MetaWeigher
+- Agent-routed, forecast-and-risk-driven flow (not signal combinator)
+- Default timeframe **1h** (BTC-first)
 - Kraken OHLCV ingestion via `ccxt`
-- MA crossover + volume confirmation signal
-- **Ripster EMA clouds** (fast 8/9, slow 34/50) — bullish/bearish/neutral cloud direction per bar
-- **ICT Fair-Value Gap (FVG) detector** — identifies bullish and bearish gaps, tracks fill status, and generates entry signals when price re-enters an active zone
-- Configurable signal combinator (`HOGAN_SIGNAL_MODE`):
-  - `ma_only` — original MA crossover only
-  - `any` — buy/sell fires if any enabled signal agrees (default)
-  - `all` — buy/sell fires only when every enabled signal agrees
+- Ripster EMA clouds (fast 8/9, slow 34/50) — cloud direction per bar
 - Dynamic stop-distance proxy from recent candle range
-- Position sizing bounded by:
-  - risk-per-trade
-  - aggressive allocation cap
+- Position sizing bounded by risk-per-trade and aggressive allocation cap
 - Portfolio simulation with fees (`PaperPortfolio`)
 - Max drawdown guard to halt trading on breach
-- Optional ML probability filter that gates buy/sell signals using a trained logistic model
-  - ML feature set now includes cloud direction and FVG activity columns
+- Optional ML probability filter (logistic model) for buy/sell gating
 - Backtest engine + CLI to evaluate strategy/ML settings on historical candles
 - 24/5 behavior toggle (`HOGAN_TRADE_WEEKENDS=false` by default)
 - `--max-loops` option for finite test runs
+- **ICT/FVG** — experimental, quarantined (not a core feature)
 
 ## Quick start
 
@@ -42,12 +37,12 @@ python -m hogan_bot.main --max-loops 2
 
 ## ML enhancement workflow (recommended)
 
-The ML pipeline uses 43 features (momentum, RSI, volatility, candle microstructure, volume, EMA cloud direction/width, FVG counts, OBV, Stochastic RSI, VWAP deviation, MACD, Bollinger Bands, ATR, multi-timeframe features, on-chain/macro signals, and ICT structural features) and supports two classifier types.
+The ML pipeline uses 43 features (momentum, RSI, volatility, candle microstructure, volume, EMA cloud direction/width, OBV, Stochastic RSI, VWAP deviation, MACD, Bollinger Bands, ATR, multi-timeframe features, on-chain/macro signals) and supports two classifier types.
 
 ### 1. Validate with walk-forward cross-validation first
 
 ```bash
-python -m hogan_bot.train --symbol BTC/USD --timeframe 5m --limit 5000 --cv --cv-splits 5
+python -m hogan_bot.train --symbol BTC/USD --timeframe 1h --limit 5000 --cv --cv-splits 5
 ```
 
 Output includes per-fold accuracy and ROC-AUC, plus mean values across folds.
@@ -57,13 +52,13 @@ Output includes per-fold accuracy and ROC-AUC, plus mean values across folds.
 Logistic regression (scaled, default):
 
 ```bash
-python -m hogan_bot.train --symbol BTC/USD --timeframe 5m --limit 5000 --horizon-bars 3 --model-path models/hogan_logreg.pkl
+python -m hogan_bot.train --symbol BTC/USD --timeframe 1h --limit 5000 --horizon-bars 3 --model-path models/hogan_logreg.pkl
 ```
 
 Random forest (includes feature importances in output):
 
 ```bash
-python -m hogan_bot.train --symbol BTC/USD --timeframe 5m --limit 5000 --model-type random_forest --model-path models/hogan_rf.pkl
+python -m hogan_bot.train --symbol BTC/USD --timeframe 1h --limit 5000 --model-type random_forest --model-path models/hogan_rf.pkl
 ```
 
 Both commands now report `accuracy`, `roc_auc`, `precision`, `recall`, and `f1`.
@@ -102,7 +97,7 @@ HOGAN_AGGRESSIVE_ALLOCATION=0.75
 HOGAN_MAX_RISK_PER_TRADE=0.03
 HOGAN_MAX_DRAWDOWN=0.15
 HOGAN_SYMBOLS=BTC/USD,ETH/USD
-HOGAN_TIMEFRAME=5m
+HOGAN_TIMEFRAME=1h
 HOGAN_OHLCV_LIMIT=500
 HOGAN_SHORT_MA=20
 HOGAN_LONG_MA=50
@@ -135,45 +130,37 @@ HOGAN_SIGNAL_MODE=any
 | `HOGAN_EMA_FAST_LONG` | `9` | Fast cloud long EMA span |
 | `HOGAN_EMA_SLOW_SHORT` | `34` | Slow cloud short EMA span |
 | `HOGAN_EMA_SLOW_LONG` | `50` | Slow cloud long EMA span |
-| `HOGAN_USE_FVG` | `false` | Enable ICT Fair-Value Gap signal |
+| `HOGAN_USE_FVG` | `false` | *(Experimental)* Enable ICT Fair-Value Gap signal |
 | `HOGAN_FVG_MIN_GAP_PCT` | `0.001` | Minimum gap size (fraction of price) to record an FVG |
-| `HOGAN_SIGNAL_MODE` | `any` | `ma_only` / `any` / `all` — how multiple signals are combined |
+| `HOGAN_SIGNAL_MODE` | `any` | `ma_only` / `any` / `all` — legacy signal combinator (secondary to AgentPipeline) |
 
-## EMA clouds + FVG workflow
+## EMA clouds workflow
 
-Enable one or both new signal layers in `.env` and backtest before paper-trading:
+Enable EMA clouds in `.env` and backtest before paper-trading:
 
 ```env
 HOGAN_USE_EMA_CLOUDS=true
-HOGAN_USE_FVG=true
-HOGAN_SIGNAL_MODE=any
 ```
 
-Backtest with clouds + FVGs enabled:
+Backtest with clouds enabled:
 
 ```bash
 python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000
 ```
 
-Retrain the ML model to pick up the new cloud/FVG features:
+Retrain the ML model to pick up cloud features:
 
 ```bash
-python -m hogan_bot.train --symbol BTC/USD --timeframe 5m --limit 5000 --horizon-bars 3 --model-path models/hogan_logreg.pkl
+python -m hogan_bot.train --symbol BTC/USD --timeframe 1h --limit 5000 --horizon-bars 3 --model-path models/hogan_logreg.pkl
 ```
 
-Then backtest with both new signals and ML combined:
+Then backtest with clouds and ML combined:
 
 ```bash
 python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000 --use-ml
 ```
 
-Signal combinator guide:
-
-| `HOGAN_SIGNAL_MODE` | Behaviour |
-|---|---|
-| `ma_only` | Only the MA crossover fires; EMA clouds and FVGs are ignored even if enabled |
-| `any` | A buy/sell fires if the MA crossover, cloud direction, **or** FVG entry agrees |
-| `all` | A buy/sell fires only when every enabled signal agrees simultaneously |
+**ICT/FVG** is experimental and quarantined. Use `HOGAN_USE_FVG=true` only for testing; it is not part of the core AgentPipeline decision flow.
 
 ## Multi-exchange support
 

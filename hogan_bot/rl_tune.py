@@ -122,7 +122,7 @@ def _make_objective(
     trial_steps: int,
     seed: int,
     device: str,
-    timeframe: str = "5m",
+    timeframe: str = "1h",
 ):
     """Return an Optuna objective closure."""
     from hogan_bot.rl_env import TradingEnv
@@ -186,7 +186,7 @@ def _make_objective(
 def tune(
     candles: pd.DataFrame,
     *,
-    timeframe: str = "5m",
+    timeframe: str = "1h",
     reward_type: str = "risk_adjusted",
     model_dir: str = "models",
     starting_balance: float = 10_000.0,
@@ -283,7 +283,7 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--symbol", default="BTC/USD")
-    p.add_argument("--timeframe", default="5m")
+    p.add_argument("--timeframe", default="1h")
     p.add_argument(
         "--from-db", action="store_true",
         help="Load candles from data/hogan.db",

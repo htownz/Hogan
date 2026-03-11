@@ -112,7 +112,7 @@ class ExchangeClient:
     def fetch_ohlcv_df(
         self,
         symbol: str,
-        timeframe: str = "5m",
+        timeframe: str = "1h",
         limit: int = 500,
         since: int | None = None,
     ) -> pd.DataFrame:

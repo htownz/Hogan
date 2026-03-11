@@ -63,7 +63,7 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="SYMBOL",
         help="One or more trading pairs, e.g. BTC/USD ETH/USD",
     )
-    p.add_argument("--timeframe", default="5m", help="OHLCV bar interval, e.g. 1m 5m 1h")
+    p.add_argument("--timeframe", default="1h", help="OHLCV bar interval, e.g. 1m 5m 1h")
     p.add_argument("--limit", type=int, default=5000, help="Number of bars to fetch per symbol")
     p.add_argument(
         "--exchange",

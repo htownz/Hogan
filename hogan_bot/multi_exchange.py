@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 def fetch_multi_ohlcv(
     symbol: str,
     exchange_ids: list[str],
-    timeframe: str = "5m",
+    timeframe: str = "1h",
     limit: int = 500,
     workers: int | None = None,
 ) -> dict[str, pd.DataFrame]:

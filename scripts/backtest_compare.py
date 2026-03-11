@@ -23,10 +23,10 @@ from hogan_bot.storage import get_connection, load_candles
 
 cfg = load_config()
 conn = get_connection("data/hogan.db")
-candles = load_candles(conn, "BTC/USD", "5m", limit=2000)
+candles = load_candles(conn, "BTC/USD", "1h", limit=2000)
 conn.close()
 
-print(f"Loaded {len(candles)} candles from local DB (BTC/USD / 5m)\n")
+print(f"Loaded {len(candles)} candles from local DB (BTC/USD / 1h)\n")
 
 SHARED = dict(
     candles=candles,
@@ -49,7 +49,7 @@ SHARED = dict(
 # ── BEFORE: old settings ──────────────────────────────────────────────────────
 r_before = run_backtest_on_candles(
     **SHARED,
-    timeframe="5m",
+    timeframe="1h",
     volume_threshold=0.9,      # old: too restrictive
     ml_confidence_sizing=True, # old: shrunk positions to ~1%
 )
@@ -57,7 +57,7 @@ r_before = run_backtest_on_candles(
 # ── AFTER: current settings ───────────────────────────────────────────────────
 r_after = run_backtest_on_candles(
     **SHARED,
-    timeframe="5m",
+    timeframe="1h",
     volume_threshold=0.3,       # new: allows more trades
     ml_confidence_sizing=False, # new: full position sizing
 )

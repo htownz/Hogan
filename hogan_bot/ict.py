@@ -196,7 +196,7 @@ def liquidity_pools(
     else:
         # Fallback: bar-based (previous "day" = previous bpd bars when no timestamps)
         from hogan_bot.timeframe_utils import bars_per_day, infer_timeframe_from_candles
-        tf = timeframe or infer_timeframe_from_candles(df) or "5m"
+        tf = timeframe or infer_timeframe_from_candles(df) or "1h"
         bpd = bars_per_day(tf)
         if n >= 2 * bpd:
             prev = df.iloc[n - 2 * bpd : n - bpd]

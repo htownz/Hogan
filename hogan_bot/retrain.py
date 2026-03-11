@@ -86,7 +86,7 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--symbol", default="BTC/USD", help="Trading pair to train on")
-    p.add_argument("--timeframe", default="5m", help="Bar interval")
+    p.add_argument("--timeframe", default="1h", help="Bar interval")
     p.add_argument(
         "--exchange",
         default="kraken",

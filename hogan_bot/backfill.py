@@ -63,7 +63,7 @@ _TF_PERIOD_DEFAULT: dict[str, str] = {
 
 def fetch_yfinance(
     symbol: str,
-    timeframe: str = "5m",
+    timeframe: str = "1h",
     period: str | None = None,
 ) -> pd.DataFrame:
     """Download OHLCV from Yahoo Finance and return a normalised DataFrame.
@@ -139,7 +139,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--symbol", nargs="+", default=["BTC/USD"],
                    metavar="SYMBOL", help="Trading pairs, e.g. BTC/USD ETH/USD")
-    p.add_argument("--timeframe", default="5m",
+    p.add_argument("--timeframe", default="1h",
                    help="Bar interval: 1m 5m 15m 1h 1d etc.")
     p.add_argument("--period", default=None,
                    help="Lookback period: 7d 60d 1y 2y 5y max (default depends on timeframe)")

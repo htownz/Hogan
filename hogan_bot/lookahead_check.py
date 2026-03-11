@@ -202,7 +202,7 @@ def _main() -> None:
     p = argparse.ArgumentParser(description="Lookahead bias checker")
     p.add_argument("--db", default="data/hogan.db")
     p.add_argument("--symbol", default="BTC/USD")
-    p.add_argument("--timeframe", default="5m")
+    p.add_argument("--timeframe", default="1h")
     p.add_argument("--limit", type=int, default=500)
     p.add_argument("--csv", default=None, help="Load candles from CSV instead of DB")
     args = p.parse_args()

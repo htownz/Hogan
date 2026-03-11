@@ -60,11 +60,12 @@ class TestSharpeRatio:
 
         result = compute_sharpe(equity)
         assert result is not None
-        # The population Sharpe is 0.1 * sqrt(105120) ≈ 32.
-        # With 5 000 bars and the given seed the sample Sharpe should be in
-        # the ballpark [15, 50].
-        assert result > 10
-        assert result < 100
+        # Default annualization is now 1h (8760 bars/year).
+        # Population Sharpe is 0.1 * sqrt(8760) ≈ 9.4.
+        # With 5 000 bars and the given seed, sample Sharpe should be
+        # in the ballpark [3, 20].
+        assert result > 3
+        assert result < 30
 
 
 # ---------------------------------------------------------------------------

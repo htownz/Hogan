@@ -30,7 +30,7 @@ from hogan_bot.storage import (
     load_latest_fill_ts, record_fill,
     open_paper_trade, close_paper_trade,
 )
-from hogan_bot.strategy import generate_signal
+from hogan_bot.agent_pipeline import AgentPipeline
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("hogan.trader")
@@ -250,6 +250,9 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
             logger.warning("OnlineLearner init failed: %s", exc)
 
     bg_retrain_thread = _start_background_retrain(config, conn, model_holder, model_lock)
+
+    # ── Agent Pipeline (Technical + Sentiment + Macro → MetaWeigher) ─────
+    pipeline = AgentPipeline(config, conn=conn)
 
     # ── Trade explainer (LLM, fire-and-forget) ────────────────────────────
     _explain_trade = None
@@ -532,39 +535,18 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                             eff["take_profit_pct"], eff["position_scale"],
                         )
 
-                    # ── Signal generation (all params) ────────────────
-                    signal = generate_signal(
-                        candles,
-                        short_window=cfg.short_ma_window,
-                        long_window=cfg.long_ma_window,
-                        volume_window=cfg.volume_window,
-                        volume_threshold=eff["volume_threshold"],
-                        use_ema_clouds=cfg.use_ema_clouds,
-                        ema_fast_short=cfg.ema_fast_short,
-                        ema_fast_long=cfg.ema_fast_long,
-                        ema_slow_short=cfg.ema_slow_short,
-                        ema_slow_long=cfg.ema_slow_long,
-                        use_fvg=cfg.use_fvg,
-                        fvg_min_gap_pct=cfg.fvg_min_gap_pct,
-                        signal_mode=cfg.signal_mode,
-                        min_vote_margin=cfg.signal_min_vote_margin,
-                        atr_stop_multiplier=cfg.atr_stop_multiplier,
-                        use_ict=cfg.use_ict,
-                        ict_swing_left=cfg.ict_swing_left,
-                        ict_swing_right=cfg.ict_swing_right,
-                        ict_eq_tolerance_pct=cfg.ict_eq_tolerance_pct,
-                        ict_min_displacement_pct=cfg.ict_min_displacement_pct,
-                        ict_require_time_window=cfg.ict_require_time_window,
-                        ict_time_windows=cfg.ict_time_windows,
-                        ict_require_pd=cfg.ict_require_pd,
-                        ict_ote_enabled=cfg.ict_ote_enabled,
-                        ict_ote_low=cfg.ict_ote_low,
-                        ict_ote_high=cfg.ict_ote_high,
-                    )
+                    # ── Agent Pipeline decision ────────────────────────
+                    signal = pipeline.run(candles, symbol=symbol)
 
                     action = signal.action
                     up_prob = None
-                    conf_scale = eff["position_scale"]
+                    conf_scale = (signal.confidence or 1.0) * eff["position_scale"]
+
+                    if action != "hold":
+                        logger.info(
+                            "PIPELINE %s action=%s conf=%.2f | %s",
+                            symbol, action, signal.confidence, signal.explanation,
+                        )
 
                     # ── ML filter with regime-adjusted thresholds ─────
                     with model_lock:
