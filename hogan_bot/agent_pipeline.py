@@ -457,18 +457,18 @@ class MetaWeigher:
 
         combined_score = raw_score
 
-        # Thresholds adapt to regime
-        buy_threshold = 0.15
-        sell_threshold = -0.15
+        # Thresholds adapt to regime (raised to reduce low-conviction trades)
+        buy_threshold = 0.25
+        sell_threshold = -0.25
         if regime == "volatile":
-            buy_threshold = 0.25
-            sell_threshold = -0.25
+            buy_threshold = 0.35
+            sell_threshold = -0.35
         elif regime in ("trending_up", "trending_down"):
-            buy_threshold = 0.10
-            sell_threshold = -0.10
+            buy_threshold = 0.20
+            sell_threshold = -0.20
         elif regime == "ranging":
-            buy_threshold = 0.12
-            sell_threshold = -0.12
+            buy_threshold = 0.30
+            sell_threshold = -0.30
 
         if combined_score >= buy_threshold:
             action = "buy"

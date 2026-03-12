@@ -16,6 +16,47 @@ def apply_ml_filter(signal_action: str, up_prob: float, buy_threshold: float, se
     return signal_action
 
 
+def edge_gate(
+    action: str,
+    atr_pct: float,
+    take_profit_pct: float,
+    fee_rate: float,
+    min_edge_multiple: float = 1.5,
+    forecast_expected_return: float | None = None,
+) -> str:
+    """Block entries where the expected move is insufficient relative to fees.
+
+    Checks three conditions (any failure -> hold):
+    1. ATR must exceed 1.5x round-trip fees (enough volatility to move)
+    2. Take-profit target must exceed min_edge_multiple * round-trip fees
+    3. If forecast available, expected return must exceed round-trip fees
+    """
+    if action == "hold":
+        return action
+
+    round_trip = 2.0 * fee_rate
+
+    if atr_pct < round_trip * 1.5:
+        logger.debug("EDGE_GATE: ATR %.4f < %.4f (1.5x fees) -> hold", atr_pct, round_trip * 1.5)
+        return "hold"
+
+    if take_profit_pct < round_trip * min_edge_multiple:
+        logger.debug(
+            "EDGE_GATE: TP %.4f < %.4f (%.1fx fees) -> hold",
+            take_profit_pct, round_trip * min_edge_multiple, min_edge_multiple,
+        )
+        return "hold"
+
+    if forecast_expected_return is not None and abs(forecast_expected_return) < round_trip:
+        logger.debug(
+            "EDGE_GATE: forecast_ret %.4f < %.4f (fees) -> hold",
+            abs(forecast_expected_return), round_trip,
+        )
+        return "hold"
+
+    return action
+
+
 def ml_confidence(up_prob: float) -> float:
     """Return a position-size scaling factor in [0, 1] based on how far the
     predicted probability is from the indifferent 0.5 mark.

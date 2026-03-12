@@ -59,8 +59,8 @@ class BotConfig:
     # Signal combinator: "ma_only" | "any" | "all"
     signal_mode: str = "any"
     # Minimum directional vote edge required in "any" mode (buy_votes - sell_votes).
-    # Default 1 = any majority. Set to 2 to require two more votes before trading.
-    signal_min_vote_margin: int = 1
+    # Raised to 2 to reduce flippy low-conviction trades.
+    signal_min_vote_margin: int = 2
 
     # Exit management (0 = disabled)
     trailing_stop_pct: float = 0.02
@@ -79,6 +79,17 @@ class BotConfig:
     # Ensures parity between backtest and live/paper across different timeframes.
     max_hold_hours: float = 24.0     # 24h max hold (canonical)
     loss_cooldown_hours: float = 2.0 # 2h cooldown (canonical)
+
+    # Conviction persistence: minimum bars to hold before signal exits are allowed.
+    # Trailing stop / take profit / max_hold exits are unaffected.
+    min_hold_bars: int = 3           # 3 bars on 1h = 3 hours
+
+    # Exit confirmation: require N consecutive sell signals before a signal exit.
+    exit_confirmation_bars: int = 2
+
+    # Fee-aware entry gate: minimum multiple of round-trip fees (2 * fee_rate)
+    # that the expected move (ATR or take_profit) must exceed before entry.
+    min_edge_multiple: float = 1.5
 
     # Execution timeframe — used by the 15m execution model for entry/exit timing
     execution_timeframe: str = "15m"
@@ -310,7 +321,7 @@ def load_config() -> BotConfig:
         use_fvg=os.getenv("HOGAN_USE_FVG", "false").lower() == "true",
         fvg_min_gap_pct=float(os.getenv("HOGAN_FVG_MIN_GAP_PCT", "0.001")),
         signal_mode=os.getenv("HOGAN_SIGNAL_MODE", "any"),
-        signal_min_vote_margin=max(1, int(os.getenv("HOGAN_SIGNAL_MIN_VOTE_MARGIN", "1"))),
+        signal_min_vote_margin=max(1, int(os.getenv("HOGAN_SIGNAL_MIN_VOTE_MARGIN", "2"))),
         trailing_stop_pct=float(os.getenv("HOGAN_TRAILING_STOP_PCT", "0.02")),
         take_profit_pct=float(os.getenv("HOGAN_TAKE_PROFIT_PCT", "0.054")),
         atr_stop_multiplier=float(os.getenv("HOGAN_ATR_STOP_MULTIPLIER", "2.5")),
@@ -318,6 +329,9 @@ def load_config() -> BotConfig:
         loss_cooldown_bars=int(os.getenv("HOGAN_LOSS_COOLDOWN_BARS", "2")),
         max_hold_hours=float(os.getenv("HOGAN_MAX_HOLD_HOURS", "0")),
         loss_cooldown_hours=float(os.getenv("HOGAN_LOSS_COOLDOWN_HOURS", "2")),
+        min_hold_bars=int(os.getenv("HOGAN_MIN_HOLD_BARS", "3")),
+        exit_confirmation_bars=int(os.getenv("HOGAN_EXIT_CONFIRM_BARS", "2")),
+        min_edge_multiple=float(os.getenv("HOGAN_MIN_EDGE_MULTIPLE", "1.5")),
         use_ict=os.getenv("HOGAN_USE_ICT", "false").lower() == "true",
         ict_model=os.getenv("HOGAN_ICT_MODEL", "silver_bullet"),
         ict_swing_left=int(os.getenv("HOGAN_ICT_SWING_LEFT", "2")),
