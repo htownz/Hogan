@@ -147,7 +147,7 @@ class TechnicalAgent:
                 details={"source": "strategy.generate_signal"},
             )
         except Exception as exc:
-            logger.warning("TechnicalAgent failed: %s", exc)
+            logger.warning("TechnicalAgent failed: %s", exc, exc_info=True)
             return TechSignal(action="hold", confidence=0.0)
 
 
@@ -415,10 +415,13 @@ class MetaWeigher:
             w["sentiment"] = w["sentiment"] + 0.10
             w["macro"] = w["macro"] + 0.10
 
-        # Normalize weights
+        # Normalize weights — if all zero, fall back to equal weights
         total = sum(w.values())
         if total > 0:
             w = {k: v / total for k, v in w.items()}
+        else:
+            n = len(w)
+            w = {k: 1.0 / n for k in w} if n > 0 else w
 
         # Convert tech signal to a numeric vote [-1, 0, 1]
         tech_vote = {"buy": 1.0, "sell": -1.0, "hold": 0.0}.get(tech.action, 0.0)
@@ -514,7 +517,7 @@ class MetaWeigher:
             sentiment=sentiment,
             macro=macro,
             explanation=explanation,
-            agent_weights=dict(self._weights),
+            agent_weights=dict(w),
         )
 
     def update_weights(self, new_weights: dict[str, float]) -> None:

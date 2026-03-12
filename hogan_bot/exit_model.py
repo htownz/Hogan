@@ -68,6 +68,7 @@ class ExitEvaluator:
         Returns an ExitDecision with should_exit, reason, and urgency.
         """
         if len(candles) < 20:
+            logger.debug("EXIT_MODEL: insufficient candles (%d < 20), skipping", len(candles))
             return ExitDecision()
 
         close = candles["close"].astype(float)
@@ -135,24 +136,40 @@ class ExitEvaluator:
     def _trend_persistence(self, close: pd.Series, side: str) -> float:
         """Score in [-1, 1]: positive = trend intact, negative = reversed.
 
-        Uses a combination of short/long MA relationship and momentum.
+        Uses a combination of short/long MA spread (normalized by ATR-like
+        range to avoid unit mismatch) and recent momentum direction.
         """
         if len(close) < 20:
             return 0.0
 
         ma_fast = close.rolling(5).mean().iloc[-1]
         ma_slow = close.rolling(20).mean().iloc[-1]
-        ma_spread = (ma_fast - ma_slow) / max(ma_slow, 1e-9)
 
-        recent_returns = close.pct_change().iloc[-5:]
-        momentum = float(recent_returns.mean()) * 100
+        if pd.isna(ma_fast) or pd.isna(ma_slow) or ma_slow < 1e-9:
+            return 0.0
 
-        if side == "long":
-            score = ma_spread * 10 + momentum
+        # Normalize spread as a z-score relative to rolling std
+        rolling_std = close.rolling(20).std().iloc[-1]
+        if pd.isna(rolling_std) or rolling_std < 1e-9:
+            rolling_std = abs(ma_slow) * 0.01
+
+        ma_spread_z = (ma_fast - ma_slow) / rolling_std
+
+        recent_returns = close.pct_change().iloc[-5:].dropna()
+        if recent_returns.empty:
+            momentum_z = 0.0
         else:
-            score = -(ma_spread * 10 + momentum)
+            ret_mean = float(recent_returns.mean())
+            ret_std = float(recent_returns.std())
+            momentum_z = ret_mean / max(ret_std, 1e-9) if ret_std > 1e-9 else 0.0
 
-        return max(-1.0, min(1.0, score))
+        # Both components are now z-score-like, combine with equal weight
+        raw = ma_spread_z * 0.6 + momentum_z * 0.4
+
+        if side != "long":
+            raw = -raw
+
+        return float(max(-1.0, min(1.0, raw)))
 
     def _current_atr_pct(self, candles: pd.DataFrame) -> float:
         """Current ATR as a percentage of price."""
@@ -167,4 +184,6 @@ class ExitEvaluator:
             (low - close.shift(1)).abs(),
         ], axis=1).max(axis=1)
         atr = tr.rolling(14).mean().iloc[-1]
-        return float(atr / max(close.iloc[-1], 1e-9))
+        if pd.isna(atr) or close.iloc[-1] < 1e-9:
+            return 0.01
+        return float(atr / close.iloc[-1])

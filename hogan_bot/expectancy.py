@@ -99,11 +99,15 @@ class ExpectancyTracker:
 
         return result
 
-    def signal_exit_loss_rate(self) -> float:
-        """Fraction of signal-exit trades that were losers."""
+    def signal_exit_loss_rate(self) -> float | None:
+        """Fraction of signal-exit trades that were losers.
+
+        Returns None when there are no signal exits (as opposed to 0.0 which
+        means "signal exits exist but none were losers").
+        """
         signal_exits = [t for t in self._trades if t.close_reason == "signal"]
         if not signal_exits:
-            return 0.0
+            return None
         losers = sum(1 for t in signal_exits if not t.is_win)
         return losers / len(signal_exits)
 
@@ -124,7 +128,7 @@ class ExpectancyTracker:
 
         avg_win = sum(t.net_pnl_pct for t in wins) / len(wins) if wins else 0
         avg_loss = sum(t.net_pnl_pct for t in losses) / len(losses) if losses else 0
-        payoff_ratio = abs(avg_win / avg_loss) if avg_loss != 0 else float("inf")
+        payoff_ratio = abs(avg_win / avg_loss) if avg_loss != 0 else 99.99
 
         expectancy = win_rate * avg_win + (1 - win_rate) * avg_loss
 

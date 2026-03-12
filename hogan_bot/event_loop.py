@@ -72,8 +72,8 @@ class SignalEvaluator:
         candles: pd.DataFrame,
         equity: float,
         recent_whipsaw_count: int = 0,
-    ) -> tuple[str, float, float | None, str | None]:
-        """Returns (action, size, up_prob, regime_name)."""
+    ) -> tuple[str, float, float | None, str | None, float]:
+        """Returns (action, size, up_prob, regime_name, atr_pct)."""
         cfg = symbol_config(self.config, symbol)
 
         regime_name = None
@@ -149,7 +149,7 @@ class SignalEvaluator:
                 result.explanation,
             )
 
-        return action, size, up_prob, regime_name
+        return action, size, up_prob, regime_name, atr_pct
 
 
 # ---------------------------------------------------------------------------
@@ -179,23 +179,33 @@ async def run_event_loop(
     guard = DrawdownGuard(config.starting_balance_usd, config.max_drawdown)
 
     if allow_live:
-        from hogan_bot.exchange import ExchangeClient
-        client = ExchangeClient(config.exchange_id, config.kraken_api_key, config.kraken_api_secret)
-        use_smart = os.getenv("HOGAN_SMART_EXEC", "").strip().lower() in ("1", "true", "yes")
-        if use_smart:
-            smart_cfg = SmartExecConfig(
-                max_reprices=int(os.getenv("HOGAN_EXEC_MAX_REPRICES", "2")),
-                post_only=True,
-                chase_bps=float(os.getenv("HOGAN_EXEC_CHASE_BPS", "2.0")),
+        use_oanda = config.exchange_id.lower() == "oanda" or os.getenv("HOGAN_USE_OANDA", "").strip().lower() in ("1", "true", "yes")
+        if use_oanda:
+            from hogan_bot.oanda_client import OandaClient
+            from hogan_bot.oanda_execution import OandaExecution
+            oanda_client = OandaClient()
+            executor = OandaExecution(
+                client=oanda_client, conn=conn, portfolio=portfolio,
             )
-            executor = SmartExecution(
-                client=client, conn=conn, exchange_id=config.exchange_id,
-                portfolio=portfolio, config=smart_cfg,
-            )
-            logger.warning("LIVE SMART EXECUTION on exchange=%s (post-only, %d reprices)", config.exchange_id, smart_cfg.max_reprices)
+            logger.warning("LIVE OANDA EXECUTION on account=%s env=%s", oanda_client.account_id, oanda_client.environment)
         else:
-            executor = LiveExecution(client=client, conn=conn, exchange_id=config.exchange_id)
-            logger.warning("LIVE TRADING ENABLED on exchange=%s", config.exchange_id)
+            from hogan_bot.exchange import ExchangeClient
+            client = ExchangeClient(config.exchange_id, config.kraken_api_key, config.kraken_api_secret)
+            use_smart = os.getenv("HOGAN_SMART_EXEC", "").strip().lower() in ("1", "true", "yes")
+            if use_smart:
+                smart_cfg = SmartExecConfig(
+                    max_reprices=int(os.getenv("HOGAN_EXEC_MAX_REPRICES", "2")),
+                    post_only=True,
+                    chase_bps=float(os.getenv("HOGAN_EXEC_CHASE_BPS", "2.0")),
+                )
+                executor = SmartExecution(
+                    client=client, conn=conn, exchange_id=config.exchange_id,
+                    portfolio=portfolio, config=smart_cfg,
+                )
+                logger.warning("LIVE SMART EXECUTION on exchange=%s (post-only, %d reprices)", config.exchange_id, smart_cfg.max_reprices)
+            else:
+                executor = LiveExecution(client=client, conn=conn, exchange_id=config.exchange_id)
+                logger.warning("LIVE TRADING ENABLED on exchange=%s", config.exchange_id)
     else:
         use_realistic = os.getenv("HOGAN_REALISTIC_PAPER", "1").strip().lower() in ("1", "true", "yes")
         if use_realistic:
@@ -256,6 +266,18 @@ async def run_event_loop(
     _signal_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     _current_regime: dict[str, str] = {}
     _EXPECTANCY_LOG_INTERVAL = 50
+
+    # FX session filter (active when any symbol looks like an FX pair)
+    _fx_session_filter = None
+    _has_fx_symbols = any("/" in s and not any(c in s for c in ("BTC", "ETH", "SOL", "DOGE"))
+                          for s in config.symbols)
+    if _has_fx_symbols:
+        try:
+            from hogan_bot.fx_utils import SessionFilter
+            _fx_session_filter = SessionFilter()
+            logger.info("FX session filter enabled for symbols: %s", config.symbols)
+        except ImportError:
+            pass
 
     logger.info(
         "Event loop starting: mode=%s symbols=%s timeframe=%s",
@@ -398,9 +420,17 @@ async def run_event_loop(
                 except Exception:
                     pass
 
+            # FX session filter: block trading during off-hours/weekends
+            if _fx_session_filter is not None:
+                _fx_allowed, _fx_scale, _fx_reason = _fx_session_filter.should_trade()
+                if not _fx_allowed:
+                    logger.debug("FX_SESSION blocked: %s", _fx_reason)
+                    event_count += 1
+                    continue
+
             # Per-symbol signal evaluation (isolated — one symbol failure won't break others)
             try:
-                action, size, up_prob, _sym_regime = evaluator.evaluate(symbol, candles, equity)
+                action, size, up_prob, _sym_regime, _sym_atr_pct = evaluator.evaluate(symbol, candles, equity)
                 if _sym_regime:
                     _current_regime[symbol] = _sym_regime
             except Exception as exc:
@@ -437,6 +467,9 @@ async def run_event_loop(
                             take_profit_pct=config.take_profit_pct,
                         )
                     if executed:
+                        pos = portfolio.positions.get(symbol)
+                        if pos is not None:
+                            pos.entry_atr_pct = _sym_atr_pct
                         now_ms = int(time.time() * 1000)
                         fee = size * buy_px * config.fee_rate
                         open_paper_trade(conn, symbol, "long", buy_px, size, fee, now_ms,
@@ -471,6 +504,7 @@ async def run_event_loop(
                         bars_held=pos.bars_held,
                         side="long",
                         max_hold_bars=max_hold_bars,
+                        entry_atr=getattr(pos, "entry_atr_pct", None) or None,
                     )
                     if not exit_decision.should_exit:
                         logger.debug(
