@@ -662,6 +662,7 @@ def retrain_once(args: argparse.Namespace) -> dict:
             symbol=args.symbol,
             timeframe=args.timeframe,
             db_path=_oos_db,
+            label_mode=getattr(args, "label_mode", "fee_threshold"),
         )
         logger.info(
             "OOS eval — sharpe=%.2f dd=%.1f%% trades=%d win=%.1f%%",
@@ -709,7 +710,32 @@ def retrain_once(args: argparse.Namespace) -> dict:
     if oos_result is not None:
         result.update(oos_result.to_dict())
 
-    # 4. Act on the decision
+    # 4. Always log to registry (evidence-first: every candidate run is recorded)
+    _reg_metrics = dict(metrics)
+    _reg_metrics["promoted"] = should_promote
+    _reg_metrics["label_mode"] = getattr(args, "label_mode", "fee_threshold")
+    if oos_result is not None:
+        _reg_metrics.update(oos_result.to_dict())
+
+    symbols = _resolve_symbols(args)
+    try:
+        registry.log(
+            _reg_metrics,
+            model_path=candidate_path if not should_promote else args.model_path,
+            symbol=",".join(symbols) if len(symbols) > 1 else args.symbol,
+            timeframe=args.timeframe,
+            horizon_bars=args.horizon_bars,
+            params={
+                "label_mode": getattr(args, "label_mode", "fee_threshold"),
+                "window_bars": args.window_bars,
+                "promotion_metric": args.promotion_metric,
+                "min_improvement": args.min_improvement,
+            },
+        )
+    except Exception as exc:
+        logger.warning("Registry log failed (non-fatal): %s", exc)
+
+    # 5. Act on the promotion decision
     try:
         if args.dry_run:
             result["message"] = (
@@ -720,14 +746,6 @@ def retrain_once(args: argparse.Namespace) -> dict:
 
         elif should_promote:
             shutil.copy2(candidate_path, args.model_path)
-            symbols = _resolve_symbols(args)
-            registry.log(
-                metrics,
-                model_path=args.model_path,
-                symbol=",".join(symbols) if len(symbols) > 1 else args.symbol,
-                timeframe=args.timeframe,
-                horizon_bars=args.horizon_bars,
-            )
             result["promoted"] = True
             improvement = new_score - (current_score or 0.0)
             if current_score is None:
@@ -753,7 +771,7 @@ def retrain_once(args: argparse.Namespace) -> dict:
             logger.info("Model NOT promoted. %s", result["message"])
 
     finally:
-        # 5. Always clean up the candidate file
+        # 6. Always clean up the candidate file
         candidate = Path(candidate_path)
         if candidate.exists():
             candidate.unlink()

@@ -175,22 +175,23 @@ def _create_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS paper_trades (
-            trade_id       TEXT PRIMARY KEY,    -- uuid
-            symbol         TEXT NOT NULL,
-            side           TEXT NOT NULL,       -- long / short
-            entry_price    REAL NOT NULL,
-            exit_price     REAL,               -- NULL while open
-            qty            REAL NOT NULL,
-            entry_fee      REAL NOT NULL DEFAULT 0,
-            exit_fee       REAL NOT NULL DEFAULT 0,
-            realized_pnl   REAL,               -- NULL while open
-            pnl_pct        REAL,               -- NULL while open
-            open_ts_ms     INTEGER NOT NULL,
-            close_ts_ms    INTEGER,            -- NULL while open
-            close_reason   TEXT,               -- signal / trailing_stop / take_profit / auto_exit
-            ml_up_prob     REAL,               -- ML up-probability at entry
-            strategy_conf  REAL,               -- strategy confidence at entry
-            vol_ratio      REAL                -- volume ratio at entry
+            trade_id           TEXT PRIMARY KEY,    -- uuid
+            symbol             TEXT NOT NULL,
+            side               TEXT NOT NULL,       -- long / short
+            entry_price        REAL NOT NULL,
+            exit_price         REAL,               -- NULL while open
+            qty                REAL NOT NULL,
+            entry_fee          REAL NOT NULL DEFAULT 0,
+            exit_fee           REAL NOT NULL DEFAULT 0,
+            realized_pnl       REAL,               -- NULL while open
+            pnl_pct            REAL,               -- NULL while open
+            open_ts_ms         INTEGER NOT NULL,
+            close_ts_ms        INTEGER,            -- NULL while open
+            close_reason       TEXT,               -- signal / trailing_stop / take_profit / auto_exit
+            ml_up_prob         REAL,               -- ML up-probability at entry
+            strategy_conf      REAL,               -- strategy confidence at entry
+            vol_ratio          REAL,               -- volume ratio at entry
+            entry_decision_id  INTEGER             -- FK -> decision_log.id
         )
         """
     )
@@ -268,7 +269,8 @@ def _create_schema(conn: sqlite3.Connection) -> None:
             conf_scale        REAL,
             explanation       TEXT,
             realized_pnl      REAL,
-            outcome_ts_ms     INTEGER
+            outcome_ts_ms     INTEGER,
+            linked_trade_id   TEXT
         )
         """
     )
@@ -284,6 +286,16 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_decision_log_action "
         "ON decision_log (final_action)"
     )
+
+    # ── Schema migrations for existing databases ──────────────────────
+    for _alt in (
+        "ALTER TABLE paper_trades ADD COLUMN entry_decision_id INTEGER",
+        "ALTER TABLE decision_log ADD COLUMN linked_trade_id TEXT",
+    ):
+        try:
+            conn.execute(_alt)
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
     conn.commit()
 
@@ -652,6 +664,7 @@ def open_paper_trade(
     ml_up_prob: float | None = None,
     strategy_conf: float | None = None,
     vol_ratio: float | None = None,
+    entry_decision_id: int | None = None,
 ) -> str:
     """Insert an open paper trade. Returns the trade_id for later closing."""
     trade_id = str(_uuid.uuid4())
@@ -659,8 +672,8 @@ def open_paper_trade(
         """
         INSERT INTO paper_trades
         (trade_id, symbol, side, entry_price, qty, entry_fee,
-         open_ts_ms, ml_up_prob, strategy_conf, vol_ratio)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         open_ts_ms, ml_up_prob, strategy_conf, vol_ratio, entry_decision_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             trade_id, symbol, side,
@@ -669,6 +682,7 @@ def open_paper_trade(
             None if ml_up_prob is None else float(ml_up_prob),
             None if strategy_conf is None else float(strategy_conf),
             None if vol_ratio is None else float(vol_ratio),
+            entry_decision_id,
         ),
     )
     conn.commit()
@@ -683,11 +697,16 @@ def close_paper_trade(
     exit_fee: float,
     close_ts_ms: int,
     close_reason: str = "signal",
-) -> None:
-    """Close the most-recent open paper trade for this symbol/side, recording P&L."""
+) -> int | None:
+    """Close the most-recent open paper trade for this symbol/side.
+
+    Returns the ``entry_decision_id`` stored on the trade (or *None* if
+    unavailable), so callers can back-fill the outcome on the exact
+    decision that opened the position.
+    """
     row = conn.execute(
         """
-        SELECT trade_id, entry_price, qty, entry_fee
+        SELECT trade_id, entry_price, qty, entry_fee, entry_decision_id
         FROM paper_trades
         WHERE symbol=? AND side=? AND exit_price IS NULL
         ORDER BY open_ts_ms DESC
@@ -696,9 +715,9 @@ def close_paper_trade(
         (symbol, side),
     ).fetchone()
     if not row:
-        return
+        return None
 
-    trade_id, entry_price, qty, entry_fee = row
+    trade_id, entry_price, qty, entry_fee, entry_dec_id = row
     entry_price = float(entry_price)
     qty = float(qty)
 
@@ -724,6 +743,7 @@ def close_paper_trade(
         ),
     )
     conn.commit()
+    return entry_dec_id
 
 
 def load_paper_trades(
@@ -783,8 +803,9 @@ def log_decision(
     ml_up_prob: float | None = None,
     conf_scale: float | None = None,
     explanation: str | None = None,
+    linked_trade_id: str | None = None,
 ) -> int:
-    """Insert a structured decision packet.  Returns the row id."""
+    """Insert a structured decision packet.  Returns the row id (decision_id)."""
     cur = conn.execute(
         """
         INSERT INTO decision_log (
@@ -797,8 +818,9 @@ def log_decision(
             risk_vol_pct, risk_mae_pct, risk_stop_hit, risk_regime, risk_pos_scale,
             freshness_json,
             final_action, final_confidence, position_size,
-            ml_up_prob, conf_scale, explanation
-        ) VALUES (?,?,?, ?,?, ?,?, ?,?, ?, ?,?,?,?, ?,?,?,?,?, ?, ?,?,?, ?,?,?)
+            ml_up_prob, conf_scale, explanation,
+            linked_trade_id
+        ) VALUES (?,?,?, ?,?, ?,?, ?,?, ?, ?,?,?,?, ?,?,?,?,?, ?, ?,?,?, ?,?,?, ?)
         """,
         (
             int(ts_ms), symbol, regime,
@@ -812,41 +834,41 @@ def log_decision(
             json.dumps(freshness) if freshness else None,
             final_action, final_confidence, position_size,
             ml_up_prob, conf_scale, explanation,
+            linked_trade_id,
         ),
     )
     conn.commit()
     return cur.lastrowid  # type: ignore[return-value]
 
 
+def link_decision_to_trade(
+    conn: sqlite3.Connection,
+    decision_id: int,
+    trade_id: str,
+) -> None:
+    """Set ``linked_trade_id`` on a decision after the trade is opened."""
+    conn.execute(
+        "UPDATE decision_log SET linked_trade_id = ? WHERE id = ?",
+        (trade_id, int(decision_id)),
+    )
+    conn.commit()
+
+
 def update_decision_outcome(
     conn: sqlite3.Connection,
-    symbol: str,
-    entry_action: str,
+    decision_id: int,
     realized_pnl: float,
     outcome_ts_ms: int,
 ) -> None:
     """Back-fill realized outcome on the decision that opened this trade.
 
-    Parameters
-    ----------
-    entry_action
-        The action that *opened* the position: ``"buy"`` for long trades,
-        ``"sell"`` for short trades.  Combined with ``realized_pnl IS NULL``
-        this ensures we update the original entry decision, not a later
-        decision logged while the position was held.
+    Uses the exact ``decision_log.id`` primary key rather than a
+    heuristic symbol/action search, giving referential integrity even
+    with pyramiding, partial closes, or rapid close-and-reopen.
     """
     conn.execute(
-        """
-        UPDATE decision_log
-        SET realized_pnl = ?, outcome_ts_ms = ?
-        WHERE id = (
-            SELECT id FROM decision_log
-            WHERE symbol = ? AND final_action = ?
-                  AND realized_pnl IS NULL
-            ORDER BY ts_ms DESC LIMIT 1
-        )
-        """,
-        (float(realized_pnl), int(outcome_ts_ms), symbol, entry_action),
+        "UPDATE decision_log SET realized_pnl = ?, outcome_ts_ms = ? WHERE id = ?",
+        (float(realized_pnl), int(outcome_ts_ms), int(decision_id)),
     )
     conn.commit()
 

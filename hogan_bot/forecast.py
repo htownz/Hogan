@@ -289,14 +289,27 @@ def train_forecast_models(
     db_conn=None,
     output_dir: str = "models",
     fee_rate: float = 0.0026,
+    purge_bars: int = 24,
 ) -> dict:
     """Train calibrated forecast models for all horizons.
 
-    Returns a metrics dict with per-horizon Brier, ECE, ROC-AUC.
-    Models are saved to ``{output_dir}/forecast_{horizon}.pkl``.
+    Uses a purged walk-forward split::
+
+        [--- train (60%) ---][purge][--- cal (15%) ---][purge][--- test (25%) ---]
+
+    The base LightGBM is trained on the train window, then calibrated
+    (isotonic regression) on the separate calibration window.  Metrics
+    are computed on the unseen test window.  A JSON model card is saved
+    alongside each ``.pkl`` with full provenance.
+
+    Returns a metrics dict with per-horizon Brier, ECE, ROC-AUC,
+    precision/recall at operational thresholds.
     """
+    import json as _json
+    from datetime import datetime, timezone
+
     from sklearn.calibration import CalibratedClassifierCV
-    from sklearn.metrics import brier_score_loss, roc_auc_score
+    from sklearn.metrics import brier_score_loss, precision_score, recall_score, roc_auc_score
     from sklearn.preprocessing import StandardScaler
 
     try:
@@ -304,7 +317,7 @@ def train_forecast_models(
     except ImportError:
         from sklearn.ensemble import HistGradientBoostingClassifier as LGBMClassifier
 
-    from hogan_bot.ml import _feature_frame, _FEATURE_COLUMNS
+    from hogan_bot.ml import TrainedModel, _feature_frame, _FEATURE_COLUMNS
 
     frame = _feature_frame(candles)
 
@@ -328,21 +341,34 @@ def train_forecast_models(
         frame[f"target_{horizon_name}"] = (future_ret > 0).astype(int)
 
         dataset = frame[_FEATURE_COLUMNS + [f"target_{horizon_name}"]].dropna().copy()
-        if len(dataset) < 200:
-            logger.warning("Horizon %s: only %d rows, skipping", horizon_name, len(dataset))
+        if len(dataset) < 300:
+            logger.warning("Horizon %s: only %d rows, need >=300, skipping", horizon_name, len(dataset))
             continue
 
         X = dataset[_FEATURE_COLUMNS]
         y = dataset[f"target_{horizon_name}"]
+        n = len(X)
 
-        split = int(len(X) * 0.75)
-        X_train, X_test = X.iloc[:split], X.iloc[split:]
-        y_train, y_test = y.iloc[:split], y.iloc[split:]
+        # Purged walk-forward: train 60% | purge | cal 15% | purge | test 25%
+        train_end = int(n * 0.60)
+        cal_start = train_end + purge_bars
+        cal_end = cal_start + int(n * 0.15)
+        test_start = cal_end + purge_bars
+
+        if test_start >= n or cal_end >= n:
+            logger.warning("Horizon %s: not enough data for purged split (n=%d)", horizon_name, n)
+            continue
+
+        X_train, y_train = X.iloc[:train_end], y.iloc[:train_end]
+        X_cal, y_cal = X.iloc[cal_start:cal_end], y.iloc[cal_start:cal_end]
+        X_test, y_test = X.iloc[test_start:], y.iloc[test_start:]
 
         scaler = StandardScaler()
         X_train_sc = scaler.fit_transform(X_train)
+        X_cal_sc = scaler.transform(X_cal)
         X_test_sc = scaler.transform(X_test)
 
+        # Step 1: Train base classifier on train window
         try:
             base = LGBMClassifier(
                 n_estimators=200, max_depth=6, learning_rate=0.05,
@@ -354,10 +380,13 @@ def train_forecast_models(
                 max_iter=200, max_depth=6, learning_rate=0.05,
                 random_state=42,
             )
+        base.fit(X_train_sc, y_train)
 
-        cal = CalibratedClassifierCV(base, cv=3, method="isotonic")
-        cal.fit(X_train_sc, y_train)
+        # Step 2: Calibrate on separate held-out calibration window
+        cal = CalibratedClassifierCV(base, cv="prefit", method="isotonic")
+        cal.fit(X_cal_sc, y_cal)
 
+        # Step 3: Evaluate on unseen test window
         proba = cal.predict_proba(X_test_sc)[:, 1]
 
         brier = float(brier_score_loss(y_test, proba))
@@ -367,7 +396,18 @@ def train_forecast_models(
         except ValueError:
             auc = 0.0
 
-        from hogan_bot.ml import TrainedModel
+        # Precision/recall at operational thresholds
+        thresholds = [0.55, 0.60, 0.65]
+        threshold_metrics: dict[str, dict[str, float]] = {}
+        for t in thresholds:
+            preds = (proba >= t).astype(int)
+            if preds.sum() > 0:
+                threshold_metrics[f"t{t:.2f}"] = {
+                    "precision": round(float(precision_score(y_test, preds, zero_division=0)), 4),
+                    "recall": round(float(recall_score(y_test, preds, zero_division=0)), 4),
+                    "n_triggered": int(preds.sum()),
+                }
+
         artifact = TrainedModel(scaler=scaler, model=cal, feature_columns=_FEATURE_COLUMNS)
         model_path = out / f"forecast_{horizon_name}.pkl"
         with open(model_path, "wb") as fh:
@@ -380,12 +420,37 @@ def train_forecast_models(
             "ece": round(ece, 4),
             "roc_auc": round(auc, 4),
             "n_train": int(len(X_train)),
+            "n_cal": int(len(X_cal)),
             "n_test": int(len(X_test)),
+            "purge_bars": purge_bars,
+            "thresholds": threshold_metrics,
         }
         all_metrics[horizon_name] = h_metrics
+
+        # Save model card (JSON sidecar)
+        card = {
+            "horizon": horizon_name,
+            "horizon_bars": horizon_bars,
+            "trained_at": datetime.now(tz=timezone.utc).isoformat(),
+            "split": {
+                "train": f"0:{train_end}",
+                "purge1": f"{train_end}:{cal_start}",
+                "calibration": f"{cal_start}:{cal_end}",
+                "purge2": f"{cal_end}:{test_start}",
+                "test": f"{test_start}:{n}",
+            },
+            "metrics": h_metrics,
+            "features": len(_FEATURE_COLUMNS),
+            "calibration_method": "isotonic (CalibratedClassifierCV, cv=prefit)",
+        }
+        card_path = out / f"forecast_{horizon_name}_card.json"
+        with open(card_path, "w", encoding="utf-8") as fh:
+            _json.dump(card, fh, indent=2)
+
         logger.info(
-            "Forecast %s — brier=%.4f ece=%.4f auc=%.4f (n_train=%d n_test=%d)",
-            horizon_name, brier, ece, auc, len(X_train), len(X_test),
+            "Forecast %s — brier=%.4f ece=%.4f auc=%.4f (train=%d cal=%d test=%d purge=%d)",
+            horizon_name, brier, ece, auc,
+            len(X_train), len(X_cal), len(X_test), purge_bars,
         )
 
     return all_metrics

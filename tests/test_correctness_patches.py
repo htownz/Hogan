@@ -35,22 +35,23 @@ def _in_memory_db() -> sqlite3.Connection:
     conn = sqlite3.connect(":memory:")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS paper_trades (
-            trade_id       TEXT PRIMARY KEY,
-            symbol         TEXT NOT NULL,
-            side           TEXT NOT NULL,
-            entry_price    REAL NOT NULL,
-            exit_price     REAL,
-            qty            REAL NOT NULL,
-            entry_fee      REAL NOT NULL DEFAULT 0,
-            exit_fee       REAL NOT NULL DEFAULT 0,
-            realized_pnl   REAL,
-            pnl_pct        REAL,
-            open_ts_ms     INTEGER NOT NULL,
-            close_ts_ms    INTEGER,
-            close_reason   TEXT,
-            ml_up_prob     REAL,
-            strategy_conf  REAL,
-            vol_ratio      REAL
+            trade_id           TEXT PRIMARY KEY,
+            symbol             TEXT NOT NULL,
+            side               TEXT NOT NULL,
+            entry_price        REAL NOT NULL,
+            exit_price         REAL,
+            qty                REAL NOT NULL,
+            entry_fee          REAL NOT NULL DEFAULT 0,
+            exit_fee           REAL NOT NULL DEFAULT 0,
+            realized_pnl       REAL,
+            pnl_pct            REAL,
+            open_ts_ms         INTEGER NOT NULL,
+            close_ts_ms        INTEGER,
+            close_reason       TEXT,
+            ml_up_prob         REAL,
+            strategy_conf      REAL,
+            vol_ratio          REAL,
+            entry_decision_id  INTEGER
         )
     """)
     conn.execute("""
@@ -240,6 +241,75 @@ class TestJournalSideNormalization:
         assert row is not None
         assert row[0] == pytest.approx(180.0)
         assert row[1] > 0, "Short trade profit should be positive when exit < entry"
+
+
+class TestDecisionIdLinkage:
+    """Outcome back-fill must use the exact decision_id, not heuristic matching."""
+
+    def test_outcome_links_to_entry_decision(self):
+        from hogan_bot.storage import (
+            open_paper_trade, close_paper_trade,
+            log_decision, update_decision_outcome, link_decision_to_trade,
+            _create_schema,
+        )
+        conn = sqlite3.connect(":memory:")
+        _create_schema(conn)
+
+        dec_id = log_decision(conn, ts_ms=1000, symbol="BTC/USD", final_action="buy",
+                              final_confidence=0.8, position_size=0.1)
+        trade_id = open_paper_trade(conn, "BTC/USD", "long", 100.0, 1.0, 0.1, 1000,
+                                    entry_decision_id=dec_id)
+        link_decision_to_trade(conn, dec_id, trade_id)
+
+        log_decision(conn, ts_ms=2000, symbol="BTC/USD", final_action="hold",
+                     final_confidence=0.5, position_size=0.0)
+
+        entry_dec = close_paper_trade(conn, "BTC/USD", "long", 110.0, 0.11, 3000,
+                                      close_reason="signal")
+        assert entry_dec == dec_id, "close_paper_trade must return the entry decision_id"
+
+        update_decision_outcome(conn, dec_id, 0.10, 3000)
+
+        row = conn.execute(
+            "SELECT realized_pnl, outcome_ts_ms, linked_trade_id FROM decision_log WHERE id=?",
+            (dec_id,),
+        ).fetchone()
+        assert row[0] == pytest.approx(0.10)
+        assert row[1] == 3000
+        assert row[2] == trade_id
+
+    def test_multiple_buys_different_symbols(self):
+        """Each symbol's outcome links to ITS entry decision, not the most recent one."""
+        from hogan_bot.storage import (
+            open_paper_trade, close_paper_trade,
+            log_decision, update_decision_outcome,
+            _create_schema,
+        )
+        conn = sqlite3.connect(":memory:")
+        _create_schema(conn)
+
+        dec_btc = log_decision(conn, ts_ms=1000, symbol="BTC/USD", final_action="buy",
+                               final_confidence=0.8, position_size=0.1)
+        open_paper_trade(conn, "BTC/USD", "long", 100.0, 1.0, 0.1, 1000,
+                         entry_decision_id=dec_btc)
+
+        dec_eth = log_decision(conn, ts_ms=1500, symbol="ETH/USD", final_action="buy",
+                               final_confidence=0.7, position_size=0.2)
+        open_paper_trade(conn, "ETH/USD", "long", 50.0, 2.0, 0.05, 1500,
+                         entry_decision_id=dec_eth)
+
+        btc_dec = close_paper_trade(conn, "BTC/USD", "long", 110.0, 0.11, 3000)
+        assert btc_dec == dec_btc
+        update_decision_outcome(conn, btc_dec, 0.10, 3000)
+
+        eth_dec = close_paper_trade(conn, "ETH/USD", "long", 55.0, 0.055, 3500)
+        assert eth_dec == dec_eth
+        update_decision_outcome(conn, eth_dec, 0.10, 3500)
+
+        btc_row = conn.execute("SELECT realized_pnl FROM decision_log WHERE id=?", (dec_btc,)).fetchone()
+        eth_row = conn.execute("SELECT realized_pnl FROM decision_log WHERE id=?", (dec_eth,)).fetchone()
+        assert btc_row[0] == pytest.approx(0.10)
+        assert eth_row[0] == pytest.approx(0.10)
 
 
 # ---------------------------------------------------------------------------
