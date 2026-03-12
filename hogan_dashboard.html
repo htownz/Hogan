@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HOGAN — Market Operating System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;800&family=Outfit:wght@300;400;600;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #06090f;
+  --surface: #0d1219;
+  --surface2: #141c28;
+  --surface3: #1a2435;
+  --border: #1c2a3a;
+  --text: #e2e8f0;
+  --text-dim: #5a6b80;
+  --accent: #f59e0b;
+  --accent2: #fbbf24;
+  --green: #10b981;
+  --green-dim: rgba(16,185,129,0.12);
+  --red: #ef4444;
+  --red-dim: rgba(239,68,68,0.12);
+  --blue: #3b82f6;
+  --purple: #8b5cf6;
+  --cyan: #06b6d4;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Outfit', sans-serif;
+  overflow-x: hidden;
+}
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ─── HEADER ─── */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 24px;
+  background: linear-gradient(180deg, rgba(13,18,25,0.98), rgba(6,9,15,0.99));
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+}
+.header-left { display:flex; align-items:center; gap:14px; }
+.logo-wrap { display:flex; align-items:baseline; gap:8px; }
+.logo {
+  font-weight:900; font-size:26px;
+  background: linear-gradient(135deg, #f59e0b, #fbbf24, #f97316);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  letter-spacing: 4px;
+}
+.logo-sub { font-size:10px; color:var(--text-dim); letter-spacing:2px; text-transform:uppercase; }
+.status-pill {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:3px 10px; border-radius:16px;
+  font-size:11px; font-weight:600; letter-spacing:1px;
+}
+.status-pill.live { background:rgba(16,185,129,0.1); color:var(--green); border:1px solid rgba(16,185,129,0.2); }
+.status-pill .dot { width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.7)} }
+.header-right { display:flex; align-items:center; gap:14px; }
+.clock { font-size:12px; color:var(--text-dim); letter-spacing:1px; }
+.refresh-btn {
+  background:transparent; border:1px solid var(--border);
+  color:var(--text-dim); padding:5px 12px; border-radius:6px;
+  cursor:pointer; font-size:11px; letter-spacing:1px; transition:all 0.2s;
+}
+.refresh-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+/* ─── LAYOUT ─── */
+.dashboard {
+  display:grid;
+  grid-template-columns: 240px 1fr 300px;
+  grid-template-rows: auto auto 1fr;
+  min-height: calc(100vh - 48px);
+  gap:1px;
+  background: var(--border);
+}
+.panel {
+  background: var(--surface);
+  padding: 16px;
+  position: relative;
+}
+.panel-title {
+  font-size:10px; font-weight:700; letter-spacing:2.5px;
+  text-transform:uppercase; color:var(--text-dim);
+  margin-bottom:10px;
+  display:flex; align-items:center; gap:6px;
+}
+.panel-title::before {
+  content:''; display:inline-block;
+  width:3px; height:12px; border-radius:2px;
+  background:var(--accent);
+}
+
+/* ─── HOGAN MASCOT (left, rows 1-2) ─── */
+.mascot-panel {
+  grid-column:1; grid-row:1/3;
+  display:flex; flex-direction:column; align-items:center;
+  justify-content:center; gap:12px;
+  background: radial-gradient(ellipse at center 40%, var(--surface2), var(--surface));
+}
+#hoganCanvas { cursor:crosshair; }
+.mood-badge {
+  font-size:12px; font-weight:700; text-align:center;
+  padding:5px 14px; border-radius:10px; letter-spacing:2px;
+}
+.mood-badge.bullish { background:var(--green-dim); color:var(--green); }
+.mood-badge.bearish { background:var(--red-dim); color:var(--red); }
+.mood-badge.neutral { background:rgba(100,116,139,0.1); color:var(--text-dim); }
+.mood-badge.thinking { background:rgba(245,158,11,0.1); color:var(--accent); }
+.regime-tag { font-size:13px; font-weight:800; color:var(--accent); letter-spacing:2px; text-align:center; margin-top:4px; }
+.regime-label { font-size:9px; color:var(--text-dim); letter-spacing:1.5px; text-align:center; }
+
+/* ─── STATS BAR (center, row 1) ─── */
+.stats-bar {
+  grid-column:2; grid-row:1;
+  display:flex; align-items:center; justify-content:space-around; flex-wrap:wrap;
+  gap:8px;
+}
+.stat { text-align:center; min-width:80px; }
+.stat-val { font-size:22px; font-weight:800; line-height:1.2; }
+.stat-lbl { font-size:9px; color:var(--text-dim); letter-spacing:1.5px; text-transform:uppercase; margin-top:2px; }
+.stat-val.pos { color:var(--green); }
+.stat-val.neg { color:var(--red); }
+
+/* ─── RIGHT COLUMN (rows 1-3) ─── */
+.right-col {
+  grid-column:3; grid-row:1/4;
+  display:flex; flex-direction:column; gap:1px;
+  background:var(--border);
+}
+.right-col > .panel { flex:0 0 auto; }
+
+/* ─── EQUITY CHART (center, row 2) ─── */
+.chart-panel { grid-column:2; grid-row:2; min-height:200px; }
+#equityChart { width:100%; height:180px; display:block; }
+
+/* ─── BOTTOM PANELS (row 3) ─── */
+.decisions-panel { grid-column:1; grid-row:3; overflow-y:auto; }
+.trades-panel { grid-column:2; grid-row:3; overflow-y:auto; }
+
+/* ─── AGENT WEIGHTS BAR ─── */
+.wbar { display:flex; height:10px; border-radius:5px; overflow:hidden; background:var(--bg); margin-bottom:6px; }
+.wbar .seg { transition:width 1s ease; }
+.wbar .seg.tech { background:linear-gradient(90deg,#2563eb,#3b82f6); }
+.wbar .seg.sent { background:linear-gradient(90deg,#7c3aed,#8b5cf6); }
+.wbar .seg.macro { background:linear-gradient(90deg,#0891b2,#06b6d4); }
+.wlegend { display:flex; gap:10px; flex-wrap:wrap; }
+.wlegend span { font-size:10px; display:flex; align-items:center; gap:3px; color:var(--text-dim); }
+.wlegend .d { width:7px; height:7px; border-radius:2px; }
+
+/* ─── GAUGES ─── */
+.gauge-row { display:flex; gap:8px; margin-top:8px; }
+.gauge {
+  flex:1; text-align:center; padding:8px 4px;
+  background:var(--bg); border-radius:6px; border:1px solid var(--border);
+}
+.gauge-lbl { font-size:9px; color:var(--text-dim); letter-spacing:1px; }
+.gauge-val { font-size:18px; font-weight:700; margin-top:1px; }
+.gauge-val.bull { color:var(--green); }
+.gauge-val.bear { color:var(--red); }
+.gauge-val.flat { color:var(--text-dim); }
+
+/* ─── VOTES ─── */
+.vote-row {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:5px 0; border-bottom:1px solid rgba(28,42,58,0.5);
+  font-size:12px;
+}
+.vote-row:last-child { border-bottom:none; }
+.vote-name { color:var(--text-dim); font-weight:600; }
+
+/* ─── DECISIONS FEED ─── */
+.dec-item {
+  padding:8px 0; border-bottom:1px solid rgba(28,42,58,0.4);
+  animation:fadeIn 0.3s ease;
+}
+@keyframes fadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+.dec-time { font-size:10px; color:var(--text-dim); }
+.dec-action {
+  display:inline-block; padding:1px 7px; border-radius:3px;
+  font-size:10px; font-weight:800; letter-spacing:1px; text-transform:uppercase;
+}
+.dec-action.buy { background:var(--green-dim); color:var(--green); }
+.dec-action.sell { background:var(--red-dim); color:var(--red); }
+.dec-action.hold { background:rgba(100,116,139,0.08); color:var(--text-dim); }
+.dec-conf { font-size:10px; color:var(--text-dim); margin-left:6px; }
+.dec-explain { font-size:10px; color:rgba(90,107,128,0.7); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* ─── TRADES TABLE ─── */
+.trow {
+  display:grid; grid-template-columns:70px 50px 80px 80px 70px 65px 85px;
+  gap:4px; padding:5px 0; border-bottom:1px solid rgba(28,42,58,0.3);
+  font-size:11px; align-items:center;
+}
+.trow.th { color:var(--text-dim); font-weight:700; font-size:9px; letter-spacing:1px; text-transform:uppercase; }
+
+/* ─── SHADOW WEIGHTS ─── */
+.shadow-info { font-size:11px; color:var(--text-dim); line-height:1.6; }
+.shadow-info b { color:var(--text); font-weight:600; }
+
+/* ─── SCROLLBAR ─── */
+::-webkit-scrollbar { width:3px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+@media(max-width:900px) {
+  .dashboard { grid-template-columns:1fr; grid-template-rows:auto; }
+  .mascot-panel,.stats-bar,.chart-panel,.decisions-panel,.trades-panel,.right-col { grid-column:1; grid-row:auto; }
+  .right-col { display:block; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo-wrap">
+      <span class="logo">HOGAN</span>
+      <span class="logo-sub">Market OS</span>
+    </div>
+    <div class="status-pill live" id="statusPill"><div class="dot"></div><span id="statusText">LIVE</span></div>
+  </div>
+  <div class="header-right">
+    <span class="clock mono" id="clockEl"></span>
+    <button class="refresh-btn" onclick="fetchAll()">REFRESH</button>
+  </div>
+</div>
+
+<div class="dashboard">
+
+  <!-- LEFT: HOGAN MASCOT -->
+  <div class="panel mascot-panel">
+    <canvas id="hoganCanvas" width="200" height="240"></canvas>
+    <div class="mood-badge thinking" id="moodBadge">INITIALIZING</div>
+    <div class="regime-tag mono" id="regimeEl">—</div>
+    <div class="regime-label">REGIME</div>
+  </div>
+
+  <!-- CENTER TOP: STATS -->
+  <div class="panel stats-bar">
+    <div class="stat"><div class="stat-val mono" id="eqVal">$0</div><div class="stat-lbl">equity</div></div>
+    <div class="stat"><div class="stat-val mono" id="pnlVal">$0</div><div class="stat-lbl">total p&l</div></div>
+    <div class="stat"><div class="stat-val mono" id="ddVal">0%</div><div class="stat-lbl">drawdown</div></div>
+    <div class="stat"><div class="stat-val mono" id="trVal">0</div><div class="stat-lbl">trades</div></div>
+    <div class="stat"><div class="stat-val mono" id="wrVal">0%</div><div class="stat-lbl">win rate</div></div>
+    <div class="stat"><div class="stat-val mono" id="opVal">0</div><div class="stat-lbl">open</div></div>
+  </div>
+
+  <!-- CENTER: EQUITY CHART -->
+  <div class="panel chart-panel">
+    <div class="panel-title">Equity Curve</div>
+    <canvas id="equityChart"></canvas>
+  </div>
+
+  <!-- RIGHT COLUMN -->
+  <div class="right-col">
+    <div class="panel">
+      <div class="panel-title">Agent Weights</div>
+      <div class="wbar" id="wbar">
+        <div class="seg tech" style="width:55%"></div>
+        <div class="seg sent" style="width:25%"></div>
+        <div class="seg macro" style="width:20%"></div>
+      </div>
+      <div class="wlegend">
+        <span><span class="d" style="background:var(--blue)"></span>Tech <b id="wT">55%</b></span>
+        <span><span class="d" style="background:var(--purple)"></span>Sent <b id="wS">25%</b></span>
+        <span><span class="d" style="background:var(--cyan)"></span>Macro <b id="wM">20%</b></span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Forecast</div>
+      <div class="gauge-row">
+        <div class="gauge"><div class="gauge-lbl">4H</div><div class="gauge-val flat mono" id="f4h">—</div></div>
+        <div class="gauge"><div class="gauge-lbl">12H</div><div class="gauge-val flat mono" id="f12h">—</div></div>
+        <div class="gauge"><div class="gauge-lbl">24H</div><div class="gauge-val flat mono" id="f24h">—</div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Agent Votes</div>
+      <div class="vote-row"><span class="vote-name">Technical</span><span id="vTech">—</span></div>
+      <div class="vote-row"><span class="vote-name">Sentiment</span><span id="vSent">—</span></div>
+      <div class="vote-row"><span class="vote-name">Macro</span><span id="vMacro">—</span></div>
+      <div class="vote-row"><span class="vote-name">ML Prob</span><span id="vMl" class="mono">—</span></div>
+    </div>
+    <div class="panel" style="flex:1;">
+      <div class="panel-title">Shadow Weights</div>
+      <div class="shadow-info" id="shadowEl">Waiting for data...</div>
+    </div>
+  </div>
+
+  <!-- BOTTOM LEFT: DECISIONS -->
+  <div class="panel decisions-panel">
+    <div class="panel-title">Decisions</div>
+    <div id="decFeed"></div>
+  </div>
+
+  <!-- BOTTOM CENTER: TRADES -->
+  <div class="panel trades-panel">
+    <div class="panel-title">Trade Journal</div>
+    <div class="trow th"><span>Symbol</span><span>Side</span><span>Entry</span><span>Exit</span><span>PnL</span><span>PnL%</span><span>Reason</span></div>
+    <div id="tradeRows"></div>
+  </div>
+
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   HOGAN — Animated Bull Mascot
+   ═══════════════════════════════════════════════════════════════════ */
+const cv = document.getElementById('hoganCanvas');
+const c = cv.getContext('2d');
+const H = {
+  mood:'neutral', breath:0, bob:0,
+  blinkT:0, blink:false,
+  eyeTX:0, eyeTY:0, eyeX:0, eyeY:0,
+  mouth:0, mouthT:0,
+  sparks:[], tailA:0
+};
+
+function draw(t) {
+  const W=200, HH=240;
+  c.clearRect(0,0,W,HH);
+  H.breath+=0.025; H.bob+=0.018;
+  const by=Math.sin(H.breath)*2.5, bb=Math.sin(H.bob)*1.5;
+  const cx=100, cy=148+by+bb;
+  const bodyC = H.mood==='bullish'?'#fbbf24':H.mood==='bearish'?'#8faab8':'#d4a574';
+  const darkC = H.mood==='bullish'?'#b47e0a':H.mood==='bearish'?'#607888':'#9c7040';
+
+  // Sparkles (bullish)
+  if(H.mood==='bullish' && Math.random()<0.1) H.sparks.push({x:40+Math.random()*120,y:20+Math.random()*80,l:1,s:Math.random()*3+1});
+  H.sparks=H.sparks.filter(s=>{
+    s.l-=0.012;s.y-=0.4;
+    if(s.l<=0)return false;
+    c.save();c.globalAlpha=s.l;c.fillStyle='#fde68a';
+    const a=t/300+s.x;
+    c.translate(s.x,s.y);c.rotate(a);
+    for(let i=0;i<4;i++){c.fillRect(-0.5,-s.s,1,s.s*2);c.rotate(Math.PI/4);}
+    c.restore();return true;
+  });
+
+  // Rain drops (bearish)
+  if(H.mood==='bearish') {
+    c.save();c.globalAlpha=0.25;c.strokeStyle='#60a5fa';c.lineWidth=1;
+    for(let i=0;i<5;i++){
+      const rx=30+i*35, ry=((t/60+i*40)%120)+20;
+      c.beginPath();c.moveTo(rx,ry);c.lineTo(rx-1,ry+6);c.stroke();
+    }
+    c.restore();
+  }
+
+  // Shadow
+  c.save();c.globalAlpha=0.12;c.fillStyle='#000';
+  c.beginPath();c.ellipse(cx,218,38,7,0,0,Math.PI*2);c.fill();c.restore();
+
+  // Tail
+  H.tailA+=(H.mood==='bullish'?0.06:0.02);
+  const ts=Math.sin(H.tailA)*15;
+  c.strokeStyle=bodyC;c.lineWidth=5;c.lineCap='round';
+  c.beginPath();c.moveTo(cx+42,cy-8);
+  c.quadraticCurveTo(cx+58+ts,cy-28,cx+50+ts*1.4,cy-45);c.stroke();
+  c.fillStyle=darkC;c.beginPath();c.arc(cx+50+ts*1.4,cy-47,5,0,Math.PI*2);c.fill();
+
+  // Legs
+  for(let lx of [-20,-7,7,20]) {
+    const lb=Math.sin(H.bob+lx*0.12)*2;
+    c.fillStyle=bodyC;c.beginPath();c.roundRect(cx+lx-4,cy+38+lb,9,20,4);c.fill();
+    c.fillStyle=darkC;c.beginPath();c.roundRect(cx+lx-5,cy+54+lb,11,5,3);c.fill();
+  }
+
+  // Body
+  c.fillStyle=bodyC;c.beginPath();c.ellipse(cx,cy,44,50,0,0,Math.PI*2);c.fill();
+  // Belly
+  c.save();c.globalAlpha=0.2;c.fillStyle='#fff';
+  c.beginPath();c.ellipse(cx,cy+8,24,28,0,0,Math.PI*2);c.fill();c.restore();
+
+  // Head
+  const hy=cy-55+by*0.4;
+  c.fillStyle=bodyC;c.beginPath();c.ellipse(cx,hy,30,26,0,0,Math.PI*2);c.fill();
+  // Muzzle highlight
+  c.save();c.globalAlpha=0.15;c.fillStyle='#fff';
+  c.beginPath();c.ellipse(cx,hy+6,18,13,0,0,Math.PI*2);c.fill();c.restore();
+
+  // Horns
+  c.strokeStyle='#c9a96e';c.lineWidth=3.5;c.lineCap='round';
+  c.beginPath();c.moveTo(cx-18,hy-20);c.quadraticCurveTo(cx-28,hy-38,cx-14,hy-42);c.stroke();
+  c.beginPath();c.moveTo(cx+18,hy-20);c.quadraticCurveTo(cx+28,hy-38,cx+14,hy-42);c.stroke();
+  c.strokeStyle='#fef3c7';c.lineWidth=2;
+  c.beginPath();c.moveTo(cx-16,hy-39);c.lineTo(cx-14,hy-42);c.stroke();
+  c.beginPath();c.moveTo(cx+16,hy-39);c.lineTo(cx+14,hy-42);c.stroke();
+
+  // Ears
+  c.fillStyle=bodyC;
+  c.beginPath();c.ellipse(cx-27,hy-7,9,6,-0.4,0,Math.PI*2);c.fill();
+  c.beginPath();c.ellipse(cx+27,hy-7,9,6,0.4,0,Math.PI*2);c.fill();
+  c.fillStyle='#e8a0a0';
+  c.beginPath();c.ellipse(cx-27,hy-7,4.5,3,-0.4,0,Math.PI*2);c.fill();
+  c.beginPath();c.ellipse(cx+27,hy-7,4.5,3,0.4,0,Math.PI*2);c.fill();
+
+  // Eyes
+  H.blinkT++;
+  if(H.blinkT>160+Math.random()*100){H.blink=true;H.blinkT=0;}
+  if(H.blink){H.blinkT++;if(H.blinkT>7)H.blink=false;}
+  H.eyeX+=(H.eyeTX-H.eyeX)*0.08;
+  H.eyeY+=(H.eyeTY-H.eyeY)*0.08;
+  const eH=H.blink?1:7;
+  for(let s of [-1,1]){
+    const ex=cx+s*12,ey=hy-3;
+    c.fillStyle='#fff';c.beginPath();c.ellipse(ex,ey,8,eH,0,0,Math.PI*2);c.fill();
+    if(!H.blink){
+      c.fillStyle='#1e293b';c.beginPath();c.ellipse(ex+H.eyeX*1.8,ey+H.eyeY*1.2,4,4.5,0,0,Math.PI*2);c.fill();
+      c.fillStyle='#fff';c.beginPath();c.arc(ex+H.eyeX*1.8+1.5,ey+H.eyeY*1.2-1.5,1.3,0,Math.PI*2);c.fill();
+    }
+  }
+
+  // Eyebrows
+  c.strokeStyle=darkC;c.lineWidth=2.2;c.lineCap='round';
+  const bOff=H.mood==='bearish'?-3:H.mood==='bullish'?3:0;
+  c.beginPath();c.moveTo(cx-20,hy-13-bOff);c.lineTo(cx-5,hy-13+bOff*0.5);c.stroke();
+  c.beginPath();c.moveTo(cx+20,hy-13-bOff);c.lineTo(cx+5,hy-13+bOff*0.5);c.stroke();
+
+  // Nostrils
+  c.fillStyle=darkC;
+  c.beginPath();c.ellipse(cx-4,hy+7,2.2,1.8,0,0,Math.PI*2);c.fill();
+  c.beginPath();c.ellipse(cx+4,hy+7,2.2,1.8,0,0,Math.PI*2);c.fill();
+
+  // Nose ring
+  c.strokeStyle='#fbbf24';c.lineWidth=1.8;
+  c.beginPath();c.arc(cx,hy+10,4,0.3,Math.PI-0.3);c.stroke();
+
+  // Mouth
+  H.mouth+=(H.mouthT-H.mouth)*0.06;
+  c.strokeStyle=darkC;c.lineWidth=1.8;
+  c.beginPath();c.moveTo(cx-8,hy+15);
+  c.quadraticCurveTo(cx,hy+15+H.mouth*7,cx+8,hy+15);c.stroke();
+
+  // Cowboy hat (bullish)
+  if(H.mood==='bullish'){
+    const hatY=hy-24+Math.sin(H.bob*1.3)*1.5;
+    c.fillStyle='#92400e';
+    c.beginPath();c.ellipse(cx,hatY+7,36,5,0,0,Math.PI*2);c.fill();
+    c.beginPath();c.moveTo(cx-17,hatY+3);c.quadraticCurveTo(cx,hatY-14,cx+17,hatY+3);
+    c.lineTo(cx+17,hatY+7);c.lineTo(cx-17,hatY+7);c.fill();
+    c.fillStyle='var(--accent)';c.beginPath();c.arc(cx,hatY+1,2.5,0,Math.PI*2);c.fill();
+  }
+
+  // Storm cloud (bearish)
+  if(H.mood==='bearish'){
+    c.save();c.globalAlpha=0.35+Math.sin(t/400)*0.1;
+    c.fillStyle='#475569';
+    c.beginPath();c.arc(cx-8,hy-42,10,0,Math.PI*2);c.fill();
+    c.arc(cx+7,hy-44,8,0,Math.PI*2);c.fill();
+    c.arc(cx,hy-36,9,0,Math.PI*2);c.fill();
+    c.restore();
+  }
+
+  // Thinking dots (neutral)
+  if(H.mood==='neutral'){
+    c.save();c.globalAlpha=0.4+Math.sin(t/300)*0.2;
+    for(let i=0;i<3;i++){
+      const dx=cx+30+i*8, dy=hy-20-i*6+Math.sin(t/300+i)*3;
+      c.fillStyle='var(--accent)';c.beginPath();c.arc(dx,dy,2.5-i*0.3,0,Math.PI*2);c.fill();
+    }
+    c.restore();
+  }
+
+  requestAnimationFrame(draw);
+}
+cv.addEventListener('mousemove',e=>{
+  const r=cv.getBoundingClientRect();
+  H.eyeTX=((e.clientX-r.left)/200-0.5)*2;
+  H.eyeTY=((e.clientY-r.top)/240-0.5)*2;
+});
+cv.addEventListener('mouseleave',()=>{H.eyeTX=0;H.eyeTY=0;});
+requestAnimationFrame(draw);
+
+/* ═══════════════════════════════════════════════════════════════════
+   EQUITY CHART — vanilla canvas
+   ═══════════════════════════════════════════════════════════════════ */
+function drawEquity(data) {
+  const el = document.getElementById('equityChart');
+  const W = el.parentElement.clientWidth - 32;
+  const HH = 180;
+  el.width=W; el.height=HH;
+  const x = el.getContext('2d');
+  x.clearRect(0,0,W,HH);
+
+  if(!Array.isArray(data) || data.length<2) {
+    x.fillStyle='#5a6b80'; x.font='12px Outfit';
+    x.fillText('Waiting for equity data...',W/2-70,HH/2);
+    return;
+  }
+
+  data.sort((a,b)=>a.ts_ms-b.ts_ms);
+  const vals=data.map(d=>d.equity_usd);
+  const mn=Math.min(...vals), mx=Math.max(...vals);
+  const rng=mx-mn||1, padY=16;
+  const up=vals[vals.length-1]>=vals[0];
+
+  // Grid
+  const yDecimals = rng < 10 ? 2 : rng < 100 ? 1 : 0;
+  x.strokeStyle='rgba(28,42,58,0.5)';x.lineWidth=1;
+  for(let i=0;i<5;i++){
+    const y=padY+(HH-padY*2)*(i/4);
+    x.beginPath();x.moveTo(50,y);x.lineTo(W,y);x.stroke();
+    x.fillStyle='#5a6b80';x.font='9px JetBrains Mono';
+    x.fillText('$'+(mx-rng*(i/4)).toFixed(yDecimals),2,y+3);
+  }
+
+  // Line path
+  const pts=vals.map((v,i)=>{
+    return {x:50+(i/(vals.length-1))*(W-50), y:padY+(1-(v-mn)/rng)*(HH-padY*2)};
+  });
+
+  // Gradient fill
+  const grad=x.createLinearGradient(0,0,0,HH);
+  if(up){grad.addColorStop(0,'rgba(16,185,129,0.2)');grad.addColorStop(1,'rgba(16,185,129,0)');}
+  else{grad.addColorStop(0,'rgba(239,68,68,0.2)');grad.addColorStop(1,'rgba(239,68,68,0)');}
+
+  x.beginPath();
+  pts.forEach((p,i)=>i===0?x.moveTo(p.x,p.y):x.lineTo(p.x,p.y));
+  x.strokeStyle=up?'#10b981':'#ef4444';x.lineWidth=2;x.stroke();
+
+  x.lineTo(pts[pts.length-1].x,HH);x.lineTo(pts[0].x,HH);x.closePath();
+  x.fillStyle=grad;x.fill();
+
+  // Current dot
+  const lp=pts[pts.length-1];
+  x.beginPath();x.arc(lp.x,lp.y,4,0,Math.PI*2);
+  x.fillStyle=up?'#10b981':'#ef4444';x.fill();
+  x.strokeStyle='#fff';x.lineWidth=1.5;x.stroke();
+
+  // Current value label
+  x.fillStyle=up?'#10b981':'#ef4444';x.font='bold 11px JetBrains Mono';
+  x.fillText('$'+vals[vals.length-1].toFixed(0),lp.x-40,lp.y-8);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CLOCK
+   ═══════════════════════════════════════════════════════════════════ */
+function tick(){document.getElementById('clockEl').textContent=new Date().toLocaleTimeString('en-US',{hour12:false});}
+setInterval(tick,1000);tick();
+
+/* ═══════════════════════════════════════════════════════════════════
+   DATA FETCH
+   ═══════════════════════════════════════════════════════════════════ */
+async function api(path){try{const r=await fetch(path);return await r.json();}catch(e){return null;}}
+
+async function fetchAll(){
+  const [sum,eq,dec,tr]=await Promise.all([api('/api/summary'),api('/api/equity'),api('/api/decisions'),api('/api/trades')]);
+  if(sum) renderSummary(sum);
+  if(eq) drawEquity(eq);
+  if(dec) renderDecisions(dec);
+  if(tr) renderTrades(tr);
+}
+
+function renderSummary(s){
+  const eq=s.equity||{}, tr=s.trades||{}, ld=s.last_decision||{};
+
+  document.getElementById('eqVal').textContent='$'+(eq.equity_usd||0).toLocaleString(undefined,{maximumFractionDigits:0});
+
+  const pnl=tr.total_pnl||0;
+  const pe=document.getElementById('pnlVal');
+  pe.textContent=(pnl>=0?'+':'')+pnl.toFixed(2);
+  pe.className='stat-val mono '+(pnl>=0?'pos':'neg');
+
+  const dd=eq.drawdown||0;
+  const de=document.getElementById('ddVal');
+  de.textContent=(dd*100).toFixed(1)+'%';
+  de.className='stat-val mono '+(dd>0.05?'neg':'pos');
+
+  const tot=tr.total||0;
+  document.getElementById('trVal').textContent=tot;
+  const wr=tot>0?(tr.wins||0)/tot*100:0;
+  const we=document.getElementById('wrVal');
+  we.textContent=wr.toFixed(0)+'%';
+  we.className='stat-val mono '+(wr>=50?'pos':wr>0?'neg':'');
+
+  document.getElementById('opVal').textContent=s.open_positions||0;
+
+  // Regime + mood
+  const regime=ld.regime||'unknown';
+  document.getElementById('regimeEl').textContent=regime.toUpperCase();
+
+  const act=ld.final_action||'hold';
+  const mb=document.getElementById('moodBadge');
+  if(act==='buy'){H.mood='bullish';H.mouthT=1;mb.textContent='BULLISH';mb.className='mood-badge bullish';}
+  else if(act==='sell'){H.mood='bearish';H.mouthT=-1;mb.textContent='BEARISH';mb.className='mood-badge bearish';}
+  else{H.mood='neutral';H.mouthT=0;mb.textContent='WATCHING';mb.className='mood-badge thinking';}
+
+  // Votes
+  const setV=(id,val,isBool)=>{
+    const el=document.getElementById(id);
+    if(val==null){el.textContent='—';el.style.color='var(--text-dim)';return;}
+    const s=String(val).toUpperCase();
+    el.textContent=s;
+    if(isBool) el.style.color=val?'var(--green)':'var(--red)';
+    else el.style.color=s==='BUY'||s==='BULLISH'||s==='RISK_ON'?'var(--green)':s==='SELL'||s==='BEARISH'||s==='RISK_OFF'?'var(--red)':'var(--text-dim)';
+  };
+  setV('vTech',ld.tech_action);
+  setV('vSent',ld.sent_bias);
+  setV('vMacro',ld.macro_regime);
+  const mlEl=document.getElementById('vMl');
+  mlEl.textContent=ld.ml_up_prob!=null?(ld.ml_up_prob*100).toFixed(0)+'%':'—';
+  mlEl.style.color=ld.ml_up_prob>0.55?'var(--green)':ld.ml_up_prob<0.45?'var(--red)':'var(--text-dim)';
+
+  // Forecast
+  function setF(id,v){
+    const el=document.getElementById(id);
+    if(v!=null){el.textContent=(v*100).toFixed(0)+'%';el.className='gauge-val mono '+(v>0.55?'bull':v<0.45?'bear':'flat');}
+    else{el.textContent='—';el.className='gauge-val flat mono';}
+  }
+  setF('f4h',ld.forecast_4h);setF('f12h',ld.forecast_12h);setF('f24h',ld.forecast_24h);
+
+  // Meta weights from last decision
+  try{
+    if(ld.meta_weights_json){
+      const w=typeof ld.meta_weights_json==='string'?JSON.parse(ld.meta_weights_json):ld.meta_weights_json;
+      if(w.technical!=null){
+        const bar=document.getElementById('wbar');
+        bar.children[0].style.width=(w.technical*100)+'%';
+        bar.children[1].style.width=(w.sentiment*100)+'%';
+        bar.children[2].style.width=(w.macro*100)+'%';
+        document.getElementById('wT').textContent=(w.technical*100).toFixed(0)+'%';
+        document.getElementById('wS').textContent=(w.sentiment*100).toFixed(0)+'%';
+        document.getElementById('wM').textContent=(w.macro*100).toFixed(0)+'%';
+      }
+    }
+  }catch(e){}
+
+  // Shadow weights
+  const sw=s.shadow_weights||{};
+  const se=document.getElementById('shadowEl');
+  if(sw.proposed_global){
+    const pg=sw.proposed_global;
+    let h=`<b>Proposed:</b> T<span style="color:var(--blue)">${(pg.technical*100).toFixed(0)}%</span> `
+      +`S<span style="color:var(--purple)">${(pg.sentiment*100).toFixed(0)}%</span> `
+      +`M<span style="color:var(--cyan)">${(pg.macro*100).toFixed(0)}%</span>`
+      +`<br><span style="font-size:10px">${sw.n_decisions||'?'} decisions analyzed</span>`;
+    if(sw.by_regime){
+      h+='<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px">';
+      for(const[r,v] of Object.entries(sw.by_regime)){
+        h+=`<div style="margin-top:2px"><b>${r}:</b> T${(v.proposed.technical*100).toFixed(0)} S${(v.proposed.sentiment*100).toFixed(0)} M${(v.proposed.macro*100).toFixed(0)} <span style="color:var(--text-dim)">(${v.n_decisions}d, ${(v.win_rate*100).toFixed(0)}%w)</span></div>`;
+      }
+      h+='</div>';
+    }
+    se.innerHTML=h;
+  } else if(sw.proposed){
+    const p=sw.proposed;
+    se.innerHTML=`T${(p.technical*100).toFixed(0)}% · S${(p.sentiment*100).toFixed(0)}% · M${(p.macro*100).toFixed(0)}%`;
+  }
+}
+
+function renderDecisions(decs){
+  if(!Array.isArray(decs))return;
+  const el=document.getElementById('decFeed');
+  let h='';
+  for(const d of decs.slice(0,30)){
+    const dt=new Date(d.ts_ms).toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit'});
+    const conf=d.final_confidence!=null?(d.final_confidence*100).toFixed(0)+'%':'';
+    const ex=d.explanation?d.explanation.substring(0,100):'';
+    h+=`<div class="dec-item"><span class="dec-time mono">${dt}</span> <span class="dec-action ${d.final_action||'hold'}">${d.final_action||'hold'}</span><span class="dec-conf mono">${conf}</span><div class="dec-explain">${ex}</div></div>`;
+  }
+  el.innerHTML=h||'<div style="padding:12px;color:var(--text-dim);font-size:11px">No decisions yet</div>';
+}
+
+function renderTrades(trades){
+  if(!Array.isArray(trades))return;
+  const el=document.getElementById('tradeRows');
+  const closed=trades.filter(t=>t.exit_price!=null).slice(0,25);
+  let h='';
+  for(const t of closed){
+    const pc=(t.realized_pnl||0)>=0?'var(--green)':'var(--red)';
+    const pp=t.pnl_pct!=null?(t.pnl_pct*100).toFixed(2)+'%':'—';
+    h+=`<div class="trow mono"><span>${(t.symbol||'').replace('/USD','')}</span><span style="color:${t.side==='long'?'var(--green)':'var(--red)'}">${(t.side||'').toUpperCase()}</span><span>$${(t.entry_price||0).toFixed(0)}</span><span>$${(t.exit_price||0).toFixed(0)}</span><span style="color:${pc}">${(t.realized_pnl||0).toFixed(2)}</span><span style="color:${pc}">${pp}</span><span style="font-size:9px;color:var(--text-dim)">${t.close_reason||''}</span></div>`;
+  }
+  el.innerHTML=h||'<div style="padding:12px;color:var(--text-dim);font-size:11px">No closed trades yet</div>';
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   INIT
+   ═══════════════════════════════════════════════════════════════════ */
+fetchAll();
+setInterval(fetchAll, 12000);
+</script>
+</body>
+</html>
