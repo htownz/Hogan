@@ -10,8 +10,22 @@ models/hogan_rl_policy.zip
 *.db-wal
 *.db-shm
 
+# Backup files — use version control instead
+*.bak
+*.backup
+*~
+
+# IDE and editor config
+.idea/
+.vscode/
+*.swp
+*.swo
+
 # Secret / key files — NEVER commit these
 API Keys.txt
 *.key
 *.pem
 secrets.txt
+
+# Logs — keep structure but ignore contents
+logs/*.log
