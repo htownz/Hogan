@@ -66,6 +66,7 @@ from hogan_bot.ml import (
     train_random_forest,
     train_xgboost,
 )
+from hogan_bot.oos_eval import oos_evaluate
 from hogan_bot.registry import ModelRegistry
 from hogan_bot.storage import get_connection, load_candles
 from hogan_bot.timeframe_utils import default_horizon_bars
@@ -229,6 +230,16 @@ def _build_parser() -> argparse.ArgumentParser:
             "Requires 10m and 30m candles in the DB (run backfill first). "
             "IMPORTANT: produces a different feature vector — always pair with "
             "--force-promote and update HOGAN_USE_MTF_EXTENDED=true in .env."
+        ),
+    )
+    p.add_argument(
+        "--label-mode",
+        choices=["fee_threshold", "triple_barrier"],
+        default="fee_threshold",
+        help=(
+            "Label generation strategy: 'fee_threshold' (default) uses fee-aware "
+            "directional labels; 'triple_barrier' uses path-aware labels that "
+            "account for time decay and adverse excursion."
         ),
     )
     return p
@@ -463,23 +474,24 @@ def _train_to_candidate(args: argparse.Namespace, candles: pd.DataFrame) -> tupl
     if getattr(args, "from_db", False):
         _db_conn = get_connection(getattr(args, "db", "data/hogan.db"))
 
+    _label_mode = getattr(args, "label_mode", "fee_threshold")
     try:
         if args.model_type == "random_forest":
             metrics = train_random_forest(
                 candles, model_path=candidate_path, horizon_bars=args.horizon_bars,
                 paper_labels=paper_labels, paper_labels_weight=paper_weight,
-                db_conn=_db_conn,
+                db_conn=_db_conn, label_mode=_label_mode,
             )
         elif args.model_type == "xgboost":
             metrics = train_xgboost(
                 candles, model_path=candidate_path, horizon_bars=args.horizon_bars,
                 paper_labels=paper_labels, paper_labels_weight=paper_weight,
-                db_conn=_db_conn,
+                db_conn=_db_conn, label_mode=_label_mode,
             )
         elif args.model_type == "lightgbm":
             metrics = train_lightgbm(
                 candles, model_path=candidate_path, horizon_bars=args.horizon_bars,
-                db_conn=_db_conn,
+                db_conn=_db_conn, label_mode=_label_mode,
             )
         else:
             metrics = train_logistic_regression(
@@ -489,7 +501,7 @@ def _train_to_candidate(args: argparse.Namespace, candles: pd.DataFrame) -> tupl
                 tune_hyperparams=getattr(args, "tune", False),
                 paper_labels=paper_labels,
                 paper_labels_weight=paper_weight,
-                db_conn=_db_conn,
+                db_conn=_db_conn, label_mode=_label_mode,
             )
     finally:
         if _db_conn is not None:
@@ -640,6 +652,25 @@ def retrain_once(args: argparse.Namespace) -> dict:
         candidate_path,
     )
 
+    # 2b. OOS evaluation on unseen tail of the training candles
+    oos_result = None
+    try:
+        _oos_db = getattr(args, "db", "data/hogan.db") if getattr(args, "from_db", False) else None
+        oos_result = oos_evaluate(
+            candidate_path=candidate_path,
+            candles=candles,
+            symbol=args.symbol,
+            timeframe=args.timeframe,
+            db_path=_oos_db,
+        )
+        logger.info(
+            "OOS eval — sharpe=%.2f dd=%.1f%% trades=%d win=%.1f%%",
+            oos_result.sharpe, oos_result.max_drawdown_pct,
+            oos_result.trade_count, oos_result.win_rate * 100,
+        )
+    except Exception as exc:
+        logger.warning("OOS evaluation failed (non-fatal): %s", exc)
+
     # 3. Determine whether to promote
     registry = ModelRegistry(registry_path=args.registry_path)
     current_score = _get_current_best_score(registry, args.promotion_metric)
@@ -662,6 +693,7 @@ def retrain_once(args: argparse.Namespace) -> dict:
         "window_bars": args.window_bars,
         "horizon_bars": args.horizon_bars,
         "model_type": args.model_type,
+        "label_mode": getattr(args, "label_mode", "fee_threshold"),
         "promotion_metric": args.promotion_metric,
         "min_improvement": args.min_improvement,
         "new_score": new_score,
@@ -673,6 +705,9 @@ def retrain_once(args: argparse.Namespace) -> dict:
     for k, v in metrics.items():
         if k not in ("feature_importances", "model_type") and isinstance(v, (int, float)):
             result.setdefault(k, float(v))
+    # Attach OOS metrics for registry logging
+    if oos_result is not None:
+        result.update(oos_result.to_dict())
 
     # 4. Act on the decision
     try:

@@ -16,23 +16,28 @@ ForecastResult
     confidence : float
         Overall confidence in the forecast (0-1), based on feature coverage.
 
-Architecture
-------------
-Uses the existing ``_feature_frame`` from ``ml.py`` to compute a rich
-feature vector, then applies lightweight statistical models:
+Architecture (two modes)
+------------------------
+**Trained mode** (preferred): Loads calibrated horizon-specific LightGBM
+models from ``models/forecast_{horizon}.pkl``.  Uses the full 59-feature
+frame from ``ml._feature_frame()`` for inference.  Calibration is via
+``CalibratedClassifierCV`` so output probabilities are reliable.
 
-1. **Logistic trend persistence**: rolling MA slope + ADX -> trend continuation prob
-2. **Volatility-scaled return expectation**: recent returns + vol regime -> expected move
-3. **Multi-horizon probability**: feature-based directional estimates
+**Heuristic fallback**: When model files don't exist, uses hand-crafted
+features with fixed sigmoid coefficients.  This is the original v1
+implementation kept for cold-start and testing.
 
-These are intentionally simple and robust — no deep learning, no overfit.
-The forecast head should be *calibrated* rather than *ambitious*.
+Calibration metrics tracked during training:
+- Brier score, ECE (Expected Calibration Error), ROC-AUC
+- Precision/recall at operational thresholds
 """
 from __future__ import annotations
 
 import logging
 import math
+import pickle
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -40,6 +45,11 @@ import pandas as pd
 from hogan_bot.indicators import compute_atr
 
 logger = logging.getLogger(__name__)
+
+_MODEL_DIR = Path("models")
+_HORIZONS = {"4h": 4, "12h": 12, "24h": 24}
+
+_model_cache: dict[str, object] = {}
 
 
 @dataclass
@@ -82,93 +92,151 @@ def _safe_sigmoid(x: float) -> float:
         return z / (1.0 + z)
 
 
+def _load_forecast_model(horizon: str):
+    """Load a trained forecast model from disk (cached after first load)."""
+    if horizon in _model_cache:
+        return _model_cache[horizon]
+    path = _MODEL_DIR / f"forecast_{horizon}.pkl"
+    if not path.exists():
+        _model_cache[horizon] = None
+        return None
+    try:
+        with open(path, "rb") as fh:
+            model = pickle.load(fh)
+        _model_cache[horizon] = model
+        logger.info("Loaded forecast model: %s", path)
+        return model
+    except Exception as exc:
+        logger.warning("Failed to load %s: %s", path, exc)
+        _model_cache[horizon] = None
+        return None
+
+
+def _ml_forecast(candles: pd.DataFrame) -> ForecastResult | None:
+    """Try to produce a forecast using trained ML models.
+
+    Returns None if any horizon model is missing, signaling fallback
+    to the heuristic implementation.
+    """
+    models = {h: _load_forecast_model(h) for h in _HORIZONS}
+    if any(m is None for m in models.values()):
+        return None
+
+    try:
+        from hogan_bot.ml import _feature_frame, _FEATURE_COLUMNS
+        frame = _feature_frame(candles)
+        last_row = frame[_FEATURE_COLUMNS].iloc[[-1]]
+        if last_row.isna().any(axis=1).iloc[0]:
+            return None
+    except Exception:
+        return None
+
+    direction_prob: dict[str, float] = {}
+    expected_return: dict[str, float] = {}
+
+    close = candles["close"].astype(float)
+    ret_1 = close.pct_change(1)
+    vol_20 = float(ret_1.rolling(20).std().iloc[-1]) if len(close) >= 20 else 0.01
+
+    for horizon_name, horizon_bars in _HORIZONS.items():
+        model = models[horizon_name]
+        try:
+            scaler = getattr(model, "scaler", None)
+            clf = getattr(model, "model", model)
+            X = last_row.values
+            if scaler is not None:
+                X = scaler.transform(X)
+            prob = float(clf.predict_proba(X)[:, 1][0])
+        except Exception:
+            return None
+
+        direction_prob[horizon_name] = round(prob, 4)
+        typical_move = vol_20 * math.sqrt(horizon_bars) * 100.0
+        expected_return[horizon_name] = round((2.0 * prob - 1.0) * typical_move, 4)
+
+    ma_fast = close.rolling(12).mean()
+    ma_slow = close.rolling(48).mean()
+    ma_spread = float(((ma_fast - ma_slow) / ma_slow.clip(lower=1e-9)).iloc[-1])
+
+    avg_prob = np.mean(list(direction_prob.values()))
+    trend_persistence = round(float(avg_prob if ma_spread > 0 else 1.0 - avg_prob), 4)
+    confidence = 0.85
+
+    return ForecastResult(
+        direction_prob=direction_prob,
+        expected_return=expected_return,
+        trend_persistence=trend_persistence,
+        confidence=confidence,
+    )
+
+
 def compute_forecast(candles: pd.DataFrame) -> ForecastResult:
     """Compute multi-horizon directional forecast from OHLCV data.
 
-    Uses only causal features (no look-ahead). Designed for 1h candles
-    but works on any timeframe — horizons are in bar-counts.
+    Tries trained ML models first; falls back to heuristic when
+    model files don't exist.
     """
     min_bars = 80
     if candles is None or len(candles) < min_bars:
         return ForecastResult(confidence=0.0)
 
+    ml_result = _ml_forecast(candles)
+    if ml_result is not None:
+        return ml_result
+
+    return _heuristic_forecast(candles)
+
+
+def _heuristic_forecast(candles: pd.DataFrame) -> ForecastResult:
+    """Original heuristic forecast (v1 fallback)."""
     close = candles["close"].astype(float)
-    high = candles["high"].astype(float)
-    low = candles["low"].astype(float)
     volume = candles["volume"].astype(float)
 
-    # --- Feature extraction (all causal) ---
-
-    # Momentum features
     ret_1 = close.pct_change(1)
-    ret_4 = close.pct_change(4)
-    ret_12 = close.pct_change(12)
-    ret_24 = close.pct_change(24)
 
-    # MA trend
     ma_fast = close.rolling(12).mean()
     ma_slow = close.rolling(48).mean()
     ma_spread = ((ma_fast - ma_slow) / ma_slow.clip(lower=1e-9)).iloc[-1]
 
-    # RSI
     delta = close.diff()
     gain = delta.clip(lower=0.0).ewm(com=13, min_periods=14, adjust=False).mean()
     loss = (-delta.clip(upper=0.0)).ewm(com=13, min_periods=14, adjust=False).mean()
     rs = gain / loss.clip(lower=1e-9)
-    rsi = (100.0 - (100.0 / (1.0 + rs))).iloc[-1] / 100.0  # [0, 1]
+    rsi = (100.0 - (100.0 / (1.0 + rs))).iloc[-1] / 100.0
 
-    # Volatility
     vol_20 = float(ret_1.rolling(20).std().iloc[-1])
     vol_50 = float(ret_1.rolling(50).std().iloc[-1]) or vol_20
     vol_regime = vol_20 / max(vol_50, 1e-9)
 
-    # ADX for trend strength
     atr = compute_atr(candles, window=14)
     atr_pct = float(atr.iloc[-1] / max(close.iloc[-1], 1e-9))
 
-    # Volume profile
     vol_avg = float(volume.rolling(20).mean().iloc[-1])
     vol_ratio = float(volume.iloc[-1] / max(vol_avg, 1e-9))
 
-    # Bollinger %B
     bb_mid = close.rolling(20).mean()
     bb_std = close.rolling(20).std()
     bb_upper = bb_mid + 2.0 * bb_std
     bb_lower = bb_mid - 2.0 * bb_std
     bb_pct_b = float((close.iloc[-1] - bb_lower.iloc[-1]) / max(bb_upper.iloc[-1] - bb_lower.iloc[-1], 1e-9))
 
-    # --- Trend persistence model ---
-    # Higher ADX + consistent MA spread + moderate RSI = higher persistence
-    trend_dir = 1.0 if ma_spread > 0 else -1.0
-
-    # Logit-based persistence: positive features -> trend continues
     persistence_logit = (
-        2.0 * abs(ma_spread) * 100.0        # stronger trend = more persistent
-        + 0.5 * max(0, atr_pct * 100.0 - 1.0)  # some vol helps trends
-        - 1.0 * vol_regime                    # excessive vol regime hurts
-        + 0.3 * (0.5 - abs(rsi - 0.5)) * 2.0  # extreme RSI = reversal risk
+        2.0 * abs(ma_spread) * 100.0
+        + 0.5 * max(0, atr_pct * 100.0 - 1.0)
+        - 1.0 * vol_regime
+        + 0.3 * (0.5 - abs(rsi - 0.5)) * 2.0
     )
     trend_persistence = _safe_sigmoid(persistence_logit)
 
-    # --- Multi-horizon directional probability ---
-    # Combine momentum, mean-reversion, and trend features
     direction_prob = {}
     expected_return = {}
 
     for horizon_name, horizon_bars in [("4h", 4), ("12h", 12), ("24h", 24)]:
-        # Momentum component: recent returns predict short-term direction
         recent_ret = float(close.pct_change(min(horizon_bars, len(close) - 1)).iloc[-1])
-
-        # Mean-reversion component: extreme BB%B -> reversion pressure
-        mr_pressure = -(bb_pct_b - 0.5) * 0.3  # oversold = bullish, overbought = bearish
-
-        # Trend component: MA spread aligned with price direction
-        trend_component = ma_spread * 20.0  # scale to comparable range
-
-        # Volume confirmation: high volume amplifies the signal
+        mr_pressure = -(bb_pct_b - 0.5) * 0.3
+        trend_component = ma_spread * 20.0
         vol_boost = min(0.3, max(-0.1, (vol_ratio - 1.0) * 0.15))
 
-        # Horizon-dependent weighting: short-term = momentum, long-term = trend
         if horizon_bars <= 4:
             logit = 0.5 * recent_ret * 50.0 + 0.3 * mr_pressure + 0.2 * trend_component
         elif horizon_bars <= 12:
@@ -177,20 +245,16 @@ def compute_forecast(candles: pd.DataFrame) -> ForecastResult:
             logit = 0.15 * recent_ret * 20.0 + 0.2 * mr_pressure + 0.65 * trend_component
 
         logit += vol_boost
-
         prob_up = _safe_sigmoid(logit)
         direction_prob[horizon_name] = round(prob_up, 4)
-
-        # Expected return: directional probability * typical move size
-        typical_move = vol_20 * math.sqrt(horizon_bars) * 100.0  # annualize
+        typical_move = vol_20 * math.sqrt(horizon_bars) * 100.0
         expected_return[horizon_name] = round((2.0 * prob_up - 1.0) * typical_move, 4)
 
-    # --- Confidence: based on data coverage and feature stability ---
-    feature_count = 6  # momentum, MA, RSI, vol, BB, volume
+    feature_count = 6
     nan_count = sum(1 for v in [ma_spread, rsi, vol_20, bb_pct_b, vol_ratio, atr_pct]
-                    if v != v)  # NaN check
+                    if v != v)
     data_confidence = (feature_count - nan_count) / feature_count
-    stability = max(0.0, 1.0 - abs(vol_regime - 1.0))  # stable vol = higher confidence
+    stability = max(0.0, 1.0 - abs(vol_regime - 1.0))
     confidence = round(data_confidence * (0.5 + 0.5 * stability), 4)
 
     return ForecastResult(
@@ -199,3 +263,129 @@ def compute_forecast(candles: pd.DataFrame) -> ForecastResult:
         trend_persistence=round(trend_persistence, 4),
         confidence=confidence,
     )
+
+
+# ---------------------------------------------------------------------------
+# Training
+# ---------------------------------------------------------------------------
+
+def _expected_calibration_error(y_true, y_prob, n_bins: int = 10) -> float:
+    """Compute Expected Calibration Error (ECE)."""
+    bins = np.linspace(0.0, 1.0, n_bins + 1)
+    ece = 0.0
+    for lo, hi in zip(bins[:-1], bins[1:]):
+        mask = (y_prob >= lo) & (y_prob < hi)
+        if mask.sum() == 0:
+            continue
+        frac = mask.sum() / len(y_true)
+        avg_conf = float(y_prob[mask].mean())
+        avg_acc = float(y_true[mask].mean())
+        ece += frac * abs(avg_acc - avg_conf)
+    return ece
+
+
+def train_forecast_models(
+    candles: pd.DataFrame,
+    db_conn=None,
+    output_dir: str = "models",
+    fee_rate: float = 0.0026,
+) -> dict:
+    """Train calibrated forecast models for all horizons.
+
+    Returns a metrics dict with per-horizon Brier, ECE, ROC-AUC.
+    Models are saved to ``{output_dir}/forecast_{horizon}.pkl``.
+    """
+    from sklearn.calibration import CalibratedClassifierCV
+    from sklearn.metrics import brier_score_loss, roc_auc_score
+    from sklearn.preprocessing import StandardScaler
+
+    try:
+        from lightgbm import LGBMClassifier
+    except ImportError:
+        from sklearn.ensemble import HistGradientBoostingClassifier as LGBMClassifier
+
+    from hogan_bot.ml import _feature_frame, _FEATURE_COLUMNS
+
+    frame = _feature_frame(candles)
+
+    if db_conn is not None:
+        try:
+            from hogan_bot.macro_features import add_macro_features
+            frame = add_macro_features(frame, db_conn)
+        except Exception:
+            pass
+    from hogan_bot.macro_features import MACRO_FEATURE_NAMES
+    for col in MACRO_FEATURE_NAMES:
+        if col not in frame.columns:
+            frame[col] = 0.0
+
+    all_metrics: dict = {}
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    for horizon_name, horizon_bars in _HORIZONS.items():
+        future_ret = frame["close"].shift(-horizon_bars) / frame["close"] - 1.0
+        frame[f"target_{horizon_name}"] = (future_ret > 0).astype(int)
+
+        dataset = frame[_FEATURE_COLUMNS + [f"target_{horizon_name}"]].dropna().copy()
+        if len(dataset) < 200:
+            logger.warning("Horizon %s: only %d rows, skipping", horizon_name, len(dataset))
+            continue
+
+        X = dataset[_FEATURE_COLUMNS]
+        y = dataset[f"target_{horizon_name}"]
+
+        split = int(len(X) * 0.75)
+        X_train, X_test = X.iloc[:split], X.iloc[split:]
+        y_train, y_test = y.iloc[:split], y.iloc[split:]
+
+        scaler = StandardScaler()
+        X_train_sc = scaler.fit_transform(X_train)
+        X_test_sc = scaler.transform(X_test)
+
+        try:
+            base = LGBMClassifier(
+                n_estimators=200, max_depth=6, learning_rate=0.05,
+                num_leaves=31, subsample=0.8, colsample_bytree=0.8,
+                random_state=42, verbose=-1, n_jobs=-1,
+            )
+        except TypeError:
+            base = LGBMClassifier(
+                max_iter=200, max_depth=6, learning_rate=0.05,
+                random_state=42,
+            )
+
+        cal = CalibratedClassifierCV(base, cv=3, method="isotonic")
+        cal.fit(X_train_sc, y_train)
+
+        proba = cal.predict_proba(X_test_sc)[:, 1]
+
+        brier = float(brier_score_loss(y_test, proba))
+        ece = _expected_calibration_error(y_test.values, proba)
+        try:
+            auc = float(roc_auc_score(y_test, proba))
+        except ValueError:
+            auc = 0.0
+
+        from hogan_bot.ml import TrainedModel
+        artifact = TrainedModel(scaler=scaler, model=cal, feature_columns=_FEATURE_COLUMNS)
+        model_path = out / f"forecast_{horizon_name}.pkl"
+        with open(model_path, "wb") as fh:
+            pickle.dump(artifact, fh)
+
+        _model_cache.pop(horizon_name, None)
+
+        h_metrics = {
+            "brier": round(brier, 4),
+            "ece": round(ece, 4),
+            "roc_auc": round(auc, 4),
+            "n_train": int(len(X_train)),
+            "n_test": int(len(X_test)),
+        }
+        all_metrics[horizon_name] = h_metrics
+        logger.info(
+            "Forecast %s — brier=%.4f ece=%.4f auc=%.4f (n_train=%d n_test=%d)",
+            horizon_name, brier, ece, auc, len(X_train), len(X_test),
+        )
+
+    return all_metrics

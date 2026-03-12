@@ -62,13 +62,58 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip writing to the model registry",
     )
+    parser.add_argument(
+        "--forecast",
+        action="store_true",
+        help="Train calibrated forecast models (4h/12h/24h) instead of directional classifier",
+    )
+    parser.add_argument(
+        "--from-db",
+        action="store_true",
+        help="Load candles from local SQLite DB instead of fetching live",
+    )
+    parser.add_argument(
+        "--db",
+        default="data/hogan.db",
+        help="DB path (used with --from-db)",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    client = ExchangeClient("kraken")
-    candles = client.fetch_ohlcv_df(args.symbol, timeframe=args.timeframe, limit=args.limit)
+
+    if getattr(args, "from_db", False):
+        from hogan_bot.storage import get_connection, load_candles
+        conn = get_connection(args.db)
+        candles = load_candles(conn, args.symbol, args.timeframe, limit=args.limit)
+        if candles.empty:
+            print(f"No candles in DB for {args.symbol}/{args.timeframe}")
+            return
+    else:
+        client = ExchangeClient("kraken")
+        candles = client.fetch_ohlcv_df(args.symbol, timeframe=args.timeframe, limit=args.limit)
+
+    if args.forecast:
+        from hogan_bot.forecast import train_forecast_models
+        db_conn = None
+        if getattr(args, "from_db", False):
+            from hogan_bot.storage import get_connection as _gc
+            db_conn = _gc(args.db)
+        metrics = train_forecast_models(candles, db_conn=db_conn)
+        if db_conn:
+            db_conn.close()
+        if not args.no_registry:
+            registry = ModelRegistry(registry_path=args.registry_path)
+            registry.log(
+                {"model_type": "forecast_ensemble", **{f"{h}_{k}": v for h, hm in metrics.items() for k, v in hm.items()}},
+                model_path="models/forecast_4h.pkl",
+                symbol=args.symbol,
+                timeframe=args.timeframe,
+                horizon_bars=0,
+            )
+        print(json.dumps(metrics, indent=2))
+        return
 
     if args.cv:
         folds = walk_forward_cv(candles, horizon_bars=args.horizon_bars, n_splits=args.cv_splits, model_type=args.model_type)

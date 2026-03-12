@@ -29,6 +29,7 @@ from hogan_bot.storage import (
     upsert_position_state, load_position_state,
     load_latest_fill_ts, record_fill,
     open_paper_trade, close_paper_trade,
+    log_decision, update_decision_outcome,
 )
 from hogan_bot.agent_pipeline import AgentPipeline
 
@@ -94,6 +95,64 @@ def sync_fills_deterministic(conn, client: ExchangeClient, exchange_id: str, sym
     if new:
         FILLS.labels(exchange=exchange_id).inc(new)
     return new
+
+
+# ---------------------------------------------------------------------------
+# Decision telemetry helper (Phase 2 — Gap 0)
+# ---------------------------------------------------------------------------
+
+def _build_decision_packet(
+    symbol: str,
+    regime_state,
+    signal,
+    final_action: str,
+    conf_scale: float,
+    up_prob: float | None,
+    position_size: float,
+) -> dict:
+    """Extract a flat dict of decision fields from pipeline state."""
+    fc = signal.forecast
+    rk = signal.risk_estimate
+    tech = signal.tech
+    sent = signal.sentiment
+    macro = signal.macro
+
+    freshness: dict = {}
+    if sent and sent.details:
+        for k, v in sent.details.items():
+            freshness[f"sent_{k}"] = "present" if v is not None else "missing"
+    if macro and macro.details:
+        for k, v in macro.details.items():
+            freshness[f"macro_{k}"] = "present" if v is not None else "missing"
+
+    return dict(
+        ts_ms=int(time.time() * 1000),
+        symbol=symbol,
+        regime=regime_state.regime if regime_state else None,
+        tech_action=tech.action if tech else None,
+        tech_confidence=tech.confidence if tech else None,
+        sent_bias=sent.bias if sent else None,
+        sent_strength=sent.strength if sent else None,
+        macro_regime=macro.regime if macro else None,
+        macro_risk_on=macro.risk_on if macro else None,
+        meta_weights=signal.agent_weights,
+        forecast_4h=fc.bullish_4h if fc else None,
+        forecast_12h=fc.bullish_12h if fc else None,
+        forecast_24h=fc.bullish_24h if fc else None,
+        forecast_conf=fc.confidence if fc else None,
+        risk_vol_pct=rk.expected_vol_pct if rk else None,
+        risk_mae_pct=rk.max_adverse_pct if rk else None,
+        risk_stop_hit=rk.stop_hit_prob if rk else None,
+        risk_regime=rk.regime_risk if rk else None,
+        risk_pos_scale=rk.position_scale if rk else None,
+        freshness=freshness or None,
+        final_action=final_action,
+        final_confidence=signal.confidence,
+        position_size=position_size,
+        ml_up_prob=up_prob,
+        conf_scale=conf_scale,
+        explanation=signal.explanation,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -440,6 +499,10 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                                 close_paper_trade(conn, exit_symbol, "long", exit_px, fee, now_ms, close_reason=reason)
                                 pnl_pct = (exit_px - avg_entry) / avg_entry if avg_entry > 0 else 0.0
                                 _label_buffer_from_trade(conn, exit_symbol, now_ms, pnl_pct)
+                                try:
+                                    update_decision_outcome(conn, exit_symbol, now_ms, pnl_pct, now_ms)
+                                except Exception:
+                                    pass
                                 is_loss = exit_px < avg_entry
                                 if is_loss and loss_cooldown_bars > 0:
                                     _cooldown_remaining = loss_cooldown_bars
@@ -591,6 +654,15 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                             action = "hold"
 
                     if action == "hold":
+                        try:
+                            pkt = _build_decision_packet(
+                                symbol, regime_state, signal,
+                                final_action="hold", conf_scale=conf_scale,
+                                up_prob=up_prob, position_size=0.0,
+                            )
+                            log_decision(conn, **pkt)
+                        except Exception:
+                            pass
                         continue
 
                     # ── Position state ────────────────────────────────
@@ -611,6 +683,16 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                         max_allocation_pct=config.aggressive_allocation,
                         confidence_scale=conf_scale,
                     )
+
+                    try:
+                        pkt = _build_decision_packet(
+                            symbol, regime_state, signal,
+                            final_action=action, conf_scale=conf_scale,
+                            up_prob=up_prob, position_size=size,
+                        )
+                        log_decision(conn, **pkt)
+                    except Exception:
+                        pass
 
                     now_ms = int(time.time() * 1000)
                     ts_pct = eff["trailing_stop_pct"]
@@ -706,6 +788,10 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                                 close_paper_trade(conn, symbol, "long", px, fee, now_ms, close_reason="signal")
                                 pnl_pct = (px - _entry_px) / _entry_px if _entry_px > 0 else 0.0
                                 _label_buffer_from_trade(conn, symbol, now_ms, pnl_pct)
+                                try:
+                                    update_decision_outcome(conn, symbol, now_ms, pnl_pct, now_ms)
+                                except Exception:
+                                    pass
                                 notifier.notify("sell", {"symbol": symbol, "price": px, "qty": sell_qty, "up_prob": up_prob})
                                 logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
                                             symbol, px, sell_qty, up_prob or -1, equity)
@@ -780,6 +866,9 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                             result = online_learner.update(symbol=sym)
                             if result.get("status") == "updated":
                                 logger.info("ONLINE_LEARN symbol=%s rows=%d", sym, result.get("n_rows", 0))
+                            proposed = online_learner.compute_shadow_weights(symbol=sym)
+                            if proposed:
+                                logger.info("SHADOW_WEIGHTS %s proposed=%s", sym, proposed)
                     except Exception as exc:
                         logger.debug("Online learner update failed: %s", exc)
 

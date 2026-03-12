@@ -500,13 +500,20 @@ def build_training_set(
     horizon_bars: int = 12,
     db_conn=None,
     fee_rate: float = 0.0026,
+    label_mode: str = "fee_threshold",
 ) -> tuple[pd.DataFrame | None, pd.Series | None, list[str]]:
     """Construct feature matrix *X* and label vector *y* from *candles*.
 
-    Labels use a fee-aware threshold: a bar is labelled 1 only when the future
-    return exceeds ``2 * fee_rate`` (round-trip cost).  Bars where the future
-    return falls in the ambiguous dead zone ``(-2*fee, +2*fee)`` are dropped
-    so the model only learns from clearly profitable or clearly losing moves.
+    Parameters
+    ----------
+    label_mode : str
+        ``"fee_threshold"`` (default) — labels 1 when future return exceeds
+        ``2 * fee_rate``, 0 when below ``-2 * fee_rate``, drops the ambiguous
+        dead zone.
+
+        ``"triple_barrier"`` — uses path-aware triple-barrier labels from
+        ``ml_advanced.triple_barrier_labels()``.  Accounts for time decay
+        and adverse excursion, better for trend-following strategies.
 
     When *db_conn* is provided, joins in 10 macro-asset features
     (SPY/QQQ/GLD/TLT/UUP/VIX/TNX) via :func:`~hogan_bot.macro_features.add_macro_features`.
@@ -534,13 +541,20 @@ def build_training_set(
         for col in MACRO_FEATURE_NAMES:
             frame[col] = 0.0
 
-    future_ret = frame["close"].shift(-horizon_bars) / frame["close"] - 1.0
-    min_move = 2.0 * fee_rate
-
-    frame["target"] = np.where(
-        future_ret > min_move, 1,
-        np.where(future_ret < -min_move, 0, np.nan),
-    )
+    if label_mode == "triple_barrier":
+        from hogan_bot.ml_advanced import triple_barrier_labels
+        frame["target"] = triple_barrier_labels(
+            frame["close"], horizon=horizon_bars, vol_span=100, k=2.0,
+        ).values
+        frame["target"] = frame["target"].astype(float)
+        frame.loc[frame["target"].isna(), "target"] = np.nan
+    else:
+        future_ret = frame["close"].shift(-horizon_bars) / frame["close"] - 1.0
+        min_move = 2.0 * fee_rate
+        frame["target"] = np.where(
+            future_ret > min_move, 1,
+            np.where(future_ret < -min_move, 0, np.nan),
+        )
 
     dataset = frame[_FEATURE_COLUMNS + ["target"]].dropna().copy()
     dataset["target"] = dataset["target"].astype(int)
@@ -773,6 +787,7 @@ def train_logistic_regression(
     db_conn=None,
     prune_features: bool = True,
     max_features: int = 25,
+    label_mode: str = "fee_threshold",
 ) -> dict[str, object]:
     """Fit a scaled logistic-regression classifier and pickle the artifact.
 
@@ -795,7 +810,7 @@ def train_logistic_regression(
     except ModuleNotFoundError as exc:
         raise RuntimeError("scikit-learn is required for training") from exc
 
-    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn)
+    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn, label_mode=label_mode)
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
@@ -864,6 +879,7 @@ def train_random_forest(
     db_conn=None,
     prune_features: bool = True,
     max_features: int = 25,
+    label_mode: str = "fee_threshold",
 ) -> dict[str, object]:
     """Fit a Random Forest classifier and pickle the artifact.
 
@@ -883,7 +899,7 @@ def train_random_forest(
     except ModuleNotFoundError as exc:
         raise RuntimeError("scikit-learn is required for training") from exc
 
-    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn)
+    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn, label_mode=label_mode)
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
@@ -945,6 +961,7 @@ def train_xgboost(
     db_conn=None,
     prune_features: bool = True,
     max_features: int = 25,
+    label_mode: str = "fee_threshold",
 ) -> dict[str, object]:
     """Fit an XGBoost gradient-boosted classifier and pickle the artifact.
 
@@ -969,7 +986,7 @@ def train_xgboost(
     except ModuleNotFoundError as exc:
         raise RuntimeError("scikit-learn is required for metrics") from exc
 
-    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn)
+    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn, label_mode=label_mode)
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
@@ -1024,7 +1041,8 @@ def train_xgboost(
 
 
 def train_lightgbm(
-    candles: pd.DataFrame, model_path: str, horizon_bars: int = 12, db_conn=None
+    candles: pd.DataFrame, model_path: str, horizon_bars: int = 12, db_conn=None,
+    label_mode: str = "fee_threshold",
 ) -> dict[str, object]:
     """Fit a LightGBM gradient-boosted classifier and pickle the artifact.
 
@@ -1049,7 +1067,7 @@ def train_lightgbm(
     except ModuleNotFoundError as exc:
         raise RuntimeError("scikit-learn is required for metrics") from exc
 
-    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn)
+    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn, label_mode=label_mode)
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
