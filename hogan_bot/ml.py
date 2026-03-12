@@ -541,7 +541,17 @@ def build_training_set(
         for col in MACRO_FEATURE_NAMES:
             frame[col] = 0.0
 
-    if label_mode == "triple_barrier":
+    if label_mode == "enhanced_triple_barrier":
+        from hogan_bot.ml_advanced import triple_barrier_labels_enhanced
+        tb_result = triple_barrier_labels_enhanced(
+            frame, horizon=horizon_bars, vol_span=100,
+            k_up=2.0, k_dn=2.0, time_decay=True,
+            regime_adaptive=True, fee_rate=fee_rate,
+        )
+        frame["target"] = tb_result["label"].values
+        frame["meta_quality"] = tb_result["meta_quality"].values
+        frame.loc[frame["target"].isna(), "target"] = np.nan
+    elif label_mode == "triple_barrier":
         from hogan_bot.ml_advanced import triple_barrier_labels
         frame["target"] = triple_barrier_labels(
             frame["close"], horizon=horizon_bars, vol_span=100, k=2.0,

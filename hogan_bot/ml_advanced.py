@@ -59,6 +59,188 @@ def triple_barrier_labels(close: pd.Series, horizon: int = 48, vol_span: int = 1
     return s.astype("float").fillna(method="ffill").fillna(0.0).astype(int)
 
 
+def triple_barrier_labels_enhanced(
+    candles: pd.DataFrame,
+    horizon: int = 48,
+    vol_span: int = 100,
+    k_up: float = 2.0,
+    k_dn: float = 2.0,
+    time_decay: bool = True,
+    regime_adaptive: bool = True,
+    fee_rate: float = 0.0026,
+) -> pd.DataFrame:
+    """Enhanced triple-barrier labeling with regime awareness and time decay.
+
+    Improvements over the basic version:
+
+    1. **Asymmetric barriers**: ``k_up`` and ``k_dn`` can differ, allowing
+       wider profit targets and tighter stops (or vice versa).
+
+    2. **Regime-adaptive barriers**: When ``regime_adaptive=True``, barriers
+       widen in trending markets (let winners run) and tighten in ranging
+       markets (take profits sooner).
+
+    3. **Time decay**: When ``time_decay=True``, barriers shrink linearly
+       toward expiry — penalizing trades that take too long to resolve,
+       which is realistic for time-sensitive strategies.
+
+    4. **Metalabel output**: Returns a DataFrame with columns:
+       - ``label``: 1 (profitable) or 0 (not)
+       - ``barrier_hit``: ``"upper"`` / ``"lower"`` / ``"timeout"``
+       - ``bars_to_hit``: how many bars until barrier was touched
+       - ``pnl_at_hit``: percentage P&L at the barrier hit
+       - ``meta_quality``: [0, 1] quality score (clean hits score higher
+         than timeouts; early hits score higher than late)
+
+    Parameters
+    ----------
+    candles : DataFrame
+        OHLCV data with ``close``, ``high``, ``low`` columns.
+    horizon : int
+        Maximum bars to look ahead.
+    vol_span : int
+        EWMA span for volatility estimate.
+    k_up / k_dn : float
+        Multipliers for upper/lower barriers (in units of vol).
+    time_decay : bool
+        Shrink barriers linearly toward expiry.
+    regime_adaptive : bool
+        Adjust barrier widths based on detected ADX regime.
+    fee_rate : float
+        Round-trip fee rate; labels account for friction.
+    """
+    close = candles["close"].astype(float)
+    high = candles["high"].astype(float)
+    low = candles["low"].astype(float)
+
+    ret = close.pct_change().fillna(0.0)
+    vol = ret.ewm(span=vol_span, adjust=False).std().fillna(method="bfill").clip(lower=1e-9)
+
+    regime_mult_up = np.ones(len(close))
+    regime_mult_dn = np.ones(len(close))
+
+    if regime_adaptive:
+        adx_series = _quick_adx(high, low, close, period=14)
+        ma_fast = close.rolling(20).mean()
+        ma_slow = close.rolling(50).mean()
+        trend_up = (ma_fast > ma_slow).astype(float).values
+        adx_vals = adx_series.values
+
+        for i in range(len(close)):
+            adx = adx_vals[i] if not np.isnan(adx_vals[i]) else 20.0
+            if adx > 25:
+                if trend_up[i]:
+                    regime_mult_up[i] = 1.5
+                    regime_mult_dn[i] = 0.8
+                else:
+                    regime_mult_up[i] = 0.8
+                    regime_mult_dn[i] = 1.5
+            elif adx < 18:
+                regime_mult_up[i] = 0.7
+                regime_mult_dn[i] = 0.7
+
+    n = len(close)
+    labels = np.full(n, np.nan)
+    barrier_hit = np.full(n, "", dtype=object)
+    bars_to_hit = np.full(n, np.nan)
+    pnl_at_hit = np.full(n, np.nan)
+    meta_quality = np.full(n, np.nan)
+
+    prices = close.values
+    highs = high.values
+    lows = low.values
+    volv = vol.values
+
+    for i in range(n - horizon - 1):
+        p0 = prices[i]
+        base_up = k_up * volv[i] * regime_mult_up[i]
+        base_dn = k_dn * volv[i] * regime_mult_dn[i]
+
+        hit_type = None
+        hit_bar = horizon
+        hit_pnl = 0.0
+
+        for j in range(1, horizon + 1):
+            idx = i + j
+            if idx >= n:
+                break
+
+            if time_decay:
+                decay = 1.0 - 0.4 * (j / horizon)
+            else:
+                decay = 1.0
+
+            up_barrier = p0 * (1.0 + base_up * decay)
+            dn_barrier = p0 * (1.0 - base_dn * decay)
+
+            if highs[idx] >= up_barrier:
+                hit_type = "upper"
+                hit_bar = j
+                hit_pnl = (up_barrier - p0) / p0 - fee_rate
+                break
+
+            if lows[idx] <= dn_barrier:
+                hit_type = "lower"
+                hit_bar = j
+                hit_pnl = (dn_barrier - p0) / p0 - fee_rate
+                break
+
+        if hit_type is None:
+            hit_type = "timeout"
+            hit_bar = horizon
+            hit_pnl = (prices[min(i + horizon, n - 1)] - p0) / p0 - fee_rate
+
+        labels[i] = 1 if hit_pnl > 0 else 0
+        barrier_hit[i] = hit_type
+        bars_to_hit[i] = hit_bar
+        pnl_at_hit[i] = hit_pnl
+
+        if hit_type == "timeout":
+            meta_quality[i] = 0.2
+        else:
+            speed_bonus = 1.0 - (hit_bar / horizon)
+            pnl_bonus = min(1.0, abs(hit_pnl) / (3.0 * volv[i] + 1e-9))
+            meta_quality[i] = 0.4 + 0.3 * speed_bonus + 0.3 * pnl_bonus
+
+    result = pd.DataFrame({
+        "label": labels,
+        "barrier_hit": barrier_hit,
+        "bars_to_hit": bars_to_hit,
+        "pnl_at_hit": pnl_at_hit,
+        "meta_quality": meta_quality,
+    }, index=candles.index)
+
+    return result
+
+
+def _quick_adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+    """Lightweight ADX computation for regime-adaptive barriers."""
+    tr = pd.concat(
+        [high - low, (high - close.shift()).abs(), (low - close.shift()).abs()],
+        axis=1,
+    ).max(axis=1)
+
+    up_move = high.diff()
+    down_move = -(low.diff())
+    plus_dm = pd.Series(
+        np.where((up_move > down_move) & (up_move > 0), up_move, 0.0),
+        index=close.index,
+    )
+    minus_dm = pd.Series(
+        np.where((down_move > up_move) & (down_move > 0), down_move, 0.0),
+        index=close.index,
+    )
+
+    alpha = 1.0 / period
+    atr = tr.ewm(alpha=alpha, min_periods=period, adjust=False).mean()
+    plus_di = 100.0 * plus_dm.ewm(alpha=alpha, min_periods=period, adjust=False).mean() / atr.clip(lower=1e-9)
+    minus_di = 100.0 * minus_dm.ewm(alpha=alpha, min_periods=period, adjust=False).mean() / atr.clip(lower=1e-9)
+
+    dx = (plus_di - minus_di).abs() / (plus_di + minus_di).clip(lower=1e-9) * 100.0
+    adx = dx.ewm(alpha=alpha, min_periods=period, adjust=False).mean()
+    return adx
+
+
 # ----------------------------
 # Regime detection (trend / mean-revert / chop proxy)
 # ----------------------------

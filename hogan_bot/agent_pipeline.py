@@ -531,6 +531,8 @@ class AgentPipeline:
         conn=None,
         weights: dict[str, float] | None = None,
         rag_retriever=None,
+        performance_tracker=None,
+        adaptive_confidence=None,
     ) -> None:
         self.config = config
         self.conn = conn
@@ -539,6 +541,8 @@ class AgentPipeline:
         self.macro_agent = MacroAgent(conn=conn, symbol=config.symbols[0] if config.symbols else "BTC/USD")
         self.meta = MetaWeigher(weights=weights)
         self.rag_retriever = rag_retriever
+        self.perf_tracker = performance_tracker
+        self.adaptive_conf = adaptive_confidence
 
     def run(
         self,
@@ -639,9 +643,60 @@ class AgentPipeline:
         if risk_est.regime_risk == "high":
             signal.confidence *= risk_est.position_scale
 
+        # Adaptive confidence scaling: uses recency-weighted model accuracy,
+        # forecast agreement, and calibration quality to modulate position size.
+        if self.adaptive_conf is not None and signal.action != "hold":
+            ml_prob = getattr(signal, '_ml_up_prob', None)
+            if ml_prob is not None:
+                fc_bias_val = None
+                if forecast.confidence > 0.2:
+                    fc_bias_val = (forecast.bullish_4h - 0.5) * 0.6 + (forecast.bullish_12h - 0.5) * 0.4
+                adaptive_scale = self.adaptive_conf.compute(
+                    up_prob=ml_prob,
+                    forecast_bias=fc_bias_val,
+                    regime=regime,
+                )
+                signal.confidence *= adaptive_scale
+
         logger.debug(
             "AgentPipeline: %s | tech=%s sent=%s macro=%s conf=%.2f | %s | %s",
             symbol, tech.action, sent.bias, macro.regime, signal.confidence,
             forecast.summary(), risk_est.summary(),
         )
         return signal
+
+    def record_trade_outcome(
+        self,
+        symbol: str,
+        regime: str,
+        signal: AgentSignal,
+        realized_pnl: float,
+        ml_up_prob: float | None = None,
+    ) -> None:
+        """Record a completed trade outcome for performance tracking and
+        adaptive confidence learning.
+
+        Should be called after each trade closes (by the event loop or
+        execution layer).
+        """
+        if self.perf_tracker is not None:
+            try:
+                self.perf_tracker.record_trade_outcome(
+                    symbol=symbol,
+                    regime=regime or "unknown",
+                    tech_action=signal.tech.action if signal.tech else "hold",
+                    tech_confidence=signal.tech.confidence if signal.tech else 0.5,
+                    sent_bias=signal.sentiment.bias if signal.sentiment else "neutral",
+                    sent_strength=signal.sentiment.strength if signal.sentiment else 0.0,
+                    macro_regime=signal.macro.regime if signal.macro else "neutral",
+                    realized_pnl=realized_pnl,
+                )
+            except Exception as exc:
+                logger.debug("Performance tracker record failed: %s", exc)
+
+        if self.adaptive_conf is not None and ml_up_prob is not None:
+            try:
+                actual_label = 1 if realized_pnl > 0 else 0
+                self.adaptive_conf.record_outcome(ml_up_prob, actual_label)
+            except Exception as exc:
+                logger.debug("Adaptive confidence record failed: %s", exc)

@@ -234,12 +234,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--label-mode",
-        choices=["fee_threshold", "triple_barrier"],
+        choices=["fee_threshold", "triple_barrier", "enhanced_triple_barrier"],
         default="fee_threshold",
         help=(
             "Label generation strategy: 'fee_threshold' (default) uses fee-aware "
-            "directional labels; 'triple_barrier' uses path-aware labels that "
-            "account for time decay and adverse excursion."
+            "directional labels; 'triple_barrier' uses path-aware labels; "
+            "'enhanced_triple_barrier' adds regime-adaptive barriers, time decay, "
+            "and metalabel quality scores for sample weighting."
         ),
     )
     return p
