@@ -18,6 +18,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh  # type: ignore[import]
 
 # ---------------------------------------------------------------------------
@@ -172,6 +173,231 @@ def _pnl_color(val):
     return "color: #2ecc71" if val >= 0 else "color: #e74c3c"
 
 
+def _bruno_html(mood: str = "neutral", regime: str = "unknown", quip: str = "") -> str:
+    """Return self-contained HTML/JS for the animated Bruno the Bull mascot."""
+    return f"""
+<canvas id="brunoCanvas" width="200" height="260"
+        style="cursor:pointer;display:block;margin:0 auto"></canvas>
+<div id="moodBadge" style="text-align:center;margin-top:4px;font-family:sans-serif;
+     font-size:11px;font-weight:700;letter-spacing:2px;padding:3px 10px;
+     border-radius:8px;display:inline-block;width:100%;box-sizing:border-box"></div>
+<div id="quipText" style="text-align:center;margin-top:4px;font-family:sans-serif;
+     font-size:10px;color:#8898aa;min-height:16px"></div>
+<script>
+const cv=document.getElementById('brunoCanvas'),c=cv.getContext('2d');
+const mood='{mood}', regime='{regime}', quip=`{quip}`;
+const B={{breath:0,bob:0,blinkT:0,blink:false,eyeTX:0,eyeTY:0,eyeX:0,eyeY:0,
+  mouth:mood==='bullish'||mood==='excited'?1:mood==='bearish'||mood==='worried'?-1:0,
+  tailA:0,sparks:[],particles:[],petT:0,snorePhase:0}};
+const sleeping=mood==='sleeping';
+const moodLabels={{bullish:'BULLISH',bearish:'BEARISH',neutral:'WATCHING',
+  excited:'ON FIRE',worried:'CONCERNED',sleeping:'SLEEPING'}};
+const moodColors={{bullish:'#10b981',bearish:'#ef4444',neutral:'#f59e0b',
+  excited:'#fbbf24',worried:'#f87171',sleeping:'#475569'}};
+const badgeBg={{bullish:'rgba(16,185,129,.12)',bearish:'rgba(239,68,68,.12)',
+  neutral:'rgba(245,158,11,.1)',excited:'rgba(251,191,36,.15)',
+  worried:'rgba(239,68,68,.08)',sleeping:'rgba(100,116,139,.06)'}};
+const mb=document.getElementById('moodBadge');
+mb.textContent=moodLabels[mood]||'WATCHING';
+mb.style.color=moodColors[mood]||'#f59e0b';
+mb.style.background=badgeBg[mood]||'rgba(245,158,11,.1)';
+document.getElementById('quipText').textContent=quip;
+const accessory=regime==='trending'?'sunglasses':regime==='volatile'?'hardhat':
+  regime==='ranging'?'sleepingcap':regime==='risk_off'?'scarf':'none';
+
+function draw(t){{
+  const W=200,HH=260;c.clearRect(0,0,W,HH);
+  B.breath+=.025;B.bob+=.018;
+  const by=Math.sin(B.breath)*2.5,bb=Math.sin(B.bob)*1.5;
+  const cx=100,cy=148+by+bb;
+  const bodyC=mood==='bullish'||mood==='excited'?'#fbbf24':mood==='bearish'||mood==='worried'?'#8faab8':sleeping?'#a0937c':'#d4a574';
+  const dkC=mood==='bullish'||mood==='excited'?'#b47e0a':mood==='bearish'||mood==='worried'?'#607888':sleeping?'#7a7060':'#9c7040';
+
+  B.particles=B.particles.filter(p=>{{
+    p.life-=.015;p.x+=p.vx;p.y+=p.vy;p.vy+=.05;
+    if(p.life<=0)return false;
+    c.save();c.globalAlpha=p.life;c.fillStyle=p.color;
+    c.beginPath();c.arc(p.x,p.y,p.sz,0,Math.PI*2);c.fill();c.restore();
+    return true;
+  }});
+  if((mood==='bullish'||mood==='excited')&&Math.random()<.12)
+    B.sparks.push({{x:20+Math.random()*160,y:10+Math.random()*90,l:1,s:Math.random()*3+1}});
+  B.sparks=B.sparks.filter(s=>{{
+    s.l-=.012;s.y-=.4;if(s.l<=0)return false;
+    c.save();c.globalAlpha=s.l;c.fillStyle='#fde68a';
+    c.translate(s.x,s.y);c.rotate(t/300+s.x);
+    for(let i=0;i<4;i++){{c.fillRect(-.5,-s.s,1,s.s*2);c.rotate(Math.PI/4);}}
+    c.restore();return true;
+  }});
+  if(mood==='bearish'||mood==='worried'){{
+    c.save();c.globalAlpha=.2;c.strokeStyle='#60a5fa';c.lineWidth=1;
+    for(let i=0;i<5;i++){{const rx=15+i*38,ry=((t/50+i*35)%130)+10;
+    c.beginPath();c.moveTo(rx,ry);c.lineTo(rx-1,ry+7);c.stroke();}}c.restore();
+  }}
+  c.save();c.globalAlpha=.1;c.fillStyle='#000';
+  c.beginPath();c.ellipse(cx,238,38,6,0,0,Math.PI*2);c.fill();c.restore();
+  B.tailA+=(mood==='bullish'||mood==='excited'?.07:sleeping?.008:.025);
+  const ts=Math.sin(B.tailA)*(mood==='excited'?18:12);
+  c.strokeStyle=bodyC;c.lineWidth=4.5;c.lineCap='round';
+  c.beginPath();c.moveTo(cx+40,cy-8);c.quadraticCurveTo(cx+55+ts,cy-28,cx+48+ts*1.3,cy-44);c.stroke();
+  c.fillStyle=dkC;c.beginPath();c.arc(cx+48+ts*1.3,cy-46,4.5,0,Math.PI*2);c.fill();
+  for(let lx of [-20,-7,7,20]){{
+    const lb=Math.sin(B.bob+lx*.12)*2;
+    const stomp=mood==='excited'?Math.abs(Math.sin(t/100+lx))*3:0;
+    c.fillStyle=bodyC;c.beginPath();c.roundRect(cx+lx-4.5,cy+38+lb-stomp,9,20,4);c.fill();
+    c.fillStyle=dkC;c.beginPath();c.roundRect(cx+lx-5.5,cy+54+lb-stomp,11,4.5,3);c.fill();
+  }}
+  c.fillStyle=bodyC;c.beginPath();c.ellipse(cx,cy,44,50,0,0,Math.PI*2);c.fill();
+  c.save();c.globalAlpha=.18;c.fillStyle='#fff';
+  c.beginPath();c.ellipse(cx,cy+9,24,28,0,0,Math.PI*2);c.fill();c.restore();
+  const hy=cy-56+by*.4+(sleeping?4:0);
+  const headTilt=sleeping?.08:0;
+  c.save();c.translate(cx,hy);c.rotate(headTilt);
+  c.fillStyle=bodyC;c.beginPath();c.ellipse(0,0,29,25,0,0,Math.PI*2);c.fill();
+  c.save();c.globalAlpha=.12;c.fillStyle='#fff';c.beginPath();c.ellipse(0,5,18,13,0,0,Math.PI*2);c.fill();c.restore();
+  c.strokeStyle='#c9a96e';c.lineWidth=3;c.lineCap='round';
+  c.beginPath();c.moveTo(-18,-18);c.quadraticCurveTo(-27,-36,-14,-40);c.stroke();
+  c.beginPath();c.moveTo(18,-18);c.quadraticCurveTo(27,-36,14,-40);c.stroke();
+  c.strokeStyle='#fef3c7';c.lineWidth=1.8;
+  c.beginPath();c.moveTo(-16,-37);c.lineTo(-14,-40);c.stroke();
+  c.beginPath();c.moveTo(16,-37);c.lineTo(14,-40);c.stroke();
+  c.fillStyle=bodyC;
+  c.beginPath();c.ellipse(-26,-6,8,5.5,-.4,0,Math.PI*2);c.fill();
+  c.beginPath();c.ellipse(26,-6,8,5.5,.4,0,Math.PI*2);c.fill();
+  c.fillStyle='#e8a0a0';
+  c.beginPath();c.ellipse(-26,-6,4,2.8,-.4,0,Math.PI*2);c.fill();
+  c.beginPath();c.ellipse(26,-6,4,2.8,.4,0,Math.PI*2);c.fill();
+  B.blinkT++;
+  if(B.blinkT>150+Math.random()*100){{B.blink=true;B.blinkT=0;}}
+  if(B.blink){{B.blinkT++;if(B.blinkT>7)B.blink=false;}}
+  B.eyeX+=(B.eyeTX-B.eyeX)*.08;B.eyeY+=(B.eyeTY-B.eyeY)*.08;
+  if(sleeping){{
+    c.strokeStyle=dkC;c.lineWidth=2;
+    c.beginPath();c.moveTo(-14,-2);c.lineTo(-7,-2);c.stroke();
+    c.beginPath();c.moveTo(7,-2);c.lineTo(14,-2);c.stroke();
+  }}else{{
+    const eH=B.blink?1:6.5;
+    for(let s of[-1,1]){{
+      const ex=s*12,ey=-2;
+      c.fillStyle='#fff';c.beginPath();c.ellipse(ex,ey,7.5,eH,0,0,Math.PI*2);c.fill();
+      if(!B.blink){{
+        const px=mood==='worried'?s*1:0;
+        c.fillStyle='#1e293b';c.beginPath();c.ellipse(ex+B.eyeX*2+px,ey+B.eyeY*1.5,3.8,4.2,0,0,Math.PI*2);c.fill();
+        c.fillStyle='#fff';c.beginPath();c.arc(ex+B.eyeX*2+1.5+px,ey+B.eyeY*1.5-1.5,1.2,0,Math.PI*2);c.fill();
+      }}
+    }}
+  }}
+  c.strokeStyle=dkC;c.lineWidth=2;c.lineCap='round';
+  const bOff=mood==='bearish'||mood==='worried'?-3:mood==='bullish'||mood==='excited'?3:0;
+  c.beginPath();c.moveTo(-19,-12-bOff);c.lineTo(-5,-12+bOff*.5);c.stroke();
+  c.beginPath();c.moveTo(19,-12-bOff);c.lineTo(5,-12+bOff*.5);c.stroke();
+  c.fillStyle=dkC;
+  c.beginPath();c.ellipse(-4,6,2,1.6,0,0,Math.PI*2);c.fill();
+  c.beginPath();c.ellipse(4,6,2,1.6,0,0,Math.PI*2);c.fill();
+  c.strokeStyle='#fbbf24';c.lineWidth=1.6;
+  c.beginPath();c.arc(0,9,3.5,.3,Math.PI-.3);c.stroke();
+  c.strokeStyle=dkC;c.lineWidth=1.6;
+  c.beginPath();c.moveTo(-8,14);c.quadraticCurveTo(0,14+B.mouth*7,8,14);c.stroke();
+  if(B.petT>0){{
+    B.petT--;c.save();c.globalAlpha=B.petT/40*.4;
+    c.fillStyle='#f87171';
+    c.beginPath();c.ellipse(-16,5,5,3.5,0,0,Math.PI*2);c.fill();
+    c.beginPath();c.ellipse(16,5,5,3.5,0,0,Math.PI*2);c.fill();
+    c.restore();
+  }}
+  c.restore();
+  if(accessory==='sunglasses'&&!sleeping){{
+    c.save();c.translate(cx,hy);c.rotate(headTilt);
+    c.fillStyle='rgba(30,41,59,.85)';c.strokeStyle='#475569';c.lineWidth=1.3;
+    c.beginPath();c.roundRect(-20,-7,15,10,3);c.fill();c.stroke();
+    c.beginPath();c.roundRect(5,-7,15,10,3);c.fill();c.stroke();
+    c.strokeStyle='#475569';c.lineWidth=1.8;c.beginPath();c.moveTo(-5,-2);c.lineTo(5,-2);c.stroke();
+    c.restore();
+  }}
+  if(accessory==='hardhat'){{
+    c.save();c.translate(cx,hy);
+    const hhy=-22+Math.sin(B.bob*1.3)*1;
+    c.fillStyle='#eab308';
+    c.beginPath();c.ellipse(0,hhy+5,30,3.5,0,0,Math.PI*2);c.fill();
+    c.beginPath();c.moveTo(-20,hhy+2);c.quadraticCurveTo(0,hhy-16,20,hhy+2);c.lineTo(20,hhy+5);c.lineTo(-20,hhy+5);c.fill();
+    c.restore();
+  }}
+  if(accessory==='scarf'){{
+    c.save();c.translate(cx,hy);
+    c.fillStyle='#dc2626';c.globalAlpha=.8;
+    c.beginPath();c.ellipse(0,22,25,5,0,0,Math.PI*2);c.fill();
+    c.fillRect(7,22,5,16);c.fillRect(12,22,4,12);
+    c.restore();
+  }}
+  if((mood==='bullish'||mood==='excited')&&accessory!=='hardhat'){{
+    c.save();c.translate(cx,hy);
+    const hty=-24+Math.sin(B.bob*1.3)*1.5;
+    c.fillStyle='#92400e';
+    c.beginPath();c.ellipse(0,hty+6,34,5,0,0,Math.PI*2);c.fill();
+    c.beginPath();c.moveTo(-16,hty+3);c.quadraticCurveTo(0,hty-13,16,hty+3);c.lineTo(16,hty+6);c.lineTo(-16,hty+6);c.fill();
+    c.fillStyle='#fbbf24';c.beginPath();c.arc(0,hty+1,2.2,0,Math.PI*2);c.fill();
+    c.restore();
+  }}
+  if(mood==='bearish'||mood==='worried'){{
+    c.save();c.globalAlpha=.3+Math.sin(t/400)*.1;c.translate(cx,hy);
+    c.fillStyle='#475569';
+    c.beginPath();c.arc(-7,-40,10,0,Math.PI*2);c.fill();
+    c.arc(7,-42,8,0,Math.PI*2);c.fill();
+    c.arc(0,-34,9,0,Math.PI*2);c.fill();
+    c.restore();
+  }}
+  if(sleeping){{
+    B.snorePhase+=.02;
+    c.save();c.globalAlpha=.5+Math.sin(B.snorePhase)*.2;
+    c.fillStyle='#94a3b8';c.font='bold 13px sans-serif';
+    const zy=hy-32+Math.sin(B.snorePhase*2)*5;
+    c.fillText('z',cx+22,zy);c.font='bold 9px sans-serif';c.fillText('z',cx+32,zy-11);
+    c.font='bold 7px sans-serif';c.fillText('z',cx+38,zy-20);
+    c.restore();
+  }}
+  if(mood==='neutral'){{
+    c.save();c.globalAlpha=.35+Math.sin(t/300)*.2;
+    for(let i=0;i<3;i++){{
+      const dx=cx+28+i*7,dy=hy-20-i*5+Math.sin(t/300+i)*3;
+      c.fillStyle='#f59e0b';c.beginPath();c.arc(dx,dy,2.2-i*.3,0,Math.PI*2);c.fill();
+    }}c.restore();
+  }}
+  requestAnimationFrame(draw);
+}}
+cv.addEventListener('mousemove',e=>{{const r=cv.getBoundingClientRect();B.eyeTX=((e.clientX-r.left)/200-.5)*2;B.eyeTY=((e.clientY-r.top)/260-.5)*2;}});
+cv.addEventListener('mouseleave',()=>{{B.eyeTX=0;B.eyeTY=0;}});
+cv.addEventListener('click',()=>{{
+  B.petT=40;
+  for(let i=0;i<4;i++) B.particles.push({{x:100+Math.random()*30-15,y:80,vx:(Math.random()-.5)*2,vy:-Math.random()*3-1,life:1,color:'#f87171',sz:2.5}});
+}});
+requestAnimationFrame(draw);
+</script>"""
+
+
+def _determine_mood(
+    win_rate: float, drawdown: float, total_pnl: float, num_open: int
+) -> tuple[str, str]:
+    """Pick Bruno's mood and a quip based on current trading state."""
+    import random
+    if drawdown > 8:
+        quips = ["Stay cautious...", "Bears prowling", "Rough waters", "Patience..."]
+        return "worried", random.choice(quips)
+    if win_rate >= 65 and total_pnl > 0:
+        quips = ["BOOM! Nice trades!", "That's what I'm talking about!", "Bulls in control!"]
+        return "excited", random.choice(quips)
+    if total_pnl > 0 and win_rate >= 50:
+        quips = ["Let's ride!", "Looking strong", "Send it!", "Yeehaw!"]
+        return "bullish", random.choice(quips)
+    if total_pnl < 0:
+        quips = ["Not feeling it", "Getting choppy", "Need to be careful"]
+        return "bearish", random.choice(quips)
+    if num_open == 0:
+        quips = ["Watching...", "Hmm, ranging", "Waiting for setup", "Flat market"]
+        return "neutral", random.choice(quips)
+    quips = ["Watching...", "Nothing yet", "Waiting for setup"]
+    return "neutral", random.choice(quips)
+
+
 # ---------------------------------------------------------------------------
 # Main tab layout
 # ---------------------------------------------------------------------------
@@ -209,13 +435,22 @@ with tab_live:
 
     max_dd = equity["drawdown"].max() * 100 if not equity.empty and "drawdown" in equity.columns else 0.0
 
-    k1, k2, k3, k4, k5, k6 = st.columns(6)
-    k1.metric("Equity", f"${cur_equity:,.2f}", delta=f"${total_pnl:+,.2f}")
-    k2.metric("Total P&L", f"${total_pnl:+,.2f}", delta=f"{total_pnl_pct:+.2f}%")
-    k3.metric("Win Rate", f"{win_rate:.1f}%", delta=f"{len(closed)} closed trades")
-    k4.metric("Avg Win / Loss", f"${avg_win:.2f} / ${avg_loss:.2f}")
-    k5.metric("Max Drawdown", f"{max_dd:.2f}%")
-    k6.metric("Open Positions", len(open_trades))
+    # ── Bruno the Bull mascot + KPIs side-by-side ────────────────────────────
+    bruno_col, kpi_col = st.columns([1, 4])
+    with bruno_col:
+        _mood, _quip = _determine_mood(win_rate, max_dd, total_pnl, len(open_trades))
+        components.html(_bruno_html(mood=_mood, regime="unknown", quip=_quip), height=330)
+
+    with kpi_col:
+        k1, k2, k3 = st.columns(3)
+        k1.metric("Equity", f"${cur_equity:,.2f}", delta=f"${total_pnl:+,.2f}")
+        k2.metric("Total P&L", f"${total_pnl:+,.2f}", delta=f"{total_pnl_pct:+.2f}%")
+        k3.metric("Win Rate", f"{win_rate:.1f}%", delta=f"{len(closed)} closed trades")
+
+        k4, k5, k6 = st.columns(3)
+        k4.metric("Avg Win / Loss", f"${avg_win:.2f} / ${avg_loss:.2f}")
+        k5.metric("Max Drawdown", f"{max_dd:.2f}%")
+        k6.metric("Open Positions", len(open_trades))
 
     st.divider()
 
