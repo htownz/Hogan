@@ -18,6 +18,7 @@ from hogan_bot.ml import (
     TrainedModel,
     _FEATURE_COLUMNS,
     _feature_frame,
+    build_feature_frame,
     build_training_set,
     predict_up_probability,
     train_lightgbm,
@@ -48,7 +49,7 @@ class FeatureFrameTests(unittest.TestCase):
         self.df = _synthetic_candles(n=200)
 
     def test_all_feature_columns_present(self):
-        frame = _feature_frame(self.df)
+        frame = build_feature_frame(self.df)
         for col in _FEATURE_COLUMNS:
             self.assertIn(col, frame.columns, f"Missing feature column: {col}")
 
@@ -58,7 +59,7 @@ class FeatureFrameTests(unittest.TestCase):
             self.assertIn(col, frame.columns, f"Missing new feature: {col}")
 
     def test_feature_column_count(self):
-        self.assertEqual(len(_FEATURE_COLUMNS), 43)
+        self.assertEqual(len(_FEATURE_COLUMNS), 59)
 
     def test_rsi_bounded(self):
         frame = _feature_frame(self.df)
@@ -67,7 +68,7 @@ class FeatureFrameTests(unittest.TestCase):
         self.assertTrue((rsi_scaled <= 1.0).all(), "RSI above 1")
 
     def test_no_inf_values(self):
-        frame = _feature_frame(self.df)
+        frame = build_feature_frame(self.df)
         numeric = frame[_FEATURE_COLUMNS].select_dtypes(include="number")
         self.assertFalse(numeric.isin([float("inf"), float("-inf")]).any().any())
 

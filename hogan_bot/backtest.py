@@ -7,7 +7,11 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from hogan_bot.agent_pipeline import AgentPipeline
-from hogan_bot.decision import apply_ml_filter, edge_gate, ml_confidence
+from hogan_bot.decision import (
+    apply_ml_filter, edge_gate, entry_quality_gate, ml_confidence,
+    estimate_spread_from_candles,
+)
+from hogan_bot.expectancy import ExpectancyTracker
 from hogan_bot.ml import TrainedModel, predict_up_probability
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
@@ -49,6 +53,7 @@ class BacktestResult:
     # Full closed-trade records for ML learning: entry_bar_idx, entry_ts_ms, exit_bar_idx,
     # exit_ts_ms, side, entry_price, exit_price, qty, pnl_usd, pnl_pct
     closed_trades: list[dict] = field(default_factory=list)
+    expectancy_report: dict = field(default_factory=dict)
 
     def summary_dict(self) -> dict:
         """Return all scalar fields as a plain dict (omits large lists)."""
@@ -342,6 +347,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     equity_curve: list[float] = []
     trade_log: list[dict] = []
     closed_trades: list[dict] = []
+    _expectancy = ExpectancyTracker()
 
     # Track entry bar index for each symbol (for closed_trades / ML learning)
     _entry_bar: dict[str, int] = {}
@@ -393,6 +399,13 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     elif loss_cooldown_bars > 0:
                         _cooldown_remaining = loss_cooldown_bars
                     trade_log.append({"bar": bar_ts, "action": "sell", "reason": reason, "price": sell_px, "qty": qty})
+                    gross_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
+                    _expectancy.record_trade(
+                        symbol=sym, regime="backtest",
+                        gross_pnl_pct=gross_pct, net_pnl_pct=gross_pct - 2 * fee_rate,
+                        hold_bars=(i - 1 - entry_bar_idx) if entry_bar_idx is not None else 0,
+                        close_reason=reason,
+                    )
                     if entry_bar_idx is not None:
                         exit_bar_idx = min(i - 1, len(candles) - 1)
                         fee = qty * (avg_entry + sell_px) * fee_rate
@@ -436,6 +449,13 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         _cooldown_remaining = loss_cooldown_bars
                     trade_log.append(
                         {"bar": bar_ts, "action": "sell", "reason": reason, "price": sell_px, "qty": qty}
+                    )
+                    gross_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
+                    _expectancy.record_trade(
+                        symbol=exit_symbol, regime="backtest",
+                        gross_pnl_pct=gross_pct, net_pnl_pct=gross_pct - 2 * fee_rate,
+                        hold_bars=(i - 1 - entry_bar) if entry_bar is not None else 0,
+                        close_reason=reason,
                     )
                     if entry_bar is not None:
                         exit_bar_idx = min(i - 1, len(candles) - 1)
@@ -483,13 +503,23 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             if ml_confidence_sizing:
                 conf_scale *= ml_confidence(up_prob)
 
-        # Fee-aware edge gate (parity with live/paper)
+        # Fee- and spread-aware edge gate (parity with live/paper)
         _atr_pct = signal.stop_distance_pct / max(atr_stop_multiplier, 1.0)
+        _spread_est = estimate_spread_from_candles(window)
         action = edge_gate(
             action,
             atr_pct=_atr_pct,
             take_profit_pct=take_profit_pct,
             fee_rate=fee_rate,
+            estimated_spread=_spread_est,
+        )
+
+        # Hard entry quality gate (parity with live/paper)
+        _tech_conf = signal.tech.confidence if signal.tech else None
+        action, _quality_scale = entry_quality_gate(
+            action,
+            final_confidence=signal.confidence,
+            tech_confidence=_tech_conf,
         )
 
         equity = portfolio.total_equity(mark)
@@ -504,7 +534,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             stop_distance_pct=signal.stop_distance_pct,
             max_risk_per_trade=max_risk_per_trade,
             max_allocation_pct=aggressive_allocation,
-            confidence_scale=conf_scale,
+            confidence_scale=conf_scale * _quality_scale,
             fee_rate=fee_rate,
         )
 
@@ -564,6 +594,13 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     trade_log.append(
                         {"bar": bar_ts, "action": "sell", "reason": "signal", "price": sell_px_sig, "qty": sell_qty}
                     )
+                    gross_pct = (sell_px_sig - avg_entry) / avg_entry if avg_entry else 0
+                    _expectancy.record_trade(
+                        symbol=symbol, regime="backtest",
+                        gross_pnl_pct=gross_pct, net_pnl_pct=gross_pct - 2 * fee_rate,
+                        hold_bars=(i - 1 - entry_bar_idx) if entry_bar_idx is not None else 0,
+                        close_reason="signal",
+                    )
                     if entry_bar_idx is not None:
                         exit_bar_idx = min(i - 1, len(candles) - 1)
                         fee = sell_qty * (avg_entry + sell_px_sig) * fee_rate
@@ -609,4 +646,5 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         equity_curve=equity_curve,
         trade_log=trade_log,
         closed_trades=closed_trades,
+        expectancy_report=_expectancy.summary(),
     )

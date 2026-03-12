@@ -711,7 +711,7 @@ def retrain_once(args: argparse.Namespace) -> dict:
     if oos_result is not None:
         result.update(oos_result.to_dict())
 
-    # 4. Always log to registry (evidence-first: every candidate run is recorded)
+    # 4. Log to registry (skip for dry runs so file isn't created)
     _reg_metrics = dict(metrics)
     _reg_metrics["promoted"] = should_promote
     _reg_metrics["label_mode"] = getattr(args, "label_mode", "fee_threshold")
@@ -719,22 +719,23 @@ def retrain_once(args: argparse.Namespace) -> dict:
         _reg_metrics.update(oos_result.to_dict())
 
     symbols = _resolve_symbols(args)
-    try:
-        registry.log(
-            _reg_metrics,
-            model_path=candidate_path if not should_promote else args.model_path,
-            symbol=",".join(symbols) if len(symbols) > 1 else args.symbol,
-            timeframe=args.timeframe,
-            horizon_bars=args.horizon_bars,
-            params={
-                "label_mode": getattr(args, "label_mode", "fee_threshold"),
-                "window_bars": args.window_bars,
-                "promotion_metric": args.promotion_metric,
-                "min_improvement": args.min_improvement,
-            },
-        )
-    except Exception as exc:
-        logger.warning("Registry log failed (non-fatal): %s", exc)
+    if not args.dry_run:
+        try:
+            registry.log(
+                _reg_metrics,
+                model_path=candidate_path if not should_promote else args.model_path,
+                symbol=",".join(symbols) if len(symbols) > 1 else args.symbol,
+                timeframe=args.timeframe,
+                horizon_bars=args.horizon_bars,
+                params={
+                    "label_mode": getattr(args, "label_mode", "fee_threshold"),
+                    "window_bars": args.window_bars,
+                    "promotion_metric": args.promotion_metric,
+                    "min_improvement": args.min_improvement,
+                },
+            )
+        except Exception as exc:
+            logger.warning("Registry log failed (non-fatal): %s", exc)
 
     # 5. Act on the promotion decision
     try:

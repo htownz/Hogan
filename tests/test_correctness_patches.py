@@ -212,21 +212,25 @@ class TestJournalSideNormalization:
         assert row[0] == pytest.approx(110.0), "exit_price should be set on close"
         assert row[1] > 0, "Long trade profit should be positive when exit > entry"
 
-    def test_buy_side_does_not_match_close(self):
-        """If someone journals side='buy', close_paper_trade with side='long'
-        should NOT find it — proving the mismatch would be a silent no-op."""
+    def test_buy_side_normalizes_to_long(self):
+        """side='buy' is normalized to 'long' on open, so close with 'long' matches."""
         from hogan_bot.storage import open_paper_trade, close_paper_trade
         conn = _in_memory_db()
 
         open_paper_trade(conn, "ETH/USD", "buy", 50.0, 2.0, 0.05, 1000)
+
+        stored = conn.execute(
+            "SELECT side FROM paper_trades WHERE symbol='ETH/USD'"
+        ).fetchone()
+        assert stored[0] == "long", "normalize_side should map 'buy' -> 'long'"
+
         close_paper_trade(conn, "ETH/USD", "long", 60.0, 0.06, 2000, close_reason="signal")
 
         row = conn.execute(
-            "SELECT exit_price FROM paper_trades WHERE symbol='ETH/USD'"
+            "SELECT exit_price, realized_pnl FROM paper_trades WHERE symbol='ETH/USD'"
         ).fetchone()
-        assert row[0] is None, (
-            "close with side='long' should not match an open with side='buy'"
-        )
+        assert row[0] == pytest.approx(60.0), "close should match the normalized trade"
+        assert row[1] > 0, "Long trade profit should be positive when exit > entry"
 
     def test_short_side_round_trip(self):
         from hogan_bot.storage import open_paper_trade, close_paper_trade
@@ -534,7 +538,7 @@ class TestRegimeMultipliers:
         )
         eff = effective_thresholds(self._make_regime("ranging"), cfg)
         assert abs(eff["volume_threshold"] - 1.84 * 1.10) < 1e-6
-        assert abs(eff["trailing_stop_pct"] - 0.03 * 0.50) < 1e-6
+        assert abs(eff["trailing_stop_pct"] - 0.03 * 0.80) < 1e-6
         assert abs(eff["take_profit_pct"] - 0.055 * 0.70) < 1e-6
         assert eff["position_scale"] == 0.75
 

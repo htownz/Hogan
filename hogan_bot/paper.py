@@ -16,6 +16,9 @@ class Position:
     peak_price: float = 0.0
     # Bars held since entry (incremented each check_exits call).
     bars_held: int = 0
+    # Max adverse/favorable excursion as fraction of entry price
+    max_adverse_pct: float = 0.0
+    max_favorable_pct: float = 0.0
 
 
 @dataclass
@@ -169,6 +172,12 @@ class PaperPortfolio:
             if px <= 0:
                 continue
             pos.bars_held += 1
+            if pos.avg_entry > 0:
+                move_pct = (px - pos.avg_entry) / pos.avg_entry
+                if move_pct < 0:
+                    pos.max_adverse_pct = max(pos.max_adverse_pct, abs(move_pct))
+                else:
+                    pos.max_favorable_pct = max(pos.max_favorable_pct, move_pct)
             if max_hold_bars > 0 and pos.bars_held >= max_hold_bars:
                 exits.append((symbol, "max_hold_time"))
                 continue
