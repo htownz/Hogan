@@ -479,6 +479,19 @@ class MetaWeigher:
 
         confidence = min(1.0, abs(combined_score))
 
+        # Regime-specific sub-strategy gates
+        if regime == "ranging" and action != "hold":
+            if tech.action == action and tech.confidence < 0.6:
+                action = "hold"
+                confidence *= 0.5
+        elif regime == "volatile" and action != "hold":
+            if tech.confidence < 0.5:
+                action = "hold"
+                confidence *= 0.6
+        elif regime not in ("trending_up", "trending_down", "volatile", "ranging", None):
+            action = "hold"
+            confidence *= 0.3
+
         # Build explanation
         explanation_parts = [f"Tech: {tech.action}({tech.confidence:.2f})"]
         if sentiment.bias != "neutral":

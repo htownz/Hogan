@@ -37,12 +37,19 @@ import pandas as pd
 from hogan_bot.agent_pipeline import AgentPipeline
 from hogan_bot.config import BotConfig, load_config, symbol_config, effective_hold_cooldown_bars
 from hogan_bot.data_engine import CandleEvent, LiveDataEngine, CandleRingBuffer
-from hogan_bot.decision import apply_ml_filter, edge_gate, ml_confidence
-from hogan_bot.execution import PaperExecution, LiveExecution
+from hogan_bot.decision import (
+    apply_ml_filter, edge_gate, entry_quality_gate, ml_confidence,
+    estimate_spread_from_candles,
+)
+from hogan_bot.execution import (
+    PaperExecution, LiveExecution, SmartExecution, SmartExecConfig,
+    RealisticPaperExecution, FillSimConfig,
+)
 from hogan_bot.ml import TrainedModel, load_model, predict_up_probability
 from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
+from hogan_bot.expectancy import ExpectancyTracker
 from hogan_bot.storage import get_connection, record_equity, upsert_position, open_paper_trade, close_paper_trade
 
 logger = logging.getLogger(__name__)
@@ -64,9 +71,23 @@ class SignalEvaluator:
         symbol: str,
         candles: pd.DataFrame,
         equity: float,
-    ) -> tuple[str, float, float | None]:
+        recent_whipsaw_count: int = 0,
+    ) -> tuple[str, float, float | None, str | None]:
+        """Returns (action, size, up_prob, regime_name)."""
         cfg = symbol_config(self.config, symbol)
-        result = self.pipeline.run(candles, symbol=symbol, config_override=cfg)
+
+        regime_name = None
+        regime_conf = None
+        if getattr(cfg, "use_regime_detection", True):
+            try:
+                from hogan_bot.regime import detect_regime
+                rstate = detect_regime(candles)
+                regime_name = rstate.regime
+                regime_conf = rstate.confidence
+            except Exception:
+                pass
+
+        result = self.pipeline.run(candles, symbol=symbol, config_override=cfg, regime=regime_name)
         px = float(candles["close"].iloc[-1])
 
         up_prob = None
@@ -79,7 +100,7 @@ class SignalEvaluator:
             if cfg.ml_confidence_sizing:
                 conf_scale = ml_confidence(up_prob) * (result.confidence or 1.0)
 
-        # Fee-aware edge gate: block entries where expected move < fees
+        # Fee-aware edge gate
         forecast_ret = None
         if result.forecast is not None and result.forecast.confidence > 0.2:
             er = result.forecast.expected_return
@@ -88,6 +109,7 @@ class SignalEvaluator:
             elif isinstance(er, (int, float)):
                 forecast_ret = abs(float(er))
         atr_pct = result.stop_distance_pct / max(getattr(cfg, "atr_stop_multiplier", 2.5), 1.0)
+        spread_est = estimate_spread_from_candles(candles)
         action = edge_gate(
             action,
             atr_pct=atr_pct,
@@ -95,6 +117,18 @@ class SignalEvaluator:
             fee_rate=cfg.fee_rate,
             min_edge_multiple=getattr(cfg, "min_edge_multiple", 1.5),
             forecast_expected_return=forecast_ret,
+            estimated_spread=spread_est,
+        )
+
+        # Hard entry quality gate
+        tech_conf = result.tech.confidence if result.tech else None
+        action, quality_scale = entry_quality_gate(
+            action,
+            final_confidence=result.confidence,
+            tech_confidence=tech_conf,
+            regime=regime_name,
+            regime_confidence=regime_conf,
+            recent_whipsaw_count=recent_whipsaw_count,
         )
 
         size = calculate_position_size(
@@ -103,17 +137,19 @@ class SignalEvaluator:
             stop_distance_pct=result.stop_distance_pct,
             max_risk_per_trade=cfg.max_risk_per_trade,
             max_allocation_pct=cfg.aggressive_allocation,
-            confidence_scale=conf_scale,
+            confidence_scale=conf_scale * quality_scale,
             fee_rate=cfg.fee_rate,
         )
 
         if action != "hold":
             logger.info(
-                "PIPELINE %s action=%s conf=%.2f | %s",
-                symbol, action, result.confidence, result.explanation,
+                "PIPELINE %s action=%s conf=%.2f tech_conf=%.2f regime=%s | %s",
+                symbol, action, result.confidence,
+                tech_conf or 0.0, regime_name or "unknown",
+                result.explanation,
             )
 
-        return action, size, up_prob
+        return action, size, up_prob, regime_name
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +161,9 @@ async def run_event_loop(
 ) -> None:
     if config is None:
         config = load_config()
+
+    from hogan_bot.champion import apply_champion_mode
+    config = apply_champion_mode(config)
 
     conn = get_connection(config.db_path)
     notifier = make_notifier(config.webhook_url or None)
@@ -142,10 +181,34 @@ async def run_event_loop(
     if allow_live:
         from hogan_bot.exchange import ExchangeClient
         client = ExchangeClient(config.exchange_id, config.kraken_api_key, config.kraken_api_secret)
-        executor = LiveExecution(client=client, conn=conn, exchange_id=config.exchange_id)
-        logger.warning("LIVE TRADING ENABLED on exchange=%s", config.exchange_id)
+        use_smart = os.getenv("HOGAN_SMART_EXEC", "").strip().lower() in ("1", "true", "yes")
+        if use_smart:
+            smart_cfg = SmartExecConfig(
+                max_reprices=int(os.getenv("HOGAN_EXEC_MAX_REPRICES", "2")),
+                post_only=True,
+                chase_bps=float(os.getenv("HOGAN_EXEC_CHASE_BPS", "2.0")),
+            )
+            executor = SmartExecution(
+                client=client, conn=conn, exchange_id=config.exchange_id,
+                portfolio=portfolio, config=smart_cfg,
+            )
+            logger.warning("LIVE SMART EXECUTION on exchange=%s (post-only, %d reprices)", config.exchange_id, smart_cfg.max_reprices)
+        else:
+            executor = LiveExecution(client=client, conn=conn, exchange_id=config.exchange_id)
+            logger.warning("LIVE TRADING ENABLED on exchange=%s", config.exchange_id)
     else:
-        executor = PaperExecution(portfolio=portfolio, conn=conn, exchange_id="paper")
+        use_realistic = os.getenv("HOGAN_REALISTIC_PAPER", "1").strip().lower() in ("1", "true", "yes")
+        if use_realistic:
+            fill_cfg = FillSimConfig(
+                slippage_bps=float(os.getenv("HOGAN_SLIPPAGE_BPS", "5.0")),
+                spread_half_bps=float(os.getenv("HOGAN_SPREAD_HALF_BPS", "3.0")),
+            )
+            executor = RealisticPaperExecution(
+                portfolio=portfolio, conn=conn, config=fill_cfg,
+            )
+            logger.info("Paper mode with realistic fills (slip=%.1fbps spread=%.1fbps)", fill_cfg.slippage_bps, fill_cfg.spread_half_bps)
+        else:
+            executor = PaperExecution(portfolio=portfolio, conn=conn, exchange_id="paper")
 
     ml_model: TrainedModel | None = None
     if config.use_ml_filter:
@@ -158,6 +221,9 @@ async def run_event_loop(
             logger.warning("ML model load error: %s", exc)
 
     evaluator = SignalEvaluator(config, ml_model, conn=conn)
+    from hogan_bot.exit_model import ExitEvaluator
+    _exit_eval = ExitEvaluator()
+    _expectancy = ExpectancyTracker()
     buffer = CandleRingBuffer(maxlen=config.ohlcv_limit)
 
     # Parity with backtest: max_hold_bars, loss_cooldown, slippage
@@ -188,6 +254,8 @@ async def run_event_loop(
 
     event_count = 0
     _signal_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    _current_regime: dict[str, str] = {}
+    _EXPECTANCY_LOG_INTERVAL = 50
 
     logger.info(
         "Event loop starting: mode=%s symbols=%s timeframe=%s",
@@ -263,10 +331,23 @@ async def run_event_loop(
                         continue
                     qty = pos.qty
                     avg_entry = pos.avg_entry
+                    bars_held = getattr(pos, "bars_held", 0)
                     executed = portfolio.execute_sell(exit_symbol, sell_px, qty)
                     if executed:
                         fee = qty * sell_px * config.fee_rate
                         close_paper_trade(conn, exit_symbol, "long", sell_px, fee, now_ms, close_reason=reason)
+                        gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
+                        net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
+                        _expectancy.record_trade(
+                            symbol=exit_symbol,
+                            regime=_current_regime.get(exit_symbol, "unknown"),
+                            gross_pnl_pct=gross_pnl_pct,
+                            net_pnl_pct=net_pnl_pct,
+                            mae_pct=getattr(pos, "max_adverse_pct", 0.0),
+                            mfe_pct=getattr(pos, "max_favorable_pct", 0.0),
+                            hold_bars=bars_held,
+                            close_reason=reason,
+                        )
                         is_loss = sell_px < avg_entry
                         if is_loss and loss_cooldown_bars > 0:
                             _cooldown_remaining = loss_cooldown_bars
@@ -280,11 +361,25 @@ async def run_event_loop(
                     if pos is None:
                         continue
                     qty = pos.qty
+                    avg_entry = pos.avg_entry
+                    bars_held = getattr(pos, "bars_held", 0)
                     cover_px = ep * (1.0 + slip_mult)
                     executed = portfolio.execute_cover(exit_symbol, cover_px, qty)
                     if executed:
                         fee = qty * cover_px * config.fee_rate
                         close_paper_trade(conn, exit_symbol, "short", cover_px, fee, now_ms, close_reason=reason)
+                        gross_pnl_pct = (avg_entry - cover_px) / avg_entry if avg_entry else 0
+                        net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
+                        _expectancy.record_trade(
+                            symbol=exit_symbol,
+                            regime=_current_regime.get(exit_symbol, "unknown"),
+                            gross_pnl_pct=gross_pnl_pct,
+                            net_pnl_pct=net_pnl_pct,
+                            mae_pct=getattr(pos, "max_adverse_pct", 0.0),
+                            mfe_pct=getattr(pos, "max_favorable_pct", 0.0),
+                            hold_bars=bars_held,
+                            close_reason=reason,
+                        )
                     if notifier and executed:
                         notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason,
                                                       "price": cover_px, "qty": qty})
@@ -305,7 +400,9 @@ async def run_event_loop(
 
             # Per-symbol signal evaluation (isolated — one symbol failure won't break others)
             try:
-                action, size, up_prob = evaluator.evaluate(symbol, candles, equity)
+                action, size, up_prob, _sym_regime = evaluator.evaluate(symbol, candles, equity)
+                if _sym_regime:
+                    _current_regime[symbol] = _sym_regime
             except Exception as exc:
                 logger.error("Signal eval error for %s: %s", symbol, exc)
                 if _has_metrics:
@@ -366,6 +463,22 @@ async def run_event_loop(
                         symbol, _consecutive_exit_signals[symbol], exit_confirm_bars,
                     )
                 else:
+                    # Consult ExitEvaluator: "is the thesis broken?"
+                    exit_decision = _exit_eval.should_exit(
+                        candles=candles,
+                        entry_price=pos.avg_entry,
+                        current_price=px,
+                        bars_held=pos.bars_held,
+                        side="long",
+                        max_hold_bars=max_hold_bars,
+                    )
+                    if not exit_decision.should_exit:
+                        logger.debug(
+                            "EXIT_MODEL %s — thesis intact, holding despite sell signal",
+                            symbol,
+                        )
+                        event_count += 1
+                        continue
                     sell_qty = min(pos.qty, size)
                     sell_px = px * (1.0 - slip_mult)
                     avg_entry = pos.avg_entry
@@ -378,6 +491,19 @@ async def run_event_loop(
                         now_ms = int(time.time() * 1000)
                         exit_fee = sell_qty * sell_px * config.fee_rate
                         close_paper_trade(conn, symbol, "long", sell_px, exit_fee, now_ms, close_reason="signal")
+                        gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
+                        net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
+                        bars_held = getattr(pos, "bars_held", 0)
+                        _expectancy.record_trade(
+                            symbol=symbol,
+                            regime=_current_regime.get(symbol, "unknown"),
+                            gross_pnl_pct=gross_pnl_pct,
+                            net_pnl_pct=net_pnl_pct,
+                            mae_pct=getattr(pos, "max_adverse_pct", 0.0),
+                            mfe_pct=getattr(pos, "max_favorable_pct", 0.0),
+                            hold_bars=bars_held,
+                            close_reason="signal",
+                        )
                         _consecutive_exit_signals[symbol] = 0
                         is_loss = sell_px < avg_entry
                         if is_loss and loss_cooldown_bars > 0:
@@ -401,7 +527,35 @@ async def run_event_loop(
             except Exception:
                 pass
 
+            # Periodic expectancy summary
+            if (
+                event_count > 0
+                and event_count % _EXPECTANCY_LOG_INTERVAL == 0
+                and _expectancy._trades
+            ):
+                report = _expectancy.summary()
+                overall = report.get("overall", {})
+                logger.info(
+                    "EXPECTANCY [%d trades] win=%.1f%% net_edge=%.4f%% payoff=%.2f exp=%.4f%% sig_exit_loss=%.1f%%",
+                    report["total_trades"],
+                    overall.get("win_rate", 0) * 100,
+                    overall.get("avg_net_edge_pct", 0),
+                    overall.get("payoff_ratio", 0),
+                    overall.get("expectancy_pct", 0),
+                    overall.get("signal_exit_loss_rate", 0) * 100,
+                )
+                for regime, stats in report.get("by_regime", {}).items():
+                    logger.info(
+                        "  regime=%s n=%d win=%.1f%% exp=%.4f%%",
+                        regime, stats["n"], stats["win_rate"] * 100, stats["expectancy_pct"],
+                    )
+
             event_count += 1
+
+    # Final expectancy report
+    if _expectancy._trades:
+        report = _expectancy.summary()
+        logger.info("FINAL EXPECTANCY REPORT: %s", report)
 
     logger.info("Event loop terminated after %d events.", event_count)
     conn.close()

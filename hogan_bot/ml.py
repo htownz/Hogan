@@ -623,7 +623,6 @@ def make_paper_trade_labels(
 
     for _, trade in trades_df.iterrows():
         ts = int(trade["open_ts_ms"])
-        # Find the latest candle at or before this timestamp
         idx = int(np.searchsorted(candle_ts, ts, side="right")) - 1
         if idx < 1 or idx >= len(frame):
             continue
@@ -632,10 +631,11 @@ def make_paper_trade_labels(
             continue
 
         pnl = float(trade["realized_pnl"])
-        side = str(trade["side"])
+        raw_side = str(trade["side"]).lower().strip()
+        side = "long" if raw_side in ("buy", "long") else "short"
         if side == "long":
             label = 1 if pnl > 0 else 0
-        else:  # short: profits when price falls → direction label 0
+        else:
             label = 0 if pnl > 0 else 1
 
         X_rows.append(row.tolist())
@@ -697,7 +697,8 @@ def make_backtest_labels(
             continue
 
         pnl = float(trade.get("pnl_usd", 0.0))
-        side = str(trade.get("side", "long"))
+        raw_side = str(trade.get("side", "long")).lower().strip()
+        side = "long" if raw_side in ("buy", "long") else "short"
         if side == "long":
             label = 1 if pnl > 0 else 0
         else:
@@ -1389,7 +1390,9 @@ def train_hist_gradient_boosting(
     from sklearn.ensemble import HistGradientBoostingClassifier
     from sklearn.metrics import accuracy_score, roc_auc_score, precision_score, recall_score, f1_score
 
-    X, y, feature_cols = make_feature_matrix(candles, horizon_bars=horizon_bars)
+    X, y, feature_cols = build_training_set(candles, horizon_bars=horizon_bars)
+    if X is None or y is None or len(X) < 50:
+        raise ValueError(f"Not enough training rows ({len(X) if X is not None else 0})")
     split = int(len(X) * 0.8)
     X_train, X_test = X.iloc[:split], X.iloc[split:]
     y_train, y_test = y.iloc[:split], y.iloc[split:]
@@ -1417,13 +1420,27 @@ def train_hist_gradient_boosting(
     }
 
     artifact = TrainedModel(model=clf, feature_columns=feature_cols, scaler=None)
-    save_model(artifact, model_path)
+    with open(model_path, "wb") as f:
+        pickle.dump(artifact, f)
     return metrics
 
 
-def build_feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
-    """Return a feature DataFrame aligned to candles index for advanced models."""
+def build_feature_frame(candles: pd.DataFrame, db_conn=None) -> pd.DataFrame:
+    """Return a feature DataFrame aligned to candles index for advanced models.
+
+    When *db_conn* is provided, macro features are joined from the database.
+    Otherwise macro/onchain/sentiment/derivatives/intermarket columns are
+    filled with zeros so the output always matches ``_FEATURE_COLUMNS`` (59).
+    """
     frame = _feature_frame(candles)
-    cols = list(_FEATURE_COLUMNS)
-    out = frame[cols].copy()
+    if db_conn is not None:
+        try:
+            from hogan_bot.macro_features import add_macro_features
+            frame = add_macro_features(frame, db_conn)
+        except Exception:
+            pass
+    for col in _FEATURE_COLUMNS:
+        if col not in frame.columns:
+            frame[col] = 0.0
+    out = frame[list(_FEATURE_COLUMNS)].copy()
     return out.replace([np.inf, -np.inf], np.nan)

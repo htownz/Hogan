@@ -652,6 +652,16 @@ def load_position_state(conn: sqlite3.Connection, symbol: str) -> tuple[float, f
 
 import uuid as _uuid
 
+_SIDE_MAP = {"buy": "long", "sell": "short", "long": "long", "short": "short"}
+
+
+def normalize_side(side: str) -> str:
+    """Normalize trade side to 'long' or 'short'.
+
+    Accepts 'buy'/'long'/'sell'/'short' and always returns 'long' or 'short'.
+    """
+    return _SIDE_MAP.get(side.lower().strip(), side.lower().strip())
+
 
 def open_paper_trade(
     conn: sqlite3.Connection,
@@ -667,6 +677,7 @@ def open_paper_trade(
     entry_decision_id: int | None = None,
 ) -> str:
     """Insert an open paper trade. Returns the trade_id for later closing."""
+    side = normalize_side(side)
     trade_id = str(_uuid.uuid4())
     conn.execute(
         """
@@ -704,6 +715,7 @@ def close_paper_trade(
     unavailable), so callers can back-fill the outcome on the exact
     decision that opened the position.
     """
+    side = normalize_side(side)
     row = conn.execute(
         """
         SELECT trade_id, entry_price, qty, entry_fee, entry_decision_id

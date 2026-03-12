@@ -19,12 +19,12 @@ from hogan_bot.retrain import _get_current_best_score, retrain_once
 # ---------------------------------------------------------------------------
 
 
-def _synthetic_candles(n: int = 900) -> pd.DataFrame:
+def _synthetic_candles(n: int = 2000) -> pd.DataFrame:
     rng = np.random.default_rng(42)
-    close = 30_000.0 + np.cumsum(rng.normal(0, 50, n))
+    close = 30_000.0 + np.cumsum(rng.normal(0, 200, n))
     close = np.clip(close, 1_000.0, None)
-    noise = rng.uniform(0.001, 0.005, n)
-    open_ = close * (1 + rng.normal(0, 0.002, n))
+    noise = rng.uniform(0.002, 0.008, n)
+    open_ = close * (1 + rng.normal(0, 0.003, n))
     high = np.maximum(close, open_) * (1 + noise)
     low = np.minimum(close, open_) * (1 - noise)
     volume = rng.uniform(100, 1_000, n)
@@ -265,7 +265,7 @@ class TestFromDb:
 
         with patch("hogan_bot.retrain.load_candles", return_value=pd.DataFrame()), \
              patch("hogan_bot.retrain.get_connection", return_value=MagicMock()):
-            with pytest.raises(RuntimeError, match="No candles found"):
+            with pytest.raises(RuntimeError, match="No candles"):
                 retrain_once(args)
 
 

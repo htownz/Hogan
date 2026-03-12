@@ -4,8 +4,94 @@ import logging
 import time
 
 import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Spread estimation
+# ---------------------------------------------------------------------------
+
+def estimate_spread_from_candles(candles: pd.DataFrame, window: int = 20) -> float:
+    """Estimate the bid-ask spread as a fraction of price from OHLCV data.
+
+    Uses the Corwin-Schultz (2012) high-low spread estimator: the ratio of
+    high-to-low range in a single bar versus the range over two consecutive
+    bars reveals the non-information component of the spread.
+
+    Falls back to a simpler (high-low)/close proxy when there are not enough
+    bars.
+
+    Returns
+    -------
+    float
+        Estimated half-spread as a fraction of mid-price (e.g. 0.001 = 10 bps
+        round-trip).  Multiply by 2 for the full round-trip spread cost.
+    """
+    if candles is None or len(candles) < 3:
+        return 0.0005  # conservative default: 5 bps half-spread
+
+    h = candles["high"].values[-window:]
+    l = candles["low"].values[-window:]
+    c = candles["close"].values[-window:]
+
+    if len(h) < 3:
+        avg_range = np.mean((h - l) / np.maximum(c, 1e-9))
+        return max(0.0001, float(avg_range * 0.25))
+
+    # Simple range-based proxy: spread ≈ small fraction of avg bar range
+    avg_range_pct = float(np.mean((h - l) / np.maximum(c, 1e-9)))
+    simple_est = avg_range_pct * 0.15
+
+    # Corwin-Schultz high-low estimator
+    hl_ratio = np.log(h / np.maximum(l, 1e-9))
+    gamma = hl_ratio[:-1] ** 2 + hl_ratio[1:] ** 2
+
+    h2 = np.maximum(h[:-1], h[1:])
+    l2 = np.minimum(l[:-1], l[1:])
+    beta = np.log(h2 / np.maximum(l2, 1e-9)) ** 2
+
+    valid = beta > gamma
+    if not np.any(valid):
+        return max(0.0001, min(simple_est, 0.005))
+
+    alpha = (np.sqrt(2 * beta[valid]) - np.sqrt(gamma[valid])) / (
+        3 - 2 * np.sqrt(2)
+    )
+    alpha = np.clip(alpha, 0, None)
+    spread = 2.0 * (np.exp(alpha) - 1) / (1 + np.exp(alpha))
+    cs_est = float(np.median(spread))
+
+    # Blend: take the smaller of the two estimates (CS can overestimate on
+    # synthetic or noisy data where high/low are not real bid-ask artifacts)
+    est = min(cs_est, simple_est * 2)
+    return max(0.0001, min(est, 0.005))
+
+
+def estimate_spread_from_order_book(
+    bids: list[list[float]], asks: list[list[float]]
+) -> float:
+    """Compute the quoted spread from top-of-book bid/ask.
+
+    Parameters
+    ----------
+    bids, asks
+        Lists of [price, qty] pairs from the order book.
+
+    Returns
+    -------
+    float
+        Half-spread as a fraction of mid-price.
+    """
+    if not bids or not asks:
+        return 0.001
+    best_bid = bids[0][0]
+    best_ask = asks[0][0]
+    mid = (best_bid + best_ask) / 2.0
+    if mid <= 0:
+        return 0.001
+    return max(0.0, (best_ask - best_bid) / (2.0 * mid))
 
 
 def apply_ml_filter(signal_action: str, up_prob: float, buy_threshold: float, sell_threshold: float) -> str:
@@ -23,38 +109,114 @@ def edge_gate(
     fee_rate: float,
     min_edge_multiple: float = 1.5,
     forecast_expected_return: float | None = None,
+    estimated_spread: float = 0.0,
 ) -> str:
-    """Block entries where the expected move is insufficient relative to fees.
+    """Block entries where the expected move is insufficient relative to friction.
 
-    Checks three conditions (any failure -> hold):
-    1. ATR must exceed 1.5x round-trip fees (enough volatility to move)
-    2. Take-profit target must exceed min_edge_multiple * round-trip fees
-    3. If forecast available, expected return must exceed round-trip fees
+    Total friction = round-trip fees + round-trip spread.
+
+    Checks four conditions (any failure -> hold):
+    1. ATR must exceed 1.5x total friction (enough volatility to move)
+    2. Take-profit target must exceed min_edge_multiple * total friction
+    3. If forecast available, expected return must exceed total friction
+    4. If spread alone exceeds ATR/3, conditions are too illiquid
     """
     if action == "hold":
         return action
 
-    round_trip = 2.0 * fee_rate
+    round_trip_fees = 2.0 * fee_rate
+    round_trip_spread = 2.0 * estimated_spread
+    total_friction = round_trip_fees + round_trip_spread
 
-    if atr_pct < round_trip * 1.5:
-        logger.debug("EDGE_GATE: ATR %.4f < %.4f (1.5x fees) -> hold", atr_pct, round_trip * 1.5)
-        return "hold"
-
-    if take_profit_pct < round_trip * min_edge_multiple:
+    if atr_pct < total_friction * 1.5:
         logger.debug(
-            "EDGE_GATE: TP %.4f < %.4f (%.1fx fees) -> hold",
-            take_profit_pct, round_trip * min_edge_multiple, min_edge_multiple,
+            "EDGE_GATE: ATR %.4f < %.4f (1.5x friction: fees=%.4f spread=%.4f) -> hold",
+            atr_pct, total_friction * 1.5, round_trip_fees, round_trip_spread,
         )
         return "hold"
 
-    if forecast_expected_return is not None and abs(forecast_expected_return) < round_trip:
+    if take_profit_pct > 0 and take_profit_pct < total_friction * min_edge_multiple:
         logger.debug(
-            "EDGE_GATE: forecast_ret %.4f < %.4f (fees) -> hold",
-            abs(forecast_expected_return), round_trip,
+            "EDGE_GATE: TP %.4f < %.4f (%.1fx friction) -> hold",
+            take_profit_pct, total_friction * min_edge_multiple, min_edge_multiple,
+        )
+        return "hold"
+
+    if forecast_expected_return is not None and abs(forecast_expected_return) < total_friction:
+        logger.debug(
+            "EDGE_GATE: forecast_ret %.4f < %.4f (friction) -> hold",
+            abs(forecast_expected_return), total_friction,
+        )
+        return "hold"
+
+    if estimated_spread > 0 and atr_pct > 0 and estimated_spread > atr_pct / 3:
+        logger.debug(
+            "EDGE_GATE: spread %.4f > ATR/3 %.4f (illiquid) -> hold",
+            estimated_spread, atr_pct / 3,
         )
         return "hold"
 
     return action
+
+
+def entry_quality_gate(
+    action: str,
+    *,
+    final_confidence: float | None = None,
+    tech_confidence: float | None = None,
+    regime: str | None = None,
+    regime_confidence: float | None = None,
+    recent_whipsaw_count: int = 0,
+    min_final_confidence: float = 0.3,
+    min_tech_confidence: float = 0.4,
+    min_regime_confidence: float = 0.5,
+    max_whipsaws: int = 3,
+) -> tuple[str, float]:
+    """Block entries that don't meet quality thresholds. Returns (action, size_scale).
+
+    Checks (any failure blocks the trade):
+    1. Final confidence must exceed minimum
+    2. Technical confidence must exceed minimum
+    3. Regime confidence must be sufficient (blocks ambiguous regimes)
+    4. Recent whipsaw count must be below threshold (reduces size or blocks)
+    """
+    if action == "hold":
+        return action, 1.0
+
+    size_scale = 1.0
+
+    if final_confidence is not None and final_confidence < min_final_confidence:
+        logger.debug(
+            "QUALITY_GATE: final_conf %.3f < %.3f -> hold",
+            final_confidence, min_final_confidence,
+        )
+        return "hold", 1.0
+
+    if tech_confidence is not None and tech_confidence < min_tech_confidence:
+        logger.debug(
+            "QUALITY_GATE: tech_conf %.3f < %.3f -> hold",
+            tech_confidence, min_tech_confidence,
+        )
+        return "hold", 1.0
+
+    if regime_confidence is not None and regime_confidence < min_regime_confidence:
+        logger.debug(
+            "QUALITY_GATE: regime_conf %.3f < %.3f -> hold",
+            regime_confidence, min_regime_confidence,
+        )
+        return "hold", 1.0
+
+    if recent_whipsaw_count >= max_whipsaws:
+        scale = max(0.25, 1.0 - (recent_whipsaw_count - max_whipsaws + 1) * 0.25)
+        logger.debug(
+            "QUALITY_GATE: whipsaws %d >= %d -> scale %.2f",
+            recent_whipsaw_count, max_whipsaws, scale,
+        )
+        if scale <= 0.25:
+            return "hold", 1.0
+        size_scale = scale
+
+    return action, size_scale
 
 
 def ml_confidence(up_prob: float) -> float:
