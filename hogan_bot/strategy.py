@@ -269,7 +269,8 @@ def generate_signal(
             confidence *= consensus_ratio
 
     # ── ATR minimum-move guard ────────────────────────────────────────────────
-    min_atr_pct = float(os.getenv("HOGAN_ATR_MIN_PCT", "0.0015"))
+    # Default raised to 0.008 (0.8%): must exceed 1.5x round-trip fees (~0.52%)
+    min_atr_pct = float(os.getenv("HOGAN_ATR_MIN_PCT", "0.008"))
     if min_atr_pct > 0 and action != "hold":
         atr_pct = float(atr_series.iloc[-1] / max(close.iloc[-1], 1e-9))
         if atr_pct < min_atr_pct:

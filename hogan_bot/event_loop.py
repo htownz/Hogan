@@ -35,9 +35,9 @@ from datetime import datetime
 import pandas as pd
 
 from hogan_bot.agent_pipeline import AgentPipeline
-from hogan_bot.config import BotConfig, load_config, symbol_config
+from hogan_bot.config import BotConfig, load_config, symbol_config, effective_hold_cooldown_bars
 from hogan_bot.data_engine import CandleEvent, LiveDataEngine, CandleRingBuffer
-from hogan_bot.decision import apply_ml_filter, ml_confidence
+from hogan_bot.decision import apply_ml_filter, edge_gate, ml_confidence
 from hogan_bot.execution import PaperExecution, LiveExecution
 from hogan_bot.ml import TrainedModel, load_model, predict_up_probability
 from hogan_bot.notifier import make_notifier
@@ -79,6 +79,24 @@ class SignalEvaluator:
             if cfg.ml_confidence_sizing:
                 conf_scale = ml_confidence(up_prob) * (result.confidence or 1.0)
 
+        # Fee-aware edge gate: block entries where expected move < fees
+        forecast_ret = None
+        if result.forecast is not None and result.forecast.confidence > 0.2:
+            er = result.forecast.expected_return
+            if isinstance(er, dict) and er:
+                forecast_ret = max(abs(v) for v in er.values())
+            elif isinstance(er, (int, float)):
+                forecast_ret = abs(float(er))
+        atr_pct = result.stop_distance_pct / max(getattr(cfg, "atr_stop_multiplier", 2.5), 1.0)
+        action = edge_gate(
+            action,
+            atr_pct=atr_pct,
+            take_profit_pct=cfg.take_profit_pct,
+            fee_rate=cfg.fee_rate,
+            min_edge_multiple=getattr(cfg, "min_edge_multiple", 1.5),
+            forecast_expected_return=forecast_ret,
+        )
+
         size = calculate_position_size(
             equity_usd=equity,
             price=px,
@@ -86,6 +104,7 @@ class SignalEvaluator:
             max_risk_per_trade=cfg.max_risk_per_trade,
             max_allocation_pct=cfg.aggressive_allocation,
             confidence_scale=conf_scale,
+            fee_rate=cfg.fee_rate,
         )
 
         if action != "hold":
@@ -140,6 +159,15 @@ async def run_event_loop(
 
     evaluator = SignalEvaluator(config, ml_model, conn=conn)
     buffer = CandleRingBuffer(maxlen=config.ohlcv_limit)
+
+    # Parity with backtest: max_hold_bars, loss_cooldown, slippage
+    max_hold_bars, loss_cooldown_bars = effective_hold_cooldown_bars(config, config.timeframe)
+    slippage_bps = float(os.getenv("HOGAN_SLIPPAGE_BPS", "5.0"))
+    slip_mult = slippage_bps / 10_000.0
+    _cooldown_remaining: int = 0
+    _consecutive_exit_signals: dict[str, int] = defaultdict(int)
+    min_hold_bars = getattr(config, "min_hold_bars", 3)
+    exit_confirm_bars = getattr(config, "exit_confirmation_bars", 2)
 
     try:
         from hogan_bot.metrics import MetricsServer, LoopTimer, EQUITY, CASH, DRAWDOWN, EXCEPTIONS
@@ -218,40 +246,49 @@ async def run_event_loop(
                     notifier.notify("drawdown_breach", {"equity": equity, "peak": guard.peak_equity})
                 break
 
-            # Auto-exit trailing stops / take profits
-            exits = portfolio.check_exits(mark_prices)
+            # Decrement loss cooldown each iteration
+            if _cooldown_remaining > 0:
+                _cooldown_remaining -= 1
+
+            # Auto-exit trailing stops / take profits / max_hold_time
+            exits = portfolio.check_exits(mark_prices, max_hold_bars=max_hold_bars)
             for exit_symbol, reason in exits:
                 ep = mark_prices.get(exit_symbol, 0.0)
+                sell_px = ep * (1.0 - slip_mult)
                 now_ms = int(time.time() * 1000)
 
-                if reason in ("trailing_stop", "take_profit"):
+                if reason in ("trailing_stop", "take_profit", "max_hold_time"):
                     pos = portfolio.positions.get(exit_symbol)
                     if pos is None:
                         continue
                     qty = pos.qty
                     avg_entry = pos.avg_entry
-                    executed = portfolio.execute_sell(exit_symbol, ep, qty)
+                    executed = portfolio.execute_sell(exit_symbol, sell_px, qty)
                     if executed:
-                        fee = qty * ep * config.fee_rate
-                        close_paper_trade(conn, exit_symbol, "long", ep, fee, now_ms, close_reason=reason)
+                        fee = qty * sell_px * config.fee_rate
+                        close_paper_trade(conn, exit_symbol, "long", sell_px, fee, now_ms, close_reason=reason)
+                        is_loss = sell_px < avg_entry
+                        if is_loss and loss_cooldown_bars > 0:
+                            _cooldown_remaining = loss_cooldown_bars
                     if notifier and executed:
                         notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason,
-                                                      "price": ep, "qty": qty})
-                    logger.info("AUTO_EXIT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, ep, qty)
+                                                      "price": sell_px, "qty": qty})
+                    logger.info("AUTO_EXIT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, sell_px, qty)
 
                 elif reason in ("short_trailing_stop", "short_take_profit"):
                     pos = portfolio.short_positions.get(exit_symbol)
                     if pos is None:
                         continue
                     qty = pos.qty
-                    executed = portfolio.execute_cover(exit_symbol, ep, qty)
+                    cover_px = ep * (1.0 + slip_mult)
+                    executed = portfolio.execute_cover(exit_symbol, cover_px, qty)
                     if executed:
-                        fee = qty * ep * config.fee_rate
-                        close_paper_trade(conn, exit_symbol, "short", ep, fee, now_ms, close_reason=reason)
+                        fee = qty * cover_px * config.fee_rate
+                        close_paper_trade(conn, exit_symbol, "short", cover_px, fee, now_ms, close_reason=reason)
                     if notifier and executed:
                         notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason,
-                                                      "price": ep, "qty": qty})
-                    logger.info("AUTO_EXIT_SHORT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, ep, qty)
+                                                      "price": cover_px, "qty": qty})
+                    logger.info("AUTO_EXIT_SHORT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, cover_px, qty)
 
             # Dead-man's switch check
             stale = engine.check_dead_man()
@@ -278,47 +315,78 @@ async def run_event_loop(
 
             _signal_counts[symbol][action] += 1
 
+            # Track consecutive exit signals for confirmation
+            if action == "sell" and symbol in portfolio.positions:
+                _consecutive_exit_signals[symbol] += 1
+            else:
+                _consecutive_exit_signals[symbol] = 0
+
             if action == "buy" and px > 0:
-                if executor:
-                    res = executor.buy(symbol, px, size,
-                                       trailing_stop_pct=config.trailing_stop_pct,
-                                       take_profit_pct=config.take_profit_pct)
-                    executed = bool(res.ok)
+                if symbol in portfolio.positions:
+                    pass  # already long
+                elif _cooldown_remaining > 0:
+                    logger.debug("COOLDOWN %s — %d bars remaining", symbol, _cooldown_remaining)
                 else:
-                    executed = portfolio.execute_buy(
-                        symbol, px, size,
-                        trailing_stop_pct=config.trailing_stop_pct,
-                        take_profit_pct=config.take_profit_pct,
-                    )
-                if executed:
-                    now_ms = int(time.time() * 1000)
-                    fee = size * px * config.fee_rate
-                    open_paper_trade(conn, symbol, "long", px, size, fee, now_ms,
-                                     ml_up_prob=up_prob, strategy_conf=0.0,
-                                     vol_ratio=0.0)
-                    if notifier:
-                        notifier.notify("buy", {"symbol": symbol, "price": px,
-                                                "qty": size, "ml_up_prob": up_prob})
-                logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
-                            symbol, px, size, up_prob or -1, equity)
+                    buy_px = px * (1.0 + slip_mult)
+                    if executor:
+                        res = executor.buy(symbol, buy_px, size,
+                                           trailing_stop_pct=config.trailing_stop_pct,
+                                           take_profit_pct=config.take_profit_pct)
+                        executed = bool(res.ok)
+                    else:
+                        executed = portfolio.execute_buy(
+                            symbol, buy_px, size,
+                            trailing_stop_pct=config.trailing_stop_pct,
+                            take_profit_pct=config.take_profit_pct,
+                        )
+                    if executed:
+                        now_ms = int(time.time() * 1000)
+                        fee = size * buy_px * config.fee_rate
+                        open_paper_trade(conn, symbol, "long", buy_px, size, fee, now_ms,
+                                         ml_up_prob=up_prob, strategy_conf=0.0,
+                                         vol_ratio=0.0)
+                        if notifier:
+                            notifier.notify("buy", {"symbol": symbol, "price": buy_px,
+                                                    "qty": size, "ml_up_prob": up_prob})
+                    logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
+                                symbol, buy_px, size, up_prob or -1, equity)
 
             elif action == "sell" and symbol in portfolio.positions:
                 pos = portfolio.positions[symbol]
-                sell_qty = min(pos.qty, size)
-                if executor:
-                    res = executor.sell(symbol, px, sell_qty)
-                    executed = bool(res.ok)
+                # Conviction persistence: block signal exits until min hold time
+                if pos.bars_held < min_hold_bars:
+                    logger.debug(
+                        "HOLD %s — min hold not met (%d/%d bars)",
+                        symbol, pos.bars_held, min_hold_bars,
+                    )
+                # Exit confirmation: require N consecutive sell signals
+                elif _consecutive_exit_signals[symbol] < exit_confirm_bars:
+                    logger.debug(
+                        "HOLD %s — exit confirmation %d/%d",
+                        symbol, _consecutive_exit_signals[symbol], exit_confirm_bars,
+                    )
                 else:
-                    executed = portfolio.execute_sell(symbol, px, sell_qty)
-                if executed:
-                    now_ms = int(time.time() * 1000)
-                    exit_fee = sell_qty * px * config.fee_rate
-                    close_paper_trade(conn, symbol, "long", px, exit_fee, now_ms, close_reason="signal")
-                    if notifier:
-                        notifier.notify("sell", {"symbol": symbol, "price": px,
-                                                 "qty": sell_qty, "ml_up_prob": up_prob})
-                logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
-                            symbol, px, sell_qty, up_prob or -1, equity)
+                    sell_qty = min(pos.qty, size)
+                    sell_px = px * (1.0 - slip_mult)
+                    avg_entry = pos.avg_entry
+                    if executor:
+                        res = executor.sell(symbol, sell_px, sell_qty)
+                        executed = bool(res.ok)
+                    else:
+                        executed = portfolio.execute_sell(symbol, sell_px, sell_qty)
+                    if executed:
+                        now_ms = int(time.time() * 1000)
+                        exit_fee = sell_qty * sell_px * config.fee_rate
+                        close_paper_trade(conn, symbol, "long", sell_px, exit_fee, now_ms, close_reason="signal")
+                        _consecutive_exit_signals[symbol] = 0
+                        is_loss = sell_px < avg_entry
+                        if is_loss and loss_cooldown_bars > 0:
+                            _cooldown_remaining = loss_cooldown_bars
+                        if notifier:
+                            notifier.notify("sell", {"symbol": symbol, "price": sell_px,
+                                                     "qty": sell_qty, "ml_up_prob": up_prob})
+                    logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
+                                symbol, sell_px, sell_qty, up_prob or -1, equity)
             else:
                 logger.debug("HOLD %s px=%.2f ml=%.3f equity=%.2f",
                              symbol, px, up_prob or -1, equity)

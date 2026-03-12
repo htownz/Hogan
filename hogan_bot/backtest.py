@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from hogan_bot.agent_pipeline import AgentPipeline
-from hogan_bot.decision import apply_ml_filter, ml_confidence
+from hogan_bot.decision import apply_ml_filter, edge_gate, ml_confidence
 from hogan_bot.ml import TrainedModel, predict_up_probability
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
@@ -351,6 +351,11 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
 
     _rl_bars_in_trade: int = 0
 
+    # Conviction persistence (parity with event_loop)
+    _consecutive_exit_signals: int = 0
+    _min_hold_bars: int = 3
+    _exit_confirm_bars: int = 2
+
     # Next-open execution: pending buys/sells to fill at next bar's open
     _pending_buys: dict[str, float] = {}
     _pending_sells: dict[str, tuple[float, float, int | None, str]] = {}
@@ -478,6 +483,15 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             if ml_confidence_sizing:
                 conf_scale *= ml_confidence(up_prob)
 
+        # Fee-aware edge gate (parity with live/paper)
+        _atr_pct = signal.stop_distance_pct / max(atr_stop_multiplier, 1.0)
+        action = edge_gate(
+            action,
+            atr_pct=_atr_pct,
+            take_profit_pct=take_profit_pct,
+            fee_rate=fee_rate,
+        )
+
         equity = portfolio.total_equity(mark)
         equity_curve.append(equity)
 
@@ -491,9 +505,11 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             max_risk_per_trade=max_risk_per_trade,
             max_allocation_pct=aggressive_allocation,
             confidence_scale=conf_scale,
+            fee_rate=fee_rate,
         )
 
         if action == "buy":
+            _consecutive_exit_signals = 0
             if symbol in portfolio.positions:
                 pass
             elif _cooldown_remaining > 0:
@@ -514,11 +530,20 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     )
         elif action == "sell":
             if symbol not in portfolio.positions:
+                _consecutive_exit_signals = 0
                 continue
             pos = portfolio.positions[symbol]
             qty = pos.qty
             if qty <= 0:
+                _consecutive_exit_signals = 0
                 continue
+            _consecutive_exit_signals += 1
+            # Conviction persistence: block signal exits before min hold
+            if pos.bars_held < _min_hold_bars:
+                continue
+            if _consecutive_exit_signals < _exit_confirm_bars:
+                continue
+            _consecutive_exit_signals = 0
             sell_qty = min(qty, size)
             avg_entry = pos.avg_entry
             entry_bar_idx = _entry_bar.get(symbol)
