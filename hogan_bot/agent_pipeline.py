@@ -375,6 +375,10 @@ class MetaWeigher:
             w["technical"] = max(0.35, w["technical"] - 0.10)
             w["sentiment"] = w["sentiment"] + 0.05
             w["macro"] = w["macro"] + 0.05
+        elif regime == "ranging":
+            w["technical"] = max(0.25, w["technical"] - 0.20)
+            w["sentiment"] = w["sentiment"] + 0.10
+            w["macro"] = w["macro"] + 0.10
 
         # Normalize weights
         total = sum(w.values())
@@ -389,13 +393,11 @@ class MetaWeigher:
         sent_vote = {"bullish": 1.0, "bearish": -1.0, "neutral": 0.0}.get(sentiment.bias, 0.0)
         sent_score = sent_vote * sentiment.strength
 
-        # Macro modifier: risk-off reduces bullish conviction but doesn't crush it
-        if not macro.risk_on:
-            macro_mult = 0.70
-            if tech_score > 0:
-                tech_score *= macro_mult
-            if sent_score > 0:
-                sent_score *= macro_mult
+        # Macro as directional voter: risk_off pushes bearish, risk_on pushes bullish
+        macro_vote = {"risk_on": 0.5, "risk_off": -0.5, "neutral": 0.0}.get(
+            macro.regime, 0.0
+        )
+        macro_score = macro_vote
 
         # RAG context boost (optional)
         rag_boost = 0.0
@@ -406,10 +408,11 @@ class MetaWeigher:
         combined_score = (
             w["technical"] * tech_score
             + w["sentiment"] * sent_score
+            + w["macro"] * macro_score
             + rag_boost
         )
 
-        # Thresholds adapt to regime: tighter in volatile, looser in trends
+        # Thresholds adapt to regime
         buy_threshold = 0.15
         sell_threshold = -0.15
         if regime == "volatile":
@@ -418,6 +421,9 @@ class MetaWeigher:
         elif regime in ("trending_up", "trending_down"):
             buy_threshold = 0.10
             sell_threshold = -0.10
+        elif regime == "ranging":
+            buy_threshold = 0.12
+            sell_threshold = -0.12
 
         if combined_score >= buy_threshold:
             action = "buy"
