@@ -162,19 +162,33 @@ class SentimentAgent:
         self.conn = conn
         self.symbol = symbol
 
-    def analyze(self) -> SentimentSignal:
+    def analyze(self, as_of_ms: int | None = None) -> SentimentSignal:
+        """Produce a sentiment signal.
+
+        Parameters
+        ----------
+        as_of_ms
+            Point-in-time cutoff (epoch ms).  When set, all DB queries
+            restrict to data available *at or before* this timestamp.
+            ``None`` means "now" (live mode).
+        """
         if self.conn is None:
             return SentimentSignal(bias="neutral", strength=0.0)
 
+        if as_of_ms is not None:
+            cutoff_date = pd.Timestamp(as_of_ms, unit="ms", tz="UTC").strftime("%Y-%m-%d")
+            cutoff_ts = int(as_of_ms)
+        else:
+            cutoff_date = pd.Timestamp.utcnow().strftime("%Y-%m-%d")
+            cutoff_ts = int(pd.Timestamp.utcnow().timestamp() * 1000)
+
         scores: dict[str, float] = {}
         try:
-            today = pd.Timestamp.utcnow().strftime("%Y-%m-%d")
-
             # Fear & Greed (0=extreme fear, 100=extreme greed)
             row = self.conn.execute(
                 "SELECT value FROM onchain_metrics WHERE symbol=? AND metric='fear_greed_value' "
                 "AND date<=? ORDER BY date DESC LIMIT 1",
-                (self.symbol, today),
+                (self.symbol, cutoff_date),
             ).fetchone()
             if row:
                 scores["fear_greed"] = float(row[0]) / 100.0
@@ -183,7 +197,7 @@ class SentimentAgent:
             row = self.conn.execute(
                 "SELECT value FROM onchain_metrics WHERE symbol=? AND metric='news_sentiment_score' "
                 "AND date<=? ORDER BY date DESC LIMIT 1",
-                (self.symbol, today),
+                (self.symbol, cutoff_date),
             ).fetchone()
             if row:
                 scores["news_sentiment"] = float(row[0])
@@ -192,7 +206,7 @@ class SentimentAgent:
             row = self.conn.execute(
                 "SELECT value FROM onchain_metrics WHERE symbol=? AND metric='santiment_social_vol_chg' "
                 "AND date<=? ORDER BY date DESC LIMIT 1",
-                (self.symbol, today),
+                (self.symbol, cutoff_date),
             ).fetchone()
             if row:
                 scores["social_vol"] = float(row[0])
@@ -200,8 +214,8 @@ class SentimentAgent:
             # Funding rate (positive = longs paying, bearish signal)
             row = self.conn.execute(
                 "SELECT value FROM derivatives_metrics WHERE symbol=? AND metric='funding_rate' "
-                "ORDER BY ts_ms DESC LIMIT 1",
-                (self.symbol,),
+                "AND ts_ms<=? ORDER BY ts_ms DESC LIMIT 1",
+                (self.symbol, cutoff_ts),
             ).fetchone()
             if row:
                 raw_funding = float(row[0])
@@ -247,19 +261,30 @@ class MacroAgent:
         self.conn = conn
         self.symbol = symbol
 
-    def analyze(self) -> MacroSignal:
+    def analyze(self, as_of_ms: int | None = None) -> MacroSignal:
+        """Produce a macro signal.
+
+        Parameters
+        ----------
+        as_of_ms
+            Point-in-time cutoff (epoch ms).  ``None`` = now.
+        """
         if self.conn is None:
             return MacroSignal(regime="neutral", risk_on=True)
 
+        if as_of_ms is not None:
+            cutoff_date = pd.Timestamp(as_of_ms, unit="ms", tz="UTC").strftime("%Y-%m-%d")
+        else:
+            cutoff_date = pd.Timestamp.utcnow().strftime("%Y-%m-%d")
+
         indicators: dict[str, float] = {}
         try:
-            today = pd.Timestamp.utcnow().strftime("%Y-%m-%d")
             for metric in ["vix_close", "dxy_close", "gpr_index", "fomc_proximity",
                            "spy_return_pct"]:
                 row = self.conn.execute(
                     "SELECT value FROM onchain_metrics WHERE symbol=? AND metric=? "
                     "AND date<=? ORDER BY date DESC LIMIT 1",
-                    (self.symbol, metric, today),
+                    (self.symbol, metric, cutoff_date),
                 ).fetchone()
                 if row:
                     indicators[metric] = float(row[0])
@@ -471,6 +496,7 @@ class AgentPipeline:
         features: list[float] | None = None,
         config_override=None,
         regime: str | None = None,
+        as_of_ms: int | None = None,
         **runtime_state,
     ) -> AgentSignal:
         """Run all agents and return a combined AgentSignal.
@@ -483,13 +509,17 @@ class AgentPipeline:
             these params instead of the pipeline's base config.
         regime
             Market microstructure regime (from ``detect_regime()``).
+        as_of_ms
+            Point-in-time cutoff (epoch ms) for all DB lookups.
+            Used by backtest to prevent future data leakage.
+            ``None`` means "now" (live mode).
         """
         agent = self.tech_agent
         if config_override is not None:
             agent = TechnicalAgent(config_override)
         tech = agent.analyze(candles, **runtime_state)
-        sent = self.sent_agent.analyze()
-        macro = self.macro_agent.analyze()
+        sent = self.sent_agent.analyze(as_of_ms=as_of_ms)
+        macro = self.macro_agent.analyze(as_of_ms=as_of_ms)
 
         # RAG context (optional)
         rag_context = None

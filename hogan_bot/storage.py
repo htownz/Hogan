@@ -234,6 +234,57 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         """
     )
 
+    # -------------------------------------------------------------------
+    # Structured decision telemetry (Phase 2 — Gap 0)
+    # -------------------------------------------------------------------
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS decision_log (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_ms             INTEGER NOT NULL,
+            symbol            TEXT    NOT NULL,
+            regime            TEXT,
+            tech_action       TEXT,
+            tech_confidence   REAL,
+            sent_bias         REAL,
+            sent_strength     REAL,
+            macro_regime      TEXT,
+            macro_risk_on     INTEGER,
+            meta_weights_json TEXT,
+            forecast_4h       REAL,
+            forecast_12h      REAL,
+            forecast_24h      REAL,
+            forecast_conf     REAL,
+            risk_vol_pct      REAL,
+            risk_mae_pct      REAL,
+            risk_stop_hit     REAL,
+            risk_regime       TEXT,
+            risk_pos_scale    REAL,
+            freshness_json    TEXT,
+            final_action      TEXT    NOT NULL,
+            final_confidence  REAL,
+            position_size     REAL    DEFAULT 0.0,
+            ml_up_prob        REAL,
+            conf_scale        REAL,
+            explanation       TEXT,
+            realized_pnl      REAL,
+            outcome_ts_ms     INTEGER
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_log_ts "
+        "ON decision_log (ts_ms)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_log_symbol_ts "
+        "ON decision_log (symbol, ts_ms)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_log_action "
+        "ON decision_log (final_action)"
+    )
+
     conn.commit()
 
 
@@ -694,6 +745,121 @@ def load_paper_trades(
     params.append(int(limit))
     return pd.read_sql_query(
         f"SELECT * FROM paper_trades {where} ORDER BY open_ts_ms DESC LIMIT ?",
+        conn,
+        params=params,
+    )
+
+
+# -------------------------------------------------------------------
+# Decision telemetry (Phase 2 — Gap 0)
+# -------------------------------------------------------------------
+
+def log_decision(
+    conn: sqlite3.Connection,
+    *,
+    ts_ms: int,
+    symbol: str,
+    regime: str | None = None,
+    tech_action: str | None = None,
+    tech_confidence: float | None = None,
+    sent_bias: float | None = None,
+    sent_strength: float | None = None,
+    macro_regime: str | None = None,
+    macro_risk_on: bool | None = None,
+    meta_weights: dict | None = None,
+    forecast_4h: float | None = None,
+    forecast_12h: float | None = None,
+    forecast_24h: float | None = None,
+    forecast_conf: float | None = None,
+    risk_vol_pct: float | None = None,
+    risk_mae_pct: float | None = None,
+    risk_stop_hit: float | None = None,
+    risk_regime: str | None = None,
+    risk_pos_scale: float | None = None,
+    freshness: dict | None = None,
+    final_action: str = "hold",
+    final_confidence: float | None = None,
+    position_size: float = 0.0,
+    ml_up_prob: float | None = None,
+    conf_scale: float | None = None,
+    explanation: str | None = None,
+) -> int:
+    """Insert a structured decision packet.  Returns the row id."""
+    cur = conn.execute(
+        """
+        INSERT INTO decision_log (
+            ts_ms, symbol, regime,
+            tech_action, tech_confidence,
+            sent_bias, sent_strength,
+            macro_regime, macro_risk_on,
+            meta_weights_json,
+            forecast_4h, forecast_12h, forecast_24h, forecast_conf,
+            risk_vol_pct, risk_mae_pct, risk_stop_hit, risk_regime, risk_pos_scale,
+            freshness_json,
+            final_action, final_confidence, position_size,
+            ml_up_prob, conf_scale, explanation
+        ) VALUES (?,?,?, ?,?, ?,?, ?,?, ?, ?,?,?,?, ?,?,?,?,?, ?, ?,?,?, ?,?,?)
+        """,
+        (
+            int(ts_ms), symbol, regime,
+            tech_action, tech_confidence,
+            sent_bias, sent_strength,
+            macro_regime,
+            (1 if macro_risk_on else 0) if macro_risk_on is not None else None,
+            json.dumps(meta_weights) if meta_weights else None,
+            forecast_4h, forecast_12h, forecast_24h, forecast_conf,
+            risk_vol_pct, risk_mae_pct, risk_stop_hit, risk_regime, risk_pos_scale,
+            json.dumps(freshness) if freshness else None,
+            final_action, final_confidence, position_size,
+            ml_up_prob, conf_scale, explanation,
+        ),
+    )
+    conn.commit()
+    return cur.lastrowid  # type: ignore[return-value]
+
+
+def update_decision_outcome(
+    conn: sqlite3.Connection,
+    symbol: str,
+    entry_ts_ms: int,
+    realized_pnl: float,
+    outcome_ts_ms: int,
+) -> None:
+    """Back-fill realized outcome on the decision that opened this trade."""
+    conn.execute(
+        """
+        UPDATE decision_log
+        SET realized_pnl = ?, outcome_ts_ms = ?
+        WHERE id = (
+            SELECT id FROM decision_log
+            WHERE symbol = ? AND ts_ms <= ? AND final_action IN ('buy', 'sell')
+            ORDER BY ts_ms DESC LIMIT 1
+        )
+        """,
+        (float(realized_pnl), int(outcome_ts_ms), symbol, int(entry_ts_ms)),
+    )
+    conn.commit()
+
+
+def load_decision_log(
+    conn: sqlite3.Connection,
+    symbol: str | None = None,
+    limit: int = 500,
+    action_filter: str | None = None,
+) -> pd.DataFrame:
+    """Load recent decision packets for analysis."""
+    clauses: list[str] = []
+    params: list = []
+    if symbol:
+        clauses.append("symbol = ?")
+        params.append(symbol)
+    if action_filter:
+        clauses.append("final_action = ?")
+        params.append(action_filter)
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    params.append(int(limit))
+    return pd.read_sql_query(
+        f"SELECT * FROM decision_log {where} ORDER BY ts_ms DESC LIMIT ?",
         conn,
         params=params,
     )

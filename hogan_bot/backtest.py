@@ -279,6 +279,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     slippage_bps: float = 5.0,
     # Execution: "same_bar" = fill at signal bar close; "next_open" = fill at next bar open
     execution_mode: str = "same_bar",
+    # DB path for sentiment/macro agents (as-of timestamp semantics)
+    db_path: str | None = None,
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
@@ -326,7 +328,13 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         ict_ote_high=ict_ote_high, use_rl_agent=use_rl_agent,
         rl_policy=rl_policy, symbols=[symbol],
     )
-    _pipeline = AgentPipeline(_bt_config, conn=None)
+    _bt_conn = None
+    if db_path:
+        import sqlite3
+        _bt_conn = sqlite3.connect(db_path, check_same_thread=False)
+        _bt_conn.execute("PRAGMA journal_mode=WAL")
+        _bt_conn.execute("PRAGMA query_only=ON")
+    _pipeline = AgentPipeline(_bt_config, conn=_bt_conn)
 
     wins = 0
     closed = 0
@@ -452,21 +460,23 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             _rl_upnl = 0.0
             _rl_bars_in_trade = 0
 
+        _as_of = _bar_ts_ms(candles, i - 1) if _bt_conn is not None else None
         signal = _pipeline.run(
             window,
             symbol=symbol,
+            as_of_ms=_as_of,
             rl_in_position=_rl_in_pos,
             rl_unrealized_pnl=_rl_upnl,
             rl_bars_in_trade=_rl_bars_in_trade,
         )
 
         action = signal.action
-        conf_scale = 1.0
+        conf_scale = signal.confidence or 1.0
         if ml_model is not None:
             up_prob = predict_up_probability(window, ml_model)
             action = apply_ml_filter(action, up_prob, ml_buy_threshold, ml_sell_threshold)
             if ml_confidence_sizing:
-                conf_scale = ml_confidence(up_prob)
+                conf_scale *= ml_confidence(up_prob)
 
         equity = portfolio.total_equity(mark)
         equity_curve.append(equity)
@@ -556,6 +566,9 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     )
     win_rate = (wins / closed) if closed > 0 else 0.0
     max_dd_pct = max_dd * 100
+
+    if _bt_conn is not None:
+        _bt_conn.close()
 
     return BacktestResult(
         start_equity=starting_balance_usd,
