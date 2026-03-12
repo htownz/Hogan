@@ -176,15 +176,31 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 ).fetchone()
                 streak = self._compute_streak(conn)
 
+                open_detail = conn.execute(
+                    "SELECT trade_id, symbol, side, entry_price, qty, "
+                    "open_ts_ms, ml_up_prob, strategy_conf "
+                    "FROM paper_trades WHERE exit_price IS NULL "
+                    "ORDER BY open_ts_ms DESC"
+                ).fetchall()
+
+                now_ms = int(time.time() * 1000)
+                eq_ts_ms = eq["ts_ms"] if eq else 0
+                dec_ts_ms = last_dec["ts_ms"] if last_dec else 0
                 data = {
                     "equity": dict(eq) if eq else {"ts_ms": 0, "equity_usd": 0, "drawdown": 0},
                     "trades": dict(trades) if trades else {},
                     "open_positions": dict(open_trades)["n"] if open_trades else 0,
+                    "open_positions_detail": _json_rows(open_detail),
                     "last_decision": dict(last_dec) if last_dec else {},
                     "shadow_weights": _safe_json_loads(shadow["explanation"]) if shadow else {},
                     "regime_history": _json_rows(recent_regimes),
                     "last_closed_trade": dict(last_closed) if last_closed else None,
                     "streak": streak,
+                    "health": {
+                        "server_ts": now_ms,
+                        "equity_age_s": (now_ms - eq_ts_ms) / 1000,
+                        "decision_age_s": (now_ms - dec_ts_ms) / 1000,
+                    },
                 }
 
             elif path == "/api/candles":

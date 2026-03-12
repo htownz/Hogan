@@ -641,6 +641,7 @@ function findXForTs(sorted,ts,W,lm){
   if(!ts||!sorted.length)return null;
   const first=sorted[0].ts_ms,last=sorted[sorted.length-1].ts_ms;
   if(ts<first||ts>last)return null;
+  if(last===first)return lm+(W-lm)/2;
   const ratio=(ts-first)/(last-first);
   return lm+ratio*(W-lm);
 }
@@ -748,23 +749,23 @@ async function fetchTrades(){
   }
 }
 async function fetchOpenPos(){
-  S.openPosData=await api('/api/open_positions')||[];renderOpenPositions();
+  // Open positions now included in summary response
+  renderOpenPositions();
 }
-async function fetchHealth(){
-  const h=await api('/api/health');
+function updateHealth(h){
   const pill=document.getElementById('healthPill'),txt=document.getElementById('healthTxt');
   if(!h){pill.className='pill err';txt.textContent='OFFLINE';return;}
-  const age=Math.max(h.equity_age_s,h.decision_age_s);
-  if(age<120){pill.className='pill ok';txt.textContent='LIVE';}
-  else if(age<600){pill.className='pill warn';txt.textContent='STALE';}
+  const age=Math.min(h.equity_age_s||9999,h.decision_age_s||9999);
+  if(age<300){pill.className='pill ok';txt.textContent='LIVE';}
+  else if(age<1800){pill.className='pill warn';txt.textContent='STALE';}
   else{pill.className='pill err';txt.textContent='OFFLINE';}
 }
 async function fetchSummary(){
-  const s=await api('/api/summary');if(s){S.summaryData=s;renderSummary(s);}
+  const s=await api('/api/summary');if(s){S.summaryData=s;S.openPosData=s.open_positions_detail||[];renderSummary(s);renderOpenPositions();updateHealth(s.health);}
 }
 
 async function fetchAll(){
-  await Promise.all([fetchSummary(),fetchEquity(),fetchCandles(),fetchDecisions(),fetchTrades(),fetchOpenPos(),fetchHealth()]);
+  await Promise.all([fetchSummary(),fetchEquity(),fetchCandles(),fetchDecisions(),fetchTrades(),fetchOpenPos()]);
 }
 
 /* ================================================================
@@ -796,8 +797,8 @@ function renderSummary(s){
   if(dd>.08)mood='worried';
   if(sk.type==='win'&&sk.count>=3)mood='excited';
   if(sk.type==='loss'&&sk.count>=3)mood='worried';
-  const decAge=eq.ts_ms?(Date.now()-eq.ts_ms)/1000:9999;
-  if(decAge>600&&act==='hold')mood='sleeping';
+  const decAge=ld.ts_ms?(Date.now()-ld.ts_ms)/1000:9999;
+  if(decAge>1800&&act==='hold')mood='sleeping';
   B.mouthT=mood==='bullish'||mood==='excited'?1:mood==='bearish'||mood==='worried'?-1:0;
   setBrunoMood(mood,regime);
   const mb=document.getElementById('moodBadge');
@@ -809,7 +810,7 @@ function renderSummary(s){
   setV('vTech',ld.tech_action);setV('vSent',ld.sent_bias);setV('vMacro',ld.macro_regime);
   const mlEl=document.getElementById('vMl');mlEl.textContent=ld.ml_up_prob!=null?(ld.ml_up_prob*100).toFixed(0)+'%':'\u2014';
   mlEl.style.color=ld.ml_up_prob>.55?'var(--grn)':ld.ml_up_prob<.45?'var(--red)':'var(--dim)';
-  const rvEl=document.getElementById('vRisk');rvEl.textContent=ld.risk_vol_pct!=null?(ld.risk_vol_pct*100).toFixed(1)+'%':'\u2014';
+  const rvEl=document.getElementById('vRisk');rvEl.textContent=ld.risk_vol_pct!=null?ld.risk_vol_pct.toFixed(1)+'%':'\u2014';
 
   // Consensus
   const votes=[ld.tech_action,ld.sent_bias,ld.macro_regime];
@@ -893,7 +894,8 @@ function renderTrades(){
     if(t.ml_up_prob!=null)detail+=` | <b>ML:</b> ${(t.ml_up_prob*100).toFixed(0)}%`;
     if(t.entry_decision_id)detail+=` | <b>Decision #</b>${t.entry_decision_id}`;
     detail+=`<br><b>Opened:</b> ${new Date(t.open_ts_ms).toLocaleString()} | <b>Closed:</b> ${new Date(t.close_ts_ms).toLocaleString()}`;
-    h+=`<div class="tr" onclick="this.classList.toggle('open')"><span>${(t.symbol||'').replace('/USD','')}</span><span style="color:${t.side==='long'?'var(--grn)':'var(--red)'}">${(t.side||'').toUpperCase()}</span><span class="m">$${(t.entry_price||0).toFixed(0)}</span><span class="m">$${(t.exit_price||0).toFixed(0)}</span><span class="m" style="color:${pc}">${(t.realized_pnl||0).toFixed(2)}</span><span class="m" style="color:${pc}">${pp}</span><span style="font-size:8px;color:var(--dim)">${t.close_reason||''}</span><div class="td-detail">${detail}</div></div>`;
+    const tSide=(t.side||'').toLowerCase();const tIsLong=tSide==='long'||tSide==='buy';
+    h+=`<div class="tr" onclick="this.classList.toggle('open')"><span>${(t.symbol||'').replace('/USD','')}</span><span style="color:${tIsLong?'var(--grn)':'var(--red)'}">${tIsLong?'LONG':'SHORT'}</span><span class="m">$${(t.entry_price||0).toFixed(0)}</span><span class="m">$${(t.exit_price||0).toFixed(0)}</span><span class="m" style="color:${pc}">${(t.realized_pnl||0).toFixed(2)}</span><span class="m" style="color:${pc}">${pp}</span><span style="font-size:8px;color:var(--dim)">${t.close_reason||''}</span><div class="td-detail">${detail}</div></div>`;
   }
   el.innerHTML=h||'<div style="padding:10px;color:var(--dim);font-size:10px">No closed trades yet</div>';
 }
@@ -904,7 +906,10 @@ function renderOpenPositions(){
   let h='';
   for(const p of S.openPosData){
     const age=((Date.now()-p.open_ts_ms)/3600000).toFixed(1);
-    h+=`<div class="op-row"><span class="op-sym">${(p.symbol||'').replace('/USD','')}</span><span class="op-side" style="color:${p.side==='long'?'var(--grn)':'var(--red)'}">${(p.side||'').toUpperCase()}</span><span class="m">$${(p.entry_price||0).toFixed(0)}</span><span style="color:var(--dim)">${age}h</span></div>`;
+    const sideRaw=(p.side||'').toLowerCase();
+    const isLong=sideRaw==='long'||sideRaw==='buy';
+    const sideLabel=isLong?'LONG':'SHORT';
+    h+=`<div class="op-row"><span class="op-sym">${(p.symbol||'').replace('/USD','')}</span><span class="op-side" style="color:${isLong?'var(--grn)':'var(--red)'}">${sideLabel}</span><span class="m">$${(p.entry_price||0).toFixed(0)}</span><span style="color:var(--dim)">${age}h</span></div>`;
   }
   el.innerHTML=h;
 }
@@ -935,7 +940,7 @@ document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t
 document.querySelectorAll('.rb').forEach(b=>b.classList.toggle('on',parseInt(b.dataset.h)===S.hours));
 
 fetchAll();
-setInterval(fetchHealth,15000);
+setInterval(fetchSummary,15000);
 setInterval(()=>{fetchEquity();fetchCandles();},30000);
 connectSSE();
 </script>
