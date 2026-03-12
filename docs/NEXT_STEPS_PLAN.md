@@ -147,10 +147,16 @@ is degrading, and triggers a retrain or parameter re-optimization automatically.
 | P3 | MLflow model governance | Planned | Medium |
 | P3 | OpenBB analyst cockpit | Planned | Medium |
 | P4 | RL agent training | Planned | High |
-| P4 | Triple-barrier labeling | Planned | High |
-| P4 | Self-evaluation loop | Planned | High |
+| P4 | Triple-barrier labeling | **DONE** | High |
+| P4 | Self-evaluation loop | **DONE** | High |
+| P4 | Adaptive ML confidence | **DONE** | High |
+| P4 | Performance tracker + auto-weight tuning | **DONE** | High |
 
 ---
 
 *Updated after deep codebase audit. P0 correctness fixes are merged — all paper trade
 data from this point forward has accurate accounting.*
+
+*Phase 4 update: Self-evaluation loop, enhanced triple-barrier labeling, adaptive ML
+confidence, and performance-based MetaWeigher tuning are now implemented and wired into
+the agent pipeline.*
