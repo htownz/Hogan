@@ -62,6 +62,28 @@ Hogan follows a multi-layer architecture:
 ### Experimental Features (Quarantined)
 - **ICT/FVG** — experimental, quarantined from the core AgentPipeline decision flow
 
+## Project Structure
+
+```
+/Hogan
+├── README.md              # This file
+├── requirements.txt       # Python dependencies
+├── .env.example           # Environment variable template
+├── data/                  # SQLite databases and caches
+├── deployment/            # Service files (systemd, Windows Task Scheduler)
+├── docs/                  # Architecture docs, planning, command reference
+├── hogan_bot/             # Core trading bot Python package
+├── logs/                  # Runtime logs
+├── models/                # ML models (.pkl) and optimization configs
+├── monitoring/            # Prometheus, Grafana, Docker configs
+├── scripts/
+│   ├── dashboards/        # Dashboard HTML and Python servers
+│   ├── data/              # Data refresh and management scripts
+│   ├── python/            # Python utility scripts (analysis, diagnostics)
+│   └── windows/           # PowerShell automation scripts
+└── tests/                 # Unit tests
+```
+
 ## Quick Start
 
 ```bash
