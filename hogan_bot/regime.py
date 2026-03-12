@@ -263,12 +263,12 @@ _REGIME_OVERRIDES: dict[str, dict[str, float]] = {
         "position_scale":        1.00,
     },
     "ranging": {
-        "volume_threshold_mult": 1.10,  # slightly stricter — only trade on volume spikes
-        "ml_buy_threshold":      0.62,  # strict — ranging is dangerous
+        "volume_threshold_mult": 1.10,
+        "ml_buy_threshold":      0.62,
         "ml_sell_threshold":     0.38,
-        "trailing_stop_mult":    0.50,  # tight — range is narrow, exit fast if wrong
-        "take_profit_mult":      0.70,  # small targets in ranging market
-        "position_scale":        0.75,  # reduce size — chop is dangerous
+        "trailing_stop_mult":    0.80,  # widened from 0.50 — 0.5x whipsawed BTC in ranges
+        "take_profit_mult":      0.70,
+        "position_scale":        0.75,
     },
     "volatile": {
         "volume_threshold_mult": 0.70,  # moderate filter

@@ -317,7 +317,7 @@ def load_config() -> BotConfig:
         max_hold_bars=int(os.getenv("HOGAN_MAX_HOLD_BARS", "24")),
         loss_cooldown_bars=int(os.getenv("HOGAN_LOSS_COOLDOWN_BARS", "2")),
         max_hold_hours=float(os.getenv("HOGAN_MAX_HOLD_HOURS", "0")),
-        loss_cooldown_hours=float(os.getenv("HOGAN_LOSS_COOLDOWN_HOURS", "0")),
+        loss_cooldown_hours=float(os.getenv("HOGAN_LOSS_COOLDOWN_HOURS", "2")),
         use_ict=os.getenv("HOGAN_USE_ICT", "false").lower() == "true",
         ict_model=os.getenv("HOGAN_ICT_MODEL", "silver_bullet"),
         ict_swing_left=int(os.getenv("HOGAN_ICT_SWING_LEFT", "2")),

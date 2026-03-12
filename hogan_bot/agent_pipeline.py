@@ -178,20 +178,29 @@ class SentimentAgent:
         if as_of_ms is not None:
             cutoff_date = pd.Timestamp(as_of_ms, unit="ms", tz="UTC").strftime("%Y-%m-%d")
             cutoff_ts = int(as_of_ms)
+            now_ts = int(as_of_ms)
         else:
             cutoff_date = pd.Timestamp.utcnow().strftime("%Y-%m-%d")
             cutoff_ts = int(pd.Timestamp.utcnow().timestamp() * 1000)
+            now_ts = cutoff_ts
 
         scores: dict[str, float] = {}
+        _sent_ages: list[float] = []
         try:
             # Fear & Greed (0=extreme fear, 100=extreme greed)
             row = self.conn.execute(
-                "SELECT value FROM onchain_metrics WHERE symbol=? AND metric='fear_greed_value' "
+                "SELECT value, date FROM onchain_metrics WHERE symbol=? AND metric='fear_greed_value' "
                 "AND date<=? ORDER BY date DESC LIMIT 1",
                 (self.symbol, cutoff_date),
             ).fetchone()
             if row:
                 scores["fear_greed"] = float(row[0]) / 100.0
+                try:
+                    _d = pd.Timestamp(row[1], tz="UTC")
+                    _age = (pd.Timestamp(cutoff_date, tz="UTC") - _d).total_seconds() / 3600.0
+                    _sent_ages.append(_age)
+                except Exception:
+                    pass
 
             # News sentiment [-1, 1]
             row = self.conn.execute(
@@ -202,7 +211,7 @@ class SentimentAgent:
             if row:
                 scores["news_sentiment"] = float(row[0])
 
-            # Social volume change ÷100
+            # Social volume change
             row = self.conn.execute(
                 "SELECT value FROM onchain_metrics WHERE symbol=? AND metric='santiment_social_vol_chg' "
                 "AND date<=? ORDER BY date DESC LIMIT 1",
@@ -227,7 +236,6 @@ class SentimentAgent:
         if not scores:
             return SentimentSignal(bias="neutral", strength=0.0)
 
-        # Weighted composite sentiment score
         all_keys = ["fear_greed", "news_sentiment", "social_vol", "funding"]
         weights = {"fear_greed": 0.35, "news_sentiment": 0.30,
                    "social_vol": 0.20, "funding": 0.15}
@@ -236,16 +244,28 @@ class SentimentAgent:
             for k, w in weights.items()
         )
 
-        # Scale strength by data coverage — don't claim full confidence
-        # when half the inputs are missing
         coverage = sum(1 for k in all_keys if k in scores) / len(all_keys)
 
+        data_age_hours = max(_sent_ages) if _sent_ages else 999.0
+
+        freshness = 1.0
+        if data_age_hours > 48:
+            freshness = 0.1
+        elif data_age_hours > 24:
+            freshness = 0.3
+        elif data_age_hours > 12:
+            freshness = 0.5
+
         if composite > 0.55:
-            bias, strength = "bullish", min(1.0, (composite - 0.55) * 4) * coverage
+            bias, strength = "bullish", min(1.0, (composite - 0.55) * 4) * coverage * freshness
         elif composite < 0.40:
-            bias, strength = "bearish", min(1.0, (0.40 - composite) * 4) * coverage
+            bias, strength = "bearish", min(1.0, (0.40 - composite) * 4) * coverage * freshness
         else:
             bias, strength = "neutral", 0.0
+
+        if freshness < 1.0:
+            scores["_freshness"] = freshness
+            scores["_age_h"] = data_age_hours
 
         return SentimentSignal(bias=bias, strength=strength, details=scores)
 
@@ -278,43 +298,55 @@ class MacroAgent:
             cutoff_date = pd.Timestamp.utcnow().strftime("%Y-%m-%d")
 
         indicators: dict[str, float] = {}
+        _metric_ages: list[float] = []
         try:
             for metric in ["vix_close", "dxy_close", "gpr_index", "fomc_proximity",
                            "spy_return_pct"]:
                 row = self.conn.execute(
-                    "SELECT value FROM onchain_metrics WHERE symbol=? AND metric=? "
+                    "SELECT value, date FROM onchain_metrics WHERE symbol=? AND metric=? "
                     "AND date<=? ORDER BY date DESC LIMIT 1",
                     (self.symbol, metric, cutoff_date),
                 ).fetchone()
                 if row:
                     indicators[metric] = float(row[0])
+                    try:
+                        _d = pd.Timestamp(row[1], tz="UTC")
+                        _age = (pd.Timestamp(cutoff_date, tz="UTC") - _d).total_seconds() / 3600.0
+                        _metric_ages.append(_age)
+                    except Exception:
+                        pass
         except Exception as exc:
             logger.debug("MacroAgent data lookup failed: %s", exc)
+
+        data_age_hours = max(_metric_ages) if _metric_ages else 999.0
 
         if not indicators:
             return MacroSignal(regime="neutral", risk_on=True)
 
-        risk_score = 0.0   # positive = risk-on, negative = risk-off
+        risk_score = 0.0
 
-        # VIX: above 25 = elevated fear (risk-off), below 15 = complacency
         vix = indicators.get("vix_close", 20.0)
         risk_score += 1.0 if vix < 15 else (-1.0 if vix > 25 else 0.0)
 
-        # DXY: rising dollar = risk-off for crypto
         dxy = indicators.get("dxy_close", 100.0)
         risk_score += -0.5 if dxy > 105 else (0.5 if dxy < 95 else 0.0)
 
-        # GPR: high geopolitical risk = risk-off
         gpr = indicators.get("gpr_index", 0.0)
         risk_score += -0.5 if gpr > 1.5 else (0.3 if gpr < -0.5 else 0.0)
 
-        # FOMC proximity: slight uncertainty near Fed meetings
         fomc = indicators.get("fomc_proximity", 0.0)
         risk_score += -0.3 if fomc > 0.5 else 0.0
 
-        # SPY return: positive = risk-on
         spy_ret = indicators.get("spy_return_pct", 0.0)
         risk_score += 0.5 * np.sign(spy_ret) * min(abs(spy_ret) / 2.0, 1.0)
+
+        # Freshness discount: pull score toward neutral when data is stale
+        if data_age_hours > 48:
+            risk_score *= 0.1
+        elif data_age_hours > 24:
+            risk_score *= 0.3
+        elif data_age_hours > 12:
+            risk_score *= 0.5
 
         risk_on = risk_score >= 0
         if abs(risk_score) < 0.5:
@@ -323,6 +355,9 @@ class MacroAgent:
             regime = "risk_on"
         else:
             regime = "risk_off"
+
+        if data_age_hours < 999:
+            indicators["_age_h"] = data_age_hours
 
         return MacroSignal(regime=regime, risk_on=risk_on, details=indicators)
 
@@ -405,12 +440,22 @@ class MetaWeigher:
             rag_win_rate = float(rag_context.get("similar_win_rate", 0.5))
             rag_boost = (rag_win_rate - 0.5) * 0.2
 
-        combined_score = (
+        raw_score = (
             w["technical"] * tech_score
             + w["sentiment"] * sent_score
             + w["macro"] * macro_score
             + rag_boost
         )
+
+        # When the technical agent returns "hold" with high confidence, it
+        # means the price action does NOT support any trade.  This should
+        # dampen how much sentiment/macro alone can drive a trade.
+        if tech.action == "hold" and tech.confidence > 0.3:
+            hold_dampen = 1.0 - (tech.confidence * w["technical"] * 2.0)
+            hold_dampen = max(0.2, hold_dampen)
+            raw_score *= hold_dampen
+
+        combined_score = raw_score
 
         # Thresholds adapt to regime
         buy_threshold = 0.15
@@ -556,15 +601,39 @@ class AgentPipeline:
         signal.forecast = forecast
         signal.risk_estimate = risk_est
 
-        # Forecast-based edge validation: if forecast strongly opposes action, demote
-        if signal.action == "buy" and forecast.confidence > 0.3:
-            if forecast.bullish_12h < 0.40:
-                signal.confidence *= 0.6
-                signal.explanation += f" | Forecast opposes ({forecast.bullish_12h:.0%} up@12h)"
-        elif signal.action == "sell" and forecast.confidence > 0.3:
-            if forecast.bullish_12h > 0.60:
-                signal.explanation += f" | Forecast opposes ({forecast.bullish_12h:.0%} up@12h)"
-                signal.confidence *= 0.6
+        # Forecast-driven action validation:
+        # The forecast head is an independent directional estimate.  If it
+        # strongly disagrees with the MetaWeigher action, override or dampen.
+        # If it agrees, boost.  This prevents stale sentiment/macro from
+        # overriding what the price data is actually showing.
+        if forecast.confidence > 0.2:
+            fc_4h = forecast.bullish_4h
+            fc_12h = forecast.bullish_12h
+
+            fc_bias = (fc_4h - 0.5) * 0.6 + (fc_12h - 0.5) * 0.4
+
+            if signal.action == "sell" and fc_bias > 0.03:
+                signal.explanation += f" | Forecast disagrees ({fc_4h:.0%}up@4h, bias={fc_bias:+.3f})"
+                if fc_bias > 0.08:
+                    signal.action = "hold"
+                    signal.confidence *= 0.3
+                    signal.explanation += " -> VETO to hold"
+                else:
+                    signal.confidence *= 0.5
+            elif signal.action == "buy" and fc_bias < -0.03:
+                signal.explanation += f" | Forecast disagrees ({fc_4h:.0%}up@4h, bias={fc_bias:+.3f})"
+                if fc_bias < -0.08:
+                    signal.action = "hold"
+                    signal.confidence *= 0.3
+                    signal.explanation += " -> VETO to hold"
+                else:
+                    signal.confidence *= 0.5
+            elif signal.action == "sell" and fc_bias < -0.03:
+                signal.confidence = min(1.0, signal.confidence * 1.2)
+                signal.explanation += f" | Forecast confirms ({fc_4h:.0%}up@4h)"
+            elif signal.action == "buy" and fc_bias > 0.03:
+                signal.confidence = min(1.0, signal.confidence * 1.2)
+                signal.explanation += f" | Forecast confirms ({fc_4h:.0%}up@4h)"
 
         # Risk-based position scaling
         if risk_est.regime_risk == "high":
