@@ -30,6 +30,7 @@ from hogan_bot.storage import (
     load_latest_fill_ts, record_fill,
     open_paper_trade, close_paper_trade,
     log_decision, update_decision_outcome,
+    link_decision_to_trade,
 )
 from hogan_bot.agent_pipeline import AgentPipeline
 
@@ -496,13 +497,14 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                             ok = paper_port.execute_sell(exit_symbol, exit_px, qty)
                             if ok:
                                 fee = qty * exit_px * config.fee_rate
-                                close_paper_trade(conn, exit_symbol, "long", exit_px, fee, now_ms, close_reason=reason)
+                                _entry_dec_id = close_paper_trade(conn, exit_symbol, "long", exit_px, fee, now_ms, close_reason=reason)
                                 pnl_pct = (exit_px - avg_entry) / avg_entry if avg_entry > 0 else 0.0
                                 _label_buffer_from_trade(conn, exit_symbol, now_ms, pnl_pct)
-                                try:
-                                    update_decision_outcome(conn, exit_symbol, "buy", pnl_pct, now_ms)
-                                except Exception:
-                                    pass
+                                if _entry_dec_id is not None:
+                                    try:
+                                        update_decision_outcome(conn, _entry_dec_id, pnl_pct, now_ms)
+                                    except Exception:
+                                        pass
                                 is_loss = exit_px < avg_entry
                                 if is_loss and loss_cooldown_bars > 0:
                                     _cooldown_remaining = loss_cooldown_bars
@@ -518,7 +520,14 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                             ok = paper_port.execute_cover(exit_symbol, exit_px, qty)
                             if ok:
                                 fee = qty * exit_px * config.fee_rate
-                                close_paper_trade(conn, exit_symbol, "short", exit_px, fee, now_ms, close_reason=reason)
+                                _entry_dec_id = close_paper_trade(conn, exit_symbol, "short", exit_px, fee, now_ms, close_reason=reason)
+                                if _entry_dec_id is not None:
+                                    try:
+                                        _short_entry = pos.avg_entry if hasattr(pos, "avg_entry") else exit_px
+                                        _pnl = (_short_entry - exit_px) / _short_entry if _short_entry > 0 else 0.0
+                                        update_decision_outcome(conn, _entry_dec_id, _pnl, now_ms)
+                                    except Exception:
+                                        pass
                                 ORDERS.labels(side="cover", mode=mode, exchange="paper").inc()
                                 notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason, "price": exit_px, "qty": qty})
                                 logger.info("AUTO_EXIT_SHORT symbol=%s reason=%s px=%.2f qty=%.6f",
@@ -545,7 +554,13 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                                     if res.ok:
                                         now_ms = int(time.time() * 1000)
                                         fee = qty_live * px * config.fee_rate
-                                        close_paper_trade(conn, sym, "long", px, fee, now_ms, close_reason="trailing_stop")
+                                        _edc = close_paper_trade(conn, sym, "long", px, fee, now_ms, close_reason="trailing_stop")
+                                        if _edc is not None:
+                                            try:
+                                                _lpnl = (px - entry) / entry if entry > 0 else 0.0
+                                                update_decision_outcome(conn, _edc, _lpnl, now_ms)
+                                            except Exception:
+                                                pass
                                         notifier.notify("trailing_stop_exit", {"symbol": sym, "price": px, "qty": qty_live})
                                     else:
                                         ORDER_FAILS.labels(side="sell", mode=mode, exchange=config.exchange_id).inc()
@@ -558,7 +573,13 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                                     if res.ok:
                                         now_ms = int(time.time() * 1000)
                                         fee = qty_live * px * config.fee_rate
-                                        close_paper_trade(conn, sym, "long", px, fee, now_ms, close_reason="take_profit")
+                                        _edc = close_paper_trade(conn, sym, "long", px, fee, now_ms, close_reason="take_profit")
+                                        if _edc is not None:
+                                            try:
+                                                _lpnl = (px - entry) / entry if entry > 0 else 0.0
+                                                update_decision_outcome(conn, _edc, _lpnl, now_ms)
+                                            except Exception:
+                                                pass
                                         notifier.notify("take_profit_exit", {"symbol": sym, "price": px, "qty": qty_live})
                                     else:
                                         ORDER_FAILS.labels(side="sell", mode=mode, exchange=config.exchange_id).inc()
@@ -684,13 +705,14 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                         confidence_scale=conf_scale,
                     )
 
+                    _decision_id: int | None = None
                     try:
                         pkt = _build_decision_packet(
                             symbol, regime_state, signal,
                             final_action=action, conf_scale=conf_scale,
                             up_prob=up_prob, position_size=size,
                         )
-                        log_decision(conn, **pkt)
+                        _decision_id = log_decision(conn, **pkt)
                     except Exception:
                         pass
 
@@ -707,10 +729,18 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                         elif is_short:
                             # Cover short first, then open long
                             cover_qty = paper_port.short_positions[symbol].qty
+                            _short_pos = paper_port.short_positions[symbol]
                             ok = paper_port.execute_cover(symbol, px, cover_qty)
                             if ok:
                                 fee = cover_qty * px * config.fee_rate
-                                close_paper_trade(conn, symbol, "short", px, fee, now_ms, close_reason="signal")
+                                _short_dec_id = close_paper_trade(conn, symbol, "short", px, fee, now_ms, close_reason="signal")
+                                if _short_dec_id is not None:
+                                    try:
+                                        _se = _short_pos.avg_entry if hasattr(_short_pos, "avg_entry") else px
+                                        _spnl = (_se - px) / _se if _se > 0 else 0.0
+                                        update_decision_outcome(conn, _short_dec_id, _spnl, now_ms)
+                                    except Exception:
+                                        pass
                                 ORDERS.labels(side="cover", mode=mode, exchange=config.exchange_id).inc()
                                 notifier.notify("cover", {"symbol": symbol, "price": px, "qty": cover_qty, "ml_up_prob": up_prob})
                                 logger.info("COVER %s px=%.2f qty=%.6f", symbol, px, cover_qty)
@@ -723,9 +753,12 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                                 ORDER_FAILS.labels(side="buy", mode=mode, exchange=config.exchange_id).inc()
                             else:
                                 fee = size * px * config.fee_rate
-                                open_paper_trade(conn, symbol, "long", px, size, fee, now_ms,
-                                                 ml_up_prob=up_prob, strategy_conf=signal.confidence,
-                                                 vol_ratio=signal.volume_ratio)
+                                _tid = open_paper_trade(conn, symbol, "long", px, size, fee, now_ms,
+                                                        ml_up_prob=up_prob, strategy_conf=signal.confidence,
+                                                        vol_ratio=signal.volume_ratio, entry_decision_id=_decision_id)
+                                if _decision_id:
+                                    try: link_decision_to_trade(conn, _decision_id, _tid)
+                                    except Exception: pass
                                 notifier.notify("buy", {"symbol": symbol, "price": px, "qty": size, "up_prob": up_prob})
                                 logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
                                             symbol, px, size, up_prob or -1, equity)
@@ -751,9 +784,12 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                                 notifier.notify("order_failed", {"side": "buy", "symbol": symbol, "error": res.error})
                             else:
                                 fee = size * px * config.fee_rate
-                                open_paper_trade(conn, symbol, "long", px, size, fee, now_ms,
-                                                 ml_up_prob=up_prob, strategy_conf=signal.confidence,
-                                                 vol_ratio=signal.volume_ratio)
+                                _tid = open_paper_trade(conn, symbol, "long", px, size, fee, now_ms,
+                                                        ml_up_prob=up_prob, strategy_conf=signal.confidence,
+                                                        vol_ratio=signal.volume_ratio, entry_decision_id=_decision_id)
+                                if _decision_id:
+                                    try: link_decision_to_trade(conn, _decision_id, _tid)
+                                    except Exception: pass
                                 notifier.notify("buy", {"symbol": symbol, "price": px, "qty": size, "up_prob": up_prob})
                                 logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
                                             symbol, px, size, up_prob or -1, equity)
@@ -785,13 +821,14 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                                 notifier.notify("order_failed", {"side": "sell", "symbol": symbol, "error": res.error})
                             else:
                                 fee = sell_qty * px * config.fee_rate
-                                close_paper_trade(conn, symbol, "long", px, fee, now_ms, close_reason="signal")
+                                _entry_dec_id = close_paper_trade(conn, symbol, "long", px, fee, now_ms, close_reason="signal")
                                 pnl_pct = (px - _entry_px) / _entry_px if _entry_px > 0 else 0.0
                                 _label_buffer_from_trade(conn, symbol, now_ms, pnl_pct)
-                                try:
-                                    update_decision_outcome(conn, symbol, "buy", pnl_pct, now_ms)
-                                except Exception:
-                                    pass
+                                if _entry_dec_id is not None:
+                                    try:
+                                        update_decision_outcome(conn, _entry_dec_id, pnl_pct, now_ms)
+                                    except Exception:
+                                        pass
                                 notifier.notify("sell", {"symbol": symbol, "price": px, "qty": sell_qty, "up_prob": up_prob})
                                 logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
                                             symbol, px, sell_qty, up_prob or -1, equity)
@@ -803,9 +840,12 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                                 )
                                 if ok_short:
                                     fee = size * px * config.fee_rate
-                                    open_paper_trade(conn, symbol, "short", px, size, fee, now_ms,
-                                                     ml_up_prob=up_prob, strategy_conf=signal.confidence,
-                                                     vol_ratio=signal.volume_ratio)
+                                    _tid = open_paper_trade(conn, symbol, "short", px, size, fee, now_ms,
+                                                            ml_up_prob=up_prob, strategy_conf=signal.confidence,
+                                                            vol_ratio=signal.volume_ratio, entry_decision_id=_decision_id)
+                                    if _decision_id:
+                                        try: link_decision_to_trade(conn, _decision_id, _tid)
+                                        except Exception: pass
                                     ORDERS.labels(side="short", mode=mode, exchange=config.exchange_id).inc()
                                     notifier.notify("short", {"symbol": symbol, "price": px, "qty": size, "ml_up_prob": up_prob})
                                     logger.info("SHORT %s px=%.2f qty=%.6f", symbol, px, size)
@@ -820,9 +860,12 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                             )
                             if ok_short:
                                 fee = size * px * config.fee_rate
-                                open_paper_trade(conn, symbol, "short", px, size, fee, now_ms,
-                                                 ml_up_prob=up_prob, strategy_conf=signal.confidence,
-                                                 vol_ratio=signal.volume_ratio)
+                                _tid = open_paper_trade(conn, symbol, "short", px, size, fee, now_ms,
+                                                        ml_up_prob=up_prob, strategy_conf=signal.confidence,
+                                                        vol_ratio=signal.volume_ratio, entry_decision_id=_decision_id)
+                                if _decision_id:
+                                    try: link_decision_to_trade(conn, _decision_id, _tid)
+                                    except Exception: pass
                                 ORDERS.labels(side="short", mode=mode, exchange=config.exchange_id).inc()
                                 notifier.notify("short", {"symbol": symbol, "price": px, "qty": size, "ml_up_prob": up_prob})
                                 logger.info("SHORT %s px=%.2f qty=%.6f", symbol, px, size)

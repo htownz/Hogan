@@ -161,10 +161,11 @@ class OnlineLearner:
         insufficient data is available.
 
         The algorithm:
-        1. Load recent closed decisions from decision_log
-        2. For each agent, compute signal-to-outcome correlation
-        3. Translate correlations to proposed weights (EMA smoothed)
+        1. Load recent closed decisions from decision_log (including regime)
+        2. Compute per-regime and global signal-to-outcome correlations
+        3. Translate correlations to proposed weights
         4. Apply floor/ceiling bounds per agent
+        5. Log the full comparison (global + per-regime)
         """
         from hogan_bot.storage import get_connection
 
@@ -174,7 +175,8 @@ class OnlineLearner:
                 SELECT tech_action, tech_confidence,
                        sent_bias, sent_strength,
                        macro_regime, macro_risk_on,
-                       final_action, realized_pnl
+                       final_action, realized_pnl,
+                       regime
                 FROM decision_log
                 WHERE realized_pnl IS NOT NULL
             """
@@ -193,52 +195,65 @@ class OnlineLearner:
             logger.debug("Shadow weights: only %d closed decisions, need 20+", len(rows))
             return None
 
-        tech_corr = 0.0
-        sent_corr = 0.0
-        macro_corr = 0.0
-        n = len(rows)
+        def _compute_correlations(subset):
+            n = len(subset)
+            tc = sc = mc = 0.0
+            for tech_action, tech_conf, sent_bias, sent_str, _, macro_risk, _, pnl, _ in subset:
+                outcome = 1.0 if (pnl or 0.0) > 0 else -1.0
+                tc += {"buy": 1.0, "sell": -1.0}.get(tech_action, 0.0) * (tech_conf or 0.5) * outcome
+                sc += {"bullish": 1.0, "bearish": -1.0}.get(sent_bias, 0.0) * (sent_str or 0.0) * outcome
+                mc += (1.0 if macro_risk else -1.0) * outcome * 0.5
+            return {"technical": tc / n, "sentiment": sc / n, "macro": mc / n}
 
-        for tech_action, tech_conf, sent_bias, sent_str, macro_reg, macro_risk, final_act, pnl in rows:
-            outcome = 1.0 if (pnl or 0.0) > 0 else -1.0
+        def _correlations_to_weights(corr):
+            raw = {
+                "technical": 0.55 + corr["technical"] * 0.3,
+                "sentiment": 0.25 + corr["sentiment"] * 0.3,
+                "macro": 0.20 + corr["macro"] * 0.3,
+            }
+            bounds = {"technical": (0.35, 0.75), "sentiment": (0.10, 0.35), "macro": (0.10, 0.30)}
+            clamped = {k: max(lo, min(hi, raw[k])) for k, (lo, hi) in bounds.items()}
+            total = sum(clamped.values())
+            return {k: round(v / total, 4) for k, v in clamped.items()}
 
-            t_vote = {"buy": 1.0, "sell": -1.0}.get(tech_action, 0.0)
-            tech_corr += t_vote * (tech_conf or 0.5) * outcome
+        # Global weights
+        global_corr = _compute_correlations(rows)
+        proposed = _correlations_to_weights(global_corr)
 
-            s_vote = {"bullish": 1.0, "bearish": -1.0}.get(sent_bias, 0.0)
-            sent_corr += s_vote * (sent_str or 0.0) * outcome
+        # Per-regime weights (only for regimes with enough samples)
+        regime_buckets: dict[str, list] = {}
+        for r in rows:
+            regime = r[8] or "unknown"
+            regime_buckets.setdefault(regime, []).append(r)
 
-            m_vote = 1.0 if macro_risk else -1.0
-            macro_corr += m_vote * outcome * 0.5
-
-        tech_corr /= n
-        sent_corr /= n
-        macro_corr /= n
-
-        raw = {
-            "technical": 0.55 + tech_corr * 0.3,
-            "sentiment": 0.25 + sent_corr * 0.3,
-            "macro": 0.20 + macro_corr * 0.3,
-        }
-
-        bounds = {
-            "technical": (0.35, 0.75),
-            "sentiment": (0.10, 0.35),
-            "macro": (0.10, 0.30),
-        }
-        clamped = {k: max(lo, min(hi, raw[k])) for k, (lo, hi) in bounds.items()}
-        total = sum(clamped.values())
-        proposed = {k: round(v / total, 4) for k, v in clamped.items()}
+        regime_weights: dict[str, dict] = {}
+        min_regime_samples = 10
+        for regime, bucket in regime_buckets.items():
+            if len(bucket) >= min_regime_samples:
+                rc = _compute_correlations(bucket)
+                regime_weights[regime] = {
+                    "proposed": _correlations_to_weights(rc),
+                    "correlations": {k: round(v, 4) for k, v in rc.items()},
+                    "n_decisions": len(bucket),
+                    "win_rate": round(sum(1 for r in bucket if (r[7] or 0) > 0) / len(bucket), 4),
+                }
 
         logger.info(
-            "SHADOW_WEIGHTS proposed: tech=%.3f sent=%.3f macro=%.3f "
-            "(from %d closed decisions, corr tech=%.3f sent=%.3f macro=%.3f)",
+            "SHADOW_WEIGHTS global: tech=%.3f sent=%.3f macro=%.3f "
+            "(from %d decisions, %d regimes tracked)",
             proposed["technical"], proposed["sentiment"], proposed["macro"],
-            n, tech_corr, sent_corr, macro_corr,
+            len(rows), len(regime_weights),
         )
+        for regime, rw in regime_weights.items():
+            logger.info(
+                "  regime=%s: tech=%.3f sent=%.3f macro=%.3f (n=%d win=%.1f%%)",
+                regime, rw["proposed"]["technical"], rw["proposed"]["sentiment"],
+                rw["proposed"]["macro"], rw["n_decisions"], rw["win_rate"] * 100,
+            )
 
         try:
-            conn2 = get_connection(self.db_path)
             import json
+            conn2 = get_connection(self.db_path)
             conn2.execute(
                 "INSERT INTO decision_log (ts_ms, symbol, final_action, explanation) "
                 "VALUES (?, ?, ?, ?)",
@@ -246,11 +261,12 @@ class OnlineLearner:
                     int(time.time() * 1000),
                     symbol or "ALL",
                     "shadow_weight_update",
-                    json.dumps({"proposed": proposed, "correlations": {
-                        "technical": round(tech_corr, 4),
-                        "sentiment": round(sent_corr, 4),
-                        "macro": round(macro_corr, 4),
-                    }, "n_decisions": n}),
+                    json.dumps({
+                        "proposed_global": proposed,
+                        "correlations_global": {k: round(v, 4) for k, v in global_corr.items()},
+                        "by_regime": regime_weights,
+                        "n_decisions": len(rows),
+                    }),
                 ),
             )
             conn2.commit()

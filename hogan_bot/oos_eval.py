@@ -52,7 +52,16 @@ class OOSResult:
     fee_rate: float = 0.0026
     slippage_bps: float = 5.0
 
+    label_mode: str = "fee_threshold"
     freshness_note: str = ""
+
+    # Forecast calibration metrics (populated when forecast models are used)
+    forecast_brier_4h: float | None = None
+    forecast_brier_12h: float | None = None
+    forecast_brier_24h: float | None = None
+    forecast_ece: float | None = None
+    forecast_roc_auc: float | None = None
+
     timestamp: str = field(
         default_factory=lambda: datetime.now(tz=timezone.utc).isoformat()
     )
@@ -95,6 +104,7 @@ def oos_evaluate(
     max_drawdown: float = 0.20,
     max_hold_bars: int = 24,
     loss_cooldown_bars: int = 2,
+    label_mode: str = "fee_threshold",
 ) -> OOSResult:
     """Run an OOS backtest on the tail of *candles* using the candidate model.
 
@@ -179,4 +189,5 @@ def oos_evaluate(
         oos_bars=len(oos_candles),
         fee_rate=fee_rate,
         slippage_bps=slippage_bps,
+        label_mode=label_mode,
     )
