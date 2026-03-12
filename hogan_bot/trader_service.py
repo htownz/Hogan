@@ -390,6 +390,10 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
     # ── Loss cooldown state ───────────────────────────────────────────────
     _cooldown_remaining: int = 0
 
+    # ── Candle dedup & direction cooldown ─────────────────────────────────
+    _last_candle_ts: dict[str, float] = {}
+    _last_stop_dir: dict[str, tuple[str, float]] = {}
+
     loop = 0
     while True:
         if max_loops is not None and loop >= max_loops:
@@ -508,6 +512,8 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                                 is_loss = exit_px < avg_entry
                                 if is_loss and loss_cooldown_bars > 0:
                                     _cooldown_remaining = loss_cooldown_bars
+                                if reason in ("trailing_stop",):
+                                    _last_stop_dir[exit_symbol] = ("buy", now_ms)
                                 ORDERS.labels(side="sell", mode=mode, exchange="paper").inc()
                                 notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason, "price": exit_px, "qty": qty})
                                 logger.info("AUTO_EXIT symbol=%s reason=%s px=%.2f qty=%.6f equity=%.2f",
@@ -528,6 +534,7 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                                         update_decision_outcome(conn, _entry_dec_id, _pnl, now_ms)
                                     except Exception:
                                         pass
+                                _last_stop_dir[exit_symbol] = ("sell", now_ms)
                                 ORDERS.labels(side="cover", mode=mode, exchange="paper").inc()
                                 notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason, "price": exit_px, "qty": qty})
                                 logger.info("AUTO_EXIT_SHORT symbol=%s reason=%s px=%.2f qty=%.6f",
@@ -619,6 +626,24 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                             eff["take_profit_pct"], eff["position_scale"],
                         )
 
+                    # ── Candle dedup: only re-evaluate when a new candle appears ──
+                    try:
+                        if "timestamp" in candles.columns:
+                            _raw = candles["timestamp"].iloc[-1]
+                            _candle_ts = float(_raw.timestamp() * 1000) if hasattr(_raw, "timestamp") else float(_raw)
+                        else:
+                            _idx = candles.index[-1]
+                            _candle_ts = float(_idx.timestamp() * 1000) if hasattr(_idx, "timestamp") else float(_idx)
+                    except Exception:
+                        _candle_ts = 0.0
+                    _prev_ts = _last_candle_ts.get(symbol, 0.0)
+                    _is_new_candle = abs(_candle_ts - _prev_ts) > 1000
+
+                    if not _is_new_candle:
+                        continue
+
+                    _last_candle_ts[symbol] = _candle_ts
+
                     # ── Agent Pipeline decision ────────────────────────
                     _regime_name = regime_state.regime if regime_state else None
                     signal = pipeline.run(candles, symbol=symbol, config_override=cfg, regime=_regime_name)
@@ -684,6 +709,10 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                             log_decision(conn, **pkt)
                         except Exception:
                             pass
+                        logger.info(
+                            "HOLD %s conf=%.2f | %s",
+                            symbol, signal.confidence, signal.explanation[:120],
+                        )
                         continue
 
                     # ── Position state ────────────────────────────────
@@ -719,6 +748,19 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                     now_ms = int(time.time() * 1000)
                     ts_pct = eff["trailing_stop_pct"]
                     tp_pct = eff["take_profit_pct"]
+
+                    # ── Direction cooldown: refuse same-direction re-entry
+                    # after a stop-out for at least 2 candle durations
+                    _dir_cd_hours = 2.0
+                    _stop_info = _last_stop_dir.get(symbol)
+                    if _stop_info and action == _stop_info[0]:
+                        _since = (now_ms - _stop_info[1]) / 3_600_000
+                        if _since < _dir_cd_hours:
+                            logger.info(
+                                "DIR_COOLDOWN %s — %s stopped %.1fh ago (need %.1fh)",
+                                symbol, action, _since, _dir_cd_hours,
+                            )
+                            action = "hold"
 
                     # ── BUY action ────────────────────────────────────
                     if action == "buy":
