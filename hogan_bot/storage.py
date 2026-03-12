@@ -821,22 +821,32 @@ def log_decision(
 def update_decision_outcome(
     conn: sqlite3.Connection,
     symbol: str,
-    entry_ts_ms: int,
+    entry_action: str,
     realized_pnl: float,
     outcome_ts_ms: int,
 ) -> None:
-    """Back-fill realized outcome on the decision that opened this trade."""
+    """Back-fill realized outcome on the decision that opened this trade.
+
+    Parameters
+    ----------
+    entry_action
+        The action that *opened* the position: ``"buy"`` for long trades,
+        ``"sell"`` for short trades.  Combined with ``realized_pnl IS NULL``
+        this ensures we update the original entry decision, not a later
+        decision logged while the position was held.
+    """
     conn.execute(
         """
         UPDATE decision_log
         SET realized_pnl = ?, outcome_ts_ms = ?
         WHERE id = (
             SELECT id FROM decision_log
-            WHERE symbol = ? AND ts_ms <= ? AND final_action IN ('buy', 'sell')
+            WHERE symbol = ? AND final_action = ?
+                  AND realized_pnl IS NULL
             ORDER BY ts_ms DESC LIMIT 1
         )
         """,
-        (float(realized_pnl), int(outcome_ts_ms), symbol, int(entry_ts_ms)),
+        (float(realized_pnl), int(outcome_ts_ms), symbol, entry_action),
     )
     conn.commit()
 

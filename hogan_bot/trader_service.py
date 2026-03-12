@@ -500,7 +500,7 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                                 pnl_pct = (exit_px - avg_entry) / avg_entry if avg_entry > 0 else 0.0
                                 _label_buffer_from_trade(conn, exit_symbol, now_ms, pnl_pct)
                                 try:
-                                    update_decision_outcome(conn, exit_symbol, now_ms, pnl_pct, now_ms)
+                                    update_decision_outcome(conn, exit_symbol, "buy", pnl_pct, now_ms)
                                 except Exception:
                                     pass
                                 is_loss = exit_px < avg_entry
@@ -789,7 +789,7 @@ def run_loop(max_loops: int | None = None) -> None:  # noqa: PLR0912,PLR0915
                                 pnl_pct = (px - _entry_px) / _entry_px if _entry_px > 0 else 0.0
                                 _label_buffer_from_trade(conn, symbol, now_ms, pnl_pct)
                                 try:
-                                    update_decision_outcome(conn, symbol, now_ms, pnl_pct, now_ms)
+                                    update_decision_outcome(conn, symbol, "buy", pnl_pct, now_ms)
                                 except Exception:
                                     pass
                                 notifier.notify("sell", {"symbol": symbol, "price": px, "qty": sell_qty, "up_prob": up_prob})
