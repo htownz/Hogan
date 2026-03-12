@@ -30,7 +30,8 @@ def estimate_spread_from_candles(candles: pd.DataFrame, window: int = 20) -> flo
         round-trip).  Multiply by 2 for the full round-trip spread cost.
     """
     if candles is None or len(candles) < 3:
-        return 0.0005  # conservative default: 5 bps half-spread
+        logger.debug("SPREAD_EST: insufficient data, using default 5bps")
+        return 0.0005
 
     h = candles["high"].values[-window:]
     l = candles["low"].values[-window:]
@@ -95,6 +96,8 @@ def estimate_spread_from_order_book(
 
 
 def apply_ml_filter(signal_action: str, up_prob: float, buy_threshold: float, sell_threshold: float) -> str:
+    if up_prob is None or np.isnan(up_prob):
+        return signal_action
     if signal_action == "buy" and up_prob < buy_threshold:
         return "hold"
     if signal_action == "sell" and up_prob > sell_threshold:
@@ -227,6 +230,9 @@ def ml_confidence(up_prob: float) -> float:
     A probability of 0.0 or 1.0 means maximum confidence → scale = 1.
     The mapping is linear:  scale = |up_prob − 0.5| × 2
     """
+    if up_prob is None or np.isnan(up_prob):
+        return 0.0
+    up_prob = max(0.0, min(1.0, up_prob))
     return min(1.0, abs(up_prob - 0.5) * 2.0)
 
 

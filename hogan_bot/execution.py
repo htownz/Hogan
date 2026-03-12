@@ -62,13 +62,9 @@ class PaperExecution(ExecutionEngine):
         )
         if ok and self.conn is not None:
             ts_ms = int(time.time() * 1000)
-            upsert_position(
-                self.conn,
-                symbol,
-                self.portfolio.positions.get(symbol).qty,
-                self.portfolio.positions.get(symbol).avg_entry,
-                ts_ms,
-            )
+            pos = self.portfolio.positions.get(symbol)
+            if pos is not None:
+                upsert_position(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
         return ExecResult(ok=ok)
 
     def sell(self, symbol: str, price: float, qty: float) -> ExecResult:

@@ -19,6 +19,8 @@ class Position:
     # Max adverse/favorable excursion as fraction of entry price
     max_adverse_pct: float = 0.0
     max_favorable_pct: float = 0.0
+    # ATR at entry (for volatility expansion check in ExitEvaluator)
+    entry_atr_pct: float = 0.0
 
 
 @dataclass

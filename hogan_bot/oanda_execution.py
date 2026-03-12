@@ -18,33 +18,12 @@ import logging
 import time
 
 from hogan_bot.execution import ExecutionEngine, ExecResult
+from hogan_bot.fx_utils import pip_size
 from hogan_bot.oanda_client import OandaClient
 from hogan_bot.paper import PaperPortfolio
-from hogan_bot.storage import upsert_position
+from hogan_bot.storage import record_order, upsert_position
 
 logger = logging.getLogger(__name__)
-
-# Pip values for common FX pairs (units per pip for standard lot)
-_PIP_SIZES: dict[str, float] = {
-    "EUR/USD": 0.0001,
-    "GBP/USD": 0.0001,
-    "USD/JPY": 0.01,
-    "AUD/USD": 0.0001,
-    "USD/CAD": 0.0001,
-    "NZD/USD": 0.0001,
-    "USD/CHF": 0.0001,
-    "XAU/USD": 0.01,
-}
-
-
-def pip_size(symbol: str) -> float:
-    """Return the pip size for the given symbol."""
-    return _PIP_SIZES.get(symbol, 0.0001)
-
-
-def price_to_pips(symbol: str, price_diff: float) -> float:
-    """Convert a price difference to pips."""
-    return price_diff / pip_size(symbol)
 
 
 class OandaExecution(ExecutionEngine):
@@ -85,8 +64,10 @@ class OandaExecution(ExecutionEngine):
 
         if take_profit_pct > 0:
             tp_price = price * (1 + take_profit_pct)
-        if trailing_stop_pct > 0 and sl_price is None:
-            sl_price = price * (1 - trailing_stop_pct)
+        if trailing_stop_pct > 0:
+            trailing_sl = price * (1 - trailing_stop_pct)
+            if sl_price is None or trailing_sl > sl_price:
+                sl_price = trailing_sl
 
         try:
             result = self.client.create_market_order(
@@ -94,6 +75,23 @@ class OandaExecution(ExecutionEngine):
                 stop_loss_price=sl_price,
                 take_profit_price=tp_price,
             )
+
+            # Journal the order
+            if self.conn is not None:
+                order_record = {
+                    "id": result.get("orderFillTransaction", {}).get("id", ""),
+                    "symbol": symbol,
+                    "side": "buy",
+                    "type": "market",
+                    "amount": qty,
+                    "price": price,
+                    "exchange": "oanda",
+                    "status": "filled" if result.get("orderFillTransaction") else "rejected",
+                }
+                try:
+                    record_order(self.conn, order_record)
+                except Exception as exc:
+                    logger.debug("Order journal failed: %s", exc)
 
             fill = result.get("orderFillTransaction", {})
             if fill:
@@ -164,6 +162,21 @@ class OandaExecution(ExecutionEngine):
             result = self.client.create_market_order(symbol, units=-abs(qty))
             fill = result.get("orderFillTransaction", {})
             if fill:
+                fill_price = float(fill.get("price", price))
+                if self.portfolio is not None:
+                    self.portfolio.execute_short(symbol, fill_price, abs(qty))
+                if self.conn is not None:
+                    order_record = {
+                        "id": fill.get("id", ""),
+                        "symbol": symbol, "side": "sell", "type": "market",
+                        "amount": qty, "price": fill_price, "exchange": "oanda",
+                        "status": "filled",
+                    }
+                    try:
+                        record_order(self.conn, order_record)
+                    except Exception:
+                        pass
+                logger.info("OANDA_SHORT %s units=%.0f fill=%.5f", symbol, qty, fill_price)
                 return ExecResult(ok=True, order_id=str(fill.get("id", "")))
 
             return ExecResult(ok=False, error="no fill")
