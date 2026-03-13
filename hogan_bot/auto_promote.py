@@ -11,10 +11,13 @@ Promotion rules
 3. New result must have >= *min_trades* (default 10) to avoid overfitting on
    a handful of lucky trades.
 4. Max drawdown must be <= *max_drawdown_pct* (default 15%).
+5. After-fee net expectancy must be > 0 (no promoting strategies that lose
+   money after friction).
 
 When promoted, the incumbent file is backed up to ``models/archive/`` and the
-new result takes its place.  The per-symbol config cache is cleared so the
-live bot picks up the new parameters on the next iteration.
+new result takes its place.  A model card is written alongside for governance.
+The per-symbol config cache is cleared so the live bot picks up the new
+parameters on the next iteration.
 
 Usage
 -----
@@ -23,14 +26,47 @@ Usage
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ModelCard:
+    """Metadata attached to every promoted model/strategy artifact."""
+    symbol: str = ""
+    timeframe: str = ""
+    promoted_at: str = ""
+    feature_set_hash: str = ""
+    feature_count: int = 0
+    training_window_bars: int = 0
+    sharpe: float = 0.0
+    trades: int = 0
+    win_rate: float = 0.0
+    max_drawdown_pct: float = 0.0
+    net_expectancy_pct: float = 0.0
+    label_definition: str = ""
+    regime_segmented: bool = False
+    champion_locks_applied: bool = False
+
+    def to_dict(self) -> dict:
+        return {k: v for k, v in self.__dict__.items()}
+
+
+def compute_feature_set_hash() -> str:
+    """Compute a stable hash of the champion feature set for reproducibility."""
+    try:
+        from hogan_bot.ml import _FEATURE_COLUMNS
+        payload = ",".join(_FEATURE_COLUMNS)
+        return hashlib.sha256(payload.encode()).hexdigest()[:16]
+    except Exception:
+        return "unknown"
 
 
 @dataclass
@@ -44,6 +80,7 @@ class PromotionResult:
     incumbent_score: float
     new_file: str
     backup_file: str | None = None
+    model_card: ModelCard | None = None
 
 
 def _opt_path(symbol: str, timeframe: str, models_dir: str = "models") -> Path:
@@ -71,6 +108,7 @@ def evaluate_and_promote(
     min_improvement: float = 0.5,
     min_trades: int = 10,
     max_drawdown_pct: float = 15.0,
+    require_positive_net_expectancy: bool = True,
 ) -> PromotionResult:
     """Compare a candidate Optuna result against the incumbent and promote if better.
 
@@ -92,6 +130,10 @@ def evaluate_and_promote(
         Minimum number of trades in the backtest.
     max_drawdown_pct : float
         Maximum allowed drawdown percentage.
+    require_positive_net_expectancy : bool
+        When True (default), rejects candidates whose after-fee net return
+        is not positive.  This prevents promoting "good Sharpe, negative PnL"
+        artifacts.
 
     Returns
     -------
@@ -117,49 +159,58 @@ def evaluate_and_promote(
     best_entry = leaderboard[0] if leaderboard else {}
     trades = best_entry.get("trades", 0)
     max_dd = best_entry.get("max_drawdown_pct", 100.0)
+    net_return = best_entry.get("total_return_pct", 0.0)
+    win_rate = best_entry.get("win_rate", 0.0)
 
     # Read incumbent (might be the same file for sequential runs)
     incumbent = _read_opt_json(incumbent_path) if incumbent_path != cand_path else None
     incumbent_score = incumbent.get("best_score", 0.0) if incumbent else 0.0
 
-    # Gate checks
-    if new_score < min_sharpe:
+    def _reject(reason: str) -> PromotionResult:
         return PromotionResult(
-            promoted=False,
-            reason=f"Sharpe {new_score:.2f} < minimum {min_sharpe:.2f}",
+            promoted=False, reason=reason,
             symbol=symbol, timeframe=timeframe,
             new_score=new_score, incumbent_score=incumbent_score,
             new_file=str(cand_path),
         )
+
+    if new_score < min_sharpe:
+        return _reject(f"Sharpe {new_score:.2f} < minimum {min_sharpe:.2f}")
 
     if trades < min_trades:
-        return PromotionResult(
-            promoted=False,
-            reason=f"Only {trades} trades < minimum {min_trades}",
-            symbol=symbol, timeframe=timeframe,
-            new_score=new_score, incumbent_score=incumbent_score,
-            new_file=str(cand_path),
-        )
+        return _reject(f"Only {trades} trades < minimum {min_trades}")
 
     if max_dd > max_drawdown_pct:
-        return PromotionResult(
-            promoted=False,
-            reason=f"Max drawdown {max_dd:.2f}% > limit {max_drawdown_pct:.2f}%",
-            symbol=symbol, timeframe=timeframe,
-            new_score=new_score, incumbent_score=incumbent_score,
-            new_file=str(cand_path),
+        return _reject(f"Max drawdown {max_dd:.2f}% > limit {max_drawdown_pct:.2f}%")
+
+    if require_positive_net_expectancy and net_return <= 0:
+        return _reject(
+            f"Net return {net_return:.2f}% is not positive — "
+            f"strategy loses money after fees"
         )
 
     improvement = new_score - incumbent_score
     if incumbent and improvement < min_improvement:
-        return PromotionResult(
-            promoted=False,
-            reason=f"Improvement {improvement:.2f} < minimum {min_improvement:.2f} "
-                   f"(new={new_score:.2f}, incumbent={incumbent_score:.2f})",
-            symbol=symbol, timeframe=timeframe,
-            new_score=new_score, incumbent_score=incumbent_score,
-            new_file=str(cand_path),
+        return _reject(
+            f"Improvement {improvement:.2f} < minimum {min_improvement:.2f} "
+            f"(new={new_score:.2f}, incumbent={incumbent_score:.2f})"
         )
+
+    # Build model card for governance
+    card = ModelCard(
+        symbol=symbol,
+        timeframe=timeframe,
+        promoted_at=datetime.now().isoformat(),
+        feature_set_hash=compute_feature_set_hash(),
+        feature_count=59,
+        sharpe=new_score,
+        trades=trades,
+        win_rate=win_rate,
+        max_drawdown_pct=max_dd,
+        net_expectancy_pct=net_return,
+        label_definition=candidate.get("label_mode", "fee_threshold"),
+        champion_locks_applied=candidate.get("champion_mode", False),
+    )
 
     # Promotion: archive incumbent, install candidate
     backup_path = None
@@ -176,6 +227,14 @@ def evaluate_and_promote(
     if cand_path != incumbent_path:
         shutil.copy2(cand_path, incumbent_path)
 
+    # Write model card alongside the promoted artifact
+    card_path = incumbent_path.with_suffix(".model_card.json")
+    try:
+        card_path.write_text(json.dumps(card.to_dict(), indent=2), encoding="utf-8")
+        logger.info("Model card written to %s", card_path)
+    except Exception as exc:
+        logger.warning("Failed to write model card: %s", exc)
+
     # Clear the config cache so the bot picks up new params
     try:
         from hogan_bot.config import reload_symbol_configs
@@ -184,8 +243,8 @@ def evaluate_and_promote(
         pass
 
     logger.info(
-        "PROMOTED %s/%s: Sharpe %.2f → %.2f (improvement=%.2f, trades=%d, dd=%.2f%%)",
-        symbol, timeframe, incumbent_score, new_score, improvement, trades, max_dd,
+        "PROMOTED %s/%s: Sharpe %.2f → %.2f (improvement=%.2f, trades=%d, dd=%.2f%%, net=%.2f%%)",
+        symbol, timeframe, incumbent_score, new_score, improvement, trades, max_dd, net_return,
     )
 
     return PromotionResult(
@@ -195,6 +254,7 @@ def evaluate_and_promote(
         new_score=new_score, incumbent_score=incumbent_score,
         new_file=str(incumbent_path),
         backup_file=str(backup_path) if backup_path else None,
+        model_card=card,
     )
 
 

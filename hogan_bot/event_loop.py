@@ -30,6 +30,7 @@ import logging
 import os
 import time
 from collections import defaultdict, deque
+from dataclasses import dataclass
 from datetime import datetime
 
 import pandas as pd
@@ -549,16 +550,43 @@ async def run_event_loop(
             else:
                 _consecutive_exit_signals[symbol] = 0
 
+            # Instrument-profile-aware stop/TP (FX uses pip-based, crypto uses %)
+            _eff_stop = config.trailing_stop_pct
+            _eff_tp = config.take_profit_pct
+            try:
+                from hogan_bot.instrument_profiles import get_profile
+                _iprofile = get_profile(symbol)
+                if _iprofile.use_pip_based_risk:
+                    _eff_stop = _iprofile.default_stop_pct
+                    _eff_tp = _iprofile.default_tp_pct
+            except Exception:
+                pass
+
+            # FX session filter: block new entries during off-hours
+            _fx_session_ok = True
+            try:
+                from hogan_bot.instrument_profiles import classify_symbol as _cls_sym
+                if _cls_sym(symbol) in ("fx_major", "fx_cross"):
+                    from hogan_bot.fx_utils import is_fx_weekend, session_filter
+                    if is_fx_weekend():
+                        _fx_session_ok = False
+                    elif not session_filter():
+                        _fx_session_ok = False
+            except Exception:
+                pass
+
             if action == "buy" and px > 0:
                 if symbol in portfolio.positions:
                     pass  # already long
                 elif _cooldown_remaining > 0:
                     logger.debug("COOLDOWN %s — %d bars remaining", symbol, _cooldown_remaining)
+                elif not _fx_session_ok:
+                    logger.debug("FX_SESSION_BLOCK %s — outside allowed trading hours", symbol)
                 else:
                     buy_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
                     res = executor.buy(symbol, buy_px, size,
-                                       trailing_stop_pct=config.trailing_stop_pct,
-                                       take_profit_pct=config.take_profit_pct)
+                                       trailing_stop_pct=_eff_stop,
+                                       take_profit_pct=_eff_tp)
                     executed = bool(res.ok)
                     if executed:
                         pos = portfolio.positions.get(symbol)
