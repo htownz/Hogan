@@ -495,6 +495,39 @@ def build_feature_row(
         return None
 
 
+def build_feature_row_checked(
+    candles: pd.DataFrame,
+    db_conn=None,
+    data_ages_hours: dict[str, float] | None = None,
+):
+    """Like :func:`build_feature_row` but returns a :class:`FeatureResult`
+    with staleness metadata.
+
+    Parameters
+    ----------
+    candles : pd.DataFrame
+        OHLCV candle data.
+    db_conn : optional
+        SQLite connection for macro feature lookup.
+    data_ages_hours : dict[str, float] | None
+        Mapping of source name (e.g. ``"macro_db"``) to hours since last
+        update.  Used to flag stale features.
+
+    Returns
+    -------
+    FeatureResult | None
+        ``None`` when insufficient data, otherwise a FeatureResult with
+        the feature vector and staleness info.
+    """
+    from hogan_bot.feature_registry import FeatureResult, check_staleness
+
+    values = build_feature_row(candles, db_conn=db_conn)
+    if values is None:
+        return None
+
+    return check_staleness(_FEATURE_COLUMNS, values, data_ages_hours)
+
+
 def build_training_set(
     candles: pd.DataFrame,
     horizon_bars: int = 12,

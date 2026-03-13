@@ -57,6 +57,7 @@ class BacktestResult:
     # exit_ts_ms, side, entry_price, exit_price, qty, pnl_usd, pnl_pct
     closed_trades: list[dict] = field(default_factory=list)
     expectancy_report: dict = field(default_factory=dict)
+    regime_log: list[str | None] = field(default_factory=list)
 
     def summary_dict(self) -> dict:
         """Return all scalar fields as a plain dict (omits large lists)."""
@@ -234,6 +235,64 @@ def evaluate_regimes(
     return {regime: _regime_metrics(bars, bars_per_year=bpy) for regime, bars in regime_bars.items()}
 
 
+def evaluate_market_regimes(result: "BacktestResult") -> dict[str, dict]:
+    """Per-market-regime trade analytics using the detector's labels at entry.
+
+    Segments ``closed_trades`` by their ``entry_regime`` field and computes:
+    ``trade_count``, ``win_rate``, ``avg_gross_pnl_pct``, ``avg_net_pnl_pct``,
+    ``payoff_ratio``, and ``sharpe`` per regime.
+
+    This tells us which strategy family (via the regime it ran in) is
+    earning money and which is bleeding.
+    """
+    closed = getattr(result, "closed_trades", None)
+    if not closed:
+        return {}
+
+    import numpy as np
+
+    regime_trades: dict[str, list[dict]] = {}
+    for trade in closed:
+        regime = trade.get("entry_regime") or "unknown"
+        regime_trades.setdefault(regime, []).append(trade)
+
+    fee_rate = 0.0026  # fallback
+
+    report: dict[str, dict] = {}
+    for regime, trades in regime_trades.items():
+        n = len(trades)
+        wins = sum(1 for t in trades if t.get("pnl_usd", 0) > 0)
+        gross = [t.get("pnl_pct", 0.0) for t in trades]
+        net = [g - 2 * fee_rate * 100 for g in gross]
+
+        avg_gross = float(np.mean(gross)) if gross else 0.0
+        avg_net = float(np.mean(net)) if net else 0.0
+        win_rate = wins / n if n else 0.0
+
+        wins_pnl = [g for g in gross if g > 0]
+        losses_pnl = [-g for g in gross if g <= 0]
+        avg_win = float(np.mean(wins_pnl)) if wins_pnl else 0.0
+        avg_loss = float(np.mean(losses_pnl)) if losses_pnl else 0.0
+        payoff = avg_win / avg_loss if avg_loss > 0 else float("inf") if avg_win > 0 else 0.0
+
+        ret = np.diff(np.array([0.0] + [t.get("pnl_pct", 0.0) for t in trades]))
+        sharpe = None
+        if len(ret) > 1 and np.std(ret) > 0:
+            bpy = getattr(result, "bars_per_year", _BARS_PER_YEAR_DEFAULT)
+            sharpe = float(np.mean(ret) / np.std(ret) * np.sqrt(bpy))
+
+        report[regime] = {
+            "trade_count": n,
+            "win_rate": round(win_rate, 4),
+            "avg_gross_pnl_pct": round(avg_gross, 4),
+            "avg_net_pnl_pct": round(avg_net, 4),
+            "payoff_ratio": round(payoff, 3) if payoff != float("inf") else "inf",
+            "sharpe": round(sharpe, 4) if sharpe is not None else None,
+        }
+
+    return report
+
+
 def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     candles,
     symbol: str,
@@ -381,6 +440,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     _regime_conf: float | None = None
     _whipsaw_count: int = 0
     _last_signal: str = "hold"
+    _regime_per_bar: list[str | None] = []
 
     # Next-open execution: pending buys/sells to fill at next bar's open
     _pending_buys: dict[str, float] = {}
@@ -442,6 +502,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "qty": qty,
                             "pnl_usd": pnl_usd,
                             "pnl_pct": pnl_pct,
+                            "entry_regime": _current_regime,
                         })
 
         mark = {symbol: px}
@@ -496,6 +557,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "qty": qty,
                             "pnl_usd": pnl_usd,
                             "pnl_pct": pnl_pct,
+                            "entry_regime": _current_regime,
                         })
 
         # Build RL position state for this bar
@@ -509,6 +571,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             _rl_bars_in_trade = 0
 
         # Regime detection (parity with event_loop)
+        _rstate = None
         if len(window) >= 80:
             try:
                 _rstate = detect_regime(window)
@@ -516,6 +579,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 _regime_conf = _rstate.confidence
             except Exception:
                 pass
+        _regime_per_bar.append(_current_regime)
 
         _as_of = _bar_ts_ms(candles, i - 1) if _bt_conn is not None else None
         signal = _pipeline.run(
@@ -526,6 +590,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             rl_unrealized_pnl=_rl_upnl,
             rl_bars_in_trade=_rl_bars_in_trade,
             regime=_current_regime,
+            regime_state=_rstate,
         )
 
         action = signal.action
@@ -692,6 +757,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "qty": sell_qty,
                             "pnl_usd": pnl_usd,
                             "pnl_pct": pnl_pct,
+                            "entry_regime": _current_regime,
                         })
 
     if not equity_curve:
@@ -722,4 +788,5 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         trade_log=trade_log,
         closed_trades=closed_trades,
         expectancy_report=_expectancy.summary(),
+        regime_log=_regime_per_bar,
     )

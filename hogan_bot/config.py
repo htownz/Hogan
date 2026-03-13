@@ -135,6 +135,15 @@ class BotConfig:
     regime_adx_ranging: float = 20.0     # ADX < this → ranging
     regime_atr_volatile_pct: float = 0.80  # ATR percentile ≥ this → volatile
 
+    # Strategy router: when True, TechnicalAgent uses StrategyRouter to
+    # dispatch to regime-specific strategy families instead of always using
+    # generate_signal().  Requires use_regime_detection=True for full effect.
+    use_strategy_router: bool = True
+
+    # Policy for volatile regime: "breakout" to trade vol breakouts,
+    # "hold" to sit out volatile markets entirely.
+    volatile_policy: str = "breakout"
+
     # Webhook URL for trade/drawdown notifications (empty string = disabled)
     webhook_url: str = ""
 
@@ -198,6 +207,63 @@ class BotConfig:
 
     kraken_api_key: str | None = None
     kraken_api_secret: str | None = None
+
+
+@dataclass
+class RegimeConfig:
+    """Per-regime parameter overrides.
+
+    Multiplier fields (``*_mult``) scale from the base BotConfig value.
+    Absolute fields override directly.
+    """
+    volume_threshold_mult: float = 1.0
+    ml_buy_threshold: float = 0.60
+    ml_sell_threshold: float = 0.40
+    trailing_stop_mult: float = 1.0
+    take_profit_mult: float = 1.0
+    position_scale: float = 1.0
+    strategy_family: str = "trend_follow"
+    min_confidence_to_trade: float = 0.30
+
+
+DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
+    "trending_up": RegimeConfig(
+        volume_threshold_mult=0.55,
+        ml_buy_threshold=0.55,
+        ml_sell_threshold=0.52,
+        trailing_stop_mult=1.30,
+        take_profit_mult=2.00,
+        position_scale=1.00,
+        strategy_family="trend_follow",
+    ),
+    "trending_down": RegimeConfig(
+        volume_threshold_mult=0.55,
+        ml_buy_threshold=0.65,
+        ml_sell_threshold=0.35,
+        trailing_stop_mult=1.30,
+        take_profit_mult=1.70,
+        position_scale=1.00,
+        strategy_family="trend_follow",
+    ),
+    "ranging": RegimeConfig(
+        volume_threshold_mult=1.10,
+        ml_buy_threshold=0.62,
+        ml_sell_threshold=0.38,
+        trailing_stop_mult=0.80,
+        take_profit_mult=0.70,
+        position_scale=0.75,
+        strategy_family="mean_revert",
+    ),
+    "volatile": RegimeConfig(
+        volume_threshold_mult=0.70,
+        ml_buy_threshold=0.63,
+        ml_sell_threshold=0.37,
+        trailing_stop_mult=0.80,
+        take_profit_mult=1.40,
+        position_scale=0.50,
+        strategy_family="breakout",
+    ),
+}
 
 
 def _split_symbols(raw: str) -> list[str]:
@@ -365,6 +431,8 @@ def load_config() -> BotConfig:
         regime_adx_trending=float(os.getenv("HOGAN_REGIME_ADX_TRENDING", "25.0")),
         regime_adx_ranging=float(os.getenv("HOGAN_REGIME_ADX_RANGING", "20.0")),
         regime_atr_volatile_pct=float(os.getenv("HOGAN_REGIME_ATR_VOLATILE_PCT", "0.80")),
+        use_strategy_router=os.getenv("HOGAN_USE_STRATEGY_ROUTER", "true").lower() == "true",
+        volatile_policy=os.getenv("HOGAN_VOLATILE_POLICY", "breakout"),
         webhook_url=os.getenv("HOGAN_DISCORD_WEBHOOK_URL") or os.getenv("HOGAN_WEBHOOK_URL", ""),
         exchange_id=os.getenv("HOGAN_EXCHANGE", "kraken"),
         quote_currency=os.getenv("HOGAN_QUOTE_CCY", "USD"),

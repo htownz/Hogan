@@ -69,6 +69,7 @@ class SignalResult:
     explanation: str | None = None
     forecast_ret: float | None = None
     agent_weights: dict | None = None
+    feature_freshness: dict | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -94,16 +95,20 @@ class SignalEvaluator:
 
         regime_name = None
         regime_conf = None
+        _rstate = None
         if getattr(cfg, "use_regime_detection", True):
             try:
                 from hogan_bot.regime import detect_regime
-                rstate = detect_regime(candles)
-                regime_name = rstate.regime
-                regime_conf = rstate.confidence
+                _rstate = detect_regime(candles)
+                regime_name = _rstate.regime
+                regime_conf = _rstate.confidence
             except Exception:
                 pass
 
-        result = self.pipeline.run(candles, symbol=symbol, config_override=cfg, regime=regime_name)
+        result = self.pipeline.run(
+            candles, symbol=symbol, config_override=cfg,
+            regime=regime_name, regime_state=_rstate,
+        )
         px = float(candles["close"].iloc[-1])
 
         up_prob = None
@@ -161,6 +166,17 @@ class SignalEvaluator:
             fee_rate=cfg.fee_rate,
         )
 
+        # Feature staleness check (observability, does not block trades)
+        _freshness: dict | None = None
+        try:
+            from hogan_bot.ml import build_feature_row_checked
+            feat_result = build_feature_row_checked(candles, db_conn=self.pipeline.conn)
+            if feat_result is not None and feat_result.has_stale:
+                _freshness = feat_result.freshness_summary
+                logger.warning("STALE_FEATURES %s: %s", symbol, feat_result.stale_features)
+        except Exception:
+            pass
+
         if action != "hold":
             logger.info(
                 "PIPELINE %s action=%s conf=%.2f tech_conf=%.2f regime=%s | %s",
@@ -181,6 +197,7 @@ class SignalEvaluator:
             explanation=result.explanation,
             forecast_ret=forecast_ret,
             agent_weights=result.agent_weights,
+            feature_freshness=_freshness,
         )
 
 
@@ -521,6 +538,7 @@ async def run_event_loop(
                     conf_scale=sig.conf_scale,
                     explanation=sig.explanation,
                     meta_weights=sig.agent_weights,
+                    freshness=sig.feature_freshness,
                 )
             except Exception as exc:
                 logger.debug("Decision log error: %s", exc)
