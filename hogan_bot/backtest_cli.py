@@ -120,6 +120,9 @@ def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, ov
 def main() -> None:
     args = parse_args()
     cfg = load_config()
+    from hogan_bot.champion import apply_champion_mode, is_champion_mode
+    if is_champion_mode():
+        cfg = apply_champion_mode(cfg)
 
     timeframe = args.timeframe or cfg.timeframe
     limit = args.limit or cfg.ohlcv_limit

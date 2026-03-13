@@ -32,7 +32,7 @@ def triple_barrier_labels(close: pd.Series, horizon: int = 48, vol_span: int = 1
     Returns labels in {0,1} where 1 = up move wins, 0 = down move wins.
     """
     ret = close.pct_change().fillna(0.0)
-    vol = ret.ewm(span=vol_span, adjust=False).std().fillna(method="bfill").clip(lower=1e-9)
+    vol = ret.ewm(span=vol_span, adjust=False).std().bfill().clip(lower=1e-9)
 
     labels = np.full(len(close), np.nan)
     prices = close.values
@@ -56,7 +56,7 @@ def triple_barrier_labels(close: pd.Series, horizon: int = 48, vol_span: int = 1
         labels[i] = hit
 
     s = pd.Series(labels, index=close.index)
-    return s.astype("float").fillna(method="ffill").fillna(0.0).astype(int)
+    return s.astype("float").ffill().fillna(0.0).astype(int)
 
 
 def triple_barrier_labels_enhanced(
@@ -114,7 +114,7 @@ def triple_barrier_labels_enhanced(
     low = candles["low"].astype(float)
 
     ret = close.pct_change().fillna(0.0)
-    vol = ret.ewm(span=vol_span, adjust=False).std().fillna(method="bfill").clip(lower=1e-9)
+    vol = ret.ewm(span=vol_span, adjust=False).std().bfill().clip(lower=1e-9)
 
     regime_mult_up = np.ones(len(close))
     regime_mult_dn = np.ones(len(close))

@@ -1185,6 +1185,8 @@ def calibrate_model(
     method: str = "sigmoid",
     calibration_fraction: float = 0.2,
     use_champion_features: bool | None = None,
+    db_conn=None,
+    label_mode: str = "fee_threshold",
 ) -> dict[str, object]:
     """Wrap an existing pickled model with probability calibration.
 
@@ -1212,6 +1214,7 @@ def calibrate_model(
     artifact = load_model(model_path)
     x, y, feature_columns = build_training_set(
         candles, horizon_bars=horizon_bars, use_champion_features=use_champion_features,
+        db_conn=db_conn, label_mode=label_mode,
     )
     if x is None or y is None or len(x) < 100:
         raise RuntimeError("Not enough data for calibration. Increase OHLCV history.")
@@ -1224,7 +1227,7 @@ def calibrate_model(
     if scaler is not None:
         x_cal_arr = scaler.transform(x_cal)
     else:
-        x_cal_arr = x_cal.values
+        x_cal_arr = x_cal
 
     try:
         from sklearn.frozen import FrozenEstimator  # type: ignore[import-untyped]
@@ -1447,17 +1450,28 @@ def train_hist_gradient_boosting(
     max_depth: int = 6,
     learning_rate: float = 0.05,
     max_iter: int = 400,
+    db_conn=None,
+    label_mode: str = "fee_threshold",
 ) -> dict[str, object]:
     """Train + save sklearn HistGradientBoostingClassifier (strong tabular baseline)."""
     from sklearn.ensemble import HistGradientBoostingClassifier
     from sklearn.metrics import accuracy_score, roc_auc_score, precision_score, recall_score, f1_score
 
-    X, y, feature_cols = build_training_set(candles, horizon_bars=horizon_bars)
+    X, y, feature_cols = build_training_set(
+        candles, horizon_bars=horizon_bars, db_conn=db_conn, label_mode=label_mode,
+    )
     if X is None or y is None or len(X) < 50:
         raise ValueError(f"Not enough training rows ({len(X) if X is not None else 0})")
     split = int(len(X) * 0.8)
     X_train, X_test = X.iloc[:split], X.iloc[split:]
     y_train, y_test = y.iloc[:split], y.iloc[split:]
+
+    class_counts = y_train.value_counts()
+    n_samples = len(y_train)
+    n_classes = len(class_counts)
+    sample_weight = y_train.map(
+        {c: n_samples / (n_classes * cnt) for c, cnt in class_counts.items()}
+    ).values
 
     clf = HistGradientBoostingClassifier(
         max_depth=max_depth,
@@ -1465,7 +1479,7 @@ def train_hist_gradient_boosting(
         max_iter=max_iter,
         random_state=42,
     )
-    clf.fit(X_train, y_train)
+    clf.fit(X_train, y_train, sample_weight=sample_weight)
 
     proba = clf.predict_proba(X_test)[:, 1]
     pred = (proba >= 0.5).astype(int)

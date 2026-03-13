@@ -83,6 +83,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Use 16-feature champion subset and save to models/hogan_champion.pkl",
     )
+    parser.add_argument(
+        "--label-mode",
+        choices=["fee_threshold", "triple_barrier", "enhanced_triple_barrier"],
+        default="enhanced_triple_barrier",
+        help="Labeling strategy (default: enhanced_triple_barrier — regime-adaptive, no dead zone)",
+    )
     return parser.parse_args()
 
 
@@ -95,6 +101,7 @@ def main() -> None:
             args.model_path = "models/hogan_champion.pkl"
         print("Champion mode: training on 16-feature subset ->", args.model_path)
 
+    train_db_conn = None
     if getattr(args, "from_db", False):
         from hogan_bot.storage import get_connection, load_candles
         conn = get_connection(args.db)
@@ -102,9 +109,12 @@ def main() -> None:
         if candles.empty:
             print(f"No candles in DB for {args.symbol}/{args.timeframe}")
             return
+        train_db_conn = get_connection(args.db)
     else:
         client = ExchangeClient("kraken")
         candles = client.fetch_ohlcv_df(args.symbol, timeframe=args.timeframe, limit=args.limit)
+
+    label_mode = getattr(args, "label_mode", "fee_threshold")
 
     if args.forecast:
         from hogan_bot.forecast import train_forecast_models
@@ -141,21 +151,27 @@ def main() -> None:
         print(json.dumps(output, indent=2))
         return
 
+    _train_kw = dict(db_conn=train_db_conn, label_mode=label_mode)
+
     if args.model_type == "random_forest":
         metrics = train_random_forest(
-            candles, model_path=args.model_path, horizon_bars=args.horizon_bars
+            candles, model_path=args.model_path, horizon_bars=args.horizon_bars,
+            **_train_kw,
         )
     elif args.model_type == "xgboost":
         metrics = train_xgboost(
-            candles, model_path=args.model_path, horizon_bars=args.horizon_bars
+            candles, model_path=args.model_path, horizon_bars=args.horizon_bars,
+            **_train_kw,
         )
     elif args.model_type == "lightgbm":
         metrics = train_lightgbm(
-            candles, model_path=args.model_path, horizon_bars=args.horizon_bars
+            candles, model_path=args.model_path, horizon_bars=args.horizon_bars,
+            **_train_kw,
         )
     elif args.model_type == "hist_gb":
         metrics = train_hist_gradient_boosting(
-            candles, model_path=args.model_path, horizon_bars=args.horizon_bars
+            candles, model_path=args.model_path, horizon_bars=args.horizon_bars,
+            **_train_kw,
         )
     else:
         metrics = train_logistic_regression(
@@ -163,16 +179,30 @@ def main() -> None:
             model_path=args.model_path,
             horizon_bars=args.horizon_bars,
             tune_hyperparams=args.tune,
+            **_train_kw,
         )
 
+    metrics["label_mode"] = label_mode
+
     if args.calibrate:
+        cal_db = None
+        if getattr(args, "from_db", False):
+            from hogan_bot.storage import get_connection as _gc2
+            cal_db = _gc2(args.db)
         cal_meta = calibrate_model(
             candles,
             model_path=args.model_path,
             horizon_bars=args.horizon_bars,
             method=args.calibration_method,
+            db_conn=cal_db,
+            label_mode=label_mode,
         )
+        if cal_db is not None:
+            cal_db.close()
         metrics["calibration"] = cal_meta
+
+    if train_db_conn is not None:
+        train_db_conn.close()
 
     if not args.no_registry:
         registry = ModelRegistry(registry_path=args.registry_path)
