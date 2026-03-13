@@ -81,6 +81,12 @@ class BotConfig:
     max_hold_hours: float = 24.0     # 24h max hold (canonical)
     loss_cooldown_hours: float = 2.0 # 2h cooldown (canonical)
 
+    # Exit model thresholds (ExitEvaluator)
+    exit_drawdown_pct: float = 0.03       # unrealized loss % triggering panic exit
+    exit_time_decay: float = 0.75         # hold_ratio above which stale positions exit
+    exit_vol_expansion: float = 2.0       # ATR ratio triggering vol-expansion exit
+    exit_stagnation_bars: int = 12        # bars of near-zero PnL before stagnation exit
+
     # Conviction persistence: minimum bars to hold before signal exits are allowed.
     # Trailing stop / take profit / max_hold exits are unaffected.
     min_hold_bars: int = 3           # 3 bars on 1h = 3 hours
@@ -403,6 +409,10 @@ def load_config() -> BotConfig:
         trailing_stop_pct=float(os.getenv("HOGAN_TRAILING_STOP_PCT", "0.02")),
         take_profit_pct=float(os.getenv("HOGAN_TAKE_PROFIT_PCT", "0.054")),
         atr_stop_multiplier=float(os.getenv("HOGAN_ATR_STOP_MULTIPLIER", "2.5")),
+        exit_drawdown_pct=float(os.getenv("HOGAN_EXIT_DRAWDOWN_PCT", "0.03")),
+        exit_time_decay=float(os.getenv("HOGAN_EXIT_TIME_DECAY", "0.75")),
+        exit_vol_expansion=float(os.getenv("HOGAN_EXIT_VOL_EXPANSION", "2.0")),
+        exit_stagnation_bars=int(os.getenv("HOGAN_EXIT_STAGNATION_BARS", "12")),
         max_hold_bars=int(os.getenv("HOGAN_MAX_HOLD_BARS", "24")),
         loss_cooldown_bars=int(os.getenv("HOGAN_LOSS_COOLDOWN_BARS", "2")),
         max_hold_hours=float(os.getenv("HOGAN_MAX_HOLD_HOURS", "0")),

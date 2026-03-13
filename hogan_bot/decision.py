@@ -162,6 +162,14 @@ def edge_gate(
     return action
 
 
+_REGIME_QUALITY_ADJUSTMENTS: dict[str, dict[str, float]] = {
+    "trending_up":   {"final_mult": 0.80, "tech_mult": 1.00},
+    "trending_down": {"final_mult": 0.80, "tech_mult": 1.00},
+    "volatile":      {"final_mult": 1.20, "tech_mult": 1.10},
+    "ranging":       {"final_mult": 1.00, "tech_mult": 1.25},
+}
+
+
 def entry_quality_gate(
     action: str,
     *,
@@ -177,28 +185,37 @@ def entry_quality_gate(
 ) -> tuple[str, float]:
     """Block entries that don't meet quality thresholds. Returns (action, size_scale).
 
+    Thresholds are adjusted by regime:
+    - Trending: relax final_confidence by 20% (trend-following needs less confirmation)
+    - Volatile: tighten final_confidence by 20% (require stronger conviction)
+    - Ranging: tighten tech_confidence by 25% (mean-revert needs stronger tech signal)
+
     Checks (any failure blocks the trade):
-    1. Final confidence must exceed minimum
-    2. Technical confidence must exceed minimum
+    1. Final confidence must exceed (regime-adjusted) minimum
+    2. Technical confidence must exceed (regime-adjusted) minimum
     3. Regime confidence must be sufficient (blocks ambiguous regimes)
     4. Recent whipsaw count must be below threshold (reduces size or blocks)
     """
     if action == "hold":
         return action, 1.0
 
+    adj = _REGIME_QUALITY_ADJUSTMENTS.get(regime or "", {})
+    eff_min_final = min_final_confidence * adj.get("final_mult", 1.0)
+    eff_min_tech = min_tech_confidence * adj.get("tech_mult", 1.0)
+
     size_scale = 1.0
 
-    if final_confidence is not None and final_confidence < min_final_confidence:
+    if final_confidence is not None and final_confidence < eff_min_final:
         logger.debug(
-            "QUALITY_GATE: final_conf %.3f < %.3f -> hold",
-            final_confidence, min_final_confidence,
+            "QUALITY_GATE: final_conf %.3f < %.3f (regime=%s) -> hold",
+            final_confidence, eff_min_final, regime or "none",
         )
         return "hold", 1.0
 
-    if tech_confidence is not None and tech_confidence < min_tech_confidence:
+    if tech_confidence is not None and tech_confidence < eff_min_tech:
         logger.debug(
-            "QUALITY_GATE: tech_conf %.3f < %.3f -> hold",
-            tech_confidence, min_tech_confidence,
+            "QUALITY_GATE: tech_conf %.3f < %.3f (regime=%s) -> hold",
+            tech_confidence, eff_min_tech, regime or "none",
         )
         return "hold", 1.0
 

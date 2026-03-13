@@ -107,6 +107,19 @@ class SignalEvaluator:
             except Exception:
                 pass
 
+        # Regime-adjusted thresholds (ML gates, stop/TP, position scale)
+        eff: dict[str, float] = {}
+        if _rstate is not None:
+            try:
+                from hogan_bot.regime import effective_thresholds
+                eff = effective_thresholds(_rstate, cfg)
+            except Exception:
+                pass
+        eff_ml_buy = eff.get("ml_buy_threshold", cfg.ml_buy_threshold)
+        eff_ml_sell = eff.get("ml_sell_threshold", cfg.ml_sell_threshold)
+        eff_tp = eff.get("take_profit_pct", cfg.take_profit_pct)
+        eff_position_scale = eff.get("position_scale", 1.0)
+
         result = self.pipeline.run(
             candles, symbol=symbol, config_override=cfg,
             regime=regime_name, regime_state=_rstate,
@@ -119,11 +132,11 @@ class SignalEvaluator:
 
         if cfg.use_ml_filter and self.ml_model is not None:
             up_prob = predict_up_probability(candles, self.ml_model)
-            action = apply_ml_filter(action, up_prob, cfg.ml_buy_threshold, cfg.ml_sell_threshold)
+            action = apply_ml_filter(action, up_prob, eff_ml_buy, eff_ml_sell)
             if cfg.ml_confidence_sizing:
                 conf_scale = ml_confidence(up_prob) * (result.confidence or 1.0)
 
-        # Fee-aware edge gate
+        # Fee-aware edge gate (uses regime-adjusted take_profit)
         forecast_ret = None
         if result.forecast is not None and result.forecast.confidence > 0.2:
             er = result.forecast.expected_return
@@ -136,7 +149,7 @@ class SignalEvaluator:
         action = edge_gate(
             action,
             atr_pct=atr_pct,
-            take_profit_pct=cfg.take_profit_pct,
+            take_profit_pct=eff_tp,
             fee_rate=cfg.fee_rate,
             min_edge_multiple=getattr(cfg, "min_edge_multiple", 1.5),
             forecast_expected_return=forecast_ret,
@@ -164,7 +177,7 @@ class SignalEvaluator:
             stop_distance_pct=result.stop_distance_pct,
             max_risk_per_trade=cfg.max_risk_per_trade,
             max_allocation_pct=cfg.aggressive_allocation,
-            confidence_scale=conf_scale * quality_scale,
+            confidence_scale=conf_scale * quality_scale * eff_position_scale,
             fee_rate=cfg.fee_rate,
         )
 
@@ -290,7 +303,12 @@ async def run_event_loop(
 
     evaluator = SignalEvaluator(config, ml_model, conn=conn)
     from hogan_bot.exit_model import ExitEvaluator
-    _exit_eval = ExitEvaluator()
+    _exit_eval = ExitEvaluator(
+        drawdown_panic_pct=config.exit_drawdown_pct,
+        time_decay_threshold=config.exit_time_decay,
+        volatility_expansion_threshold=config.exit_vol_expansion,
+        max_consolidation_bars=config.exit_stagnation_bars,
+    )
     _expectancy = ExpectancyTracker()
     buffer = CandleRingBuffer(maxlen=config.ohlcv_limit)
 
@@ -654,6 +672,7 @@ async def run_event_loop(
                         side="long",
                         max_hold_bars=max_hold_bars,
                         entry_atr=getattr(pos, "entry_atr_pct", None) or None,
+                        vol_ratio=sig.vol_ratio,
                     )
                     if not exit_decision.should_exit:
                         logger.debug(
