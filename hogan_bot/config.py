@@ -185,9 +185,11 @@ class BotConfig:
     # Online learning
     use_online_learning: bool = False
     online_learning_interval: int = 50
+    use_learned_weights: bool = False
 
     # Multi-timeframe ensemble: daily bias + primary signal + 30m confirmation
     use_mtf_ensemble: bool = False
+    mtf_timeframes: list[str] | None = None  # sub-hourly context frames e.g. ["15m", "30m"]
     mtf_use_daily_filter: bool = False   # enable after daily is Optuna-optimised
     mtf_daily_timeframe: str = "1d"
     mtf_m30_timeframe: str = "30m"
@@ -229,6 +231,12 @@ class RegimeConfig:
 
     Multiplier fields (``*_mult``) scale from the base BotConfig value.
     Absolute fields override directly.
+
+    Responsibility boundaries:
+    - MetaWeigher: direction and vote-level regime adaptation (meta_*_delta, meta_*_threshold)
+    - entry_quality_gate: minimum setup cleanliness (quality_final_mult, quality_tech_mult)
+    - ranging_gate: chop-specific suppression only
+    - effective_thresholds: execution economics (ML gates, TP/SL, position_scale)
     """
     volume_threshold_mult: float = 1.0
     ml_buy_threshold: float = 0.60
@@ -238,13 +246,14 @@ class RegimeConfig:
     position_scale: float = 1.0
     strategy_family: str = "trend_follow"
     min_confidence_to_trade: float = 0.30
-    # MetaWeigher weight deltas (added to base weights before normalization)
     meta_tech_delta: float = 0.0
     meta_sent_delta: float = 0.0
     meta_macro_delta: float = 0.0
-    # MetaWeigher action threshold overrides (None = use base config values)
     meta_buy_threshold: float | None = None
     meta_sell_threshold: float | None = None
+    # Quality gate: multipliers applied to min_final_confidence / min_tech_confidence
+    quality_final_mult: float = 1.0
+    quality_tech_mult: float = 1.0
 
 
 DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
@@ -261,6 +270,8 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         meta_macro_delta=-0.05,
         meta_buy_threshold=0.20,
         meta_sell_threshold=-0.20,
+        quality_final_mult=0.80,
+        quality_tech_mult=1.00,
     ),
     "trending_down": RegimeConfig(
         volume_threshold_mult=0.55,
@@ -275,6 +286,8 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         meta_macro_delta=-0.05,
         meta_buy_threshold=0.20,
         meta_sell_threshold=-0.20,
+        quality_final_mult=0.80,
+        quality_tech_mult=1.00,
     ),
     "ranging": RegimeConfig(
         volume_threshold_mult=1.10,
@@ -289,6 +302,8 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         meta_macro_delta=+0.10,
         meta_buy_threshold=0.30,
         meta_sell_threshold=-0.30,
+        quality_final_mult=1.00,
+        quality_tech_mult=1.25,
     ),
     "volatile": RegimeConfig(
         volume_threshold_mult=0.70,
@@ -303,6 +318,8 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         meta_macro_delta=+0.05,
         meta_buy_threshold=0.35,
         meta_sell_threshold=-0.35,
+        quality_final_mult=1.20,
+        quality_tech_mult=1.10,
     ),
 }
 
@@ -504,6 +521,7 @@ def load_config() -> BotConfig:
         ),
         use_mtf_extended=os.getenv("HOGAN_USE_MTF_EXTENDED", "true").lower() == "true",
         use_mtf_ensemble=os.getenv("HOGAN_USE_MTF_ENSEMBLE", "false").lower() == "true",
+        mtf_timeframes=os.getenv("HOGAN_MTF_TIMEFRAMES", "").split(",") if os.getenv("HOGAN_MTF_TIMEFRAMES") else None,
         mtf_use_daily_filter=os.getenv("HOGAN_MTF_USE_DAILY_FILTER", "false").lower() == "true",
         mtf_daily_timeframe=os.getenv("HOGAN_MTF_DAILY_TF", "1d"),
         mtf_m30_timeframe=os.getenv("HOGAN_MTF_M30_TF", "30m"),
@@ -511,6 +529,7 @@ def load_config() -> BotConfig:
         mtf_daily_slow_ma=int(os.getenv("HOGAN_MTF_DAILY_SLOW_MA", "30")),
         mtf_unconfirmed_scale=float(os.getenv("HOGAN_MTF_UNCONFIRMED_SCALE", "0.60")),
         use_online_learning=os.getenv("HOGAN_USE_ONLINE_LEARNING", "false").lower() == "true",
+        use_learned_weights=os.getenv("HOGAN_USE_LEARNED_WEIGHTS", "false").lower() == "true",
         online_learning_interval=int(os.getenv("HOGAN_ONLINE_LEARNING_INTERVAL", "50")),
         use_macro_filter=os.getenv("HOGAN_USE_MACRO_FILTER", "false").lower() == "true",
         macro_vix_caution=float(os.getenv("HOGAN_MACRO_VIX_CAUTION", "25.0")),

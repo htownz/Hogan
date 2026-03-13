@@ -294,6 +294,13 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         "ALTER TABLE decision_log ADD COLUMN direction_score REAL",
         "ALTER TABLE decision_log ADD COLUMN quality_score REAL",
         "ALTER TABLE decision_log ADD COLUMN size_score REAL",
+        "ALTER TABLE decision_log ADD COLUMN quality_components_json TEXT",
+        "ALTER TABLE decision_log ADD COLUMN block_reasons_json TEXT",
+        "ALTER TABLE paper_trades ADD COLUMN max_adverse_pct REAL",
+        "ALTER TABLE paper_trades ADD COLUMN max_favorable_pct REAL",
+        "ALTER TABLE paper_trades ADD COLUMN bars_held INTEGER",
+        "ALTER TABLE paper_trades ADD COLUMN exit_regime TEXT",
+        "ALTER TABLE paper_trades ADD COLUMN entry_atr_pct REAL",
     ):
         try:
             conn.execute(_alt)
@@ -711,6 +718,12 @@ def close_paper_trade(
     exit_fee: float,
     close_ts_ms: int,
     close_reason: str = "signal",
+    *,
+    max_adverse_pct: float | None = None,
+    max_favorable_pct: float | None = None,
+    bars_held: int | None = None,
+    exit_regime: str | None = None,
+    entry_atr_pct: float | None = None,
 ) -> int | None:
     """Close the most-recent open paper trade for this symbol/side.
 
@@ -748,13 +761,18 @@ def close_paper_trade(
         """
         UPDATE paper_trades
         SET exit_price=?, exit_fee=?, realized_pnl=?, pnl_pct=?,
-            close_ts_ms=?, close_reason=?
+            close_ts_ms=?, close_reason=?,
+            max_adverse_pct=?, max_favorable_pct=?, bars_held=?,
+            exit_regime=?, entry_atr_pct=?
         WHERE trade_id=?
         """,
         (
             float(exit_price), float(exit_fee),
             float(realized_pnl), float(pnl_pct),
-            int(close_ts_ms), close_reason, trade_id,
+            int(close_ts_ms), close_reason,
+            max_adverse_pct, max_favorable_pct, bars_held,
+            exit_regime, entry_atr_pct,
+            trade_id,
         ),
     )
     conn.commit()
@@ -822,6 +840,8 @@ def log_decision(
     direction_score: float | None = None,
     quality_score: float | None = None,
     size_score: float | None = None,
+    quality_components_json: str | None = None,
+    block_reasons: list[str] | None = None,
 ) -> int:
     """Insert a structured decision packet.  Returns the row id (decision_id)."""
     cur = conn.execute(
@@ -838,8 +858,9 @@ def log_decision(
             final_action, final_confidence, position_size,
             ml_up_prob, conf_scale, explanation,
             linked_trade_id,
-            direction_score, quality_score, size_score
-        ) VALUES (?,?,?, ?,?, ?,?, ?,?, ?, ?,?,?,?, ?,?,?,?,?, ?, ?,?,?, ?,?,?, ?, ?,?,?)
+            direction_score, quality_score, size_score,
+            quality_components_json, block_reasons_json
+        ) VALUES (?,?,?, ?,?, ?,?, ?,?, ?, ?,?,?,?, ?,?,?,?,?, ?, ?,?,?, ?,?,?, ?, ?,?,?, ?,?)
         """,
         (
             int(ts_ms), symbol, regime,
@@ -855,6 +876,8 @@ def log_decision(
             ml_up_prob, conf_scale, explanation,
             linked_trade_id,
             direction_score, quality_score, size_score,
+            quality_components_json,
+            json.dumps(block_reasons) if block_reasons else None,
         ),
     )
     conn.commit()

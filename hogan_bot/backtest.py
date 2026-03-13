@@ -621,11 +621,11 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         conf_scale = signal.confidence or 1.0
         if ml_model is not None:
             up_prob = predict_up_probability(window, ml_model)
-            action = apply_ml_filter(action, up_prob, _eff_ml_buy, _eff_ml_sell)
+            _ml_gd = apply_ml_filter(action, up_prob, _eff_ml_buy, _eff_ml_sell)
+            action = _ml_gd.action
             if ml_confidence_sizing:
                 conf_scale *= ml_confidence(up_prob)
 
-        # Fee- and spread-aware edge gate (regime-adjusted TP, parity with event_loop)
         _atr_pct = signal.stop_distance_pct / max(atr_stop_multiplier, 1.0)
         _spread_est = estimate_spread_from_candles(window)
         _forecast_ret = None
@@ -635,7 +635,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 _forecast_ret = max(abs(v) for v in _er.values())
             elif isinstance(_er, (int, float)):
                 _forecast_ret = abs(float(_er))
-        action = edge_gate(
+        _edge_gd = edge_gate(
             action,
             atr_pct=_atr_pct,
             take_profit_pct=_eff_tp,
@@ -644,10 +644,10 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             forecast_expected_return=_forecast_ret,
             estimated_spread=_spread_est,
         )
+        action = _edge_gd.action
 
-        # Hard entry quality gate (parity with live/paper — uses config thresholds)
         _tech_conf = signal.tech.confidence if signal.tech else None
-        action, _quality_scale = entry_quality_gate(
+        _quality_gd = entry_quality_gate(
             action,
             final_confidence=signal.confidence,
             tech_confidence=_tech_conf,
@@ -659,16 +659,19 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             min_regime_confidence=min_regime_confidence,
             max_whipsaws=max_whipsaws,
         )
+        action = _quality_gd.action
+        _quality_scale = _quality_gd.size_scale
 
-        # Ranging-specific extra protections (parity with event_loop)
         _tech_action = signal.tech.action if signal.tech else None
-        action, _ranging_scale = ranging_gate(
+        _ranging_gd = ranging_gate(
             action,
             regime=_current_regime,
             tech_action=_tech_action,
             up_prob=up_prob if ml_model is not None else None,
             recent_whipsaw_count=_whipsaw_count,
         )
+        action = _ranging_gd.action
+        _ranging_scale = _ranging_gd.size_scale
 
         equity = portfolio.total_equity(mark)
         equity_curve.append(equity)

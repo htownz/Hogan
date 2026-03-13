@@ -51,7 +51,12 @@ def _in_memory_db() -> sqlite3.Connection:
             ml_up_prob         REAL,
             strategy_conf      REAL,
             vol_ratio          REAL,
-            entry_decision_id  INTEGER
+            entry_decision_id  INTEGER,
+            max_adverse_pct    REAL,
+            max_favorable_pct  REAL,
+            bars_held          INTEGER,
+            exit_regime        TEXT,
+            entry_atr_pct      REAL
         )
     """)
     conn.execute("""

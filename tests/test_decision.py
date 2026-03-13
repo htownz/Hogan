@@ -15,6 +15,9 @@ from hogan_bot.decision import (
     estimate_spread_from_candles,
     estimate_spread_from_order_book,
     ml_confidence,
+    compute_quality_components,
+    QualityComponents,
+    GateDecision,
 )
 
 
@@ -40,25 +43,29 @@ def _candles(n: int = 50, base: float = 100.0, noise: float = 0.005) -> pd.DataF
 
 class TestApplyMlFilter:
     def test_buy_passes_above_threshold(self):
-        assert apply_ml_filter("buy", 0.65, 0.55, 0.45) == "buy"
+        assert apply_ml_filter("buy", 0.65, 0.55, 0.45).action == "buy"
 
     def test_buy_blocked_below_threshold(self):
-        assert apply_ml_filter("buy", 0.50, 0.55, 0.45) == "hold"
+        gd = apply_ml_filter("buy", 0.50, 0.55, 0.45)
+        assert gd.action == "hold"
+        assert gd.blocked_by == "ml_filter_buy"
 
     def test_sell_passes_below_threshold(self):
-        assert apply_ml_filter("sell", 0.30, 0.55, 0.45) == "sell"
+        assert apply_ml_filter("sell", 0.30, 0.55, 0.45).action == "sell"
 
     def test_sell_blocked_above_threshold(self):
-        assert apply_ml_filter("sell", 0.50, 0.55, 0.45) == "hold"
+        gd = apply_ml_filter("sell", 0.50, 0.55, 0.45)
+        assert gd.action == "hold"
+        assert gd.blocked_by == "ml_filter_sell"
 
     def test_hold_passes_through(self):
-        assert apply_ml_filter("hold", 0.99, 0.55, 0.45) == "hold"
+        assert apply_ml_filter("hold", 0.99, 0.55, 0.45).action == "hold"
 
     def test_nan_passes_through(self):
-        assert apply_ml_filter("buy", float("nan"), 0.55, 0.45) == "buy"
+        assert apply_ml_filter("buy", float("nan"), 0.55, 0.45).action == "buy"
 
     def test_none_passes_through(self):
-        assert apply_ml_filter("sell", None, 0.55, 0.45) == "sell"
+        assert apply_ml_filter("sell", None, 0.55, 0.45).action == "sell"
 
 
 # ---------------------------------------------------------------------------
@@ -95,44 +102,49 @@ class TestMlConfidence:
 
 class TestEdgeGate:
     def test_hold_passes_through(self):
-        assert edge_gate("hold", 0.01, 0.05, 0.001) == "hold"
+        assert edge_gate("hold", 0.01, 0.05, 0.001).action == "hold"
 
     def test_sufficient_edge_passes(self):
-        result = edge_gate("buy", atr_pct=0.02, take_profit_pct=0.05,
-                           fee_rate=0.001, estimated_spread=0.0005)
-        assert result == "buy"
+        gd = edge_gate("buy", atr_pct=0.02, take_profit_pct=0.05,
+                        fee_rate=0.001, estimated_spread=0.0005)
+        assert gd.action == "buy"
+        assert gd.blocked_by is None
 
     def test_low_atr_blocked(self):
-        result = edge_gate("buy", atr_pct=0.001, take_profit_pct=0.05,
-                           fee_rate=0.002, estimated_spread=0.001)
-        assert result == "hold"
+        gd = edge_gate("buy", atr_pct=0.001, take_profit_pct=0.05,
+                        fee_rate=0.002, estimated_spread=0.001)
+        assert gd.action == "hold"
+        assert gd.blocked_by == "edge_gate_atr_low"
 
     def test_tp_below_friction_blocked(self):
-        result = edge_gate("buy", atr_pct=0.05, take_profit_pct=0.002,
-                           fee_rate=0.001, min_edge_multiple=1.5,
-                           estimated_spread=0.001)
-        assert result == "hold"
+        gd = edge_gate("buy", atr_pct=0.05, take_profit_pct=0.002,
+                        fee_rate=0.001, min_edge_multiple=1.5,
+                        estimated_spread=0.001)
+        assert gd.action == "hold"
+        assert gd.blocked_by == "edge_gate_tp_low"
 
     def test_forecast_below_friction_blocked(self):
-        result = edge_gate("buy", atr_pct=0.05, take_profit_pct=0.05,
-                           fee_rate=0.002, forecast_expected_return=0.001,
-                           estimated_spread=0.001)
-        assert result == "hold"
+        gd = edge_gate("buy", atr_pct=0.05, take_profit_pct=0.05,
+                        fee_rate=0.002, forecast_expected_return=0.001,
+                        estimated_spread=0.001)
+        assert gd.action == "hold"
+        assert gd.blocked_by == "edge_gate_forecast_low"
 
-    def test_illiquid_spread_blocked(self):
-        result = edge_gate("buy", atr_pct=0.01, take_profit_pct=0.05,
-                           fee_rate=0.0005, estimated_spread=0.005)
-        assert result == "hold"
+    def test_high_spread_blocked(self):
+        gd = edge_gate("buy", atr_pct=0.012, take_profit_pct=0.05,
+                        fee_rate=0.0005, estimated_spread=0.005)
+        assert gd.action == "hold"
+        assert gd.blocked_by is not None
 
     def test_sell_also_gated(self):
-        result = edge_gate("sell", atr_pct=0.001, take_profit_pct=0.05,
-                           fee_rate=0.002)
-        assert result == "hold"
+        gd = edge_gate("sell", atr_pct=0.001, take_profit_pct=0.05,
+                        fee_rate=0.002)
+        assert gd.action == "hold"
 
     def test_zero_spread_passes_other_checks(self):
-        result = edge_gate("buy", atr_pct=0.02, take_profit_pct=0.05,
-                           fee_rate=0.001, estimated_spread=0.0)
-        assert result == "buy"
+        gd = edge_gate("buy", atr_pct=0.02, take_profit_pct=0.05,
+                        fee_rate=0.001, estimated_spread=0.0)
+        assert gd.action == "buy"
 
 
 # ---------------------------------------------------------------------------
@@ -141,47 +153,109 @@ class TestEdgeGate:
 
 class TestEntryQualityGate:
     def test_hold_passes_through(self):
-        action, scale = entry_quality_gate("hold", final_confidence=0.9)
-        assert action == "hold"
-        assert scale == 1.0
+        gd = entry_quality_gate("hold", final_confidence=0.9)
+        assert gd.action == "hold"
+        assert gd.size_scale == 1.0
 
     def test_high_confidence_passes(self):
-        action, scale = entry_quality_gate("buy", final_confidence=0.8,
-                                            tech_confidence=0.7,
-                                            regime_confidence=0.6)
-        assert action == "buy"
-        assert scale == 1.0
+        gd = entry_quality_gate("buy", final_confidence=0.8,
+                                tech_confidence=0.7,
+                                regime_confidence=0.6)
+        assert gd.action == "buy"
+        assert gd.size_scale == 1.0
 
     def test_low_final_confidence_blocks(self):
-        action, _ = entry_quality_gate("buy", final_confidence=0.1)
-        assert action == "hold"
+        gd = entry_quality_gate("buy", final_confidence=0.1)
+        assert gd.action == "hold"
+        assert gd.blocked_by == "quality_gate_final_conf"
 
     def test_low_tech_confidence_blocks(self):
-        action, _ = entry_quality_gate("buy", final_confidence=0.8,
-                                        tech_confidence=0.2)
-        assert action == "hold"
+        gd = entry_quality_gate("buy", final_confidence=0.8,
+                                tech_confidence=0.2)
+        assert gd.action == "hold"
+        assert gd.blocked_by == "quality_gate_tech_conf"
 
     def test_low_regime_confidence_blocks(self):
-        action, _ = entry_quality_gate("buy", final_confidence=0.8,
-                                        tech_confidence=0.8,
-                                        regime_confidence=0.3)
-        assert action == "hold"
+        gd = entry_quality_gate("buy", final_confidence=0.8,
+                                tech_confidence=0.8,
+                                regime_confidence=0.3)
+        assert gd.action == "hold"
+        assert gd.blocked_by == "quality_gate_regime_conf"
 
     def test_whipsaw_reduces_scale(self):
-        action, scale = entry_quality_gate("buy", final_confidence=0.8,
-                                            recent_whipsaw_count=3)
-        assert action == "buy"
-        assert scale < 1.0
+        gd = entry_quality_gate("buy", final_confidence=0.8,
+                                recent_whipsaw_count=3)
+        assert gd.action == "buy"
+        assert gd.size_scale < 1.0
 
     def test_many_whipsaws_blocks(self):
-        action, _ = entry_quality_gate("buy", final_confidence=0.8,
-                                        recent_whipsaw_count=10)
-        assert action == "hold"
+        gd = entry_quality_gate("buy", final_confidence=0.8,
+                                recent_whipsaw_count=10)
+        assert gd.action == "hold"
+        assert gd.blocked_by == "quality_gate_whipsaw"
 
     def test_none_confidences_pass(self):
-        action, scale = entry_quality_gate("buy")
-        assert action == "buy"
-        assert scale == 1.0
+        gd = entry_quality_gate("buy")
+        assert gd.action == "buy"
+        assert gd.size_scale == 1.0
+
+
+# ---------------------------------------------------------------------------
+# QualityComponents
+# ---------------------------------------------------------------------------
+
+class TestQualityComponents:
+    def test_compute_returns_dataclass(self):
+        qc = compute_quality_components(
+            final_confidence=0.5,
+            tech_confidence=0.6,
+            regime_confidence=0.7,
+            up_prob=0.75,
+        )
+        assert isinstance(qc, QualityComponents)
+        assert 0.0 <= qc.overall <= 1.0
+
+    def test_all_high_inputs_give_high_overall(self):
+        qc = compute_quality_components(
+            final_confidence=0.6,
+            tech_confidence=0.7,
+            regime_confidence=0.75,
+            up_prob=0.9,
+            estimated_spread=0.0001,
+            atr_pct=0.02,
+            recent_whipsaw_count=0,
+        )
+        assert qc.overall > 0.7
+
+    def test_poor_inputs_give_low_overall(self):
+        qc = compute_quality_components(
+            final_confidence=0.05,
+            tech_confidence=0.05,
+            regime_confidence=0.1,
+            up_prob=0.51,
+            estimated_spread=0.005,
+            atr_pct=0.01,
+            recent_whipsaw_count=5,
+        )
+        assert qc.overall < 0.3
+
+    def test_ranging_scale_dampens(self):
+        qc_full = compute_quality_components(final_confidence=0.5, ranging_scale=1.0)
+        qc_damp = compute_quality_components(final_confidence=0.5, ranging_scale=0.5)
+        assert qc_damp.overall < qc_full.overall
+
+    def test_to_json(self):
+        qc = compute_quality_components(final_confidence=0.5)
+        j = qc.to_json()
+        assert '"overall"' in j
+
+    def test_freshness_penalty(self):
+        qc_fresh = compute_quality_components(final_confidence=0.5, freshness_summary=None)
+        qc_stale = compute_quality_components(
+            final_confidence=0.5,
+            freshness_summary={"stale_count": 3, "critical_stale_count": 1},
+        )
+        assert qc_stale.freshness_penalty < qc_fresh.freshness_penalty
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +309,6 @@ class TestAdaptiveConfidence:
         ac = AdaptiveConfidence()
         for _ in range(30):
             ac.record_outcome(0.7, 1)
-        # Recency factor should be > 1.0 after all-correct track record
         assert ac._recency_accuracy_factor() > 1.0
 
     def test_good_track_record_vs_bad(self):
