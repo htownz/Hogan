@@ -348,6 +348,101 @@ class LiveDataEngine(DataEngineBase):
 
 
 # ---------------------------------------------------------------------------
+# Oanda data engine — REST polling via OandaClient
+# ---------------------------------------------------------------------------
+class OandaDataEngine(DataEngineBase):
+    """Poll Oanda REST v20 candles for FX paper/live trading.
+
+    Slots into the same ``DataEngineBase`` interface as ``LiveDataEngine``
+    so the event loop can swap data sources without changing strategy code.
+
+    Usage::
+
+        from hogan_bot.oanda_client import OandaClient
+        engine = OandaDataEngine(
+            client=OandaClient(),
+            symbols=["EUR/USD", "GBP/USD"],
+            timeframes=["15m"],
+        )
+        async with engine:
+            async for event in engine.stream():
+                ...
+    """
+
+    def __init__(
+        self,
+        client,  # OandaClient (lazy import to avoid hard dep)
+        symbols: list[str] | None = None,
+        timeframes: list[str] | None = None,
+        poll_interval: float = 30.0,
+        ring_buffer_len: int = 500,
+        queue_maxsize: int = 1000,
+    ) -> None:
+        super().__init__(
+            symbols=symbols or ["EUR/USD"],
+            timeframes=timeframes or ["15m"],
+            queue_maxsize=queue_maxsize,
+        )
+        self._client = client
+        self._poll_interval = poll_interval
+        self.buffer = CandleRingBuffer(maxlen=ring_buffer_len)
+        self._last_candle_ts: dict[str, float] = {}
+
+    async def _run(self) -> None:
+        logger.info(
+            "OandaDataEngine polling: %s %s every %.0fs",
+            self._client.account_id, self.symbols, self._poll_interval,
+        )
+        while self._running:
+            for symbol in self.symbols:
+                for tf in self.timeframes:
+                    try:
+                        df = await asyncio.get_event_loop().run_in_executor(
+                            None, self._client.fetch_candles, symbol, tf, 2,
+                        )
+                        if df.empty:
+                            continue
+                        for _, row in df.iterrows():
+                            ts_raw = row.get("timestamp")
+                            if hasattr(ts_raw, "timestamp"):
+                                ts_ms = int(ts_raw.timestamp() * 1000)
+                            else:
+                                ts_ms = int(ts_raw)
+                            candle = {
+                                "ts_ms": ts_ms,
+                                "open": float(row["open"]),
+                                "high": float(row["high"]),
+                                "low": float(row["low"]),
+                                "close": float(row["close"]),
+                                "volume": int(row.get("volume", 0)),
+                            }
+                            self.buffer.push(symbol, tf, candle)
+                            event = CandleEvent(
+                                symbol=symbol,
+                                timeframe=tf,
+                                candle=pd.Series(candle),
+                            )
+                            try:
+                                self._queue.put_nowait(event)
+                            except asyncio.QueueFull:
+                                pass
+                        self._last_candle_ts[symbol] = time.time()
+                    except Exception as exc:
+                        logger.warning("Oanda poll error %s/%s: %s", symbol, tf, exc)
+            await asyncio.sleep(self._poll_interval)
+
+    def check_dead_man(self) -> list[str]:
+        """Return list of symbols that haven't received a candle recently."""
+        now = time.time()
+        stale = []
+        for sym in self.symbols:
+            last = self._last_candle_ts.get(sym, 0)
+            if now - last > _DEAD_MAN_SECS:
+                stale.append(sym)
+        return stale
+
+
+# ---------------------------------------------------------------------------
 # Backtest replay engine (Phase 2c)
 # ---------------------------------------------------------------------------
 class BacktestDataEngine(DataEngineBase):

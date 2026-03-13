@@ -34,9 +34,12 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 - Uses 15-feature champion subset; model path → `champion_ml_model_path`
 - Train champion: `python -m hogan_bot.train --champion`
 
-## Data & Kraken
+## Data & Exchanges
 - `HOGAN_USE_REST_DATA=1` — skip WebSocket, use REST polling (Kraken maintenance)
 - `HOGAN_WS_FAIL_THRESHOLD=5` — auto-switch to REST after N WS failures
+- `HOGAN_USE_OANDA=true` — Oanda FX mode (OandaDataEngine + OandaExecution)
+  - Paper mode: OandaDataEngine for candles, RealisticPaperExecution for fills
+  - Live mode: OandaDataEngine for candles, OandaExecution for orders
 
 ## Trade Sides
 - Paper trades: always use `side="long"` or `side="short"` (never buy/sell in storage)
