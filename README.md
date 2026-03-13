@@ -101,6 +101,13 @@ python -m hogan_bot.event_loop --max-events 100
 > **Note:** `main.py` and `trader_service.py` are deprecated legacy runtimes.
 > Always use `hogan_bot.event_loop` for paper and live trading.
 
+### Verifying the bot is running
+
+1. **Log output** — Look for `Event loop starting`, `REST polling active`, or `Loaded ML model`.
+2. **Process check** — `Get-Process python*` (Windows) or `ps aux | grep python` (Linux).
+3. **Command line** — `wmic process where "ProcessId=<PID>" get CommandLine` should show `hogan_bot.trader_service` or `hogan_bot.event_loop`.
+4. **Metrics** — `http://localhost:8000` (if `HOGAN_METRICS_PORT=8000`).
+
 ## ML Enhancement Workflow (Recommended)
 
 The ML pipeline uses **66 features** (59 core + 7 experimental ICT features) covering momentum, RSI, volatility, candle microstructure, volume, EMA cloud direction/width, OBV, Stochastic RSI, VWAP deviation, MACD, Bollinger Bands, ATR, multi-timeframe features, and on-chain/macro signals. It supports multiple classifier types: LogReg, Random Forest, XGBoost, and LightGBM.

@@ -1,0 +1,43 @@
+---
+description: Hogan trading bot architecture, key modules, and conventions
+alwaysApply: true
+---
+
+# Hogan Architecture
+
+Hogan is a BTC-first, 1h-led trading system. When editing or extending:
+
+## Runtime Path
+- **Canonical**: `python -m hogan_bot.event_loop` (or `trader_service` as alias)
+- Config: `hogan_bot/config.py` → `load_config()` reads `.env` via dotenv
+
+## Core Pipeline (event_loop.py)
+```
+LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Execution
+```
+
+## Key Modules
+| Module | Purpose |
+|--------|---------|
+| `event_loop.py` | Main async loop; wires data engine, evaluator, execution |
+| `data_engine.py` | LiveDataEngine (WebSocket/REST), BacktestDataEngine |
+| `config.py` | BotConfig, load_config, symbol_config |
+| `champion.py` | Champion mode locks; apply_champion_mode overrides config |
+| `feature_registry.py` | CHAMPION_FEATURE_COLUMNS (15), get_feature_columns |
+| `ml.py` | build_feature_row, build_training_set, predict_up_probability |
+| `exchange.py` | ExchangeClient, fetch_ohlcv_df (CCXT) |
+| `agent_pipeline.py` | Decision brain (Technical + Sentiment + Macro) |
+
+## Champion Mode
+- `HOGAN_CHAMPION_MODE=true` → locks experimental features off
+- Uses 15-feature champion subset; model path → `champion_ml_model_path`
+- Train champion: `python -m hogan_bot.train --champion`
+
+## Data & Kraken
+- `HOGAN_USE_REST_DATA=1` — skip WebSocket, use REST polling (Kraken maintenance)
+- `HOGAN_WS_FAIL_THRESHOLD=5` — auto-switch to REST after N WS failures
+
+## Conventions
+- Use `logger` from `logging`; config from `load_config()` then `apply_champion_mode(config)`
+- ML features: `get_feature_columns(use_champion)` from feature_registry
+- Tests: `tests/test_champion.py`, `tests/test_ml.py`, `tests/test_exchange.py`
