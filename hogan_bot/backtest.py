@@ -185,7 +185,7 @@ def _regime_metrics(
     bars_per_year: float = _BARS_PER_YEAR_DEFAULT,
 ) -> dict:
     if len(equity_slice) < 2:
-        return {"bars": len(equity_slice), "sharpe": None, "total_return_pct": 0.0}
+        return {"bars": len(equity_slice), "sharpe": None, "total_return_pct": 0.0, "max_drawdown_pct": 0.0}
     sharpe = compute_sharpe(equity_slice, bars_per_year)
     total_ret = (equity_slice[-1] / equity_slice[0] - 1.0) * 100 if equity_slice[0] > 0 else 0.0
     max_dd = _compute_max_drawdown(equity_slice)

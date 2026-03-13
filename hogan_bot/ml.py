@@ -874,7 +874,8 @@ def train_logistic_regression(
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
-    if prune_features and len(x) >= 500:
+    from hogan_bot.champion import is_champion_mode as _is_champ
+    if prune_features and len(x) >= 500 and not _is_champ():
         selected = select_features(x, y, max_features=max_features)
         x = x[selected]
         feature_columns = selected
@@ -963,7 +964,8 @@ def train_random_forest(
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
-    if prune_features and len(x) >= 500:
+    from hogan_bot.champion import is_champion_mode as _is_champ
+    if prune_features and len(x) >= 500 and not _is_champ():
         selected = select_features(x, y, max_features=max_features)
         x = x[selected]
         feature_columns = selected
@@ -1050,7 +1052,8 @@ def train_xgboost(
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
-    if prune_features and len(x) >= 500:
+    from hogan_bot.champion import is_champion_mode as _is_champ
+    if prune_features and len(x) >= 500 and not _is_champ():
         selected = select_features(x, y, max_features=max_features)
         x = x[selected]
         feature_columns = selected
@@ -1181,6 +1184,7 @@ def calibrate_model(
     horizon_bars: int = 12,
     method: str = "sigmoid",
     calibration_fraction: float = 0.2,
+    use_champion_features: bool | None = None,
 ) -> dict[str, object]:
     """Wrap an existing pickled model with probability calibration.
 
@@ -1196,6 +1200,9 @@ def calibrate_model(
         ``"sigmoid"`` (Platt scaling) or ``"isotonic"``.
     calibration_fraction:
         Fraction of labelled rows reserved for calibration (default 20 %).
+    use_champion_features:
+        When True, build only the champion 16-feature subset. When None,
+        follows HOGAN_CHAMPION_MODE environment variable.
     """
     try:
         from sklearn.calibration import CalibratedClassifierCV
@@ -1203,7 +1210,9 @@ def calibrate_model(
         raise RuntimeError("scikit-learn is required for calibration") from exc
 
     artifact = load_model(model_path)
-    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars)
+    x, y, feature_columns = build_training_set(
+        candles, horizon_bars=horizon_bars, use_champion_features=use_champion_features,
+    )
     if x is None or y is None or len(x) < 100:
         raise RuntimeError("Not enough data for calibration. Increase OHLCV history.")
 
@@ -1217,7 +1226,11 @@ def calibrate_model(
     else:
         x_cal_arr = x_cal.values
 
-    calibrated = CalibratedClassifierCV(artifact.model, cv="prefit", method=method)
+    try:
+        from sklearn.frozen import FrozenEstimator  # type: ignore[import-untyped]
+        calibrated = CalibratedClassifierCV(FrozenEstimator(artifact.model), method=method)
+    except (ImportError, ModuleNotFoundError):
+        calibrated = CalibratedClassifierCV(artifact.model, cv="prefit", method=method)
     calibrated.fit(x_cal_arr, y_cal)
 
     new_artifact = TrainedModel(
