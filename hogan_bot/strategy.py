@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 from hogan_bot.indicators import (
@@ -33,6 +33,189 @@ class SignalVote:
 class SignalProvider(Protocol):
     """Interface for independent signal providers (Phase A)."""
     def evaluate(self, candles, **kwargs) -> SignalVote: ...
+
+
+# ---------------------------------------------------------------------------
+# Strategy Family protocol — regime-routed strategy selection
+# ---------------------------------------------------------------------------
+
+class StrategyFamily(Protocol):
+    """Interface for regime-specific strategy families.
+
+    Each family implements its own signal generation logic optimized for
+    a specific market regime.  The StrategyRouter selects which family
+    to invoke based on the current regime.
+    """
+    name: str
+
+    def generate_signal(
+        self,
+        candles,
+        config,
+        regime_state=None,
+    ) -> StrategySignal: ...
+
+
+# ---------------------------------------------------------------------------
+# TrendFollowFamily — for trending_up / trending_down regimes
+# ---------------------------------------------------------------------------
+
+class TrendFollowFamily:
+    """MA crossover + trend continuation strategy.
+
+    Active during trending regimes.  Uses the existing generate_signal()
+    logic with MA crossover and pullback entries.
+    """
+    name: str = "trend_follow"
+
+    def generate_signal(self, candles, config, regime_state=None) -> StrategySignal:
+        return generate_signal(
+            candles,
+            short_window=config.short_ma_window,
+            long_window=config.long_ma_window,
+            volume_window=config.volume_window,
+            volume_threshold=config.volume_threshold,
+            use_ema_clouds=config.use_ema_clouds,
+            ema_fast_short=config.ema_fast_short,
+            ema_fast_long=config.ema_fast_long,
+            ema_slow_short=config.ema_slow_short,
+            ema_slow_long=config.ema_slow_long,
+            use_fvg=config.use_fvg,
+            fvg_min_gap_pct=config.fvg_min_gap_pct,
+            signal_mode=config.signal_mode,
+            atr_stop_multiplier=config.atr_stop_multiplier,
+            use_ict=config.use_ict,
+            min_vote_margin=getattr(config, "signal_min_vote_margin", 1),
+        )
+
+
+# ---------------------------------------------------------------------------
+# MeanRevertFamily — for ranging regime
+# ---------------------------------------------------------------------------
+
+class MeanRevertFamily:
+    """RSI extremes + Bollinger Band confirmation for ranging markets.
+
+    Buys when RSI < 30 and price is near the lower BB.
+    Sells when RSI > 70 and price is near the upper BB.
+    Uses tighter stops and targets than trend-following.
+    """
+    name: str = "mean_revert"
+
+    def generate_signal(self, candles, config, regime_state=None) -> StrategySignal:
+        import numpy as np
+
+        min_bars = max(getattr(config, "long_ma_window", 50), 30)
+        if len(candles) < min_bars:
+            return StrategySignal("hold", 0.01, 0.0, 0.0)
+
+        close = candles["close"].astype(float)
+        high = candles["high"].astype(float)
+        low = candles["low"].astype(float)
+        volume = candles["volume"].astype(float)
+
+        atr_series = compute_atr(candles, window=14)
+        atr_val = float(atr_series.iloc[-1])
+        px = float(close.iloc[-1])
+        atr_pct = atr_val / max(px, 1e-9)
+        stop_distance_pct = max(0.003, min(0.015, atr_pct * 1.5))
+
+        avg_vol = float(volume.rolling(20).mean().iloc[-1])
+        vol_ratio = float(volume.iloc[-1] / max(avg_vol, 1e-9))
+
+        rsi_period = 14
+        delta = close.diff()
+        gain = delta.clip(lower=0).rolling(rsi_period).mean()
+        loss = (-delta.clip(upper=0)).rolling(rsi_period).mean()
+        rs = gain / loss.replace(0, np.nan)
+        rsi = 100.0 - (100.0 / (1.0 + rs))
+        rsi_val = float(rsi.iloc[-1])
+
+        bb_period = 20
+        bb_ma = close.rolling(bb_period).mean()
+        bb_std = close.rolling(bb_period).std()
+        bb_upper = bb_ma + 2 * bb_std
+        bb_lower = bb_ma - 2 * bb_std
+        bb_range = bb_upper - bb_lower
+        bb_pct_b = (close - bb_lower) / bb_range.replace(0, np.nan)
+        bb_val = float(bb_pct_b.iloc[-1]) if not np.isnan(float(bb_pct_b.iloc[-1])) else 0.5
+
+        # Safety: don't trade if ADX suggests trending
+        adx_check = True
+        if regime_state is not None and hasattr(regime_state, "adx"):
+            adx_check = regime_state.adx < 25
+
+        action = "hold"
+        confidence = 0.0
+
+        if adx_check:
+            if rsi_val < 30 and bb_val < 0.15:
+                action = "buy"
+                confidence = min(1.0, (30 - rsi_val) / 20.0 + (0.15 - bb_val))
+            elif rsi_val > 70 and bb_val > 0.85:
+                action = "sell"
+                confidence = min(1.0, (rsi_val - 70) / 20.0 + (bb_val - 0.85))
+
+        return StrategySignal(action, stop_distance_pct, confidence, vol_ratio)
+
+
+# ---------------------------------------------------------------------------
+# BreakoutFamily — for volatile regime
+# ---------------------------------------------------------------------------
+
+class BreakoutFamily:
+    """Volume breakout + Keltner channel for volatile markets.
+
+    Trades only when volume is 2x+ average AND price breaks the
+    Keltner channel.  Uses wider stops and larger targets.
+    Falls back to hold when ``volatile_policy="hold"`` is configured.
+    """
+    name: str = "breakout"
+
+    def generate_signal(self, candles, config, regime_state=None) -> StrategySignal:
+        volatile_policy = getattr(config, "volatile_policy", "breakout")
+        if volatile_policy == "hold":
+            return StrategySignal("hold", 0.01, 0.0, 0.0)
+
+        min_bars = max(getattr(config, "long_ma_window", 50), 30)
+        if len(candles) < min_bars:
+            return StrategySignal("hold", 0.01, 0.0, 0.0)
+
+        close = candles["close"].astype(float)
+        high = candles["high"].astype(float)
+        low = candles["low"].astype(float)
+        volume = candles["volume"].astype(float)
+
+        atr_series = compute_atr(candles, window=14)
+        atr_val = float(atr_series.iloc[-1])
+        px = float(close.iloc[-1])
+        atr_pct = atr_val / max(px, 1e-9)
+        stop_distance_pct = max(0.006, min(0.04, atr_pct * 3.0))
+
+        avg_vol = float(volume.rolling(20).mean().iloc[-1])
+        vol_ratio = float(volume.iloc[-1] / max(avg_vol, 1e-9))
+
+        # Keltner channel
+        kc_period = 20
+        kc_ma = close.rolling(kc_period).mean()
+        kc_upper = kc_ma + 2.0 * atr_series
+        kc_lower = kc_ma - 2.0 * atr_series
+        kc_upper_val = float(kc_upper.iloc[-1])
+        kc_lower_val = float(kc_lower.iloc[-1])
+
+        vol_breakout = vol_ratio >= 2.0
+        action = "hold"
+        confidence = 0.0
+
+        if vol_breakout:
+            if px > kc_upper_val:
+                action = "buy"
+                confidence = min(1.0, (vol_ratio - 2.0) / 2.0 + 0.5)
+            elif px < kc_lower_val:
+                action = "sell"
+                confidence = min(1.0, (vol_ratio - 2.0) / 2.0 + 0.5)
+
+        return StrategySignal(action, stop_distance_pct, confidence, vol_ratio)
 
 
 def generate_signal(

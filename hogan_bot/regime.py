@@ -267,40 +267,23 @@ def detect_regime(
 # keeps its optimised proportions.  ML thresholds remain absolute because
 # they operate on a fixed 0–1 probability scale.
 
-_REGIME_OVERRIDES: dict[str, dict[str, float]] = {
-    "trending_up": {
-        "volume_threshold_mult": 0.55,  # loosen volume gate — trend is confirmed
-        "ml_buy_threshold":      0.55,  # relax in confirmed uptrend
-        "ml_sell_threshold":     0.52,  # need conviction to exit uptrend
-        "trailing_stop_mult":    1.30,  # wider stop — let the trend breathe
-        "take_profit_mult":      2.00,  # wider target — let it ride
-        "position_scale":        1.00,
-    },
-    "trending_down": {
-        "volume_threshold_mult": 0.55,  # loosen volume gate — trend is confirmed
-        "ml_buy_threshold":      0.65,  # require strong conviction to buy into downtrend
-        "ml_sell_threshold":     0.35,  # sell freely in downtrend
-        "trailing_stop_mult":    1.30,  # wider stop
-        "take_profit_mult":      1.70,
-        "position_scale":        1.00,
-    },
-    "ranging": {
-        "volume_threshold_mult": 1.10,
-        "ml_buy_threshold":      0.62,
-        "ml_sell_threshold":     0.38,
-        "trailing_stop_mult":    0.80,  # widened from 0.50 — 0.5x whipsawed BTC in ranges
-        "take_profit_mult":      0.70,
-        "position_scale":        0.75,
-    },
-    "volatile": {
-        "volume_threshold_mult": 0.70,  # moderate filter
-        "ml_buy_threshold":      0.63,  # require conviction during high vol
-        "ml_sell_threshold":     0.37,
-        "trailing_stop_mult":    0.80,  # somewhat tighter
-        "take_profit_mult":      1.40,  # wider targets — vol creates opportunity
-        "position_scale":        0.50,  # half size — protect capital
-    },
-}
+def _build_regime_overrides() -> dict[str, dict[str, float]]:
+    """Build _REGIME_OVERRIDES from DEFAULT_REGIME_CONFIGS for backward compat."""
+    from hogan_bot.config import DEFAULT_REGIME_CONFIGS
+    out: dict[str, dict[str, float]] = {}
+    for regime, rc in DEFAULT_REGIME_CONFIGS.items():
+        out[regime] = {
+            "volume_threshold_mult": rc.volume_threshold_mult,
+            "ml_buy_threshold": rc.ml_buy_threshold,
+            "ml_sell_threshold": rc.ml_sell_threshold,
+            "trailing_stop_mult": rc.trailing_stop_mult,
+            "take_profit_mult": rc.take_profit_mult,
+            "position_scale": rc.position_scale,
+        }
+    return out
+
+
+_REGIME_OVERRIDES: dict[str, dict[str, float]] = _build_regime_overrides()
 
 
 def effective_thresholds(

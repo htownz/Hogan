@@ -89,18 +89,57 @@ class AgentSignal:
 # ---------------------------------------------------------------------------
 
 class TechnicalAgent:
-    """Wraps generate_signal() as one sub-brain — MA, EMA clouds, FVG, ICT, RL."""
+    """Wraps generate_signal() as one sub-brain — MA, EMA clouds, FVG, ICT, RL.
+
+    When ``use_strategy_router=True`` (default), signal generation is
+    delegated to the :class:`~hogan_bot.strategy_router.StrategyRouter`
+    which selects a regime-appropriate strategy family.  When the router
+    is disabled or no regime is available, falls back to the classic
+    ``generate_signal()`` path.
+    """
 
     def __init__(self, config) -> None:
         self.config = config
+        self._router = None
+        if getattr(config, "use_strategy_router", True):
+            try:
+                from hogan_bot.strategy_router import StrategyRouter
+                self._router = StrategyRouter(config)
+            except Exception:
+                pass
 
     def analyze(self, candles: pd.DataFrame, **runtime_state) -> TechSignal:
         """Produce a TechSignal. ``runtime_state`` passes dynamic per-bar RL
-        fields (rl_in_position, rl_unrealized_pnl, rl_bars_in_trade)."""
+        fields (rl_in_position, rl_unrealized_pnl, rl_bars_in_trade) and
+        optionally ``regime_state`` for strategy routing."""
         cfg = self.config
         if candles.empty or len(candles) < max(cfg.long_ma_window, 20):
             return TechSignal(action="hold", confidence=0.0)
 
+        regime_state = runtime_state.pop("regime_state", None)
+
+        # Strategy-router path: regime-aware family selection
+        if self._router is not None and regime_state is not None:
+            try:
+                raw = self._router.route(candles, cfg, regime_state)
+                conf = float(raw.confidence)
+                if raw.action != "hold" and conf <= 0.0:
+                    conf = 1.0
+                family_name = self._router.families.get(
+                    regime_state.regime, self._router.families.get("trending_up")
+                )
+                src = f"router/{getattr(family_name, 'name', 'unknown')}"
+                return TechSignal(
+                    action=raw.action,
+                    confidence=conf,
+                    stop_distance_pct=float(raw.stop_distance_pct),
+                    volume_ratio=float(raw.volume_ratio),
+                    details={"source": src, "regime": regime_state.regime},
+                )
+            except Exception as exc:
+                logger.warning("StrategyRouter failed, falling back: %s", exc)
+
+        # Fallback: classic generate_signal() path
         try:
             from hogan_bot.strategy import generate_signal
 
@@ -567,6 +606,7 @@ class AgentPipeline:
         features: list[float] | None = None,
         config_override=None,
         regime: str | None = None,
+        regime_state=None,
         as_of_ms: int | None = None,
         **runtime_state,
     ) -> AgentSignal:
@@ -580,6 +620,10 @@ class AgentPipeline:
             these params instead of the pipeline's base config.
         regime
             Market microstructure regime (from ``detect_regime()``).
+        regime_state
+            Full ``RegimeState`` object from ``detect_regime()``.  When
+            provided, the ``StrategyRouter`` inside ``TechnicalAgent``
+            uses it to select a regime-appropriate strategy family.
         as_of_ms
             Point-in-time cutoff (epoch ms) for all DB lookups.
             Used by backtest to prevent future data leakage.
@@ -595,7 +639,7 @@ class AgentPipeline:
                 _effective_cfg.volume_threshold = _effective_cfg.volume_threshold * vol_mult
         if _effective_cfg is not None:
             agent = TechnicalAgent(_effective_cfg)
-        tech = agent.analyze(candles, **runtime_state)
+        tech = agent.analyze(candles, regime_state=regime_state, **runtime_state)
         sent = self.sent_agent.analyze(as_of_ms=as_of_ms)
         macro = self.macro_agent.analyze(as_of_ms=as_of_ms)
 
