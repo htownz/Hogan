@@ -65,9 +65,6 @@ class TestApplyChampionMode:
 
     def test_champion_mode_uses_replace_on_dataclass(self):
         """Champion mode applies overrides via dataclasses.replace()."""
-        from dataclasses import dataclass
-
-        @dataclass
         @dataclass
         class FakeConfig:
             use_ema_clouds: bool = True
@@ -94,6 +91,8 @@ class TestApplyChampionMode:
             reversal_confidence_multiplier: float = 1.3
             max_hold_hours: float = 24.0
             loss_cooldown_hours: float = 2.0
+            ml_model_path: str = "models/hogan_logreg.pkl"
+            champion_ml_model_path: str = "models/hogan_champion.pkl"
 
         config = FakeConfig()
         with patch.dict(os.environ, {"HOGAN_CHAMPION_MODE": "1"}):
@@ -102,6 +101,64 @@ class TestApplyChampionMode:
         assert result.use_fvg is False
         assert result.use_rl_agent is False
         assert result.use_ict is False
+        assert result.ml_model_path == "models/hogan_champion.pkl"
+
+
+class TestChampionFeatureSubset:
+    """Tests for champion feature subset enforcement in feature_registry and ml."""
+
+    def test_get_feature_columns_true_returns_champion_subset(self):
+        from hogan_bot.feature_registry import CHAMPION_FEATURE_COLUMNS, get_feature_columns
+        cols = get_feature_columns(True)
+        assert cols == list(CHAMPION_FEATURE_COLUMNS)
+        assert len(cols) == len(CHAMPION_FEATURE_COLUMNS)
+
+    def test_get_feature_columns_false_returns_59(self):
+        from hogan_bot.feature_registry import _FULL_FEATURE_COLUMNS, get_feature_columns
+        cols = get_feature_columns(False)
+        assert cols == list(_FULL_FEATURE_COLUMNS)
+        assert len(cols) == 59
+
+    def test_get_feature_columns_none_respects_env(self):
+        from hogan_bot.feature_registry import CHAMPION_FEATURE_COLUMNS, get_feature_columns
+        with patch.dict(os.environ, {"HOGAN_CHAMPION_MODE": "1"}):
+            cols = get_feature_columns(None)
+        assert cols == list(CHAMPION_FEATURE_COLUMNS)
+        assert len(cols) == len(CHAMPION_FEATURE_COLUMNS)
+
+    def test_get_feature_columns_none_env_off_returns_full(self):
+        from hogan_bot.feature_registry import get_feature_columns
+        with patch.dict(os.environ, {}, clear=True):
+            os.environ.pop("HOGAN_CHAMPION_MODE", None)
+            cols = get_feature_columns(None)
+        assert len(cols) == 59
+
+    def test_build_training_set_champion_returns_champion_columns(self):
+        import numpy as np
+        import pandas as pd
+        from hogan_bot.ml import build_training_set
+
+        # Minimal candles with enough rows for training
+        n = 300
+        np.random.seed(42)
+        candles = pd.DataFrame({
+            "open": 100 + np.cumsum(np.random.randn(n) * 0.5),
+            "high": 101 + np.cumsum(np.random.randn(n) * 0.5),
+            "low": 99 + np.cumsum(np.random.randn(n) * 0.5),
+            "close": 100 + np.cumsum(np.random.randn(n) * 0.5),
+            "volume": np.abs(np.random.randn(n) * 1e6).astype(int),
+        })
+        candles["high"] = candles[["open", "high", "close"]].max(axis=1)
+        candles["low"] = candles[["open", "low", "close"]].min(axis=1)
+
+        from hogan_bot.feature_registry import CHAMPION_FEATURE_COLUMNS
+
+        x, y, feature_cols = build_training_set(
+            candles, horizon_bars=12, db_conn=None, use_champion_features=True
+        )
+        assert x is not None and y is not None
+        assert feature_cols == list(CHAMPION_FEATURE_COLUMNS)
+        assert x.shape[1] == len(CHAMPION_FEATURE_COLUMNS)
 
 
 class TestGetChampionSummary:

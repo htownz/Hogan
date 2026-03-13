@@ -458,18 +458,24 @@ def build_feature_row_extended(
 def build_feature_row(
     candles: pd.DataFrame,
     db_conn=None,
+    use_champion_features: bool | None = None,
 ) -> list[float] | None:
     """Return the feature vector for the **last bar** in *candles*.
 
     When *db_conn* is provided, the 10 macro-asset features are populated
     from the DB (SPY/VIX/GLD etc.); otherwise they default to 0.
 
+    When *use_champion_features* is True (or HOGAN_CHAMPION_MODE is set),
+    returns only the 16-feature champion subset. Otherwise returns the full 59.
+
     Returns ``None`` when there is insufficient history (< 60 bars).
     """
     if len(candles) < 60:
         return None
     try:
+        from hogan_bot.feature_registry import get_feature_columns
         from hogan_bot.macro_features import MACRO_FEATURE_NAMES
+
         frame = _feature_frame(candles)
 
         if db_conn is not None:
@@ -487,7 +493,8 @@ def build_feature_row(
             for col in MACRO_FEATURE_NAMES:
                 frame[col] = 0.0
 
-        last = frame[_FEATURE_COLUMNS].iloc[-1]
+        cols = get_feature_columns(use_champion_features)
+        last = frame[cols].iloc[-1]
         if last.isna().any():
             return None
         return [float(v) for v in last.values]
@@ -499,6 +506,7 @@ def build_feature_row_checked(
     candles: pd.DataFrame,
     db_conn=None,
     data_ages_hours: dict[str, float] | None = None,
+    use_champion_features: bool | None = None,
 ):
     """Like :func:`build_feature_row` but returns a :class:`FeatureResult`
     with staleness metadata.
@@ -512,6 +520,9 @@ def build_feature_row_checked(
     data_ages_hours : dict[str, float] | None
         Mapping of source name (e.g. ``"macro_db"``) to hours since last
         update.  Used to flag stale features.
+    use_champion_features : bool | None
+        When True, use champion feature subset. When None, follows
+        HOGAN_CHAMPION_MODE.
 
     Returns
     -------
@@ -519,13 +530,14 @@ def build_feature_row_checked(
         ``None`` when insufficient data, otherwise a FeatureResult with
         the feature vector and staleness info.
     """
-    from hogan_bot.feature_registry import FeatureResult, check_staleness
+    from hogan_bot.feature_registry import FeatureResult, check_staleness, get_feature_columns
 
-    values = build_feature_row(candles, db_conn=db_conn)
+    values = build_feature_row(candles, db_conn=db_conn, use_champion_features=use_champion_features)
     if values is None:
         return None
 
-    return check_staleness(_FEATURE_COLUMNS, values, data_ages_hours)
+    cols = get_feature_columns(use_champion_features)
+    return check_staleness(cols, values, data_ages_hours)
 
 
 def build_training_set(
@@ -534,6 +546,7 @@ def build_training_set(
     db_conn=None,
     fee_rate: float = 0.0026,
     label_mode: str = "fee_threshold",
+    use_champion_features: bool | None = None,
 ) -> tuple[pd.DataFrame | None, pd.Series | None, list[str]]:
     """Construct feature matrix *X* and label vector *y* from *candles*.
 
@@ -599,12 +612,15 @@ def build_training_set(
             np.where(future_ret < -min_move, 0, np.nan),
         )
 
-    dataset = frame[_FEATURE_COLUMNS + ["target"]].dropna().copy()
+    from hogan_bot.feature_registry import get_feature_columns
+    feature_cols = get_feature_columns(use_champion_features)
+
+    dataset = frame[feature_cols + ["target"]].dropna().copy()
     dataset["target"] = dataset["target"].astype(int)
     if dataset.empty:
-        return None, None, _FEATURE_COLUMNS
+        return None, None, feature_cols
 
-    return dataset[_FEATURE_COLUMNS], dataset["target"], _FEATURE_COLUMNS
+    return dataset[feature_cols], dataset["target"], feature_cols
 
 
 def make_paper_trade_labels(

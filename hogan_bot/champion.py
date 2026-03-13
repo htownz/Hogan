@@ -106,6 +106,12 @@ def apply_champion_mode(config):
             )
             overrides[field_name] = champion_val
 
+    # Champion mode also switches to champion model (trained on 16-feature subset)
+    champion_path = getattr(config, "champion_ml_model_path", "models/hogan_champion.pkl")
+    if config.ml_model_path != champion_path:
+        overrides["ml_model_path"] = champion_path
+        logger.info("CHAMPION_MODE: ml_model_path -> %s (16-feature model)", champion_path)
+
     if overrides:
         config = replace(config, **overrides)
         logger.info("Champion mode applied — %d overrides", len(overrides))
@@ -117,8 +123,10 @@ def apply_champion_mode(config):
 
 def get_champion_summary() -> dict:
     """Return a dict describing the champion configuration for logging."""
+    from hogan_bot.feature_registry import CHAMPION_FEATURE_COLUMNS
     return {
         "champion_mode": is_champion_mode(),
+        "champion_feature_count": len(CHAMPION_FEATURE_COLUMNS),
         "locked_experiments_off": list(_EXPERIMENTAL_FLAGS),
         "signal_mode": CHAMPION_LOCKS.signal_mode,
         "min_vote_margin": CHAMPION_LOCKS.signal_min_vote_margin,

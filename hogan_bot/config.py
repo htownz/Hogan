@@ -41,6 +41,7 @@ class BotConfig:
 
     use_ml_filter: bool = False
     ml_model_path: str = "models/hogan_logreg.pkl"
+    champion_ml_model_path: str = "models/hogan_champion.pkl"
     ml_buy_threshold: float = 0.60
     ml_sell_threshold: float = 0.40
 
@@ -387,6 +388,7 @@ def load_config() -> BotConfig:
         live_mode=os.getenv("HOGAN_LIVE_MODE", "false").lower() == "true",
         use_ml_filter=os.getenv("HOGAN_USE_ML_FILTER", "false").lower() == "true",
         ml_model_path=os.getenv("HOGAN_ML_MODEL_PATH", "models/hogan_logreg.pkl"),
+        champion_ml_model_path=os.getenv("HOGAN_CHAMPION_ML_MODEL_PATH", "models/hogan_champion.pkl"),
         ml_buy_threshold=float(os.getenv("HOGAN_ML_BUY_THRESHOLD", "0.60")),
         ml_sell_threshold=float(os.getenv("HOGAN_ML_SELL_THRESHOLD", "0.40")),
         use_ema_clouds=os.getenv("HOGAN_USE_EMA_CLOUDS", "false").lower() == "true",

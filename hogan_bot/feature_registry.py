@@ -18,6 +18,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+# Decision relevance: which decision does this feature help?
+# "entry_edge" | "regime" | "stop" | "sizing" | "veto" | "execution_timing" | "experimental"
+DECISION_ENTRY_EDGE = "entry_edge"
+DECISION_REGIME = "regime"
+DECISION_STOP = "stop"
+DECISION_SIZING = "sizing"
+DECISION_VETO = "veto"
+DECISION_EXECUTION = "execution_timing"
+DECISION_EXPERIMENTAL = "experimental"
+
+
 @dataclass(frozen=True)
 class FeatureMeta:
     """Metadata for a single ML feature."""
@@ -26,6 +37,7 @@ class FeatureMeta:
     latency_class: str   # "realtime", "hourly", "daily", "weekly"
     fill_policy: str     # "forward_fill", "zero", "drop_row", "nan_flag"
     staleness_limit_hours: float  # feature is stale if data is older than this
+    decision_relevance: str = ""  # entry_edge, regime, stop, sizing, veto, execution_timing, experimental
 
 
 def _candle(name: str) -> FeatureMeta:
@@ -165,6 +177,73 @@ FEATURE_REGISTRY: dict[str, FeatureMeta] = {m.name: m for m in [
 ]}
 
 assert len(FEATURE_REGISTRY) == 59, f"Expected 59 features, got {len(FEATURE_REGISTRY)}"
+
+
+# ---------------------------------------------------------------------------
+# Champion feature subset (12–20 core features)
+# ---------------------------------------------------------------------------
+# Point-in-time, low-missingness, decision-relevant features only.
+# When champion mode is on, training and inference use this subset.
+# Every feature declares what decision it helps.
+
+CHAMPION_FEATURE_COLUMNS: list[str] = [
+    # Multi-horizon returns (entry edge)
+    "ret_1", "ret_3", "ret_6", "ret_12",
+    # Trend / distance from trend (entry edge, regime)
+    "ma_spread",
+    # Realized volatility, oscillators (stop, sizing, regime)
+    "volatility_20", "rsi_14", "atr_pct",
+    # Volume participation (entry edge, veto)
+    "vol_ratio",
+    # Range position / breakout pressure (entry edge)
+    "bb_pct_b", "range_pct",
+    # Regime strength (regime, veto)
+    "adx_14",
+    # Momentum confirmation (entry edge)
+    "macd_hist_pct",
+    # Higher-timeframe alignment (entry edge, veto)
+    "macro_spy_trend", "macro_vix_norm",
+]
+
+CHAMPION_FEATURE_DECISIONS: dict[str, str] = {
+    "ret_1": DECISION_ENTRY_EDGE,
+    "ret_3": DECISION_ENTRY_EDGE,
+    "ret_6": DECISION_ENTRY_EDGE,
+    "ret_12": DECISION_ENTRY_EDGE,
+    "ma_spread": DECISION_ENTRY_EDGE,
+    "volatility_20": DECISION_STOP,
+    "rsi_14": DECISION_ENTRY_EDGE,
+    "atr_pct": DECISION_STOP,
+    "vol_ratio": DECISION_VETO,
+    "bb_pct_b": DECISION_ENTRY_EDGE,
+    "range_pct": DECISION_ENTRY_EDGE,
+    "adx_14": DECISION_REGIME,
+    "macd_hist_pct": DECISION_ENTRY_EDGE,
+    "macro_spy_trend": DECISION_ENTRY_EDGE,
+    "macro_vix_norm": DECISION_VETO,
+}
+
+assert len(CHAMPION_FEATURE_COLUMNS) == 15
+assert all(c in FEATURE_REGISTRY for c in CHAMPION_FEATURE_COLUMNS)
+
+
+# Full 59 in canonical order (matches ml._FEATURE_COLUMNS)
+_FULL_FEATURE_COLUMNS: list[str] = list(FEATURE_REGISTRY.keys())
+
+
+def get_feature_columns(use_champion: bool | None = None) -> list[str]:
+    """Return the feature column list for training/inference.
+
+    When *use_champion* is True or when HOGAN_CHAMPION_MODE is set,
+    returns the 16-feature champion subset. Otherwise returns the full 59.
+    """
+    if use_champion is None:
+        try:
+            from hogan_bot.champion import is_champion_mode
+            use_champion = is_champion_mode()
+        except Exception:
+            use_champion = False
+    return list(CHAMPION_FEATURE_COLUMNS) if use_champion else list(_FULL_FEATURE_COLUMNS)
 
 
 # ---------------------------------------------------------------------------
