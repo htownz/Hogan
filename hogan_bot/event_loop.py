@@ -578,6 +578,21 @@ async def run_event_loop(
                 logger.error("Drawdown limit hit: equity=%.2f peak=%.2f", equity, guard.peak_equity)
                 if notifier:
                     notifier.notify("drawdown_breach", {"equity": equity, "peak": guard.peak_equity})
+                # Flatten all positions before stopping
+                for _flat_sym, _flat_pos in list(portfolio.positions.items()):
+                    try:
+                        _flat_px = mark_prices.get(_flat_sym, _flat_pos.avg_entry)
+                        executor.sell(_flat_sym, _flat_px, _flat_pos.qty, reason="drawdown_flatten")
+                        logger.warning("FLATTEN long %s qty=%.6f px=%.2f", _flat_sym, _flat_pos.qty, _flat_px)
+                    except Exception as _flat_exc:
+                        logger.error("Failed to flatten long %s: %s", _flat_sym, _flat_exc)
+                for _flat_sym, _flat_pos in list(portfolio.short_positions.items()):
+                    try:
+                        _flat_px = mark_prices.get(_flat_sym, _flat_pos.avg_entry)
+                        executor.exit_short(_flat_sym, _flat_px, _flat_pos.qty, reason="drawdown_flatten")
+                        logger.warning("FLATTEN short %s qty=%.6f px=%.2f", _flat_sym, _flat_pos.qty, _flat_px)
+                    except Exception as _flat_exc:
+                        logger.error("Failed to flatten short %s: %s", _flat_sym, _flat_exc)
                 break
 
             # Decrement loss cooldown each iteration
@@ -650,7 +665,7 @@ async def run_event_loop(
                                                       "price": sell_px, "qty": qty})
                     logger.info("AUTO_EXIT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, sell_px, qty)
 
-                elif reason in ("short_trailing_stop", "short_take_profit"):
+                elif reason in ("short_trailing_stop", "short_take_profit", "short_max_hold_time"):
                     pos = portfolio.short_positions.get(exit_symbol)
                     if pos is None:
                         continue

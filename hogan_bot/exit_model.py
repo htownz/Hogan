@@ -116,13 +116,13 @@ class ExitEvaluator:
         # 4. Volatility expansion: regime changed dramatically
         if entry_atr is not None:
             current_atr = self._current_atr_pct(candles)
-            vol_ratio = current_atr / max(entry_atr, 1e-9)
-            if vol_ratio > self._vol_expansion_threshold:
-                logger.debug("EXIT_MODEL: vol expansion (ratio=%.1f)", vol_ratio)
+            atr_expansion = current_atr / max(entry_atr, 1e-9)
+            if atr_expansion > self._vol_expansion_threshold:
+                logger.debug("EXIT_MODEL: vol expansion (ratio=%.1f)", atr_expansion)
                 return ExitDecision(
                     should_exit=True,
                     reason="volatility_expansion",
-                    urgency=min(1.0, vol_ratio / self._vol_expansion_threshold - 0.5),
+                    urgency=min(1.0, atr_expansion / self._vol_expansion_threshold - 0.5),
                 )
 
         # 5. Stagnation: position is flat for too long
