@@ -1,10 +1,27 @@
+"""Legacy polling loop — DEPRECATED.
+
+This module is superseded by ``hogan_bot.event_loop``, which is the
+canonical runtime path for Hogan.  This file is kept only for reference
+and will be removed in a future release.
+
+Use instead::
+
+    python -m hogan_bot.event_loop
+"""
 from __future__ import annotations
 
 import argparse
 import os
 import logging
 import time
+import warnings
 from datetime import datetime
+
+warnings.warn(
+    "hogan_bot.main is deprecated. Use hogan_bot.event_loop instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 from hogan_bot.config import BotConfig, load_config, symbol_config
 from hogan_bot.decision import apply_ml_filter, ml_confidence

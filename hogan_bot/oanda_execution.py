@@ -21,7 +21,7 @@ from hogan_bot.execution import ExecutionEngine, ExecResult
 from hogan_bot.fx_utils import pip_size
 from hogan_bot.oanda_client import OandaClient
 from hogan_bot.paper import PaperPortfolio
-from hogan_bot.storage import record_order, upsert_position
+from hogan_bot.storage import record_order, record_fill, upsert_position
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +108,7 @@ class OandaExecution(ExecutionEngine):
                 if self.conn is not None:
                     ts_ms = int(time.time() * 1000)
                     upsert_position(self.conn, symbol, fill_units, fill_price, ts_ms)
+                self._journal_fill(fill, symbol, "buy")
 
                 logger.info(
                     "OANDA_BUY %s units=%.0f fill=%.5f sl=%.5f tp=%.5f",
@@ -138,10 +139,12 @@ class OandaExecution(ExecutionEngine):
                 close_units = str(int(min(qty, available)))
                 result = self.client.close_trade(trade_id, units=close_units)
 
-                close_txn = result.get("orderFillTransaction", {})
-                if close_txn:
+            close_txn = result.get("orderFillTransaction", {})
+            if close_txn:
                     fill_price = float(close_txn.get("price", price))
                     realized_pl = float(close_txn.get("pl", 0))
+
+                    self._journal_fill(close_txn, symbol, "sell")
 
                     if self.portfolio is not None:
                         self.portfolio.execute_sell(symbol, fill_price, float(close_units))
@@ -163,20 +166,25 @@ class OandaExecution(ExecutionEngine):
             fill = result.get("orderFillTransaction", {})
             if fill:
                 fill_price = float(fill.get("price", price))
+                fill_units = abs(float(fill.get("units", qty)))
                 if self.portfolio is not None:
-                    self.portfolio.execute_short(symbol, fill_price, abs(qty))
+                    self.portfolio.execute_short(symbol, fill_price, fill_units)
                 if self.conn is not None:
                     order_record = {
                         "id": fill.get("id", ""),
                         "symbol": symbol, "side": "sell", "type": "market",
-                        "amount": qty, "price": fill_price, "exchange": "oanda",
+                        "amount": fill_units, "price": fill_price, "exchange": "oanda",
                         "status": "filled",
                     }
                     try:
                         record_order(self.conn, order_record)
                     except Exception:
                         pass
-                logger.info("OANDA_SHORT %s units=%.0f fill=%.5f", symbol, qty, fill_price)
+                    # Sync negative position qty for shorts
+                    ts_ms = int(time.time() * 1000)
+                    upsert_position(self.conn, symbol, -fill_units, fill_price, ts_ms)
+                self._journal_fill(fill, symbol, "sell")
+                logger.info("OANDA_SHORT %s units=%.0f fill=%.5f", symbol, fill_units, fill_price)
                 return ExecResult(ok=True, order_id=str(fill.get("id", "")))
 
             return ExecResult(ok=False, error="no fill")
@@ -184,3 +192,137 @@ class OandaExecution(ExecutionEngine):
         except Exception as exc:
             logger.exception("Oanda sell failed: %s", exc)
             return ExecResult(ok=False, error=str(exc))
+
+    def exit_long(self, symbol: str, price: float, qty: float,
+                  reason: str = "signal") -> ExecResult:
+        """Close a long position on Oanda by closing the trade."""
+        try:
+            open_trades = self.client.get_open_trades(symbol)
+            long_trades = [t for t in open_trades if float(t.get("currentUnits", 0)) > 0]
+
+            if not long_trades:
+                logger.warning("OANDA_EXIT_LONG: no long trades for %s", symbol)
+                if self.portfolio is not None:
+                    self.portfolio.execute_sell(symbol, price, qty)
+                return ExecResult(ok=False, error="no_long_position")
+
+            trade = long_trades[0]
+            trade_id = trade["id"]
+            available = abs(float(trade.get("currentUnits", 0)))
+            close_units = str(int(min(qty, available)))
+            result = self.client.close_trade(trade_id, units=close_units)
+
+            close_txn = result.get("orderFillTransaction", {})
+            if close_txn:
+                fill_price = float(close_txn.get("price", price))
+                realized_pl = float(close_txn.get("pl", 0))
+
+                self._journal_fill(close_txn, symbol, "sell")
+
+                if self.portfolio is not None:
+                    self.portfolio.execute_sell(symbol, fill_price, float(close_units))
+                if self.conn is not None:
+                    ts_ms = int(time.time() * 1000)
+                    pos = self.portfolio.positions.get(symbol) if self.portfolio else None
+                    if pos:
+                        upsert_position(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
+                    else:
+                        upsert_position(self.conn, symbol, 0.0, 0.0, ts_ms)
+
+                logger.info(
+                    "OANDA_EXIT_LONG %s units=%s fill=%.5f pnl=%.2f reason=%s",
+                    symbol, close_units, fill_price, realized_pl, reason,
+                )
+                return ExecResult(ok=True, order_id=trade_id)
+
+            return ExecResult(ok=False, error="no_fill_on_close")
+
+        except Exception as exc:
+            logger.exception("Oanda exit_long failed: %s", exc)
+            return ExecResult(ok=False, error=str(exc))
+
+    def exit_short(self, symbol: str, price: float, qty: float,
+                   reason: str = "signal") -> ExecResult:
+        """Cover a short position on Oanda by closing the trade."""
+        try:
+            open_trades = self.client.get_open_trades(symbol)
+            short_trades = [t for t in open_trades if float(t.get("currentUnits", 0)) < 0]
+
+            if not short_trades:
+                logger.warning("OANDA_EXIT_SHORT: no short trades for %s", symbol)
+                if self.portfolio is not None:
+                    self.portfolio.execute_cover(symbol, price, qty)
+                return ExecResult(ok=False, error="no_short_position")
+
+            trade = short_trades[0]
+            trade_id = trade["id"]
+            available = abs(float(trade.get("currentUnits", 0)))
+            close_units = str(int(min(qty, available)))
+            result = self.client.close_trade(trade_id, units=close_units)
+
+            close_txn = result.get("orderFillTransaction", {})
+            if close_txn:
+                fill_price = float(close_txn.get("price", price))
+                realized_pl = float(close_txn.get("pl", 0))
+
+                self._journal_fill(close_txn, symbol, "buy")
+
+                if self.portfolio is not None:
+                    self.portfolio.execute_cover(symbol, fill_price, float(close_units))
+                if self.conn is not None:
+                    ts_ms = int(time.time() * 1000)
+                    spos = self.portfolio.short_positions.get(symbol) if self.portfolio else None
+                    if spos:
+                        upsert_position(self.conn, symbol, -spos.qty, spos.avg_entry, ts_ms)
+                    else:
+                        upsert_position(self.conn, symbol, 0.0, 0.0, ts_ms)
+
+                logger.info(
+                    "OANDA_EXIT_SHORT %s units=%s fill=%.5f pnl=%.2f reason=%s",
+                    symbol, close_units, fill_price, realized_pl, reason,
+                )
+                return ExecResult(ok=True, order_id=trade_id)
+
+            return ExecResult(ok=False, error="no_fill_on_close")
+
+        except Exception as exc:
+            logger.exception("Oanda exit_short failed: %s", exc)
+            return ExecResult(ok=False, error=str(exc))
+
+    def emergency_flatten(self, symbol: str, price: float) -> ExecResult:
+        """Close all Oanda positions for a symbol (long + short)."""
+        results = []
+        try:
+            open_trades = self.client.get_open_trades(symbol)
+            for trade in open_trades:
+                units = float(trade.get("currentUnits", 0))
+                trade_id = trade["id"]
+                if units > 0:
+                    results.append(self.exit_long(symbol, price, units, reason="emergency"))
+                elif units < 0:
+                    results.append(self.exit_short(symbol, price, abs(units), reason="emergency"))
+        except Exception as exc:
+            logger.exception("Oanda emergency_flatten failed: %s", exc)
+            return ExecResult(ok=False, error=str(exc))
+        ok = all(r.ok for r in results) if results else False
+        return ExecResult(ok=ok)
+
+    def _journal_fill(self, txn: dict, symbol: str, side: str) -> None:
+        """Record an Oanda fill transaction for journal parity with CCXT path."""
+        if self.conn is None:
+            return
+        try:
+            fill_record = {
+                "id": txn.get("id", ""),
+                "order": txn.get("orderID", txn.get("id", "")),
+                "exchange": "oanda",
+                "symbol": symbol,
+                "side": side,
+                "amount": abs(float(txn.get("units", 0))),
+                "price": float(txn.get("price", 0)),
+                "fee": {"cost": abs(float(txn.get("commission", 0))), "currency": "USD"},
+                "timestamp": int(time.time() * 1000),
+            }
+            record_fill(self.conn, fill_record)
+        except Exception as exc:
+            logger.debug("Oanda fill journal failed: %s", exc)

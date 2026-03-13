@@ -289,6 +289,12 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     execution_mode: str = "same_bar",
     # DB path for sentiment/macro agents (as-of timestamp semantics)
     db_path: str | None = None,
+    # Entry quality / edge gate (from config)
+    min_edge_multiple: float = 1.5,
+    min_final_confidence: float = 0.25,
+    min_tech_confidence: float = 0.15,
+    min_regime_confidence: float = 0.30,
+    max_whipsaws: int = 3,
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
@@ -545,12 +551,12 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             atr_pct=_atr_pct,
             take_profit_pct=take_profit_pct,
             fee_rate=fee_rate,
-            min_edge_multiple=1.5,
+            min_edge_multiple=min_edge_multiple,
             forecast_expected_return=_forecast_ret,
             estimated_spread=_spread_est,
         )
 
-        # Hard entry quality gate (parity with live/paper)
+        # Hard entry quality gate (parity with live/paper — uses config thresholds)
         _tech_conf = signal.tech.confidence if signal.tech else None
         action, _quality_scale = entry_quality_gate(
             action,
@@ -559,6 +565,10 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             regime=_current_regime,
             regime_confidence=_regime_conf,
             recent_whipsaw_count=_whipsaw_count,
+            min_final_confidence=min_final_confidence,
+            min_tech_confidence=min_tech_confidence,
+            min_regime_confidence=min_regime_confidence,
+            max_whipsaws=max_whipsaws,
         )
 
         equity = portfolio.total_equity(mark)

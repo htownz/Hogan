@@ -1,7 +1,14 @@
 """Paper test EUR/USD and GBP/USD via Oanda.
 
-Runs Hogan's core signal pipeline against FX pairs using Oanda's practice
-environment.  No real money is at risk.
+**EXPLORATORY** — this script is a standalone FX paper test loop.  It does
+NOT use the canonical ``event_loop`` runtime path.  For production paper/live
+FX trading, configure the Oanda adapter in ``.env`` and run::
+
+    python -m hogan_bot.event_loop
+
+This script is useful for quick iteration on FX-specific logic (session
+filtering, pip-based sizing, spread modeling) before promoting changes into
+the main runtime.
 
 Prerequisites::
 
@@ -15,13 +22,6 @@ Prerequisites::
 
     3. Monitor:
        python scripts/dashboards/dashboard.py
-
-The script:
-- Fetches 15m + 1h candles from Oanda for EUR/USD and GBP/USD
-- Runs the agent pipeline with session-aware filters
-- Simulates paper trades with realistic fills
-- Logs expectancy metrics per session / per symbol
-- Writes results to data/hogan_fx.db
 """
 from __future__ import annotations
 
@@ -32,7 +32,6 @@ import sys
 import time
 from datetime import datetime, timezone
 
-# Ensure hogan_bot is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from hogan_bot.agent_pipeline import AgentPipeline
@@ -41,11 +40,13 @@ from hogan_bot.decision import (
     edge_gate, entry_quality_gate,
     estimate_spread_from_candles,
 )
+from hogan_bot.execution import RealisticPaperExecution, FillSimConfig
 from hogan_bot.expectancy import ExpectancyTracker
 from hogan_bot.fx_utils import (
     SessionFilter, current_session, fx_position_size,
     pip_stop_loss, pip_take_profit, pip_size, is_weekend,
 )
+from hogan_bot.instrument_profiles import get_profile, spread_cost_bps
 from hogan_bot.oanda_client import OandaClient
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard
@@ -56,13 +57,25 @@ logger = logging.getLogger(__name__)
 _FX_SYMBOLS = ["EUR/USD", "GBP/USD"]
 _PRIMARY_TF = "15m"
 _CONTEXT_TF = "1h"
-_POLL_INTERVAL_S = 60 * 15  # 15 minutes
+_POLL_INTERVAL_S = 60 * 15
+
+
+def _fx_fee_rate(symbol: str) -> float:
+    """Realistic FX cost model: spread-based, not a flat percentage.
+
+    For EUR/USD, Oanda typical spread is ~1.0-1.5 pips.
+    At price 1.0850, 1 pip = 0.0001, so spread = 0.0001/1.0850 ≈ 0.92 bps.
+    We model this as the spread cost in fractional terms.
+    """
+    profile = get_profile(symbol)
+    return profile.typical_spread_bps / 10_000.0
 
 
 def _run_once(
     client: OandaClient,
     pipeline: AgentPipeline,
     portfolio: PaperPortfolio,
+    executor: RealisticPaperExecution,
     guard: DrawdownGuard,
     expectancy: ExpectancyTracker,
     session_filter: SessionFilter,
@@ -95,36 +108,38 @@ def _run_once(
             px = float(candles["close"].iloc[-1])
             mark_prices = {symbol: px}
             equity = portfolio.total_equity(mark_prices)
+            fee_rate = _fx_fee_rate(symbol)
+            profile = get_profile(symbol)
 
-            # Run the agent pipeline
             signal = pipeline.run(candles, symbol=symbol)
             action = signal.action
 
-            # Spread-aware edge gate
             spread_est = estimate_spread_from_candles(candles)
             atr_pct = signal.stop_distance_pct / max(2.5, 1.0)
             action = edge_gate(
                 action,
                 atr_pct=atr_pct,
-                take_profit_pct=config.take_profit_pct,
-                fee_rate=0.00005,  # FX spread cost is ~0.5 pip ≈ ~0.5 bps
+                take_profit_pct=profile.default_tp_pct,
+                fee_rate=fee_rate,
+                min_edge_multiple=config.min_edge_multiple,
                 estimated_spread=spread_est,
             )
 
-            # Entry quality gate
             tech_conf = signal.tech.confidence if signal.tech else None
             action, quality_scale = entry_quality_gate(
                 action,
                 final_confidence=signal.confidence,
                 tech_confidence=tech_conf,
+                min_final_confidence=config.min_final_confidence,
+                min_tech_confidence=config.min_tech_confidence,
             )
 
             if action == "hold":
                 logger.debug("HOLD %s | conf=%.2f session=%s", symbol, signal.confidence, session)
                 continue
 
-            # Pip-based position sizing
-            stop_pips = 30.0 if symbol == "EUR/USD" else 40.0
+            stop_pips = profile.default_stop_pips
+            tp_pips = profile.default_tp_pips
             size = fx_position_size(
                 account_balance=equity,
                 risk_pct=config.max_risk_per_trade * quality_scale * session_scale,
@@ -133,83 +148,98 @@ def _run_once(
                 price=px,
             )
 
-            if size < 100:
+            if size < profile.min_trade_size:
                 logger.debug("Size too small for %s: %.0f units", symbol, size)
                 continue
 
             now_ms = int(time.time() * 1000)
+            side = "long" if action == "buy" else "short"
 
             if action == "buy":
                 if symbol in portfolio.positions:
                     logger.debug("Already long %s", symbol)
                     continue
+                # Cover any existing short first
+                spos = portfolio.short_positions.get(symbol)
+                if spos and spos.qty > 0:
+                    executor.exit_short(symbol, px, spos.qty, reason="flip_to_long")
+                    close_paper_trade(conn, symbol, "short", px, spos.qty * px * fee_rate, now_ms,
+                                      close_reason="flip_to_long")
 
-                sl = pip_stop_loss(symbol, px, "long", stop_pips)
-                tp = pip_take_profit(symbol, px, "long", stop_pips * 2)
-
-                ok = portfolio.execute_buy(
+                tp = pip_take_profit(symbol, px, "long", tp_pips)
+                res = executor.buy(
                     symbol, px, size,
                     trailing_stop_pct=stop_pips * pip_size(symbol) / px,
                     take_profit_pct=(tp - px) / px,
                 )
-                if ok:
-                    fee = size * px * 0.00005
+                if res.ok:
+                    fee = size * px * fee_rate
                     open_paper_trade(conn, symbol, "long", px, size, fee, now_ms,
-                                     ml_up_prob=None, strategy_conf=signal.confidence)
+                                     strategy_conf=signal.confidence)
                     logger.info(
-                        "FX_BUY %s units=%.0f px=%.5f sl=%.5f tp=%.5f session=%s",
-                        symbol, size, px, sl, tp, session,
+                        "FX_BUY %s units=%.0f px=%.5f stop=%.0fpips tp=%.0fpips session=%s",
+                        symbol, size, px, stop_pips, tp_pips, session,
                     )
 
             elif action == "sell":
+                # Close any long first
                 pos = portfolio.positions.get(symbol)
-                if pos is None:
-                    logger.debug("No position to sell for %s", symbol)
-                    continue
+                if pos is not None:
+                    qty = pos.qty
+                    avg_entry = pos.avg_entry
+                    res = executor.exit_long(symbol, px, qty, reason="signal")
+                    if res.ok:
+                        fee = qty * px * fee_rate
+                        close_paper_trade(conn, symbol, "long", px, fee, now_ms, close_reason="signal")
+                        gross_pnl_pct = (px - avg_entry) / avg_entry if avg_entry else 0
+                        expectancy.record_trade(
+                            symbol=symbol, regime=session,
+                            gross_pnl_pct=gross_pnl_pct,
+                            net_pnl_pct=gross_pnl_pct - fee_rate * 2,
+                            hold_bars=getattr(pos, "bars_held", 0),
+                            close_reason="signal",
+                            mae_pct=getattr(pos, "max_adverse_pct", 0.0),
+                            mfe_pct=getattr(pos, "max_favorable_pct", 0.0),
+                        )
+                        logger.info(
+                            "FX_SELL %s units=%.0f px=%.5f pnl=%.2f%% session=%s",
+                            symbol, qty, px, gross_pnl_pct * 100, session,
+                        )
 
-                qty = pos.qty
-                avg_entry = pos.avg_entry
-                ok = portfolio.execute_sell(symbol, px, qty)
-                if ok:
-                    fee = qty * px * 0.00005
-                    close_paper_trade(conn, symbol, "long", px, fee, now_ms, close_reason="signal")
-                    gross_pnl_pct = (px - avg_entry) / avg_entry if avg_entry else 0
-                    expectancy.record_trade(
-                        symbol=symbol,
-                        regime=session,
-                        gross_pnl_pct=gross_pnl_pct,
-                        net_pnl_pct=gross_pnl_pct - 0.0001,
-                        hold_bars=getattr(pos, "bars_held", 0),
-                        close_reason="signal",
-                        mae_pct=getattr(pos, "max_adverse_pct", 0.0),
-                        mfe_pct=getattr(pos, "max_favorable_pct", 0.0),
-                    )
+                # Open a short if allowed
+                if config.allow_shorts and symbol not in portfolio.short_positions:
+                    tp = pip_take_profit(symbol, px, "short", tp_pips)
+                    sl_offset = stop_pips * pip_size(symbol) / px
+                    tp_offset = (px - tp) / px
+                    portfolio.execute_short(symbol, px, size)
+                    open_paper_trade(conn, symbol, "short", px, size, size * px * fee_rate, now_ms,
+                                     strategy_conf=signal.confidence)
                     logger.info(
-                        "FX_SELL %s units=%.0f px=%.5f pnl=%.2f%% session=%s",
-                        symbol, qty, px, gross_pnl_pct * 100, session,
+                        "FX_SHORT %s units=%.0f px=%.5f stop=%.0fpips tp=%.0fpips session=%s",
+                        symbol, size, px, stop_pips, tp_pips, session,
                     )
 
-            # Check auto exits
+            # Auto exits
             exits = portfolio.check_exits(mark_prices, max_hold_bars=96)
             for exit_sym, exit_reason in exits:
                 epos = portfolio.positions.get(exit_sym)
-                if epos is None:
-                    continue
-                eqty = epos.qty
-                eavg = epos.avg_entry
-                portfolio.execute_sell(exit_sym, px, eqty)
-                fee = eqty * px * 0.00005
-                close_paper_trade(conn, exit_sym, "long", px, fee, now_ms, close_reason=exit_reason)
-                gross = (px - eavg) / eavg if eavg else 0
-                expectancy.record_trade(
-                    symbol=exit_sym, regime=session,
-                    gross_pnl_pct=gross, net_pnl_pct=gross - 0.0001,
-                    hold_bars=getattr(epos, "bars_held", 0),
-                    close_reason=exit_reason,
-                )
-                logger.info("FX_EXIT %s reason=%s px=%.5f", exit_sym, exit_reason, px)
+                if epos is not None:
+                    eqty = epos.qty
+                    eavg = epos.avg_entry
+                    res = executor.exit_long(exit_sym, px, eqty, reason=exit_reason)
+                    if res.ok:
+                        fee = eqty * px * _fx_fee_rate(exit_sym)
+                        close_paper_trade(conn, exit_sym, "long", px, fee, now_ms, close_reason=exit_reason)
+                        gross = (px - eavg) / eavg if eavg else 0
+                        expectancy.record_trade(
+                            symbol=exit_sym, regime=session,
+                            gross_pnl_pct=gross,
+                            net_pnl_pct=gross - _fx_fee_rate(exit_sym) * 2,
+                            hold_bars=getattr(epos, "bars_held", 0),
+                            close_reason=exit_reason,
+                        )
+                        logger.info("FX_EXIT %s reason=%s px=%.5f", exit_sym, exit_reason, px)
 
-            # Record equity
             equity = portfolio.total_equity(mark_prices)
             dd = max(0, (guard.peak_equity - equity) / guard.peak_equity) if guard.peak_equity > 0 else 0
             record_equity(conn, now_ms, portfolio.cash_usd, equity, dd)
@@ -218,7 +248,6 @@ def _run_once(
         except Exception as exc:
             logger.error("Error processing %s: %s", symbol, exc, exc_info=True)
 
-    # Periodic expectancy log
     if expectancy._trades:
         report = expectancy.summary()
         overall = report.get("overall", {})
@@ -243,7 +272,7 @@ def main():
         format="%(asctime)s %(levelname)-7s %(message)s",
     )
 
-    parser = argparse.ArgumentParser(description="Hogan FX Paper Trading")
+    parser = argparse.ArgumentParser(description="Hogan FX Paper Trading (Exploratory)")
     parser.add_argument("--symbols", nargs="+", default=_FX_SYMBOLS)
     parser.add_argument("--balance", type=float, default=10_000.0)
     parser.add_argument("--db", default="data/hogan_fx.db")
@@ -262,7 +291,16 @@ def main():
 
     config = load_config()
     conn = get_connection(args.db)
-    portfolio = PaperPortfolio(cash_usd=args.balance, fee_rate=0.00005)
+
+    fx_spread_bps = spread_cost_bps(args.symbols[0]) if args.symbols else 1.0
+    portfolio = PaperPortfolio(cash_usd=args.balance, fee_rate=fx_spread_bps / 10_000.0)
+    fill_cfg = FillSimConfig(
+        slippage_bps=0.5,
+        spread_half_bps=fx_spread_bps / 2,
+    )
+    executor = RealisticPaperExecution(
+        portfolio=portfolio, conn=conn, config=fill_cfg,
+    )
     guard = DrawdownGuard(args.balance, config.max_drawdown)
     expectancy = ExpectancyTracker()
     session_filter = SessionFilter()
@@ -270,16 +308,16 @@ def main():
     pipeline = AgentPipeline(config, conn=conn)
 
     logger.info(
-        "FX paper trading started: symbols=%s balance=%.2f",
-        args.symbols, args.balance,
+        "FX paper trading started (EXPLORATORY): symbols=%s balance=%.2f spread=%.1fbps",
+        args.symbols, args.balance, fx_spread_bps,
     )
 
     if args.once:
-        _run_once(client, pipeline, portfolio, guard, expectancy, session_filter, conn, config, args.symbols)
+        _run_once(client, pipeline, portfolio, executor, guard, expectancy, session_filter, conn, config, args.symbols)
     else:
         while True:
             try:
-                _run_once(client, pipeline, portfolio, guard, expectancy, session_filter, conn, config, args.symbols)
+                _run_once(client, pipeline, portfolio, executor, guard, expectancy, session_filter, conn, config, args.symbols)
             except KeyboardInterrupt:
                 break
             except Exception as exc:
@@ -288,7 +326,6 @@ def main():
             logger.info("Sleeping %ds until next evaluation...", args.interval)
             time.sleep(args.interval)
 
-    # Final report
     if expectancy._trades:
         logger.info("FINAL FX EXPECTANCY: %s", expectancy.summary())
 

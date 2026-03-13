@@ -30,6 +30,10 @@ class ExecutionEngine:
 
     Both subclasses own portfolio state mutation so callers never need
     to call ``portfolio.execute_buy/sell`` separately.
+
+    Exit methods (exit_long, exit_short, emergency_flatten) MUST be used
+    for all exits — auto-exits, signal exits, and forced flattening.
+    This ensures live orders are always sent alongside portfolio updates.
     """
 
     def buy(self, symbol: str, price: float, qty: float,
@@ -39,6 +43,20 @@ class ExecutionEngine:
 
     def sell(self, symbol: str, price: float, qty: float) -> ExecResult:  # pragma: no cover
         raise NotImplementedError
+
+    def exit_long(self, symbol: str, price: float, qty: float,
+                  reason: str = "signal") -> ExecResult:
+        """Close a long position. Default delegates to sell()."""
+        return self.sell(symbol, price, qty)
+
+    def exit_short(self, symbol: str, price: float, qty: float,
+                   reason: str = "signal") -> ExecResult:
+        """Cover a short position. Default delegates to buy()."""
+        return self.buy(symbol, price, qty)
+
+    def emergency_flatten(self, symbol: str, price: float) -> ExecResult:
+        """Close all positions in a symbol (long + short). Override for live."""
+        return ExecResult(ok=False, error="not_implemented")
 
 
 class PaperExecution(ExecutionEngine):
@@ -76,6 +94,33 @@ class PaperExecution(ExecutionEngine):
                 upsert_position(self.conn, symbol, 0.0, 0.0, ts_ms)
             else:
                 upsert_position(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
+        return ExecResult(ok=ok)
+
+    def exit_long(self, symbol: str, price: float, qty: float,
+                  reason: str = "signal") -> ExecResult:
+        return self.sell(symbol, price, qty)
+
+    def exit_short(self, symbol: str, price: float, qty: float,
+                   reason: str = "signal") -> ExecResult:
+        ok = self.portfolio.execute_cover(symbol, price, qty)
+        if ok and self.conn is not None:
+            ts_ms = int(time.time() * 1000)
+            pos = self.portfolio.short_positions.get(symbol)
+            if pos is None:
+                upsert_position(self.conn, symbol, 0.0, 0.0, ts_ms)
+            else:
+                upsert_position(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
+        return ExecResult(ok=ok)
+
+    def emergency_flatten(self, symbol: str, price: float) -> ExecResult:
+        results = []
+        pos = self.portfolio.positions.get(symbol)
+        if pos and pos.qty > 0:
+            results.append(self.exit_long(symbol, price, pos.qty, reason="emergency"))
+        spos = self.portfolio.short_positions.get(symbol)
+        if spos and spos.qty > 0:
+            results.append(self.exit_short(symbol, price, spos.qty, reason="emergency"))
+        ok = all(r.ok for r in results) if results else False
         return ExecResult(ok=ok)
 
 
@@ -125,6 +170,26 @@ class LiveExecution(ExecutionEngine):
         except Exception as exc:  # pragma: no cover
             logger.exception("Live sell failed: %s", exc)
             return ExecResult(ok=False, error=str(exc))
+
+    def exit_long(self, symbol: str, price: float, qty: float,
+                  reason: str = "signal") -> ExecResult:
+        return self.sell(symbol, price, qty)
+
+    def exit_short(self, symbol: str, price: float, qty: float,
+                   reason: str = "signal") -> ExecResult:
+        return self.buy(symbol, price, qty)
+
+    def emergency_flatten(self, symbol: str, price: float) -> ExecResult:
+        results = []
+        if self.portfolio is not None:
+            pos = self.portfolio.positions.get(symbol)
+            if pos and pos.qty > 0:
+                results.append(self.exit_long(symbol, price, pos.qty, reason="emergency"))
+            spos = self.portfolio.short_positions.get(symbol)
+            if spos and spos.qty > 0:
+                results.append(self.exit_short(symbol, price, spos.qty, reason="emergency"))
+        ok = all(r.ok for r in results) if results else False
+        return ExecResult(ok=ok)
 
     def _sync_fills(self, symbol: str | None = None) -> int:
         """Fetch and journal fills since the last recorded fill timestamp.
@@ -323,6 +388,39 @@ class SmartExecution(ExecutionEngine):
             logger.exception("Market sell failed: %s", exc)
             return ExecResult(ok=False, error=str(exc))
 
+    def exit_long(self, symbol: str, price: float, qty: float,
+                  reason: str = "signal") -> ExecResult:
+        """Exit longs always use market orders (taker) to guarantee fill."""
+        return self.market_sell(symbol, price, qty)
+
+    def exit_short(self, symbol: str, price: float, qty: float,
+                   reason: str = "signal") -> ExecResult:
+        """Cover shorts with a market buy."""
+        try:
+            order = self.client.create_market_order(symbol, "buy", qty)
+            order["exchange"] = self.exchange_id
+            record_order(self.conn, order)
+            self._sync_fills(symbol)
+            if self.portfolio is not None:
+                self.portfolio.execute_cover(symbol, price, qty)
+            logger.info("TAKER_COVER %s qty=%.6f reason=%s", symbol, qty, reason)
+            return ExecResult(ok=True, order_id=str(order.get("id")))
+        except Exception as exc:
+            logger.exception("Smart cover failed: %s", exc)
+            return ExecResult(ok=False, error=str(exc))
+
+    def emergency_flatten(self, symbol: str, price: float) -> ExecResult:
+        results = []
+        if self.portfolio is not None:
+            pos = self.portfolio.positions.get(symbol)
+            if pos and pos.qty > 0:
+                results.append(self.exit_long(symbol, price, pos.qty, reason="emergency"))
+            spos = self.portfolio.short_positions.get(symbol)
+            if spos and spos.qty > 0:
+                results.append(self.exit_short(symbol, price, spos.qty, reason="emergency"))
+        ok = all(r.ok for r in results) if results else False
+        return ExecResult(ok=ok)
+
     def _sync_fills(self, symbol: str | None = None) -> int:
         from hogan_bot.storage import load_latest_fill_ts
 
@@ -441,4 +539,40 @@ class RealisticPaperExecution(ExecutionEngine):
                 symbol, fill_price, price,
                 (1 - fill_price / price) * 10_000, fill_qty,
             )
+        return ExecResult(ok=ok)
+
+    def exit_long(self, symbol: str, price: float, qty: float,
+                  reason: str = "signal") -> ExecResult:
+        return self.sell(symbol, price, qty)
+
+    def exit_short(self, symbol: str, price: float, qty: float,
+                   reason: str = "signal") -> ExecResult:
+        fill_price = self._apply_slippage_buy(price)
+        fill_qty = self._maybe_partial(qty)
+
+        ok = self.portfolio.execute_cover(symbol, fill_price, fill_qty)
+        if ok and self.conn is not None:
+            ts_ms = int(time.time() * 1000)
+            pos = self.portfolio.short_positions.get(symbol)
+            if pos is None:
+                upsert_position(self.conn, symbol, 0.0, 0.0, ts_ms)
+            else:
+                upsert_position(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
+
+        if ok:
+            logger.debug(
+                "REALISTIC_COVER %s fill=%.2f (signal=%.2f) qty=%.6f reason=%s",
+                symbol, fill_price, price, fill_qty, reason,
+            )
+        return ExecResult(ok=ok)
+
+    def emergency_flatten(self, symbol: str, price: float) -> ExecResult:
+        results = []
+        pos = self.portfolio.positions.get(symbol)
+        if pos and pos.qty > 0:
+            results.append(self.exit_long(symbol, price, pos.qty, reason="emergency"))
+        spos = self.portfolio.short_positions.get(symbol)
+        if spos and spos.qty > 0:
+            results.append(self.exit_short(symbol, price, spos.qty, reason="emergency"))
+        ok = all(r.ok for r in results) if results else False
         return ExecResult(ok=ok)

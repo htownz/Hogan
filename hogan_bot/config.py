@@ -91,6 +91,16 @@ class BotConfig:
     # that the expected move (ATR or take_profit) must exceed before entry.
     min_edge_multiple: float = 1.5
 
+    # Entry quality gate thresholds (hard pre-trade filter)
+    min_final_confidence: float = 0.25
+    min_tech_confidence: float = 0.15
+    min_regime_confidence: float = 0.30
+    max_whipsaws: int = 3
+
+    # Signal-exit reversal asymmetry: require this multiple of entry confidence
+    # to reverse (e.g., 1.3 = 30% stronger evidence needed to exit than to enter).
+    reversal_confidence_multiplier: float = 1.3
+
     # Execution timeframe — used by the 15m execution model for entry/exit timing
     execution_timeframe: str = "15m"
 
@@ -332,6 +342,11 @@ def load_config() -> BotConfig:
         min_hold_bars=int(os.getenv("HOGAN_MIN_HOLD_BARS", "3")),
         exit_confirmation_bars=int(os.getenv("HOGAN_EXIT_CONFIRM_BARS", "2")),
         min_edge_multiple=float(os.getenv("HOGAN_MIN_EDGE_MULTIPLE", "1.5")),
+        min_final_confidence=float(os.getenv("HOGAN_MIN_FINAL_CONFIDENCE", "0.25")),
+        min_tech_confidence=float(os.getenv("HOGAN_MIN_TECH_CONFIDENCE", "0.15")),
+        min_regime_confidence=float(os.getenv("HOGAN_MIN_REGIME_CONFIDENCE", "0.30")),
+        max_whipsaws=int(os.getenv("HOGAN_MAX_WHIPSAWS", "3")),
+        reversal_confidence_multiplier=float(os.getenv("HOGAN_REVERSAL_CONFIDENCE_MULT", "1.3")),
         use_ict=os.getenv("HOGAN_USE_ICT", "false").lower() == "true",
         ict_model=os.getenv("HOGAN_ICT_MODEL", "silver_bullet"),
         ict_swing_left=int(os.getenv("HOGAN_ICT_SWING_LEFT", "2")),

@@ -23,8 +23,12 @@ import logging
 import time
 from typing import Any
 
-import ccxt
 import pandas as pd
+
+try:
+    import ccxt
+except ImportError:
+    ccxt = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +88,10 @@ class ExchangeClient:
         api_secret: str | None = None,
         sandbox: bool = False,
     ) -> None:
+        if ccxt is None:
+            raise ImportError(
+                "ccxt is required for ExchangeClient. Install with: pip install ccxt"
+            )
         exchange_id = exchange_id.lower()
         try:
             exchange_class = getattr(ccxt, exchange_id)

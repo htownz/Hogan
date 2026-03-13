@@ -109,6 +109,11 @@ def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, ov
         rl_policy=rl_policy,
         max_hold_hours=cfg.max_hold_hours if cfg.max_hold_hours > 0 else None,
         loss_cooldown_hours=cfg.loss_cooldown_hours if cfg.loss_cooldown_hours > 0 else None,
+        min_edge_multiple=cfg.min_edge_multiple,
+        min_final_confidence=cfg.min_final_confidence,
+        min_tech_confidence=cfg.min_tech_confidence,
+        min_regime_confidence=cfg.min_regime_confidence,
+        max_whipsaws=cfg.max_whipsaws,
     )
 
 
