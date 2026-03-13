@@ -246,7 +246,7 @@ class WalkForwardCVTests(unittest.TestCase):
 @unittest.skipUnless(_HAS_LIGHTGBM, "lightgbm not installed")
 class TestTrainLightGBM(unittest.TestCase):
     def test_returns_expected_keys(self):
-        df = _synthetic_candles(n=500)
+        df = _synthetic_candles(n=2000)
         import tempfile, os
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -257,7 +257,7 @@ class TestTrainLightGBM(unittest.TestCase):
         self.assertEqual(metrics["model_type"], "lightgbm")
 
     def test_model_type_label(self):
-        df = _synthetic_candles(n=500)
+        df = _synthetic_candles(n=2000)
         import tempfile, os
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -266,7 +266,7 @@ class TestTrainLightGBM(unittest.TestCase):
         self.assertEqual(metrics["model_type"], "lightgbm")
 
     def test_feature_importances_all_features_present(self):
-        df = _synthetic_candles(n=500)
+        df = _synthetic_candles(n=2000)
         import tempfile, os
 
         with tempfile.TemporaryDirectory() as tmp:
