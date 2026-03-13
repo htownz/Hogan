@@ -10,7 +10,7 @@ from hogan_bot.agent_pipeline import AgentPipeline
 from hogan_bot.champion import apply_champion_mode, is_champion_mode
 from hogan_bot.decision import (
     apply_ml_filter, edge_gate, entry_quality_gate, ml_confidence,
-    estimate_spread_from_candles,
+    estimate_spread_from_candles, ranging_gate,
 )
 from hogan_bot.exit_model import ExitEvaluator
 from hogan_bot.expectancy import ExpectancyTracker
@@ -402,6 +402,12 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         ict_ote_enabled=ict_ote_enabled, ict_ote_low=ict_ote_low,
         ict_ote_high=ict_ote_high, use_rl_agent=use_rl_agent,
         rl_policy=rl_policy, symbols=[symbol],
+        # Fields required by effective_thresholds()
+        ml_buy_threshold=ml_buy_threshold,
+        ml_sell_threshold=ml_sell_threshold,
+        trailing_stop_pct=trailing_stop_pct,
+        take_profit_pct=take_profit_pct,
+        use_regime_detection=True,
     )
     _bt_conn = None
     if db_path:
@@ -432,8 +438,13 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     _min_hold_bars: int = 3
     _exit_confirm_bars: int = 2
 
-    # ExitEvaluator (parity with event_loop)
-    _exit_eval = ExitEvaluator()
+    # ExitEvaluator (parity with event_loop — configurable thresholds)
+    _exit_eval = ExitEvaluator(
+        drawdown_panic_pct=0.03,
+        time_decay_threshold=0.75,
+        volatility_expansion_threshold=2.0,
+        max_consolidation_bars=12,
+    )
 
     # Regime tracking (parity with event_loop)
     _current_regime: str | None = None
@@ -581,6 +592,19 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 pass
         _regime_per_bar.append(_current_regime)
 
+        # Regime-adjusted thresholds (parity with event_loop)
+        _eff: dict[str, float] = {}
+        if _rstate is not None:
+            try:
+                from hogan_bot.regime import effective_thresholds
+                _eff = effective_thresholds(_rstate, _bt_config)
+            except Exception:
+                pass
+        _eff_ml_buy = _eff.get("ml_buy_threshold", ml_buy_threshold)
+        _eff_ml_sell = _eff.get("ml_sell_threshold", ml_sell_threshold)
+        _eff_tp = _eff.get("take_profit_pct", take_profit_pct)
+        _eff_position_scale = _eff.get("position_scale", 1.0)
+
         _as_of = _bar_ts_ms(candles, i - 1) if _bt_conn is not None else None
         signal = _pipeline.run(
             window,
@@ -597,11 +621,11 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         conf_scale = signal.confidence or 1.0
         if ml_model is not None:
             up_prob = predict_up_probability(window, ml_model)
-            action = apply_ml_filter(action, up_prob, ml_buy_threshold, ml_sell_threshold)
+            action = apply_ml_filter(action, up_prob, _eff_ml_buy, _eff_ml_sell)
             if ml_confidence_sizing:
                 conf_scale *= ml_confidence(up_prob)
 
-        # Fee- and spread-aware edge gate (parity with live/paper)
+        # Fee- and spread-aware edge gate (regime-adjusted TP, parity with event_loop)
         _atr_pct = signal.stop_distance_pct / max(atr_stop_multiplier, 1.0)
         _spread_est = estimate_spread_from_candles(window)
         _forecast_ret = None
@@ -614,7 +638,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         action = edge_gate(
             action,
             atr_pct=_atr_pct,
-            take_profit_pct=take_profit_pct,
+            take_profit_pct=_eff_tp,
             fee_rate=fee_rate,
             min_edge_multiple=min_edge_multiple,
             forecast_expected_return=_forecast_ret,
@@ -636,6 +660,16 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             max_whipsaws=max_whipsaws,
         )
 
+        # Ranging-specific extra protections (parity with event_loop)
+        _tech_action = signal.tech.action if signal.tech else None
+        action, _ranging_scale = ranging_gate(
+            action,
+            regime=_current_regime,
+            tech_action=_tech_action,
+            up_prob=up_prob if ml_model is not None else None,
+            recent_whipsaw_count=_whipsaw_count,
+        )
+
         equity = portfolio.total_equity(mark)
         equity_curve.append(equity)
 
@@ -648,7 +682,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             stop_distance_pct=signal.stop_distance_pct,
             max_risk_per_trade=max_risk_per_trade,
             max_allocation_pct=aggressive_allocation,
-            confidence_scale=conf_scale * _quality_scale,
+            confidence_scale=conf_scale * _quality_scale * _ranging_scale * _eff_position_scale,
             fee_rate=fee_rate,
         )
 
@@ -701,6 +735,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 side="long",
                 max_hold_bars=max_hold_bars,
                 entry_atr=getattr(pos, "entry_atr_pct", None) or None,
+                vol_ratio=signal.volume_ratio,
             )
 
             _consecutive_exit_signals += 1
