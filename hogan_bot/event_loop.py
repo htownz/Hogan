@@ -50,9 +50,25 @@ from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
 from hogan_bot.expectancy import ExpectancyTracker
-from hogan_bot.storage import get_connection, record_equity, upsert_position, open_paper_trade, close_paper_trade
+from hogan_bot.storage import get_connection, record_equity, upsert_position, open_paper_trade, close_paper_trade, log_decision
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SignalResult:
+    """Rich signal evaluation output for decision logging."""
+    action: str
+    size: float
+    up_prob: float | None
+    regime: str | None
+    atr_pct: float
+    final_confidence: float = 0.0
+    tech_confidence: float | None = None
+    conf_scale: float = 1.0
+    explanation: str | None = None
+    forecast_ret: float | None = None
+    agent_weights: dict | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -72,8 +88,8 @@ class SignalEvaluator:
         candles: pd.DataFrame,
         equity: float,
         recent_whipsaw_count: int = 0,
-    ) -> tuple[str, float, float | None, str | None, float]:
-        """Returns (action, size, up_prob, regime_name, atr_pct)."""
+    ) -> SignalResult:
+        """Returns a SignalResult with action, sizing, and rich metadata."""
         cfg = symbol_config(self.config, symbol)
 
         regime_name = None
@@ -120,7 +136,7 @@ class SignalEvaluator:
             estimated_spread=spread_est,
         )
 
-        # Hard entry quality gate
+        # Hard entry quality gate (thresholds from config)
         tech_conf = result.tech.confidence if result.tech else None
         action, quality_scale = entry_quality_gate(
             action,
@@ -129,6 +145,10 @@ class SignalEvaluator:
             regime=regime_name,
             regime_confidence=regime_conf,
             recent_whipsaw_count=recent_whipsaw_count,
+            min_final_confidence=cfg.min_final_confidence,
+            min_tech_confidence=cfg.min_tech_confidence,
+            min_regime_confidence=cfg.min_regime_confidence,
+            max_whipsaws=cfg.max_whipsaws,
         )
 
         size = calculate_position_size(
@@ -149,7 +169,19 @@ class SignalEvaluator:
                 result.explanation,
             )
 
-        return action, size, up_prob, regime_name, atr_pct
+        return SignalResult(
+            action=action,
+            size=size,
+            up_prob=up_prob,
+            regime=regime_name,
+            atr_pct=atr_pct,
+            final_confidence=result.confidence or 0.0,
+            tech_confidence=tech_conf,
+            conf_scale=conf_scale * quality_scale,
+            explanation=result.explanation,
+            forecast_ret=forecast_ret,
+            agent_weights=result.agent_weights,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -240,8 +272,13 @@ async def run_event_loop(
     max_hold_bars, loss_cooldown_bars = effective_hold_cooldown_bars(config, config.timeframe)
     slippage_bps = float(os.getenv("HOGAN_SLIPPAGE_BPS", "5.0"))
     slip_mult = slippage_bps / 10_000.0
+    # When the executor owns fill simulation (RealisticPaperExecution), skip
+    # the pre-adjustment to avoid double-counting friction.
+    _executor_owns_fill = isinstance(executor, RealisticPaperExecution)
     _cooldown_remaining: int = 0
     _consecutive_exit_signals: dict[str, int] = defaultdict(int)
+    _whipsaw_counts: dict[str, int] = defaultdict(int)
+    _last_action: dict[str, str] = {}
     min_hold_bars = getattr(config, "min_hold_bars", 3)
     exit_confirm_bars = getattr(config, "exit_confirmation_bars", 2)
 
@@ -339,12 +376,16 @@ async def run_event_loop(
             # Decrement loss cooldown each iteration
             if _cooldown_remaining > 0:
                 _cooldown_remaining -= 1
+            # Decay whipsaw counts gradually (halve every 20 bars)
+            if event_count > 0 and event_count % 20 == 0:
+                for ws_sym in list(_whipsaw_counts):
+                    _whipsaw_counts[ws_sym] = max(0, _whipsaw_counts[ws_sym] - 1)
 
             # Auto-exit trailing stops / take profits / max_hold_time
+            # All exits go through the executor so live orders are always sent.
             exits = portfolio.check_exits(mark_prices, max_hold_bars=max_hold_bars)
             for exit_symbol, reason in exits:
                 ep = mark_prices.get(exit_symbol, 0.0)
-                sell_px = ep * (1.0 - slip_mult)
                 now_ms = int(time.time() * 1000)
 
                 if reason in ("trailing_stop", "take_profit", "max_hold_time"):
@@ -354,10 +395,15 @@ async def run_event_loop(
                     qty = pos.qty
                     avg_entry = pos.avg_entry
                     bars_held = getattr(pos, "bars_held", 0)
-                    executed = portfolio.execute_sell(exit_symbol, sell_px, qty)
+                    mae_pct = getattr(pos, "max_adverse_pct", 0.0)
+                    mfe_pct = getattr(pos, "max_favorable_pct", 0.0)
+                    res = executor.exit_long(exit_symbol, ep, qty, reason=reason)
+                    executed = bool(res.ok)
+                    sell_px = ep
                     if executed:
                         fee = qty * sell_px * config.fee_rate
-                        close_paper_trade(conn, exit_symbol, "long", sell_px, fee, now_ms, close_reason=reason)
+                        if not allow_live:
+                            close_paper_trade(conn, exit_symbol, "long", sell_px, fee, now_ms, close_reason=reason)
                         gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
                         net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                         _expectancy.record_trade(
@@ -365,8 +411,8 @@ async def run_event_loop(
                             regime=_current_regime.get(exit_symbol, "unknown"),
                             gross_pnl_pct=gross_pnl_pct,
                             net_pnl_pct=net_pnl_pct,
-                            mae_pct=getattr(pos, "max_adverse_pct", 0.0),
-                            mfe_pct=getattr(pos, "max_favorable_pct", 0.0),
+                            mae_pct=mae_pct,
+                            mfe_pct=mfe_pct,
                             hold_bars=bars_held,
                             close_reason=reason,
                         )
@@ -385,11 +431,15 @@ async def run_event_loop(
                     qty = pos.qty
                     avg_entry = pos.avg_entry
                     bars_held = getattr(pos, "bars_held", 0)
-                    cover_px = ep * (1.0 + slip_mult)
-                    executed = portfolio.execute_cover(exit_symbol, cover_px, qty)
+                    mae_pct = getattr(pos, "max_adverse_pct", 0.0)
+                    mfe_pct = getattr(pos, "max_favorable_pct", 0.0)
+                    cover_px = ep
+                    res = executor.exit_short(exit_symbol, cover_px, qty, reason=reason)
+                    executed = bool(res.ok)
                     if executed:
                         fee = qty * cover_px * config.fee_rate
-                        close_paper_trade(conn, exit_symbol, "short", cover_px, fee, now_ms, close_reason=reason)
+                        if not allow_live:
+                            close_paper_trade(conn, exit_symbol, "short", cover_px, fee, now_ms, close_reason=reason)
                         gross_pnl_pct = (avg_entry - cover_px) / avg_entry if avg_entry else 0
                         net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                         _expectancy.record_trade(
@@ -397,8 +447,8 @@ async def run_event_loop(
                             regime=_current_regime.get(exit_symbol, "unknown"),
                             gross_pnl_pct=gross_pnl_pct,
                             net_pnl_pct=net_pnl_pct,
-                            mae_pct=getattr(pos, "max_adverse_pct", 0.0),
-                            mfe_pct=getattr(pos, "max_favorable_pct", 0.0),
+                            mae_pct=mae_pct,
+                            mfe_pct=mfe_pct,
                             hold_bars=bars_held,
                             close_reason=reason,
                         )
@@ -430,7 +480,13 @@ async def run_event_loop(
 
             # Per-symbol signal evaluation (isolated — one symbol failure won't break others)
             try:
-                action, size, up_prob, _sym_regime, _sym_atr_pct = evaluator.evaluate(symbol, candles, equity)
+                sig = evaluator.evaluate(symbol, candles, equity,
+                                         recent_whipsaw_count=_whipsaw_counts.get(symbol, 0))
+                action = sig.action
+                size = sig.size
+                up_prob = sig.up_prob
+                _sym_regime = sig.regime
+                _sym_atr_pct = sig.atr_pct
                 if _sym_regime:
                     _current_regime[symbol] = _sym_regime
             except Exception as exc:
@@ -441,6 +497,33 @@ async def run_event_loop(
                 continue
 
             _signal_counts[symbol][action] += 1
+
+            # Whipsaw tracking: count rapid direction reversals
+            prev = _last_action.get(symbol, "hold")
+            if action != "hold":
+                if prev != "hold" and prev != action:
+                    _whipsaw_counts[symbol] = _whipsaw_counts.get(symbol, 0) + 1
+                _last_action[symbol] = action
+
+            # Decision logging: persist every signal evaluation to decision_log
+            try:
+                log_decision(
+                    conn,
+                    ts_ms=int(time.time() * 1000),
+                    symbol=symbol,
+                    regime=_sym_regime,
+                    tech_action=action,
+                    tech_confidence=sig.tech_confidence,
+                    final_action=action,
+                    final_confidence=sig.final_confidence,
+                    position_size=size,
+                    ml_up_prob=up_prob,
+                    conf_scale=sig.conf_scale,
+                    explanation=sig.explanation,
+                    meta_weights=sig.agent_weights,
+                )
+            except Exception as exc:
+                logger.debug("Decision log error: %s", exc)
 
             # Track consecutive exit signals for confirmation
             if action == "sell" and symbol in portfolio.positions:
@@ -454,27 +537,22 @@ async def run_event_loop(
                 elif _cooldown_remaining > 0:
                     logger.debug("COOLDOWN %s — %d bars remaining", symbol, _cooldown_remaining)
                 else:
-                    buy_px = px * (1.0 + slip_mult)
-                    if executor:
-                        res = executor.buy(symbol, buy_px, size,
-                                           trailing_stop_pct=config.trailing_stop_pct,
-                                           take_profit_pct=config.take_profit_pct)
-                        executed = bool(res.ok)
-                    else:
-                        executed = portfolio.execute_buy(
-                            symbol, buy_px, size,
-                            trailing_stop_pct=config.trailing_stop_pct,
-                            take_profit_pct=config.take_profit_pct,
-                        )
+                    buy_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
+                    res = executor.buy(symbol, buy_px, size,
+                                       trailing_stop_pct=config.trailing_stop_pct,
+                                       take_profit_pct=config.take_profit_pct)
+                    executed = bool(res.ok)
                     if executed:
                         pos = portfolio.positions.get(symbol)
                         if pos is not None:
                             pos.entry_atr_pct = _sym_atr_pct
                         now_ms = int(time.time() * 1000)
                         fee = size * buy_px * config.fee_rate
-                        open_paper_trade(conn, symbol, "long", buy_px, size, fee, now_ms,
-                                         ml_up_prob=up_prob, strategy_conf=0.0,
-                                         vol_ratio=0.0)
+                        if not allow_live:
+                            open_paper_trade(conn, symbol, "long", buy_px, size, fee, now_ms,
+                                             ml_up_prob=up_prob,
+                                             strategy_conf=sig.final_confidence,
+                                             vol_ratio=sig.conf_scale)
                         if notifier:
                             notifier.notify("buy", {"symbol": symbol, "price": buy_px,
                                                     "qty": size, "ml_up_prob": up_prob})
@@ -488,6 +566,13 @@ async def run_event_loop(
                     logger.debug(
                         "HOLD %s — min hold not met (%d/%d bars)",
                         symbol, pos.bars_held, min_hold_bars,
+                    )
+                # Asymmetric reversal: require stronger confidence to exit than to enter
+                elif sig.final_confidence < config.min_final_confidence * config.reversal_confidence_multiplier:
+                    logger.debug(
+                        "HOLD %s — reversal conf %.2f < asymmetric threshold %.2f",
+                        symbol, sig.final_confidence,
+                        config.min_final_confidence * config.reversal_confidence_multiplier,
                     )
                 # Exit confirmation: require N consecutive sell signals
                 elif _consecutive_exit_signals[symbol] < exit_confirm_bars:
@@ -514,17 +599,15 @@ async def run_event_loop(
                         event_count += 1
                         continue
                     sell_qty = min(pos.qty, size)
-                    sell_px = px * (1.0 - slip_mult)
+                    sell_px = px if _executor_owns_fill else px * (1.0 - slip_mult)
                     avg_entry = pos.avg_entry
-                    if executor:
-                        res = executor.sell(symbol, sell_px, sell_qty)
-                        executed = bool(res.ok)
-                    else:
-                        executed = portfolio.execute_sell(symbol, sell_px, sell_qty)
+                    res = executor.exit_long(symbol, sell_px, sell_qty, reason="signal")
+                    executed = bool(res.ok)
                     if executed:
                         now_ms = int(time.time() * 1000)
                         exit_fee = sell_qty * sell_px * config.fee_rate
-                        close_paper_trade(conn, symbol, "long", sell_px, exit_fee, now_ms, close_reason="signal")
+                        if not allow_live:
+                            close_paper_trade(conn, symbol, "long", sell_px, exit_fee, now_ms, close_reason="signal")
                         gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
                         net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                         bars_held = getattr(pos, "bars_held", 0)

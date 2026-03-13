@@ -4,8 +4,9 @@ Hogan is a **BTC-first, 1h-led market operating system** — an agent-routed, fo
 
 ## Important Safety Notes
 
-- This build is **paper mode only** (no live order routing yet).
-- If you ever exposed API keys in chat/logs/repo, **rotate them immediately** in Kraken.
+- **Paper mode by default.** Live trading requires explicit opt-in (see `.env.example`).
+- Oanda FX live execution and CCXT crypto execution paths are available but must be activated deliberately.
+- If you ever exposed API keys in chat/logs/repo, **rotate them immediately**.
 - No strategy guarantees profit; use strict risk controls and human oversight.
 
 ## Architecture Overview
@@ -88,11 +89,17 @@ Hogan follows a multi-layer architecture:
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env
-python -m hogan_bot.main --max-loops 2
+# Canonical runtime (async event loop):
+python -m hogan_bot.event_loop
+# Or with a finite run:
+python -m hogan_bot.event_loop --max-events 100
 ```
+
+> **Note:** `main.py` and `trader_service.py` are deprecated legacy runtimes.
+> Always use `hogan_bot.event_loop` for paper and live trading.
 
 ## ML Enhancement Workflow (Recommended)
 
@@ -141,7 +148,7 @@ python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000 --use-ml
 ### 5. Run paper trading
 
 ```bash
-python -m hogan_bot.main --max-loops 200
+python -m hogan_bot.event_loop --max-events 500
 ```
 
 ## Environment Config
