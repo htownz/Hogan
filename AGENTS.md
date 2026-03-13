@@ -33,6 +33,13 @@ python -m hogan_bot.main
   - Works in both paper and live mode
   - Requires OANDA_ACCESS_TOKEN + OANDA_ACCOUNT_ID in .env
 
+## Regime Logic — Responsibility Boundaries
+Each regime-aware component has a clearly defined role. Avoid double-counting.
+- **MetaWeigher** (`agent_pipeline.py`): direction and vote-level regime adaptation. Uses `meta_*_delta` and `meta_*_threshold` from `RegimeConfig`.
+- **entry_quality_gate** (`decision.py`): minimum setup cleanliness / confidence sufficiency. Uses `quality_final_mult` / `quality_tech_mult` from `RegimeConfig`.
+- **ranging_gate** (`decision.py`): chop-specific suppression only (active in ranging). Soft mode reduces size, hard mode blocks.
+- **effective_thresholds** (`regime.py`): execution economics — ML gates, TP/SL, position scale. Uses `ml_buy_threshold`, `take_profit_mult`, `position_scale` from `RegimeConfig`.
+
 ## Testing
 ```bash
 pytest tests/test_champion.py tests/test_ml.py tests/test_exchange.py -v

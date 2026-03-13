@@ -116,7 +116,7 @@ def _run_once(
 
             spread_est = estimate_spread_from_candles(candles)
             atr_pct = signal.stop_distance_pct / max(2.5, 1.0)
-            action = edge_gate(
+            _edge_gd = edge_gate(
                 action,
                 atr_pct=atr_pct,
                 take_profit_pct=profile.default_tp_pct,
@@ -124,15 +124,18 @@ def _run_once(
                 min_edge_multiple=config.min_edge_multiple,
                 estimated_spread=spread_est,
             )
+            action = _edge_gd.action
 
             tech_conf = signal.tech.confidence if signal.tech else None
-            action, quality_scale = entry_quality_gate(
+            _quality_gd = entry_quality_gate(
                 action,
                 final_confidence=signal.confidence,
                 tech_confidence=tech_conf,
                 min_final_confidence=config.min_final_confidence,
                 min_tech_confidence=config.min_tech_confidence,
             )
+            action = _quality_gd.action
+            quality_scale = _quality_gd.size_scale
 
             if action == "hold":
                 logger.debug("HOLD %s | conf=%.2f session=%s", symbol, signal.confidence, session)

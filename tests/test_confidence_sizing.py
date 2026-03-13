@@ -120,13 +120,11 @@ class TestPositionSizeConfidenceScale:
 
 class TestConfidenceFilterRoundTrip:
     def test_high_confidence_buy_passes_filter(self):
-        # prob=0.8 > buy_threshold=0.55 → action stays "buy"
-        action = apply_ml_filter("buy", 0.8, buy_threshold=0.55, sell_threshold=0.45)
-        assert action == "buy"
+        gd = apply_ml_filter("buy", 0.8, buy_threshold=0.55, sell_threshold=0.45)
+        assert gd.action == "buy"
         assert ml_confidence(0.8) == pytest.approx(0.6)
 
     def test_low_confidence_buy_vetoed(self):
-        action = apply_ml_filter("buy", 0.4, buy_threshold=0.55, sell_threshold=0.45)
-        assert action == "hold"
-        # Scale is computed regardless of filter outcome
+        gd = apply_ml_filter("buy", 0.4, buy_threshold=0.55, sell_threshold=0.45)
+        assert gd.action == "hold"
         assert ml_confidence(0.4) == pytest.approx(0.2)

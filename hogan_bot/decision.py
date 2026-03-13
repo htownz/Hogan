@@ -1,12 +1,107 @@
 from __future__ import annotations
 
+import json
 import logging
 import time
+from dataclasses import dataclass, asdict
 
 import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Quality Components — structured setup-quality decomposition
+# ---------------------------------------------------------------------------
+
+@dataclass
+class QualityComponents:
+    """Multi-dimensional setup quality score for audit trail."""
+    final_conf: float = 0.0
+    tech_conf: float = 0.0
+    regime_conf: float = 0.0
+    ml_separation: float = 1.0
+    spread_penalty: float = 1.0
+    whipsaw_penalty: float = 1.0
+    freshness_penalty: float = 1.0
+    overall: float = 0.0
+
+    def to_json(self) -> str:
+        return json.dumps(asdict(self), separators=(",", ":"))
+
+
+def compute_quality_components(
+    *,
+    final_confidence: float | None = None,
+    tech_confidence: float | None = None,
+    regime_confidence: float | None = None,
+    up_prob: float | None = None,
+    estimated_spread: float | None = None,
+    atr_pct: float | None = None,
+    recent_whipsaw_count: int = 0,
+    freshness_summary: dict | None = None,
+    ranging_scale: float = 1.0,
+    quality_gate_scale: float = 1.0,
+) -> QualityComponents:
+    """Compute a structured quality score from signal evaluation inputs."""
+    final_conf = min(1.0, max(0.0, (final_confidence or 0.0) / 0.6))
+    tech_conf = min(1.0, max(0.0, (tech_confidence or 0.0) / 0.7))
+    regime_conf = min(1.0, max(0.0, (regime_confidence or 0.0) / 0.75))
+
+    if up_prob is not None:
+        ml_separation = min(1.0, abs(up_prob - 0.5) / 0.25)
+    else:
+        ml_separation = 1.0
+
+    if estimated_spread is not None and atr_pct is not None and atr_pct > 1e-9:
+        spread_ratio = estimated_spread / atr_pct
+        spread_penalty = max(0.0, 1.0 - min(1.0, spread_ratio / 0.25))
+    else:
+        spread_penalty = 1.0
+
+    whipsaw_penalty = max(0.0, 1.0 - recent_whipsaw_count * 0.2)
+
+    freshness_penalty = 1.0
+    if freshness_summary:
+        stale_count = freshness_summary.get("stale_count", 0)
+        critical_stale = freshness_summary.get("critical_stale_count", 0)
+        freshness_penalty -= min(0.5, stale_count * 0.05 + critical_stale * 0.15)
+        freshness_penalty = max(0.0, freshness_penalty)
+
+    overall = (
+        0.20 * final_conf
+        + 0.15 * tech_conf
+        + 0.15 * regime_conf
+        + 0.15 * ml_separation
+        + 0.15 * spread_penalty
+        + 0.10 * whipsaw_penalty
+        + 0.10 * freshness_penalty
+    ) * ranging_scale * quality_gate_scale
+
+    return QualityComponents(
+        final_conf=round(final_conf, 4),
+        tech_conf=round(tech_conf, 4),
+        regime_conf=round(regime_conf, 4),
+        ml_separation=round(ml_separation, 4),
+        spread_penalty=round(spread_penalty, 4),
+        whipsaw_penalty=round(whipsaw_penalty, 4),
+        freshness_penalty=round(freshness_penalty, 4),
+        overall=round(overall, 4),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Gate Decision — structured gate output with "why blocked" attribution
+# ---------------------------------------------------------------------------
+
+@dataclass
+class GateDecision:
+    """Structured output from any signal gate."""
+    action: str
+    size_scale: float = 1.0
+    blocked_by: str | None = None
+    detail: dict | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -95,14 +190,20 @@ def estimate_spread_from_order_book(
     return max(0.0, (best_ask - best_bid) / (2.0 * mid))
 
 
-def apply_ml_filter(signal_action: str, up_prob: float, buy_threshold: float, sell_threshold: float) -> str:
+def apply_ml_filter(signal_action: str, up_prob: float, buy_threshold: float, sell_threshold: float) -> GateDecision:
     if up_prob is None or np.isnan(up_prob):
-        return signal_action
+        return GateDecision(action=signal_action)
     if signal_action == "buy" and up_prob < buy_threshold:
-        return "hold"
+        return GateDecision(
+            action="hold", blocked_by="ml_filter_buy",
+            detail={"up_prob": float(up_prob), "threshold": buy_threshold},
+        )
     if signal_action == "sell" and up_prob > sell_threshold:
-        return "hold"
-    return signal_action
+        return GateDecision(
+            action="hold", blocked_by="ml_filter_sell",
+            detail={"up_prob": float(up_prob), "threshold": sell_threshold},
+        )
+    return GateDecision(action=signal_action)
 
 
 def edge_gate(
@@ -113,7 +214,7 @@ def edge_gate(
     min_edge_multiple: float = 1.5,
     forecast_expected_return: float | None = None,
     estimated_spread: float = 0.0,
-) -> str:
+) -> GateDecision:
     """Block entries where the expected move is insufficient relative to friction.
 
     Total friction = round-trip fees + round-trip spread.
@@ -125,7 +226,7 @@ def edge_gate(
     4. If spread alone exceeds ATR/3, conditions are too illiquid
     """
     if action == "hold":
-        return action
+        return GateDecision(action=action)
 
     round_trip_fees = 2.0 * fee_rate
     round_trip_spread = 2.0 * estimated_spread
@@ -136,30 +237,42 @@ def edge_gate(
             "EDGE_GATE: ATR %.4f < %.4f (1.5x friction: fees=%.4f spread=%.4f) -> hold",
             atr_pct, total_friction * 1.5, round_trip_fees, round_trip_spread,
         )
-        return "hold"
+        return GateDecision(
+            action="hold", blocked_by="edge_gate_atr_low",
+            detail={"atr_pct": atr_pct, "required": total_friction * 1.5},
+        )
 
     if take_profit_pct > 0 and take_profit_pct < total_friction * min_edge_multiple:
         logger.debug(
             "EDGE_GATE: TP %.4f < %.4f (%.1fx friction) -> hold",
             take_profit_pct, total_friction * min_edge_multiple, min_edge_multiple,
         )
-        return "hold"
+        return GateDecision(
+            action="hold", blocked_by="edge_gate_tp_low",
+            detail={"tp": take_profit_pct, "required": total_friction * min_edge_multiple},
+        )
 
     if forecast_expected_return is not None and abs(forecast_expected_return) < total_friction:
         logger.debug(
             "EDGE_GATE: forecast_ret %.4f < %.4f (friction) -> hold",
             abs(forecast_expected_return), total_friction,
         )
-        return "hold"
+        return GateDecision(
+            action="hold", blocked_by="edge_gate_forecast_low",
+            detail={"forecast": abs(forecast_expected_return), "friction": total_friction},
+        )
 
     if estimated_spread > 0 and atr_pct > 0 and estimated_spread > atr_pct / 3:
         logger.debug(
             "EDGE_GATE: spread %.4f > ATR/3 %.4f (illiquid) -> hold",
             estimated_spread, atr_pct / 3,
         )
-        return "hold"
+        return GateDecision(
+            action="hold", blocked_by="edge_gate_illiquid",
+            detail={"spread": estimated_spread, "atr_third": atr_pct / 3},
+        )
 
-    return action
+    return GateDecision(action=action)
 
 
 _REGIME_QUALITY_ADJUSTMENTS: dict[str, dict[str, float]] = {
@@ -168,6 +281,25 @@ _REGIME_QUALITY_ADJUSTMENTS: dict[str, dict[str, float]] = {
     "volatile":      {"final_mult": 1.20, "tech_mult": 1.10},
     "ranging":       {"final_mult": 1.00, "tech_mult": 1.25},
 }
+
+
+def get_regime_quality_adjustments(regime: str | None) -> dict[str, float]:
+    """Get quality gate multipliers for a regime.
+
+    Prefers values from RegimeConfig (if available), falling back to
+    the static dict above. This bridges the transition from hardcoded
+    to config-driven adjustments.
+    """
+    if not regime:
+        return {}
+    try:
+        from hogan_bot.config import DEFAULT_REGIME_CONFIGS
+        rc = DEFAULT_REGIME_CONFIGS.get(regime)
+        if rc is not None:
+            return {"final_mult": rc.quality_final_mult, "tech_mult": rc.quality_tech_mult}
+    except Exception:
+        pass
+    return _REGIME_QUALITY_ADJUSTMENTS.get(regime, {})
 
 
 def entry_quality_gate(
@@ -182,49 +314,50 @@ def entry_quality_gate(
     min_tech_confidence: float = 0.4,
     min_regime_confidence: float = 0.5,
     max_whipsaws: int = 3,
-) -> tuple[str, float]:
-    """Block entries that don't meet quality thresholds. Returns (action, size_scale).
+) -> GateDecision:
+    """Block entries that don't meet quality thresholds.
 
     Thresholds are adjusted by regime:
     - Trending: relax final_confidence by 20% (trend-following needs less confirmation)
     - Volatile: tighten final_confidence by 20% (require stronger conviction)
     - Ranging: tighten tech_confidence by 25% (mean-revert needs stronger tech signal)
-
-    Checks (any failure blocks the trade):
-    1. Final confidence must exceed (regime-adjusted) minimum
-    2. Technical confidence must exceed (regime-adjusted) minimum
-    3. Regime confidence must be sufficient (blocks ambiguous regimes)
-    4. Recent whipsaw count must be below threshold (reduces size or blocks)
     """
     if action == "hold":
-        return action, 1.0
+        return GateDecision(action=action)
 
-    adj = _REGIME_QUALITY_ADJUSTMENTS.get(regime or "", {})
+    adj = get_regime_quality_adjustments(regime)
     eff_min_final = min_final_confidence * adj.get("final_mult", 1.0)
     eff_min_tech = min_tech_confidence * adj.get("tech_mult", 1.0)
-
-    size_scale = 1.0
 
     if final_confidence is not None and final_confidence < eff_min_final:
         logger.debug(
             "QUALITY_GATE: final_conf %.3f < %.3f (regime=%s) -> hold",
             final_confidence, eff_min_final, regime or "none",
         )
-        return "hold", 1.0
+        return GateDecision(
+            action="hold", blocked_by="quality_gate_final_conf",
+            detail={"value": final_confidence, "required": eff_min_final, "regime": regime},
+        )
 
     if tech_confidence is not None and tech_confidence < eff_min_tech:
         logger.debug(
             "QUALITY_GATE: tech_conf %.3f < %.3f (regime=%s) -> hold",
             tech_confidence, eff_min_tech, regime or "none",
         )
-        return "hold", 1.0
+        return GateDecision(
+            action="hold", blocked_by="quality_gate_tech_conf",
+            detail={"value": tech_confidence, "required": eff_min_tech, "regime": regime},
+        )
 
     if regime_confidence is not None and regime_confidence < min_regime_confidence:
         logger.debug(
             "QUALITY_GATE: regime_conf %.3f < %.3f -> hold",
             regime_confidence, min_regime_confidence,
         )
-        return "hold", 1.0
+        return GateDecision(
+            action="hold", blocked_by="quality_gate_regime_conf",
+            detail={"value": regime_confidence, "required": min_regime_confidence},
+        )
 
     if recent_whipsaw_count >= max_whipsaws:
         scale = max(0.25, 1.0 - (recent_whipsaw_count - max_whipsaws + 1) * 0.25)
@@ -233,10 +366,13 @@ def entry_quality_gate(
             recent_whipsaw_count, max_whipsaws, scale,
         )
         if scale <= 0.25:
-            return "hold", 1.0
-        size_scale = scale
+            return GateDecision(
+                action="hold", blocked_by="quality_gate_whipsaw",
+                detail={"whipsaws": recent_whipsaw_count, "max": max_whipsaws},
+            )
+        return GateDecision(action=action, size_scale=scale)
 
-    return action, size_scale
+    return GateDecision(action=action)
 
 
 def ranging_gate(
@@ -248,43 +384,64 @@ def ranging_gate(
     recent_whipsaw_count: int = 0,
     ml_separation_min: float = 0.12,
     whipsaw_block_threshold: int = 2,
-) -> tuple[str, float]:
-    """Extra protections for ranging markets. Returns (action, size_scale).
+    soft_mode: bool = True,
+) -> GateDecision:
+    """Extra protections for ranging markets.
 
-    Only active when regime == "ranging". Checks:
+    Only active when regime == "ranging". When ``soft_mode=True`` (default),
+    near-miss checks shrink size to 0.5x instead of always blocking.
+
+    Checks:
     1. Tech action must agree with final action (sentiment/macro alone cannot carry)
     2. ML probability must be far enough from 0.5 (strong model conviction)
     3. Recent whipsaws above threshold block new entries entirely
     """
     if action == "hold" or regime != "ranging":
-        return action, 1.0
+        return GateDecision(action=action)
 
-    # 1. Require technical agent agrees with the final direction
     if tech_action is not None and tech_action != action:
-        logger.debug(
-            "RANGING_GATE: tech=%s != action=%s -> hold", tech_action, action,
+        if soft_mode:
+            logger.debug("RANGING_GATE: tech=%s != action=%s -> size 0.5x", tech_action, action)
+            return GateDecision(
+                action=action, size_scale=0.5,
+                blocked_by=None,
+                detail={"tech_action": tech_action, "final_action": action, "soft": True},
+            )
+        logger.debug("RANGING_GATE: tech=%s != action=%s -> hold", tech_action, action)
+        return GateDecision(
+            action="hold", blocked_by="ranging_gate_tech_disagree",
+            detail={"tech_action": tech_action, "final_action": action},
         )
-        return "hold", 1.0
 
-    # 2. Require ML probability separated from indifference zone
     if up_prob is not None:
         separation = abs(up_prob - 0.5)
         if separation < ml_separation_min:
+            if soft_mode and separation >= ml_separation_min * 0.6:
+                logger.debug("RANGING_GATE: ML separation %.3f marginal -> size 0.5x", separation)
+                return GateDecision(
+                    action=action, size_scale=0.5,
+                    detail={"separation": separation, "required": ml_separation_min, "soft": True},
+                )
             logger.debug(
                 "RANGING_GATE: ML separation %.3f < %.3f -> hold",
                 separation, ml_separation_min,
             )
-            return "hold", 1.0
+            return GateDecision(
+                action="hold", blocked_by="ranging_gate_ml_indifference",
+                detail={"separation": separation, "required": ml_separation_min},
+            )
 
-    # 3. Whipsaw cooldown: ranging + recent flips = suppress
     if recent_whipsaw_count >= whipsaw_block_threshold:
         logger.debug(
             "RANGING_GATE: whipsaws %d >= %d in ranging -> hold",
             recent_whipsaw_count, whipsaw_block_threshold,
         )
-        return "hold", 1.0
+        return GateDecision(
+            action="hold", blocked_by="ranging_gate_whipsaw",
+            detail={"whipsaws": recent_whipsaw_count, "threshold": whipsaw_block_threshold},
+        )
 
-    return action, 1.0
+    return GateDecision(action=action)
 
 
 def ml_confidence(up_prob: float) -> float:

@@ -41,6 +41,7 @@ from hogan_bot.data_engine import CandleEvent, LiveDataEngine, CandleRingBuffer
 from hogan_bot.decision import (
     apply_ml_filter, edge_gate, entry_quality_gate, ml_confidence,
     estimate_spread_from_candles, ranging_gate,
+    compute_quality_components, QualityComponents, GateDecision,
 )
 from hogan_bot.execution import (
     PaperExecution, LiveExecution, SmartExecution, SmartExecConfig,
@@ -54,6 +55,31 @@ from hogan_bot.expectancy import ExpectancyTracker
 from hogan_bot.storage import get_connection, record_equity, upsert_position, open_paper_trade, close_paper_trade, log_decision
 
 logger = logging.getLogger(__name__)
+
+
+def _compute_data_ages(conn) -> dict[str, float]:
+    """Compute hours since last update for each data source in the DB."""
+    if conn is None:
+        return {}
+    ages: dict[str, float] = {}
+    now_s = time.time()
+    for table, source_key in (
+        ("onchain_metrics", "onchain_db"),
+        ("derivatives_metrics", "derivatives_db"),
+        ("sentiment_scores", "sentiment_db"),
+        ("macro_indicators", "macro_db"),
+        ("intermarket_prices", "intermarket_db"),
+    ):
+        try:
+            row = conn.execute(
+                f"SELECT MAX(ts_ms) FROM {table}"
+            ).fetchone()
+            if row and row[0]:
+                age_h = (now_s - row[0] / 1000.0) / 3600.0
+                ages[source_key] = max(0.0, age_h)
+        except Exception:
+            pass
+    return ages
 
 
 @dataclass
@@ -72,10 +98,11 @@ class SignalResult:
     forecast_ret: float | None = None
     agent_weights: dict | None = None
     feature_freshness: dict | None = None
-    # Explicit score decomposition for audit trail
-    direction_score: float = 0.0   # raw directional conviction [-1, 1]
-    quality_score: float = 0.0     # setup cleanliness [0, 1] — gates passed
-    size_score: float = 0.0        # position sizing factor [0, 1]
+    direction_score: float = 0.0
+    quality_score: float = 0.0
+    size_score: float = 0.0
+    quality_components: QualityComponents | None = None
+    block_reasons: list[str] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +122,8 @@ class SignalEvaluator:
         candles: pd.DataFrame,
         equity: float,
         recent_whipsaw_count: int = 0,
+        *,
+        mtf_candles: dict[str, pd.DataFrame] | None = None,
     ) -> SignalResult:
         """Returns a SignalResult with action, sizing, and rich metadata."""
         cfg = symbol_config(self.config, symbol)
@@ -134,13 +163,34 @@ class SignalEvaluator:
         conf_scale = result.confidence or 1.0
         action = result.action
 
+        block_reasons: list[str] = []
+
         if cfg.use_ml_filter and self.ml_model is not None:
+            if cfg.use_mtf_extended and mtf_candles:
+                try:
+                    from hogan_bot.ml import build_feature_row_extended
+                    _mtf_features = build_feature_row_extended(
+                        candles_5m=mtf_candles.get("5m"),
+                        candles_1h=candles,
+                        candles_15m=mtf_candles.get("15m"),
+                        candles_10m=mtf_candles.get("10m"),
+                        candles_30m=mtf_candles.get("30m"),
+                        conn=self.pipeline.conn,
+                        symbol=symbol,
+                        extended_mtf=True,
+                    )
+                    if _mtf_features is not None:
+                        logger.debug("MTF extended features computed: %d values", len(_mtf_features))
+                except Exception as exc:
+                    logger.debug("MTF features fallback: %s", exc)
             up_prob = predict_up_probability(candles, self.ml_model)
-            action = apply_ml_filter(action, up_prob, eff_ml_buy, eff_ml_sell)
+            ml_gate = apply_ml_filter(action, up_prob, eff_ml_buy, eff_ml_sell)
+            action = ml_gate.action
+            if ml_gate.blocked_by:
+                block_reasons.append(ml_gate.blocked_by)
             if cfg.ml_confidence_sizing:
                 conf_scale = ml_confidence(up_prob) * (result.confidence or 1.0)
 
-        # Fee-aware edge gate (uses regime-adjusted take_profit)
         forecast_ret = None
         if result.forecast is not None and result.forecast.confidence > 0.2:
             er = result.forecast.expected_return
@@ -150,7 +200,7 @@ class SignalEvaluator:
                 forecast_ret = abs(float(er))
         atr_pct = result.stop_distance_pct / max(getattr(cfg, "atr_stop_multiplier", 2.5), 1.0)
         spread_est = estimate_spread_from_candles(candles)
-        action = edge_gate(
+        edge_gd = edge_gate(
             action,
             atr_pct=atr_pct,
             take_profit_pct=eff_tp,
@@ -159,10 +209,12 @@ class SignalEvaluator:
             forecast_expected_return=forecast_ret,
             estimated_spread=spread_est,
         )
+        action = edge_gd.action
+        if edge_gd.blocked_by:
+            block_reasons.append(edge_gd.blocked_by)
 
-        # Hard entry quality gate (thresholds from config)
         tech_conf = result.tech.confidence if result.tech else None
-        action, quality_scale = entry_quality_gate(
+        quality_gd = entry_quality_gate(
             action,
             final_confidence=result.confidence,
             tech_confidence=tech_conf,
@@ -174,15 +226,90 @@ class SignalEvaluator:
             min_regime_confidence=cfg.min_regime_confidence,
             max_whipsaws=cfg.max_whipsaws,
         )
+        action = quality_gd.action
+        quality_scale = quality_gd.size_scale
+        if quality_gd.blocked_by:
+            block_reasons.append(quality_gd.blocked_by)
 
-        # Ranging-specific extra protections
         tech_action = result.tech.action if result.tech else None
-        action, ranging_scale = ranging_gate(
+        ranging_gd = ranging_gate(
             action,
             regime=regime_name,
             tech_action=tech_action,
             up_prob=up_prob,
             recent_whipsaw_count=recent_whipsaw_count,
+        )
+        action = ranging_gd.action
+        ranging_scale = ranging_gd.size_scale
+        if ranging_gd.blocked_by:
+            block_reasons.append(ranging_gd.blocked_by)
+
+        # MTF ensemble: daily bias + 30m confirmation
+        _mtf_conf_mult = 1.0
+        if cfg.use_mtf_ensemble and action != "hold" and mtf_candles:
+            try:
+                from hogan_bot.mtf_ensemble import evaluate_mtf
+                _daily_df = None
+                if self.pipeline.conn is not None:
+                    try:
+                        _daily_df = pd.read_sql_query(
+                            "SELECT * FROM candles WHERE symbol=? AND timeframe='1d' ORDER BY ts_ms",
+                            self.pipeline.conn, params=(symbol,),
+                        )
+                    except Exception:
+                        pass
+                _m30_df = mtf_candles.get(cfg.mtf_m30_timeframe)
+                _mtf_bias = evaluate_mtf(
+                    daily_candles=_daily_df,
+                    hourly_action=action,
+                    m30_candles=_m30_df,
+                    unconfirmed_scale=cfg.mtf_unconfirmed_scale,
+                )
+                action = _mtf_bias.final_action
+                _mtf_conf_mult = _mtf_bias.confidence_mult
+                if _mtf_bias.final_action == "hold" and _mtf_bias.hourly_action != "hold":
+                    block_reasons.append(f"mtf_daily_{_mtf_bias.daily_trend}")
+                logger.debug("MTF_ENSEMBLE: daily=%s m30_conf=%s action=%s mult=%.2f",
+                             _mtf_bias.daily_trend, _mtf_bias.m30_confirms, action, _mtf_conf_mult)
+            except Exception as exc:
+                logger.debug("MTF ensemble error: %s", exc)
+
+        # Feature staleness check with live policy
+        _freshness: dict | None = None
+        _freshness_scale = 1.0
+        try:
+            from hogan_bot.ml import build_feature_row_checked
+            _data_ages = _compute_data_ages(self.pipeline.conn)
+            feat_result = build_feature_row_checked(
+                candles, db_conn=self.pipeline.conn, data_ages_hours=_data_ages,
+            )
+            if feat_result is not None:
+                _freshness = feat_result.freshness_summary
+                crit_stale = _freshness.get("critical_stale_count", 0)
+                all_stale = _freshness.get("stale_count", 0)
+                if crit_stale >= 2 and action != "hold":
+                    logger.warning("FRESHNESS_BLOCK %s: %d critical stale features", symbol, crit_stale)
+                    action = "hold"
+                    block_reasons.append("freshness_critical_block")
+                elif (crit_stale >= 1 or all_stale >= 4):
+                    _freshness_scale = 0.75
+                    logger.info("FRESHNESS_PENALTY %s: scale=0.75 (crit=%d all=%d)", symbol, crit_stale, all_stale)
+                if feat_result.has_stale:
+                    logger.warning("STALE_FEATURES %s: %s", symbol, feat_result.stale_features)
+        except Exception:
+            pass
+
+        _qc = compute_quality_components(
+            final_confidence=result.confidence,
+            tech_confidence=tech_conf,
+            regime_confidence=regime_conf,
+            up_prob=up_prob,
+            estimated_spread=spread_est,
+            atr_pct=atr_pct,
+            recent_whipsaw_count=recent_whipsaw_count,
+            freshness_summary=_freshness,
+            ranging_scale=ranging_scale,
+            quality_gate_scale=quality_scale,
         )
 
         size = calculate_position_size(
@@ -191,25 +318,13 @@ class SignalEvaluator:
             stop_distance_pct=result.stop_distance_pct,
             max_risk_per_trade=cfg.max_risk_per_trade,
             max_allocation_pct=cfg.aggressive_allocation,
-            confidence_scale=conf_scale * quality_scale * ranging_scale * eff_position_scale,
+            confidence_scale=conf_scale * quality_scale * ranging_scale * eff_position_scale * _freshness_scale * _mtf_conf_mult,
             fee_rate=cfg.fee_rate,
         )
 
-        # Feature staleness check (observability, does not block trades)
-        _freshness: dict | None = None
-        try:
-            from hogan_bot.ml import build_feature_row_checked
-            feat_result = build_feature_row_checked(candles, db_conn=self.pipeline.conn)
-            if feat_result is not None and feat_result.has_stale:
-                _freshness = feat_result.freshness_summary
-                logger.warning("STALE_FEATURES %s: %s", symbol, feat_result.stale_features)
-        except Exception:
-            pass
-
-        # Compute explicit score decomposition
         _direction_score = getattr(result, "combined_score", 0.0)
-        _quality_score = quality_scale * ranging_scale
-        _size_score = min(1.0, conf_scale * _quality_score * eff_position_scale)
+        _quality_score = _qc.overall
+        _size_score = min(1.0, conf_scale * quality_scale * ranging_scale * eff_position_scale)
 
         if action != "hold":
             logger.info(
@@ -235,6 +350,8 @@ class SignalEvaluator:
             direction_score=_direction_score,
             quality_score=_quality_score,
             size_score=_size_score,
+            quality_components=_qc,
+            block_reasons=block_reasons if block_reasons else None,
         )
 
 
@@ -333,6 +450,16 @@ async def run_event_loop(
     _expectancy = ExpectancyTracker()
     buffer = CandleRingBuffer(maxlen=config.ohlcv_limit)
 
+    _perf_tracker = None
+    try:
+        from hogan_bot.performance_tracker import PerformanceTracker
+        _perf_tracker = PerformanceTracker(db_path=config.db_path)
+        logger.info("PerformanceTracker initialized (shadow mode)")
+    except Exception as exc:
+        logger.debug("PerformanceTracker unavailable: %s", exc)
+    _perf_trade_count = 0
+    _PERF_PROPOSAL_INTERVAL = 50
+
     # Parity with backtest: max_hold_bars, loss_cooldown, slippage
     max_hold_bars, loss_cooldown_bars = effective_hold_cooldown_bars(config, config.timeframe)
     slippage_bps = float(os.getenv("HOGAN_SLIPPAGE_BPS", "5.0"))
@@ -355,12 +482,15 @@ async def run_event_loop(
     except Exception:
         _has_metrics = False
 
+    _mtf_timeframes = config.mtf_timeframes or []
+    _all_timeframes = [config.timeframe] + [tf for tf in _mtf_timeframes if tf != config.timeframe]
+
     if use_oanda and _oanda_client is not None:
         from hogan_bot.data_engine import OandaDataEngine
         engine = OandaDataEngine(
             client=_oanda_client,
             symbols=config.symbols,
-            timeframes=[config.timeframe],
+            timeframes=_all_timeframes,
             ring_buffer_len=config.ohlcv_limit,
         )
         logger.info("Using OandaDataEngine for %s", config.symbols)
@@ -370,9 +500,11 @@ async def run_event_loop(
             api_key=config.kraken_api_key or "",
             api_secret=config.kraken_api_secret or "",
             symbols=config.symbols,
-            timeframes=[config.timeframe],
+            timeframes=_all_timeframes,
             ring_buffer_len=config.ohlcv_limit,
         )
+    if _mtf_timeframes:
+        logger.info("MTF candle subscriptions: %s (primary=%s)", _all_timeframes, config.timeframe)
 
     event_count = 0
     _signal_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -478,7 +610,13 @@ async def run_event_loop(
                     if executed:
                         fee = qty * sell_px * config.fee_rate
                         if not allow_live:
-                            close_paper_trade(conn, exit_symbol, "long", sell_px, fee, now_ms, close_reason=reason)
+                            close_paper_trade(
+                                conn, exit_symbol, "long", sell_px, fee, now_ms, close_reason=reason,
+                                max_adverse_pct=mae_pct, max_favorable_pct=mfe_pct,
+                                bars_held=bars_held,
+                                exit_regime=_current_regime.get(exit_symbol),
+                                entry_atr_pct=getattr(pos, "entry_atr_pct", None),
+                            )
                         gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
                         net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                         _expectancy.record_trade(
@@ -491,6 +629,19 @@ async def run_event_loop(
                             hold_bars=bars_held,
                             close_reason=reason,
                         )
+                        if _perf_tracker:
+                            try:
+                                _perf_tracker.record_trade_outcome(
+                                    symbol=exit_symbol,
+                                    regime=_current_regime.get(exit_symbol, "unknown"),
+                                    tech_action="sell", tech_confidence=0.0,
+                                    sent_bias="neutral", sent_strength=0.0,
+                                    macro_regime="unknown",
+                                    realized_pnl=gross_pnl_pct,
+                                )
+                                _perf_trade_count += 1
+                            except Exception:
+                                pass
                         is_loss = sell_px < avg_entry
                         if is_loss and loss_cooldown_bars > 0:
                             _cooldown_remaining = loss_cooldown_bars
@@ -514,7 +665,13 @@ async def run_event_loop(
                     if executed:
                         fee = qty * cover_px * config.fee_rate
                         if not allow_live:
-                            close_paper_trade(conn, exit_symbol, "short", cover_px, fee, now_ms, close_reason=reason)
+                            close_paper_trade(
+                                conn, exit_symbol, "short", cover_px, fee, now_ms, close_reason=reason,
+                                max_adverse_pct=mae_pct, max_favorable_pct=mfe_pct,
+                                bars_held=bars_held,
+                                exit_regime=_current_regime.get(exit_symbol),
+                                entry_atr_pct=getattr(pos, "entry_atr_pct", None),
+                            )
                         gross_pnl_pct = (avg_entry - cover_px) / avg_entry if avg_entry else 0
                         net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                         _expectancy.record_trade(
@@ -527,6 +684,19 @@ async def run_event_loop(
                             hold_bars=bars_held,
                             close_reason=reason,
                         )
+                        if _perf_tracker:
+                            try:
+                                _perf_tracker.record_trade_outcome(
+                                    symbol=exit_symbol,
+                                    regime=_current_regime.get(exit_symbol, "unknown"),
+                                    tech_action="buy", tech_confidence=0.0,
+                                    sent_bias="neutral", sent_strength=0.0,
+                                    macro_regime="unknown",
+                                    realized_pnl=gross_pnl_pct,
+                                )
+                                _perf_trade_count += 1
+                            except Exception:
+                                pass
                     if notifier and executed:
                         notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason,
                                                       "price": cover_px, "qty": qty})
@@ -555,8 +725,16 @@ async def run_event_loop(
 
             # Per-symbol signal evaluation (isolated — one symbol failure won't break others)
             try:
-                sig = evaluator.evaluate(symbol, candles, equity,
-                                         recent_whipsaw_count=_whipsaw_counts.get(symbol, 0))
+                _mtf_data: dict[str, pd.DataFrame] = {}
+                for _mtf_tf in _mtf_timeframes:
+                    _mtf_df = buffer.to_df(symbol, _mtf_tf)
+                    if not _mtf_df.empty and len(_mtf_df) >= 10:
+                        _mtf_data[_mtf_tf] = _mtf_df
+                sig = evaluator.evaluate(
+                    symbol, candles, equity,
+                    recent_whipsaw_count=_whipsaw_counts.get(symbol, 0),
+                    mtf_candles=_mtf_data if _mtf_data else None,
+                )
                 action = sig.action
                 size = sig.size
                 up_prob = sig.up_prob
@@ -600,6 +778,8 @@ async def run_event_loop(
                     direction_score=sig.direction_score,
                     quality_score=sig.quality_score,
                     size_score=sig.size_score,
+                    quality_components_json=sig.quality_components.to_json() if sig.quality_components else None,
+                    block_reasons=sig.block_reasons,
                 )
             except Exception as exc:
                 logger.debug("Decision log error: %s", exc)
@@ -714,7 +894,15 @@ async def run_event_loop(
                         now_ms = int(time.time() * 1000)
                         exit_fee = sell_qty * sell_px * config.fee_rate
                         if not allow_live:
-                            close_paper_trade(conn, symbol, "long", sell_px, exit_fee, now_ms, close_reason="signal")
+                            _sig_bars = getattr(pos, "bars_held", 0)
+                            close_paper_trade(
+                                conn, symbol, "long", sell_px, exit_fee, now_ms, close_reason="signal",
+                                max_adverse_pct=getattr(pos, "max_adverse_pct", None),
+                                max_favorable_pct=getattr(pos, "max_favorable_pct", None),
+                                bars_held=_sig_bars,
+                                exit_regime=_current_regime.get(symbol),
+                                entry_atr_pct=getattr(pos, "entry_atr_pct", None),
+                            )
                         gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
                         net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                         bars_held = getattr(pos, "bars_held", 0)
@@ -728,6 +916,19 @@ async def run_event_loop(
                             hold_bars=bars_held,
                             close_reason="signal",
                         )
+                        if _perf_tracker:
+                            try:
+                                _perf_tracker.record_trade_outcome(
+                                    symbol=symbol,
+                                    regime=_current_regime.get(symbol, "unknown"),
+                                    tech_action=action, tech_confidence=sig.tech_confidence or 0.0,
+                                    sent_bias="neutral", sent_strength=0.0,
+                                    macro_regime="unknown",
+                                    realized_pnl=gross_pnl_pct,
+                                )
+                                _perf_trade_count += 1
+                            except Exception:
+                                pass
                         _consecutive_exit_signals[symbol] = 0
                         is_loss = sell_px < avg_entry
                         if is_loss and loss_cooldown_bars > 0:
@@ -773,6 +974,23 @@ async def run_event_loop(
                         "  regime=%s n=%d win=%.1f%% exp=%.4f%%",
                         regime, stats["n"], stats["win_rate"] * 100, stats["expectancy_pct"],
                     )
+
+            # Shadow-mode weight proposals from PerformanceTracker
+            if (
+                _perf_tracker
+                and _perf_trade_count > 0
+                and _perf_trade_count % _PERF_PROPOSAL_INTERVAL == 0
+            ):
+                try:
+                    proposal = _perf_tracker.propose_weight_update()
+                    if proposal is not None:
+                        logger.info(
+                            "PERF_TRACKER weight proposal (shadow): %s",
+                            {r: {k: round(v, 3) for k, v in w.items()} for r, w in proposal.regime_weights.items()}
+                            if hasattr(proposal, "regime_weights") else str(proposal),
+                        )
+                except Exception as exc:
+                    logger.debug("PerformanceTracker proposal error: %s", exc)
 
             event_count += 1
 

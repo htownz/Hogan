@@ -427,11 +427,17 @@ class MetaWeigher:
         buy_threshold: float = 0.25,
         sell_threshold: float = -0.25,
         regime_configs: dict | None = None,
+        learned_regime_weights: dict[str, dict[str, float]] | None = None,
+        learned_blend_ratio: float = 0.30,
+        min_learned_samples: int = 30,
     ) -> None:
         self._weights = weights or _DEFAULT_WEIGHTS.copy()
         self._buy_threshold = buy_threshold
         self._sell_threshold = sell_threshold
         self._regime_configs = regime_configs
+        self._learned_regime_weights = learned_regime_weights or {}
+        self._learned_blend_ratio = learned_blend_ratio
+        self._min_learned_samples = min_learned_samples
 
     def _regime_cfg(self, regime: str | None):
         """Return the RegimeConfig for *regime*, or None."""
@@ -459,14 +465,29 @@ class MetaWeigher:
 
         rc = self._regime_cfg(regime)
 
-        # Regime-adaptive weights driven by RegimeConfig deltas
         w = dict(self._weights)
         if rc is not None:
             w["technical"] = max(0.10, w["technical"] + rc.meta_tech_delta)
             w["sentiment"] = max(0.10, w["sentiment"] + rc.meta_sent_delta)
             w["macro"] = max(0.10, w["macro"] + rc.meta_macro_delta)
 
-        # Normalize weights — if all zero, fall back to equal weights
+        # Blend learned weights if available for this regime
+        if regime and regime in self._learned_regime_weights:
+            lw = self._learned_regime_weights[regime]
+            sample_count = lw.get("_sample_count", 0)
+            if sample_count >= self._min_learned_samples:
+                blend = self._learned_blend_ratio
+                for k in ("technical", "sentiment", "macro"):
+                    if k in lw:
+                        manual_v = w.get(k, 0.0)
+                        learned_v = lw[k]
+                        w[k] = (1.0 - blend) * manual_v + blend * learned_v
+                        if abs(learned_v - manual_v) > 0.15:
+                            logger.debug(
+                                "LEARNED_WEIGHTS %s: %s manual=%.3f learned=%.3f blended=%.3f",
+                                regime, k, manual_v, learned_v, w[k],
+                            )
+
         total = sum(w.values())
         if total > 0:
             w = {k: v / total for k, v in w.items()}
@@ -612,11 +633,23 @@ class AgentPipeline:
             }
 
         from hogan_bot.config import DEFAULT_REGIME_CONFIGS
+        _learned_weights: dict[str, dict[str, float]] = {}
+        if getattr(config, "use_learned_weights", False) and performance_tracker is not None:
+            try:
+                for regime_name, rp in getattr(performance_tracker, "_regime_data", {}).items():
+                    if hasattr(rp, "agent_scores") and rp.trade_count >= 30:
+                        _learned_weights[regime_name] = {
+                            **rp.agent_scores,
+                            "_sample_count": rp.trade_count,
+                        }
+            except Exception:
+                pass
         self.meta = MetaWeigher(
             weights=weights,
             buy_threshold=getattr(config, "meta_buy_threshold", 0.25),
             sell_threshold=getattr(config, "meta_sell_threshold", -0.25),
             regime_configs=DEFAULT_REGIME_CONFIGS,
+            learned_regime_weights=_learned_weights if _learned_weights else None,
         )
         self.rag_retriever = rag_retriever
         self.perf_tracker = performance_tracker

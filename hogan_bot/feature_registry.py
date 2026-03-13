@@ -250,6 +250,9 @@ def get_feature_columns(use_champion: bool | None = None) -> list[str]:
 # Staleness checking
 # ---------------------------------------------------------------------------
 
+_CRITICAL_SOURCES = frozenset({"candle", "derived", "derivatives_db"})
+
+
 @dataclass
 class FeatureResult:
     """Feature vector with staleness metadata."""
@@ -262,14 +265,27 @@ class FeatureResult:
         return len(self.stale_features) > 0
 
     @property
-    def freshness_summary(self) -> dict[str, str]:
-        """Compact dict suitable for JSON logging."""
+    def critical_stale_count(self) -> int:
+        count = 0
+        for name in self.stale_features:
+            meta = FEATURE_REGISTRY.get(name)
+            if meta and meta.source in _CRITICAL_SOURCES:
+                count += 1
+        return count
+
+    @property
+    def freshness_summary(self) -> dict:
+        """Compact dict suitable for JSON logging and QualityComponents."""
         out: dict[str, str] = {}
         for name in self.stale_features:
             out[name] = "stale"
         for name in self.missing_features:
             out[name] = "missing"
-        return out
+        return {
+            **out,
+            "stale_count": len(self.stale_features),
+            "critical_stale_count": self.critical_stale_count,
+        }
 
 
 def check_staleness(
