@@ -216,13 +216,14 @@ def edge_gate(
     min_edge_multiple: float = 1.5,
     forecast_expected_return: float | None = None,
     estimated_spread: float = 0.0,
+    atr_friction_multiple: float = 0.8,
 ) -> GateDecision:
     """Block entries where the expected move is insufficient relative to friction.
 
     Total friction = round-trip fees + round-trip spread.
 
     Checks four conditions (any failure -> hold):
-    1. ATR must exceed 1.5x total friction (enough volatility to move)
+    1. ATR must exceed atr_friction_multiple * total friction (enough volatility)
     2. Take-profit target must exceed min_edge_multiple * total friction
     3. If forecast available, expected return must exceed total friction
     4. If spread alone exceeds ATR/3, conditions are too illiquid
@@ -234,14 +235,15 @@ def edge_gate(
     round_trip_spread = 2.0 * estimated_spread
     total_friction = round_trip_fees + round_trip_spread
 
-    if atr_pct < total_friction * 1.5:
+    if atr_pct < total_friction * atr_friction_multiple:
         logger.debug(
-            "EDGE_GATE: ATR %.4f < %.4f (1.5x friction: fees=%.4f spread=%.4f) -> hold",
-            atr_pct, total_friction * 1.5, round_trip_fees, round_trip_spread,
+            "EDGE_GATE: ATR %.4f < %.4f (%.1fx friction: fees=%.4f spread=%.4f) -> hold",
+            atr_pct, total_friction * atr_friction_multiple,
+            atr_friction_multiple, round_trip_fees, round_trip_spread,
         )
         return GateDecision(
             action="hold", blocked_by="edge_gate_atr_low",
-            detail={"atr_pct": atr_pct, "required": total_friction * 1.5},
+            detail={"atr_pct": atr_pct, "required": total_friction * atr_friction_multiple},
         )
 
     if take_profit_pct > 0 and take_profit_pct < total_friction * min_edge_multiple:

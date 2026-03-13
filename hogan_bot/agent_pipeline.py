@@ -550,13 +550,15 @@ class MetaWeigher:
 
         confidence = min(1.0, abs(combined_score))
 
-        # Regime-specific sub-strategy gates
+        # Regime-specific sub-strategy gates — light-touch; the downstream ML
+        # filter, edge gate, quality gate, and ranging gate handle fine-grained
+        # quality filtering.  These thresholds only catch very-low-conviction noise.
         if regime == "ranging" and action != "hold":
-            if tech.action == action and tech.confidence < 0.6:
+            if tech.action == action and tech.confidence < 0.15:
                 action = "hold"
                 confidence *= 0.5
         elif regime == "volatile" and action != "hold":
-            if tech.confidence < 0.5:
+            if tech.confidence < 0.15:
                 action = "hold"
                 confidence *= 0.6
         elif regime not in ("trending_up", "trending_down", "volatile", "ranging", None):

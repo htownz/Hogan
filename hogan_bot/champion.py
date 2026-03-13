@@ -39,7 +39,11 @@ class ChampionLocks:
     use_fvg: bool = False
 
     signal_mode: str = "any"
-    signal_min_vote_margin: int = 2
+    # With all extra voters disabled (EMA clouds, FVG, ICT, RL), only MA
+    # crossover/trend remain — a single voter.  Margin=2 is mathematically
+    # impossible with 1 voter; margin=1 lets the tech signal through and
+    # relies on the ML filter + edge gate + quality gate stack for protection.
+    signal_min_vote_margin: int = 1
 
     use_regime_detection: bool = True
     ml_confidence_sizing: bool = True
@@ -52,8 +56,10 @@ class ChampionLocks:
     exit_confirmation_bars: int = 2
     min_edge_multiple: float = 1.5
 
-    # Entry quality gate thresholds
-    min_final_confidence: float = 0.25
+    # Entry quality gate thresholds — tuned for single-agent contribution
+    # (sentiment/macro are usually neutral in practice, so the combined
+    # confidence from MetaWeigher is naturally lower than with 3 agents).
+    min_final_confidence: float = 0.08
     min_tech_confidence: float = 0.15
     min_regime_confidence: float = 0.30
     max_whipsaws: int = 3

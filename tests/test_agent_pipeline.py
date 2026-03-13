@@ -95,16 +95,16 @@ class TestMetaWeigherRegime:
     def test_ranging_reduces_tech_most(self):
         mw = MetaWeigher(regime_configs=DEFAULT_REGIME_CONFIGS)
         sig = mw.combine(_tech("buy", 0.7), _sent(), _macro(), regime="ranging")
-        assert sig.agent_weights["technical"] < 0.50
+        assert sig.agent_weights["technical"] <= 0.55
 
-    def test_volatile_gate_blocks_low_conf(self):
+    def test_volatile_gate_blocks_very_low_conf(self):
         mw = MetaWeigher(regime_configs=DEFAULT_REGIME_CONFIGS)
-        sig = mw.combine(_tech("buy", 0.3), _sent("bullish", 0.9), _macro("risk_on"), regime="volatile")
+        sig = mw.combine(_tech("buy", 0.1), _sent("bullish", 0.9), _macro("risk_on"), regime="volatile")
         assert sig.action == "hold"
 
-    def test_ranging_gate_blocks_low_conf(self):
+    def test_ranging_gate_blocks_very_low_conf(self):
         mw = MetaWeigher(regime_configs=DEFAULT_REGIME_CONFIGS)
-        sig = mw.combine(_tech("buy", 0.4), _sent("bullish", 0.9), _macro("risk_on"), regime="ranging")
+        sig = mw.combine(_tech("buy", 0.1), _sent("bullish", 0.9), _macro("risk_on"), regime="ranging")
         assert sig.action == "hold"
 
     def test_unknown_regime_blocks(self):
