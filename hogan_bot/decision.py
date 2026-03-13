@@ -239,6 +239,54 @@ def entry_quality_gate(
     return action, size_scale
 
 
+def ranging_gate(
+    action: str,
+    *,
+    regime: str | None = None,
+    tech_action: str | None = None,
+    up_prob: float | None = None,
+    recent_whipsaw_count: int = 0,
+    ml_separation_min: float = 0.12,
+    whipsaw_block_threshold: int = 2,
+) -> tuple[str, float]:
+    """Extra protections for ranging markets. Returns (action, size_scale).
+
+    Only active when regime == "ranging". Checks:
+    1. Tech action must agree with final action (sentiment/macro alone cannot carry)
+    2. ML probability must be far enough from 0.5 (strong model conviction)
+    3. Recent whipsaws above threshold block new entries entirely
+    """
+    if action == "hold" or regime != "ranging":
+        return action, 1.0
+
+    # 1. Require technical agent agrees with the final direction
+    if tech_action is not None and tech_action != action:
+        logger.debug(
+            "RANGING_GATE: tech=%s != action=%s -> hold", tech_action, action,
+        )
+        return "hold", 1.0
+
+    # 2. Require ML probability separated from indifference zone
+    if up_prob is not None:
+        separation = abs(up_prob - 0.5)
+        if separation < ml_separation_min:
+            logger.debug(
+                "RANGING_GATE: ML separation %.3f < %.3f -> hold",
+                separation, ml_separation_min,
+            )
+            return "hold", 1.0
+
+    # 3. Whipsaw cooldown: ranging + recent flips = suppress
+    if recent_whipsaw_count >= whipsaw_block_threshold:
+        logger.debug(
+            "RANGING_GATE: whipsaws %d >= %d in ranging -> hold",
+            recent_whipsaw_count, whipsaw_block_threshold,
+        )
+        return "hold", 1.0
+
+    return action, 1.0
+
+
 def ml_confidence(up_prob: float) -> float:
     """Return a position-size scaling factor in [0, 1] based on how far the
     predicted probability is from the indifferent 0.5 mark.

@@ -291,6 +291,9 @@ def _create_schema(conn: sqlite3.Connection) -> None:
     for _alt in (
         "ALTER TABLE paper_trades ADD COLUMN entry_decision_id INTEGER",
         "ALTER TABLE decision_log ADD COLUMN linked_trade_id TEXT",
+        "ALTER TABLE decision_log ADD COLUMN direction_score REAL",
+        "ALTER TABLE decision_log ADD COLUMN quality_score REAL",
+        "ALTER TABLE decision_log ADD COLUMN size_score REAL",
     ):
         try:
             conn.execute(_alt)
@@ -816,6 +819,9 @@ def log_decision(
     conf_scale: float | None = None,
     explanation: str | None = None,
     linked_trade_id: str | None = None,
+    direction_score: float | None = None,
+    quality_score: float | None = None,
+    size_score: float | None = None,
 ) -> int:
     """Insert a structured decision packet.  Returns the row id (decision_id)."""
     cur = conn.execute(
@@ -831,8 +837,9 @@ def log_decision(
             freshness_json,
             final_action, final_confidence, position_size,
             ml_up_prob, conf_scale, explanation,
-            linked_trade_id
-        ) VALUES (?,?,?, ?,?, ?,?, ?,?, ?, ?,?,?,?, ?,?,?,?,?, ?, ?,?,?, ?,?,?, ?)
+            linked_trade_id,
+            direction_score, quality_score, size_score
+        ) VALUES (?,?,?, ?,?, ?,?, ?,?, ?, ?,?,?,?, ?,?,?,?,?, ?, ?,?,?, ?,?,?, ?, ?,?,?)
         """,
         (
             int(ts_ms), symbol, regime,
@@ -847,6 +854,7 @@ def log_decision(
             final_action, final_confidence, position_size,
             ml_up_prob, conf_scale, explanation,
             linked_trade_id,
+            direction_score, quality_score, size_score,
         ),
     )
     conn.commit()

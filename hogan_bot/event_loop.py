@@ -40,7 +40,7 @@ from hogan_bot.config import BotConfig, load_config, symbol_config, effective_ho
 from hogan_bot.data_engine import CandleEvent, LiveDataEngine, CandleRingBuffer
 from hogan_bot.decision import (
     apply_ml_filter, edge_gate, entry_quality_gate, ml_confidence,
-    estimate_spread_from_candles,
+    estimate_spread_from_candles, ranging_gate,
 )
 from hogan_bot.execution import (
     PaperExecution, LiveExecution, SmartExecution, SmartExecConfig,
@@ -72,6 +72,10 @@ class SignalResult:
     forecast_ret: float | None = None
     agent_weights: dict | None = None
     feature_freshness: dict | None = None
+    # Explicit score decomposition for audit trail
+    direction_score: float = 0.0   # raw directional conviction [-1, 1]
+    quality_score: float = 0.0     # setup cleanliness [0, 1] — gates passed
+    size_score: float = 0.0        # position sizing factor [0, 1]
 
 
 # ---------------------------------------------------------------------------
@@ -171,13 +175,23 @@ class SignalEvaluator:
             max_whipsaws=cfg.max_whipsaws,
         )
 
+        # Ranging-specific extra protections
+        tech_action = result.tech.action if result.tech else None
+        action, ranging_scale = ranging_gate(
+            action,
+            regime=regime_name,
+            tech_action=tech_action,
+            up_prob=up_prob,
+            recent_whipsaw_count=recent_whipsaw_count,
+        )
+
         size = calculate_position_size(
             equity_usd=equity,
             price=px,
             stop_distance_pct=result.stop_distance_pct,
             max_risk_per_trade=cfg.max_risk_per_trade,
             max_allocation_pct=cfg.aggressive_allocation,
-            confidence_scale=conf_scale * quality_scale * eff_position_scale,
+            confidence_scale=conf_scale * quality_scale * ranging_scale * eff_position_scale,
             fee_rate=cfg.fee_rate,
         )
 
@@ -192,12 +206,16 @@ class SignalEvaluator:
         except Exception:
             pass
 
+        # Compute explicit score decomposition
+        _direction_score = getattr(result, "combined_score", 0.0)
+        _quality_score = quality_scale * ranging_scale
+        _size_score = min(1.0, conf_scale * _quality_score * eff_position_scale)
+
         if action != "hold":
             logger.info(
-                "PIPELINE %s action=%s conf=%.2f tech_conf=%.2f regime=%s | %s",
-                symbol, action, result.confidence,
-                tech_conf or 0.0, regime_name or "unknown",
-                result.explanation,
+                "PIPELINE %s action=%s dir=%.2f qual=%.2f sz=%.2f regime=%s | %s",
+                symbol, action, _direction_score, _quality_score, _size_score,
+                regime_name or "unknown", result.explanation,
             )
 
         return SignalResult(
@@ -214,6 +232,9 @@ class SignalEvaluator:
             forecast_ret=forecast_ret,
             agent_weights=result.agent_weights,
             feature_freshness=_freshness,
+            direction_score=_direction_score,
+            quality_score=_quality_score,
+            size_score=_size_score,
         )
 
 
@@ -576,6 +597,9 @@ async def run_event_loop(
                     explanation=sig.explanation,
                     meta_weights=sig.agent_weights,
                     freshness=sig.feature_freshness,
+                    direction_score=sig.direction_score,
+                    quality_score=sig.quality_score,
+                    size_score=sig.size_score,
                 )
             except Exception as exc:
                 logger.debug("Decision log error: %s", exc)

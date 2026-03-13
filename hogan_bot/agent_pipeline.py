@@ -77,6 +77,7 @@ class AgentSignal:
     risk_estimate: RiskEstimate | None = None
     explanation: str = ""
     agent_weights: dict = field(default_factory=dict)
+    combined_score: float = 0.0   # raw directional score from MetaWeigher [-1, 1]
     timestamp: float = field(default_factory=time.time)
 
     @property
@@ -564,6 +565,7 @@ class MetaWeigher:
             macro=macro,
             explanation=explanation,
             agent_weights=dict(w),
+            combined_score=combined_score,
         )
 
     def update_weights(self, new_weights: dict[str, float]) -> None:
