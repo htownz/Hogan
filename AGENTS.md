@@ -26,9 +26,12 @@ python -m hogan_bot.main
 - 15-feature subset in `feature_registry.CHAMPION_FEATURE_COLUMNS`
 - Train: `python -m hogan_bot.train --champion`
 
-## Data & Kraken
+## Data & Exchanges
 - `HOGAN_USE_REST_DATA=1` — REST polling during Kraken maintenance
-- `HOGAN_EXCHANGE` — kraken, binance, bybit, etc.
+- `HOGAN_EXCHANGE` — kraken, binance, bybit, oanda, etc.
+- `HOGAN_USE_OANDA=true` — uses OandaDataEngine (REST candles) + OandaExecution
+  - Works in both paper and live mode
+  - Requires OANDA_ACCESS_TOKEN + OANDA_ACCOUNT_ID in .env
 
 ## Testing
 ```bash

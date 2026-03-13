@@ -67,6 +67,7 @@ class SignalResult:
     final_confidence: float = 0.0
     tech_confidence: float | None = None
     conf_scale: float = 1.0
+    vol_ratio: float = 1.0
     explanation: str | None = None
     forecast_ret: float | None = None
     agent_weights: dict | None = None
@@ -195,6 +196,7 @@ class SignalEvaluator:
             final_confidence=result.confidence or 0.0,
             tech_confidence=tech_conf,
             conf_scale=conf_scale * quality_scale,
+            vol_ratio=result.volume_ratio,
             explanation=result.explanation,
             forecast_ret=forecast_ret,
             agent_weights=result.agent_weights,
@@ -228,16 +230,22 @@ async def run_event_loop(
     portfolio = PaperPortfolio(cash_usd=config.starting_balance_usd, fee_rate=config.fee_rate)
     guard = DrawdownGuard(config.starting_balance_usd, config.max_drawdown)
 
+    use_oanda = (
+        config.exchange_id.lower() == "oanda"
+        or os.getenv("HOGAN_USE_OANDA", "").strip().lower() in ("1", "true", "yes")
+    )
+    _oanda_client = None
+    if use_oanda:
+        from hogan_bot.oanda_client import OandaClient
+        _oanda_client = OandaClient()
+
     if allow_live:
-        use_oanda = config.exchange_id.lower() == "oanda" or os.getenv("HOGAN_USE_OANDA", "").strip().lower() in ("1", "true", "yes")
         if use_oanda:
-            from hogan_bot.oanda_client import OandaClient
             from hogan_bot.oanda_execution import OandaExecution
-            oanda_client = OandaClient()
             executor = OandaExecution(
-                client=oanda_client, conn=conn, portfolio=portfolio,
+                client=_oanda_client, conn=conn, portfolio=portfolio,
             )
-            logger.warning("LIVE OANDA EXECUTION on account=%s env=%s", oanda_client.account_id, oanda_client.environment)
+            logger.warning("LIVE OANDA EXECUTION on account=%s env=%s", _oanda_client.account_id, _oanda_client.environment)
         else:
             from hogan_bot.exchange import ExchangeClient
             client = ExchangeClient(config.exchange_id, config.kraken_api_key, config.kraken_api_secret)
@@ -308,14 +316,24 @@ async def run_event_loop(
     except Exception:
         _has_metrics = False
 
-    engine = LiveDataEngine(
-        exchange_id=config.exchange_id,
-        api_key=config.kraken_api_key or "",
-        api_secret=config.kraken_api_secret or "",
-        symbols=config.symbols,
-        timeframes=[config.timeframe],
-        ring_buffer_len=config.ohlcv_limit,
-    )
+    if use_oanda and _oanda_client is not None:
+        from hogan_bot.data_engine import OandaDataEngine
+        engine = OandaDataEngine(
+            client=_oanda_client,
+            symbols=config.symbols,
+            timeframes=[config.timeframe],
+            ring_buffer_len=config.ohlcv_limit,
+        )
+        logger.info("Using OandaDataEngine for %s", config.symbols)
+    else:
+        engine = LiveDataEngine(
+            exchange_id=config.exchange_id,
+            api_key=config.kraken_api_key or "",
+            api_secret=config.kraken_api_secret or "",
+            symbols=config.symbols,
+            timeframes=[config.timeframe],
+            ring_buffer_len=config.ohlcv_limit,
+        )
 
     event_count = 0
     _signal_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -598,7 +616,7 @@ async def run_event_loop(
                             open_paper_trade(conn, symbol, "long", buy_px, size, fee, now_ms,
                                              ml_up_prob=up_prob,
                                              strategy_conf=sig.final_confidence,
-                                             vol_ratio=sig.conf_scale)
+                                             vol_ratio=sig.vol_ratio)
                         if notifier:
                             notifier.notify("buy", {"symbol": symbol, "price": buy_px,
                                                     "qty": size, "ml_up_prob": up_prob})
