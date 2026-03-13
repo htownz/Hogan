@@ -133,6 +133,13 @@ class BotConfig:
     # with no existing long position.  Flip from short to long and back on signal change.
     allow_shorts: bool = False
 
+    # ── MetaWeigher (agent pipeline) ───────────────────────────────────────
+    meta_weight_technical: float = 0.55
+    meta_weight_sentiment: float = 0.25
+    meta_weight_macro: float = 0.20
+    meta_buy_threshold: float = 0.25    # combined score ≥ this → buy
+    meta_sell_threshold: float = -0.25  # combined score ≤ this → sell
+
     # ── Regime detection ─────────────────────────────────────────────────────
     # When enabled, the bot classifies the current market as trending_up,
     # trending_down, ranging, or volatile each iteration and dynamically
@@ -231,6 +238,13 @@ class RegimeConfig:
     position_scale: float = 1.0
     strategy_family: str = "trend_follow"
     min_confidence_to_trade: float = 0.30
+    # MetaWeigher weight deltas (added to base weights before normalization)
+    meta_tech_delta: float = 0.0
+    meta_sent_delta: float = 0.0
+    meta_macro_delta: float = 0.0
+    # MetaWeigher action threshold overrides (None = use base config values)
+    meta_buy_threshold: float | None = None
+    meta_sell_threshold: float | None = None
 
 
 DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
@@ -242,6 +256,11 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         take_profit_mult=2.00,
         position_scale=1.00,
         strategy_family="trend_follow",
+        meta_tech_delta=+0.10,
+        meta_sent_delta=-0.05,
+        meta_macro_delta=-0.05,
+        meta_buy_threshold=0.20,
+        meta_sell_threshold=-0.20,
     ),
     "trending_down": RegimeConfig(
         volume_threshold_mult=0.55,
@@ -251,6 +270,11 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         take_profit_mult=1.70,
         position_scale=1.00,
         strategy_family="trend_follow",
+        meta_tech_delta=+0.10,
+        meta_sent_delta=-0.05,
+        meta_macro_delta=-0.05,
+        meta_buy_threshold=0.20,
+        meta_sell_threshold=-0.20,
     ),
     "ranging": RegimeConfig(
         volume_threshold_mult=1.10,
@@ -260,6 +284,11 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         take_profit_mult=0.70,
         position_scale=0.75,
         strategy_family="mean_revert",
+        meta_tech_delta=-0.20,
+        meta_sent_delta=+0.10,
+        meta_macro_delta=+0.10,
+        meta_buy_threshold=0.30,
+        meta_sell_threshold=-0.30,
     ),
     "volatile": RegimeConfig(
         volume_threshold_mult=0.70,
@@ -269,6 +298,11 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         take_profit_mult=1.40,
         position_scale=0.50,
         strategy_family="breakout",
+        meta_tech_delta=-0.10,
+        meta_sent_delta=+0.05,
+        meta_macro_delta=+0.05,
+        meta_buy_threshold=0.35,
+        meta_sell_threshold=-0.35,
     ),
 }
 
@@ -439,6 +473,11 @@ def load_config() -> BotConfig:
         ict_ote_high=float(os.getenv("HOGAN_ICT_OTE_HIGH", "0.79")),
         ml_confidence_sizing=os.getenv("HOGAN_ML_CONFIDENCE_SIZING", "true").lower() == "true",
         allow_shorts=os.getenv("HOGAN_ALLOW_SHORTS", "false").lower() == "true",
+        meta_weight_technical=float(os.getenv("HOGAN_META_WEIGHT_TECH", "0.55")),
+        meta_weight_sentiment=float(os.getenv("HOGAN_META_WEIGHT_SENT", "0.25")),
+        meta_weight_macro=float(os.getenv("HOGAN_META_WEIGHT_MACRO", "0.20")),
+        meta_buy_threshold=float(os.getenv("HOGAN_META_BUY_THRESHOLD", "0.25")),
+        meta_sell_threshold=float(os.getenv("HOGAN_META_SELL_THRESHOLD", "-0.25")),
         use_regime_detection=os.getenv("HOGAN_USE_REGIME_DETECTION", "true").lower() == "true",
         regime_adx_trending=float(os.getenv("HOGAN_REGIME_ADX_TRENDING", "25.0")),
         regime_adx_ranging=float(os.getenv("HOGAN_REGIME_ADX_RANGING", "20.0")),

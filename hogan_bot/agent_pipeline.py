@@ -415,11 +415,28 @@ _DEFAULT_WEIGHTS = {
 class MetaWeigher:
     """Combine TechSignal + SentimentSignal + MacroSignal into AgentSignal.
 
-    Weights are adaptive and can be updated by the OnlineLearner.
+    Weights and action thresholds are configurable via constructor and can
+    also be updated at runtime by the OnlineLearner.  Per-regime adjustments
+    are driven by ``RegimeConfig`` when provided.
     """
 
-    def __init__(self, weights: dict[str, float] | None = None) -> None:
+    def __init__(
+        self,
+        weights: dict[str, float] | None = None,
+        buy_threshold: float = 0.25,
+        sell_threshold: float = -0.25,
+        regime_configs: dict | None = None,
+    ) -> None:
         self._weights = weights or _DEFAULT_WEIGHTS.copy()
+        self._buy_threshold = buy_threshold
+        self._sell_threshold = sell_threshold
+        self._regime_configs = regime_configs
+
+    def _regime_cfg(self, regime: str | None):
+        """Return the RegimeConfig for *regime*, or None."""
+        if regime is None or self._regime_configs is None:
+            return None
+        return self._regime_configs.get(regime)
 
     def combine(
         self,
@@ -436,23 +453,17 @@ class MetaWeigher:
         regime : str or None
             Market microstructure regime from ``detect_regime()``:
             ``"trending_up"`` / ``"trending_down"`` / ``"ranging"`` / ``"volatile"``.
-            Adjusts agent weights dynamically.
+            Adjusts agent weights and action thresholds via RegimeConfig.
         """
 
-        # Regime-adaptive weights: lean on tech in trends, broaden in range/vol
+        rc = self._regime_cfg(regime)
+
+        # Regime-adaptive weights driven by RegimeConfig deltas
         w = dict(self._weights)
-        if regime in ("trending_up", "trending_down"):
-            w["technical"] = min(0.75, w["technical"] + 0.10)
-            w["sentiment"] = max(0.10, w["sentiment"] - 0.05)
-            w["macro"] = max(0.10, w["macro"] - 0.05)
-        elif regime == "volatile":
-            w["technical"] = max(0.35, w["technical"] - 0.10)
-            w["sentiment"] = w["sentiment"] + 0.05
-            w["macro"] = w["macro"] + 0.05
-        elif regime == "ranging":
-            w["technical"] = max(0.25, w["technical"] - 0.20)
-            w["sentiment"] = w["sentiment"] + 0.10
-            w["macro"] = w["macro"] + 0.10
+        if rc is not None:
+            w["technical"] = max(0.10, w["technical"] + rc.meta_tech_delta)
+            w["sentiment"] = max(0.10, w["sentiment"] + rc.meta_sent_delta)
+            w["macro"] = max(0.10, w["macro"] + rc.meta_macro_delta)
 
         # Normalize weights — if all zero, fall back to equal weights
         total = sum(w.values())
@@ -499,18 +510,14 @@ class MetaWeigher:
 
         combined_score = raw_score
 
-        # Thresholds adapt to regime (raised to reduce low-conviction trades)
-        buy_threshold = 0.25
-        sell_threshold = -0.25
-        if regime == "volatile":
-            buy_threshold = 0.35
-            sell_threshold = -0.35
-        elif regime in ("trending_up", "trending_down"):
-            buy_threshold = 0.20
-            sell_threshold = -0.20
-        elif regime == "ranging":
-            buy_threshold = 0.30
-            sell_threshold = -0.30
+        # Action thresholds: use regime-specific overrides when available
+        buy_threshold = self._buy_threshold
+        sell_threshold = self._sell_threshold
+        if rc is not None:
+            if rc.meta_buy_threshold is not None:
+                buy_threshold = rc.meta_buy_threshold
+            if rc.meta_sell_threshold is not None:
+                sell_threshold = rc.meta_sell_threshold
 
         if combined_score >= buy_threshold:
             action = "buy"
@@ -594,7 +601,21 @@ class AgentPipeline:
         self.tech_agent = TechnicalAgent(config)
         self.sent_agent = SentimentAgent(conn=conn, symbol=config.symbols[0] if config.symbols else "BTC/USD")
         self.macro_agent = MacroAgent(conn=conn, symbol=config.symbols[0] if config.symbols else "BTC/USD")
-        self.meta = MetaWeigher(weights=weights)
+
+        if weights is None:
+            weights = {
+                "technical": getattr(config, "meta_weight_technical", 0.55),
+                "sentiment": getattr(config, "meta_weight_sentiment", 0.25),
+                "macro": getattr(config, "meta_weight_macro", 0.20),
+            }
+
+        from hogan_bot.config import DEFAULT_REGIME_CONFIGS
+        self.meta = MetaWeigher(
+            weights=weights,
+            buy_threshold=getattr(config, "meta_buy_threshold", 0.25),
+            sell_threshold=getattr(config, "meta_sell_threshold", -0.25),
+            regime_configs=DEFAULT_REGIME_CONFIGS,
+        )
         self.rag_retriever = rag_retriever
         self.perf_tracker = performance_tracker
         self.adaptive_conf = adaptive_confidence

@@ -12,6 +12,7 @@ from hogan_bot.agent_pipeline import (
     SentimentSignal,
     TechSignal,
 )
+from hogan_bot.config import DEFAULT_REGIME_CONFIGS
 
 
 # ---------------------------------------------------------------------------
@@ -82,34 +83,39 @@ class TestMetaWeigherBasics:
 
 class TestMetaWeigherRegime:
     def test_trending_boosts_tech(self):
-        mw = MetaWeigher()
+        mw = MetaWeigher(regime_configs=DEFAULT_REGIME_CONFIGS)
         sig = mw.combine(_tech("buy", 0.7), _sent(), _macro(), regime="trending_up")
         assert sig.agent_weights["technical"] > 0.55
 
     def test_volatile_reduces_tech(self):
-        mw = MetaWeigher()
+        mw = MetaWeigher(regime_configs=DEFAULT_REGIME_CONFIGS)
         sig = mw.combine(_tech("buy", 0.7), _sent(), _macro(), regime="volatile")
         assert sig.agent_weights["technical"] < 0.55
 
     def test_ranging_reduces_tech_most(self):
-        mw = MetaWeigher()
+        mw = MetaWeigher(regime_configs=DEFAULT_REGIME_CONFIGS)
         sig = mw.combine(_tech("buy", 0.7), _sent(), _macro(), regime="ranging")
         assert sig.agent_weights["technical"] < 0.50
 
     def test_volatile_gate_blocks_low_conf(self):
-        mw = MetaWeigher()
+        mw = MetaWeigher(regime_configs=DEFAULT_REGIME_CONFIGS)
         sig = mw.combine(_tech("buy", 0.3), _sent("bullish", 0.9), _macro("risk_on"), regime="volatile")
         assert sig.action == "hold"
 
     def test_ranging_gate_blocks_low_conf(self):
-        mw = MetaWeigher()
+        mw = MetaWeigher(regime_configs=DEFAULT_REGIME_CONFIGS)
         sig = mw.combine(_tech("buy", 0.4), _sent("bullish", 0.9), _macro("risk_on"), regime="ranging")
         assert sig.action == "hold"
 
     def test_unknown_regime_blocks(self):
-        mw = MetaWeigher()
+        mw = MetaWeigher(regime_configs=DEFAULT_REGIME_CONFIGS)
         sig = mw.combine(_tech("buy", 0.9), _sent("bullish", 0.9), _macro("risk_on"), regime="alien")
         assert sig.action == "hold"
+
+    def test_no_regime_configs_uses_base_weights(self):
+        mw = MetaWeigher()
+        sig = mw.combine(_tech("buy", 0.7), _sent(), _macro(), regime="trending_up")
+        assert sig.agent_weights["technical"] == pytest.approx(0.55, abs=0.01)
 
 
 # ---------------------------------------------------------------------------
