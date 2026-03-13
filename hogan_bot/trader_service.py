@@ -1,40 +1,28 @@
-"""Legacy polling service — DEPRECATED.
+"""Legacy polling service — redirects to ``hogan_bot.event_loop``.
 
-This module is superseded by ``hogan_bot.event_loop``, which is the
-canonical runtime path for Hogan.  All logic formerly here has been
-removed.  Running this module now redirects to ``event_loop``.
+This module is a thin alias for ``hogan_bot.event_loop``.  Running it
+invokes the event loop with no deprecation warning.
 
-Use instead::
+Canonical command::
 
     python -m hogan_bot.event_loop
+
+This module remains supported for backward compatibility.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
-import warnings
-
-warnings.warn(
-    "hogan_bot.trader_service is deprecated and now redirects to hogan_bot.event_loop. "
-    "Use `python -m hogan_bot.event_loop` directly.",
-    DeprecationWarning,
-    stacklevel=2,
-)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger(__name__)
 
 
 def run(max_loops: int | None = None) -> None:
-    """Thin redirect to ``event_loop.run_event_loop()``.
+    """Redirect to ``event_loop.run_event_loop()``.
 
     The ``max_loops`` parameter is accepted for backward compatibility
     but is not forwarded (event_loop runs until interrupted).
     """
-    logger.warning(
-        "trader_service.run() is deprecated — redirecting to event_loop.run_event_loop(). "
-        "Switch to `python -m hogan_bot.event_loop` to avoid this warning."
-    )
     from hogan_bot.event_loop import run_event_loop
     asyncio.run(run_event_loop())
 
