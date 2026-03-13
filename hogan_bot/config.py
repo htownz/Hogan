@@ -42,8 +42,8 @@ class BotConfig:
     use_ml_filter: bool = False
     ml_model_path: str = "models/hogan_logreg.pkl"
     champion_ml_model_path: str = "models/hogan_champion.pkl"
-    ml_buy_threshold: float = 0.60
-    ml_sell_threshold: float = 0.40
+    ml_buy_threshold: float = 0.52
+    ml_sell_threshold: float = 0.48
 
     # Ripster EMA cloud settings (disabled: empirically hurts win rate as
     # cloud-based confirmation filters out good crossover trades)
@@ -60,8 +60,9 @@ class BotConfig:
     # Signal combinator: "ma_only" | "any" | "all"
     signal_mode: str = "any"
     # Minimum directional vote edge required in "any" mode (buy_votes - sell_votes).
-    # Raised to 2 to reduce flippy low-conviction trades.
-    signal_min_vote_margin: int = 2
+    # Set to 1: with most extra voters disabled (EMA clouds, FVG, ICT, RL),
+    # only 1 voter (MA) remains; margin > 1 blocks all signals.
+    signal_min_vote_margin: int = 1
 
     # Exit management (0 = disabled)
     trailing_stop_pct: float = 0.02
@@ -99,7 +100,7 @@ class BotConfig:
     min_edge_multiple: float = 1.5
 
     # Entry quality gate thresholds (hard pre-trade filter)
-    min_final_confidence: float = 0.25
+    min_final_confidence: float = 0.08
     min_tech_confidence: float = 0.15
     min_regime_confidence: float = 0.30
     max_whipsaws: int = 3
@@ -239,8 +240,8 @@ class RegimeConfig:
     - effective_thresholds: execution economics (ML gates, TP/SL, position_scale)
     """
     volume_threshold_mult: float = 1.0
-    ml_buy_threshold: float = 0.60
-    ml_sell_threshold: float = 0.40
+    ml_buy_threshold: float = 0.52
+    ml_sell_threshold: float = 0.48
     trailing_stop_mult: float = 1.0
     take_profit_mult: float = 1.0
     position_scale: float = 1.0
@@ -259,8 +260,8 @@ class RegimeConfig:
 DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
     "trending_up": RegimeConfig(
         volume_threshold_mult=0.55,
-        ml_buy_threshold=0.55,
-        ml_sell_threshold=0.52,
+        ml_buy_threshold=0.52,
+        ml_sell_threshold=0.48,
         trailing_stop_mult=1.30,
         take_profit_mult=2.00,
         position_scale=1.00,
@@ -268,15 +269,15 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         meta_tech_delta=+0.10,
         meta_sent_delta=-0.05,
         meta_macro_delta=-0.05,
-        meta_buy_threshold=0.20,
-        meta_sell_threshold=-0.20,
+        meta_buy_threshold=0.12,
+        meta_sell_threshold=-0.12,
         quality_final_mult=0.80,
         quality_tech_mult=1.00,
     ),
     "trending_down": RegimeConfig(
         volume_threshold_mult=0.55,
-        ml_buy_threshold=0.65,
-        ml_sell_threshold=0.35,
+        ml_buy_threshold=0.52,
+        ml_sell_threshold=0.48,
         trailing_stop_mult=1.30,
         take_profit_mult=1.70,
         position_scale=1.00,
@@ -284,40 +285,40 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         meta_tech_delta=+0.10,
         meta_sent_delta=-0.05,
         meta_macro_delta=-0.05,
-        meta_buy_threshold=0.20,
-        meta_sell_threshold=-0.20,
+        meta_buy_threshold=0.12,
+        meta_sell_threshold=-0.12,
         quality_final_mult=0.80,
         quality_tech_mult=1.00,
     ),
     "ranging": RegimeConfig(
         volume_threshold_mult=1.10,
-        ml_buy_threshold=0.62,
-        ml_sell_threshold=0.38,
+        ml_buy_threshold=0.52,
+        ml_sell_threshold=0.48,
         trailing_stop_mult=0.80,
         take_profit_mult=0.70,
         position_scale=0.75,
         strategy_family="mean_revert",
-        meta_tech_delta=-0.20,
-        meta_sent_delta=+0.10,
-        meta_macro_delta=+0.10,
-        meta_buy_threshold=0.30,
-        meta_sell_threshold=-0.30,
+        meta_tech_delta=-0.05,
+        meta_sent_delta=+0.00,
+        meta_macro_delta=+0.05,
+        meta_buy_threshold=0.15,
+        meta_sell_threshold=-0.15,
         quality_final_mult=1.00,
         quality_tech_mult=1.25,
     ),
     "volatile": RegimeConfig(
         volume_threshold_mult=0.70,
-        ml_buy_threshold=0.63,
-        ml_sell_threshold=0.37,
+        ml_buy_threshold=0.52,
+        ml_sell_threshold=0.48,
         trailing_stop_mult=0.80,
         take_profit_mult=1.40,
         position_scale=0.50,
         strategy_family="breakout",
-        meta_tech_delta=-0.10,
-        meta_sent_delta=+0.05,
+        meta_tech_delta=-0.05,
+        meta_sent_delta=+0.00,
         meta_macro_delta=+0.05,
-        meta_buy_threshold=0.35,
-        meta_sell_threshold=-0.35,
+        meta_buy_threshold=0.18,
+        meta_sell_threshold=-0.18,
         quality_final_mult=1.20,
         quality_tech_mult=1.10,
     ),
@@ -446,8 +447,8 @@ def load_config() -> BotConfig:
         use_ml_filter=os.getenv("HOGAN_USE_ML_FILTER", "false").lower() == "true",
         ml_model_path=os.getenv("HOGAN_ML_MODEL_PATH", "models/hogan_logreg.pkl"),
         champion_ml_model_path=os.getenv("HOGAN_CHAMPION_ML_MODEL_PATH", "models/hogan_champion.pkl"),
-        ml_buy_threshold=float(os.getenv("HOGAN_ML_BUY_THRESHOLD", "0.60")),
-        ml_sell_threshold=float(os.getenv("HOGAN_ML_SELL_THRESHOLD", "0.40")),
+        ml_buy_threshold=float(os.getenv("HOGAN_ML_BUY_THRESHOLD", "0.52")),
+        ml_sell_threshold=float(os.getenv("HOGAN_ML_SELL_THRESHOLD", "0.48")),
         use_ema_clouds=os.getenv("HOGAN_USE_EMA_CLOUDS", "false").lower() == "true",
         ema_fast_short=int(os.getenv("HOGAN_EMA_FAST_SHORT", "8")),
         ema_fast_long=int(os.getenv("HOGAN_EMA_FAST_LONG", "9")),
@@ -456,7 +457,7 @@ def load_config() -> BotConfig:
         use_fvg=os.getenv("HOGAN_USE_FVG", "false").lower() == "true",
         fvg_min_gap_pct=float(os.getenv("HOGAN_FVG_MIN_GAP_PCT", "0.001")),
         signal_mode=os.getenv("HOGAN_SIGNAL_MODE", "any"),
-        signal_min_vote_margin=max(1, int(os.getenv("HOGAN_SIGNAL_MIN_VOTE_MARGIN", "2"))),
+        signal_min_vote_margin=max(1, int(os.getenv("HOGAN_SIGNAL_MIN_VOTE_MARGIN", "1"))),
         trailing_stop_pct=float(os.getenv("HOGAN_TRAILING_STOP_PCT", "0.02")),
         take_profit_pct=float(os.getenv("HOGAN_TAKE_PROFIT_PCT", "0.054")),
         atr_stop_multiplier=float(os.getenv("HOGAN_ATR_STOP_MULTIPLIER", "2.5")),
