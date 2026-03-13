@@ -10,8 +10,8 @@ WorkingDirectory=/opt/hogan
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=/opt/hogan/.env
 
-# Use the async event loop (Phase 2) as the primary entry point
-ExecStart=/opt/hogan/venv/bin/python -m hogan_bot.event_loop
+# Champion runtime (main delegates to async event loop)
+ExecStart=/opt/hogan/venv/bin/python -m hogan_bot.main
 
 # Restart on any failure, with a 30-second delay
 Restart=on-failure

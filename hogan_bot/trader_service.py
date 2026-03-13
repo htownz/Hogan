@@ -1,30 +1,16 @@
-"""Legacy polling service — redirects to ``hogan_bot.event_loop``.
+"""Backward-compatible alias for the champion runtime.
 
-This module is a thin alias for ``hogan_bot.event_loop``.  Running it
-invokes the event loop with no deprecation warning.
+    python -m hogan_bot.trader_service
 
-Canonical command::
+runs the same as::
 
-    python -m hogan_bot.event_loop
+    python -m hogan_bot.main
 
-This module remains supported for backward compatibility.
+Use main as the canonical entry point.
 """
 from __future__ import annotations
 
-import asyncio
-import logging
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-
-
-def run(max_loops: int | None = None) -> None:
-    """Redirect to ``event_loop.run_event_loop()``.
-
-    The ``max_loops`` parameter is accepted for backward compatibility
-    but is not forwarded (event_loop runs until interrupted).
-    """
-    from hogan_bot.event_loop import run_event_loop
-    asyncio.run(run_event_loop())
+from hogan_bot.main import run
 
 
 if __name__ == "__main__":

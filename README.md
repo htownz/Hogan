@@ -92,20 +92,19 @@ python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env
-# Canonical runtime (async event loop):
-python -m hogan_bot.event_loop
+# Champion runtime (canonical entry point):
+python -m hogan_bot.main
 # Or with a finite run:
-python -m hogan_bot.event_loop --max-events 100
+python -m hogan_bot.main --max-events 100
 ```
 
-> **Note:** `main.py` and `trader_service.py` are deprecated legacy runtimes.
-> Always use `hogan_bot.event_loop` for paper and live trading.
+> **Note:** `trader_service` is an alias for `main`. Both run the same event loop.
 
 ### Verifying the bot is running
 
 1. **Log output** — Look for `Event loop starting`, `REST polling active`, or `Loaded ML model`.
 2. **Process check** — `Get-Process python*` (Windows) or `ps aux | grep python` (Linux).
-3. **Command line** — `wmic process where "ProcessId=<PID>" get CommandLine` should show `hogan_bot.trader_service` or `hogan_bot.event_loop`.
+3. **Command line** — `wmic process where "ProcessId=<PID>" get CommandLine` should show `hogan_bot.main` or `hogan_bot.trader_service`.
 4. **Metrics** — `http://localhost:8000` (if `HOGAN_METRICS_PORT=8000`).
 
 ## ML Enhancement Workflow (Recommended)
@@ -155,7 +154,7 @@ python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000 --use-ml
 ### 5. Run paper trading
 
 ```bash
-python -m hogan_bot.event_loop --max-events 500
+python -m hogan_bot.main --max-events 500
 ```
 
 ## Environment Config

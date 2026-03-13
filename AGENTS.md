@@ -7,13 +7,13 @@ A BTC-first, 1h-led trading system. Paper mode by default. Live trading requires
 
 ## How to Run
 ```bash
-python -m hogan_bot.event_loop
+python -m hogan_bot.main
 # Or: python -m hogan_bot.trader_service (alias)
 ```
 
 ## How to Verify the Bot Is Running
 1. **Process check**: `Get-Process python*` (Windows) or `ps aux | grep python` (Linux)
-2. **Command line**: `wmic process where "ProcessId=<PID>" get CommandLine` — should show `hogan_bot.trader_service` or `hogan_bot.event_loop`
+2. **Command line**: `wmic process where "ProcessId=<PID>" get CommandLine` — should show `hogan_bot.main` or `hogan_bot.trader_service`
 3. **Logs**: Look for "Event loop starting", "REST polling active", or "Loaded ML model"
 4. **Metrics**: `http://localhost:8000` (if HOGAN_METRICS_PORT=8000)
 
