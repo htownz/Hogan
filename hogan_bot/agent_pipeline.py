@@ -586,8 +586,15 @@ class AgentPipeline:
             ``None`` means "now" (live mode).
         """
         agent = self.tech_agent
-        if config_override is not None:
-            agent = TechnicalAgent(config_override)
+        _effective_cfg = config_override
+        if _effective_cfg is not None and regime is not None:
+            from hogan_bot.regime import _REGIME_OVERRIDES
+            _overrides = _REGIME_OVERRIDES.get(regime, {})
+            vol_mult = _overrides.get("volume_threshold_mult")
+            if vol_mult is not None and hasattr(_effective_cfg, "volume_threshold"):
+                _effective_cfg.volume_threshold = _effective_cfg.volume_threshold * vol_mult
+        if _effective_cfg is not None:
+            agent = TechnicalAgent(_effective_cfg)
         tech = agent.analyze(candles, **runtime_state)
         sent = self.sent_agent.analyze(as_of_ms=as_of_ms)
         macro = self.macro_agent.analyze(as_of_ms=as_of_ms)
