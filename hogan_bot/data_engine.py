@@ -16,12 +16,19 @@ Usage::
         async for event in engine.stream():
             # event is a CandleEvent(symbol, timeframe, candle_df)
             ...
+
+Environment variables:
+    HOGAN_USE_REST_DATA=1  — Force REST polling instead of WebSocket (useful when
+                             Kraken WS fails with "GET /0/public/Assets" or network errors).
+    HOGAN_WS_FAIL_THRESHOLD=N — After N consecutive WebSocket failures, switch to REST.
+                                 Default 5. Set to 0 to disable.
 """
 from __future__ import annotations
 
 import asyncio
 import collections
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from typing import AsyncIterator
@@ -33,6 +40,19 @@ logger = logging.getLogger(__name__)
 _RECONNECT_BASE = 1.0   # seconds
 _RECONNECT_MAX  = 60.0  # seconds
 _DEAD_MAN_SECS  = 900   # 15 minutes — fire alert if no candle in this window
+
+
+def _use_rest_data() -> bool:
+    """Check if REST polling should be forced (bypass WebSocket)."""
+    return os.getenv("HOGAN_USE_REST_DATA", "").strip().lower() in ("1", "true", "yes")
+
+
+def _ws_fail_threshold() -> int:
+    """After this many consecutive WS failures, switch to REST. 0 = never switch."""
+    try:
+        return int(os.getenv("HOGAN_WS_FAIL_THRESHOLD", "5"))
+    except ValueError:
+        return 5
 
 
 @dataclass
@@ -144,8 +164,19 @@ class LiveDataEngine(DataEngineBase):
         self.buffer = CandleRingBuffer(maxlen=ring_buffer_len)
         self._last_candle_ts: dict[str, float] = {}
 
+    def _ccxt_options(self) -> dict:
+        """CCXT options for Kraken and other exchanges (timeout, rate limit)."""
+        return {
+            "enableRateLimit": True,
+            "timeout": 60_000,  # 60s — Kraken /0/public/Assets can be slow; avoids RequestTimeout
+        }
+
     # ------------------------------------------------------------------
     async def _run(self) -> None:
+        if _use_rest_data():
+            logger.info("HOGAN_USE_REST_DATA=1 — using REST polling (WebSocket disabled).")
+            await self._run_rest_fallback()
+            return
         try:
             import ccxt.pro as ccxtpro  # type: ignore
             await self._run_ws(ccxtpro)
@@ -161,13 +192,18 @@ class LiveDataEngine(DataEngineBase):
             await self._run_rest_fallback()
             return
 
-        cfg: dict = {}
+        cfg: dict = {
+            **self._ccxt_options(),
+        }
         if self.api_key:
             cfg["apiKey"] = self.api_key
         if self.api_secret:
             cfg["secret"] = self.api_secret
 
         backoff = _RECONNECT_BASE
+        ws_fail_count = 0
+        threshold = _ws_fail_threshold()
+
         while self._running:
             exchange = exchange_cls(cfg)
             try:
@@ -179,8 +215,22 @@ class LiveDataEngine(DataEngineBase):
                     for tf in self.timeframes
                 ]
                 await asyncio.gather(*tasks)
+                ws_fail_count = 0  # success — reset
             except Exception as exc:
-                logger.warning("WS error (%s); reconnecting in %.1fs: %s", self.exchange_id, backoff, exc)
+                ws_fail_count += 1
+                logger.warning(
+                    "WS error (%s); reconnecting in %.1fs [fail %d/%s]: %s",
+                    self.exchange_id, backoff,
+                    ws_fail_count, str(threshold) if threshold else "∞", exc,
+                )
+                if threshold and ws_fail_count >= threshold:
+                    logger.warning(
+                        "WebSocket failed %d times — switching to REST polling. "
+                        "Set HOGAN_USE_REST_DATA=1 to skip WS from the start.",
+                        ws_fail_count,
+                    )
+                    await self._run_rest_fallback()
+                    return
                 try:
                     from hogan_bot.metrics import WS_RECONNECTS
                     for sym in self.symbols:
@@ -243,13 +293,19 @@ class LiveDataEngine(DataEngineBase):
             logger.error("CCXT exchange %r not found.", self.exchange_id)
             return
 
-        cfg: dict = {}
+        cfg: dict = {
+            **self._ccxt_options(),
+        }
         if self.api_key:
             cfg["apiKey"] = self.api_key
         if self.api_secret:
             cfg["secret"] = self.api_secret
 
         exchange = exchange_cls(cfg)
+        logger.info(
+            "REST polling active: %s %s every %.0fs",
+            self.exchange_id, self.symbols, self.rest_fallback_interval,
+        )
         while self._running:
             for symbol in self.symbols:
                 for tf in self.timeframes:
