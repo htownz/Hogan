@@ -33,11 +33,13 @@ class ShortPosition:
     """
     qty: float = 0.0
     avg_entry: float = 0.0
-    # Stop fires when price rises more than trailing_stop_pct above the low-water mark.
     trailing_stop_pct: float = 0.0
     take_profit_pct: float = 0.0
-    # Low-water mark updated by check_exits(); tracks the lowest price since short entry.
     trough_price: float = 0.0
+    bars_held: int = 0
+    max_adverse_pct: float = 0.0
+    max_favorable_pct: float = 0.0
+    entry_atr_pct: float = 0.0
 
 
 @dataclass
@@ -199,6 +201,16 @@ class PaperPortfolio:
         for symbol, pos in list(self.short_positions.items()):
             px = mark_prices.get(symbol, 0.0)
             if px <= 0:
+                continue
+            pos.bars_held += 1
+            if pos.avg_entry > 0:
+                move_pct = (pos.avg_entry - px) / pos.avg_entry
+                if move_pct < 0:
+                    pos.max_adverse_pct = max(pos.max_adverse_pct, abs(move_pct))
+                else:
+                    pos.max_favorable_pct = max(pos.max_favorable_pct, move_pct)
+            if max_hold_bars > 0 and pos.bars_held >= max_hold_bars:
+                exits.append((symbol, "short_max_hold_time"))
                 continue
             # Trailing stop: tracks lowest price, fires when price rebounds up
             if pos.trailing_stop_pct > 0:

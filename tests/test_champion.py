@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from unittest.mock import patch
 
 import pytest
@@ -67,6 +68,7 @@ class TestApplyChampionMode:
         from dataclasses import dataclass
 
         @dataclass
+        @dataclass
         class FakeConfig:
             use_ema_clouds: bool = True
             use_fvg: bool = True
@@ -80,9 +82,16 @@ class TestApplyChampionMode:
             signal_min_vote_margin: int = 2
             use_regime_detection: bool = True
             ml_confidence_sizing: bool = True
+            use_strategy_router: bool = True
+            volatile_policy: str = "breakout"
             min_hold_bars: int = 3
             exit_confirmation_bars: int = 2
             min_edge_multiple: float = 1.5
+            min_final_confidence: float = 0.25
+            min_tech_confidence: float = 0.15
+            min_regime_confidence: float = 0.30
+            max_whipsaws: int = 3
+            reversal_confidence_multiplier: float = 1.3
             max_hold_hours: float = 24.0
             loss_cooldown_hours: float = 2.0
 

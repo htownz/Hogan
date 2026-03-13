@@ -44,9 +44,20 @@ class ChampionLocks:
     use_regime_detection: bool = True
     ml_confidence_sizing: bool = True
 
+    # Regime-routed strategy families (trend/mean-revert/breakout)
+    use_strategy_router: bool = True
+    volatile_policy: str = "breakout"
+
     min_hold_bars: int = 3
     exit_confirmation_bars: int = 2
     min_edge_multiple: float = 1.5
+
+    # Entry quality gate thresholds
+    min_final_confidence: float = 0.25
+    min_tech_confidence: float = 0.15
+    min_regime_confidence: float = 0.30
+    max_whipsaws: int = 3
+    reversal_confidence_multiplier: float = 1.3
 
     max_hold_hours: float = 24.0
     loss_cooldown_hours: float = 2.0
@@ -111,9 +122,16 @@ def get_champion_summary() -> dict:
         "locked_experiments_off": list(_EXPERIMENTAL_FLAGS),
         "signal_mode": CHAMPION_LOCKS.signal_mode,
         "min_vote_margin": CHAMPION_LOCKS.signal_min_vote_margin,
+        "use_strategy_router": CHAMPION_LOCKS.use_strategy_router,
+        "volatile_policy": CHAMPION_LOCKS.volatile_policy,
         "min_hold_bars": CHAMPION_LOCKS.min_hold_bars,
         "exit_confirmation_bars": CHAMPION_LOCKS.exit_confirmation_bars,
         "min_edge_multiple": CHAMPION_LOCKS.min_edge_multiple,
+        "min_final_confidence": CHAMPION_LOCKS.min_final_confidence,
+        "min_tech_confidence": CHAMPION_LOCKS.min_tech_confidence,
+        "min_regime_confidence": CHAMPION_LOCKS.min_regime_confidence,
+        "max_whipsaws": CHAMPION_LOCKS.max_whipsaws,
+        "reversal_confidence_multiplier": CHAMPION_LOCKS.reversal_confidence_multiplier,
         "max_hold_hours": CHAMPION_LOCKS.max_hold_hours,
         "loss_cooldown_hours": CHAMPION_LOCKS.loss_cooldown_hours,
     }
