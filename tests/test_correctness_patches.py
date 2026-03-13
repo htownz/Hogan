@@ -357,7 +357,7 @@ class TestRetrainNoFallthrough:
              patch("hogan_bot.retrain._train_from_xy") as mock_train:
 
             from hogan_bot.ml import build_training_set
-            X, y, fc = build_training_set(candles, horizon_bars=3)
+            X, y, fc, _mq = build_training_set(candles, horizon_bars=3)
             mock_build.return_value = (X, y, fc)
             mock_train.return_value = {"roc_auc": 0.55, "model_type": "logreg_multisym"}
 
@@ -397,7 +397,7 @@ class TestRetrainNoFallthrough:
              patch("hogan_bot.retrain.train_xgboost") as mock_xgb:
 
             from hogan_bot.ml import build_training_set
-            X, y, fc = build_training_set(candles, horizon_bars=3)
+            X, y, fc, _mq = build_training_set(candles, horizon_bars=3)
             mock_build.return_value = (X, y, fc)
             mock_train.return_value = {"roc_auc": 0.55, "model_type": "logreg_multisym"}
 

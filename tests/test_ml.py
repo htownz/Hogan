@@ -88,19 +88,19 @@ class FeatureFrameTests(unittest.TestCase):
 class BuildTrainingSetTests(unittest.TestCase):
     def test_returns_correct_shapes(self):
         df = _synthetic_candles(n=300)
-        x, y, cols = build_training_set(df, horizon_bars=3, fee_rate=0.0)
+        x, y, cols, _mq = build_training_set(df, horizon_bars=3, fee_rate=0.0)
         self.assertIsNotNone(x)
         self.assertEqual(len(x), len(y))
         self.assertEqual(list(x.columns), cols)
 
     def test_feature_columns_match_constant(self):
         df = _synthetic_candles(n=300)
-        _, _, cols = build_training_set(df, horizon_bars=3, fee_rate=0.0)
+        _, _, cols, _mq = build_training_set(df, horizon_bars=3, fee_rate=0.0)
         self.assertEqual(cols, _FEATURE_COLUMNS)
 
     def test_no_nan_in_output(self):
         df = _synthetic_candles(n=300)
-        x, y, _ = build_training_set(df, horizon_bars=3, fee_rate=0.0)
+        x, y, _, _mq = build_training_set(df, horizon_bars=3, fee_rate=0.0)
         self.assertFalse(x.isnull().any().any())
         self.assertFalse(y.isnull().any())
 

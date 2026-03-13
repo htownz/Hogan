@@ -88,7 +88,7 @@ def build_multi_symbol_dataset(
         if candles.empty:
             logger.warning("No candles for %s/%s — skipping", sym, timeframe)
             continue
-        X, y, cols = build_training_set(candles, horizon_bars=horizon_bars, db_conn=conn, fee_rate=fee_rate)
+        X, y, cols, _mq = build_training_set(candles, horizon_bars=horizon_bars, db_conn=conn, fee_rate=fee_rate)
         if X is not None and len(X) > 0:
             all_X.append(X)
             all_y.append(y)

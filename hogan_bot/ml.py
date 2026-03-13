@@ -615,12 +615,18 @@ def build_training_set(
     from hogan_bot.feature_registry import get_feature_columns
     feature_cols = get_feature_columns(use_champion_features)
 
-    dataset = frame[feature_cols + ["target"]].dropna().copy()
+    keep_cols = feature_cols + ["target"]
+    has_quality = "meta_quality" in frame.columns
+    if has_quality:
+        keep_cols = keep_cols + ["meta_quality"]
+
+    dataset = frame[keep_cols].dropna(subset=feature_cols + ["target"]).copy()
     dataset["target"] = dataset["target"].astype(int)
     if dataset.empty:
-        return None, None, feature_cols
+        return None, None, feature_cols, None
 
-    return dataset[feature_cols], dataset["target"], feature_cols
+    quality = dataset["meta_quality"].values if has_quality else None
+    return dataset[feature_cols], dataset["target"], feature_cols, quality
 
 
 def make_paper_trade_labels(
@@ -870,7 +876,7 @@ def train_logistic_regression(
     except ModuleNotFoundError as exc:
         raise RuntimeError("scikit-learn is required for training") from exc
 
-    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn, label_mode=label_mode)
+    x, y, feature_columns, _mq = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn, label_mode=label_mode)
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
@@ -960,7 +966,7 @@ def train_random_forest(
     except ModuleNotFoundError as exc:
         raise RuntimeError("scikit-learn is required for training") from exc
 
-    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn, label_mode=label_mode)
+    x, y, feature_columns, _mq = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn, label_mode=label_mode)
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
@@ -1048,7 +1054,7 @@ def train_xgboost(
     except ModuleNotFoundError as exc:
         raise RuntimeError("scikit-learn is required for metrics") from exc
 
-    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn, label_mode=label_mode)
+    x, y, feature_columns, _mq = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn, label_mode=label_mode)
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
@@ -1130,7 +1136,7 @@ def train_lightgbm(
     except ModuleNotFoundError as exc:
         raise RuntimeError("scikit-learn is required for metrics") from exc
 
-    x, y, feature_columns = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn, label_mode=label_mode)
+    x, y, feature_columns, _mq = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn, label_mode=label_mode)
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
@@ -1212,7 +1218,7 @@ def calibrate_model(
         raise RuntimeError("scikit-learn is required for calibration") from exc
 
     artifact = load_model(model_path)
-    x, y, feature_columns = build_training_set(
+    x, y, feature_columns, _mq = build_training_set(
         candles, horizon_bars=horizon_bars, use_champion_features=use_champion_features,
         db_conn=db_conn, label_mode=label_mode,
     )
@@ -1279,7 +1285,7 @@ def walk_forward_cv(
     except ModuleNotFoundError as exc:
         raise RuntimeError("scikit-learn is required for walk-forward CV") from exc
 
-    x, y, _ = build_training_set(
+    x, y, _, _mq = build_training_set(
         candles, horizon_bars=horizon_bars, db_conn=db_conn,
         fee_rate=fee_rate, label_mode=label_mode,
     )
@@ -1461,7 +1467,7 @@ def train_hist_gradient_boosting(
     from sklearn.ensemble import HistGradientBoostingClassifier
     from sklearn.metrics import accuracy_score, roc_auc_score, precision_score, recall_score, f1_score
 
-    X, y, feature_cols = build_training_set(
+    X, y, feature_cols, meta_quality = build_training_set(
         candles, horizon_bars=horizon_bars, db_conn=db_conn, label_mode=label_mode,
     )
     if X is None or y is None or len(X) < 50:
@@ -1470,12 +1476,19 @@ def train_hist_gradient_boosting(
     X_train, X_test = X.iloc[:split], X.iloc[split:]
     y_train, y_test = y.iloc[:split], y.iloc[split:]
 
+    # Combine class-balance weights with meta_quality from enhanced labeling
     class_counts = y_train.value_counts()
     n_samples = len(y_train)
     n_classes = len(class_counts)
-    sample_weight = y_train.map(
+    class_weight = y_train.map(
         {c: n_samples / (n_classes * cnt) for c, cnt in class_counts.items()}
     ).values
+    if meta_quality is not None:
+        mq_train = meta_quality[:split]
+        mq_train = np.clip(mq_train, 0.1, 1.0)
+        sample_weight = class_weight * mq_train
+    else:
+        sample_weight = class_weight
 
     clf = HistGradientBoostingClassifier(
         max_depth=max_depth,
