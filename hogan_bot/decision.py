@@ -150,7 +150,7 @@ def estimate_spread_from_candles(candles: pd.DataFrame, window: int = 20) -> flo
 
     valid = beta > gamma
     if not np.any(valid):
-        return max(0.0001, min(simple_est, 0.005))
+        return max(0.0001, min(simple_est, 0.001))
 
     alpha = (np.sqrt(2 * beta[valid]) - np.sqrt(gamma[valid])) / (
         3 - 2 * np.sqrt(2)
@@ -160,9 +160,11 @@ def estimate_spread_from_candles(candles: pd.DataFrame, window: int = 20) -> flo
     cs_est = float(np.median(spread))
 
     # Blend: take the smaller of the two estimates (CS can overestimate on
-    # synthetic or noisy data where high/low are not real bid-ask artifacts)
+    # synthetic or noisy data where high/low are not real bid-ask artifacts).
+    # Cap at 10 bps: hourly OHLCV conflates volatility with spread, and major
+    # crypto pairs on Kraken/Coinbase typically have ~3-5 bps half-spread.
     est = min(cs_est, simple_est * 2)
-    return max(0.0001, min(est, 0.005))
+    return max(0.0001, min(est, 0.001))
 
 
 def estimate_spread_from_order_book(

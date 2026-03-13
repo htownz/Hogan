@@ -458,8 +458,9 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     _pending_sells: dict[str, tuple[float, float, int | None, str]] = {}
 
     min_rows = max(long_ma_window, volume_window) + 2
+    _lookback = max(200, long_ma_window * 3, volume_window * 3)
     for i in range(min_rows, len(candles) + 1):
-        window = candles.iloc[:i]
+        window = candles.iloc[max(0, i - _lookback):i]
         px = float(window["close"].iloc[-1])
         bar_ts = str(window["timestamp"].iloc[-1]) if "timestamp" in window.columns else str(i)
         # Open of current bar (for next_open fills from previous bar's signal)
