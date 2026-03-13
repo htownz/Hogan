@@ -1,42 +1,34 @@
-"""Legacy polling loop — DEPRECATED.
+"""Champion runtime — the single canonical entry point for Hogan.
 
-This module is superseded by ``hogan_bot.event_loop``, which is the
-canonical runtime path for Hogan.  All logic formerly here has been
-removed.  Running this module now redirects to ``event_loop``.
+Run::
 
-Use instead::
+    python -m hogan_bot.main
 
-    python -m hogan_bot.event_loop
+Or with a finite event count::
+
+    python -m hogan_bot.main --max-events 100
+
+This module delegates to the async event loop in ``event_loop``.
+All trading logic, agent pipeline, ML filter, and execution live there.
+main is the champion runtime; event_loop is the implementation.
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
 import logging
-import warnings
-
-warnings.warn(
-    "hogan_bot.main is deprecated and now redirects to hogan_bot.event_loop. "
-    "Use `python -m hogan_bot.event_loop` directly.",
-    DeprecationWarning,
-    stacklevel=2,
-)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger(__name__)
 
 
 def run(max_loops: int | None = None) -> None:
-    """Thin redirect to ``event_loop.run_event_loop()``.
-
-    The ``max_loops`` parameter is accepted for backward compatibility
-    but is not forwarded (event_loop runs until interrupted).
-    """
-    logger.warning(
-        "main.run() is deprecated — redirecting to event_loop.run_event_loop(). "
-        "Switch to `python -m hogan_bot.event_loop` to avoid this warning."
-    )
+    """Run the Hogan event loop. Entry point for the champion runtime."""
     from hogan_bot.event_loop import run_event_loop
-    asyncio.run(run_event_loop())
+    parser = argparse.ArgumentParser(description="Hogan champion runtime")
+    parser.add_argument("--max-events", type=int, default=None, help="Stop after N candle events")
+    args, _ = parser.parse_known_args()
+    max_events = args.max_events if args.max_events is not None else max_loops
+    asyncio.run(run_event_loop(max_events=max_events))
 
 
 if __name__ == "__main__":

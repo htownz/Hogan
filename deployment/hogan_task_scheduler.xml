@@ -51,7 +51,7 @@
     <Exec>
       <!-- Update these paths to match your actual Python venv location -->
       <Command>C:\Users\15125\Documents\Hogan\venv\Scripts\python.exe</Command>
-      <Arguments>-m hogan_bot.event_loop</Arguments>
+      <Arguments>-m hogan_bot.main</Arguments>
       <WorkingDirectory>C:\Users\15125\Documents\Hogan\Hogan</WorkingDirectory>
     </Exec>
   </Actions>

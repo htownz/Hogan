@@ -8,7 +8,8 @@ alwaysApply: true
 Hogan is a BTC-first, 1h-led trading system. When editing or extending:
 
 ## Runtime Path
-- **Canonical**: `python -m hogan_bot.event_loop` (or `trader_service` as alias)
+- **Champion**: `python -m hogan_bot.main` (trader_service is alias)
+- main delegates to event_loop; event_loop holds the implementation
 - Config: `hogan_bot/config.py` → `load_config()` reads `.env` via dotenv
 
 ## Core Pipeline (event_loop.py)
@@ -36,6 +37,11 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 ## Data & Kraken
 - `HOGAN_USE_REST_DATA=1` — skip WebSocket, use REST polling (Kraken maintenance)
 - `HOGAN_WS_FAIL_THRESHOLD=5` — auto-switch to REST after N WS failures
+
+## Trade Sides
+- Paper trades: always use `side="long"` or `side="short"` (never buy/sell in storage)
+- `storage.normalize_side()` maps buy→long, sell→short
+- event_loop journals with long/short; close_paper_trade matches on side
 
 ## Conventions
 - Use `logger` from `logging`; config from `load_config()` then `apply_champion_mode(config)`
