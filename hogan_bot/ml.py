@@ -1259,6 +1259,7 @@ def walk_forward_cv(
     model_type: str = "logreg",
     db_conn=None,
     fee_rate: float = 0.0026,
+    label_mode: str = "enhanced_triple_barrier",
 ) -> list[dict[str, object]]:
     """Purged walk-forward time-series cross-validation.
 
@@ -1278,7 +1279,10 @@ def walk_forward_cv(
     except ModuleNotFoundError as exc:
         raise RuntimeError("scikit-learn is required for walk-forward CV") from exc
 
-    x, y, _ = build_training_set(candles, horizon_bars=horizon_bars, db_conn=db_conn, fee_rate=fee_rate)
+    x, y, _ = build_training_set(
+        candles, horizon_bars=horizon_bars, db_conn=db_conn,
+        fee_rate=fee_rate, label_mode=label_mode,
+    )
     if x is None or y is None or len(x) < 200:
         raise RuntimeError(
             "Not enough labelled rows for walk-forward CV. "

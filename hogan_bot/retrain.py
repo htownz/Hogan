@@ -106,9 +106,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--model-type",
-        choices=["logreg", "random_forest", "xgboost", "lightgbm"],
+        choices=["logreg", "random_forest", "xgboost", "lightgbm", "hist_gb"],
         default="logreg",
-        help="Model family to train",
+        help="Model family to train (hist_gb = HistGradientBoosting, matches champion)",
     )
     p.add_argument("--model-path", default="models/hogan_logreg.pkl", help="Production model path")
     p.add_argument(
@@ -235,12 +235,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--label-mode",
         choices=["fee_threshold", "triple_barrier", "enhanced_triple_barrier"],
-        default="fee_threshold",
+        default="enhanced_triple_barrier",
         help=(
-            "Label generation strategy: 'fee_threshold' (default) uses fee-aware "
-            "directional labels; 'triple_barrier' uses path-aware labels; "
-            "'enhanced_triple_barrier' adds regime-adaptive barriers, time decay, "
-            "and metalabel quality scores for sample weighting."
+            "Label generation strategy: 'enhanced_triple_barrier' (default, matches "
+            "champion training) adds regime-adaptive barriers, time decay, "
+            "and metalabel quality scores; 'triple_barrier' uses path-aware labels; "
+            "'fee_threshold' uses fee-aware directional labels."
         ),
     )
     return p
@@ -494,6 +494,12 @@ def _train_to_candidate(args: argparse.Namespace, candles: pd.DataFrame) -> tupl
                 candles, model_path=candidate_path, horizon_bars=args.horizon_bars,
                 db_conn=_db_conn, label_mode=_label_mode,
             )
+        elif args.model_type == "hist_gb":
+            from hogan_bot.ml import train_hist_gradient_boosting
+            metrics = train_hist_gradient_boosting(
+                candles, model_path=candidate_path, horizon_bars=args.horizon_bars,
+                db_conn=_db_conn, label_mode=_label_mode,
+            )
         else:
             metrics = train_logistic_regression(
                 candles,
@@ -566,6 +572,14 @@ def _train_from_xy(
         clf.fit(X_train, y_train)
         proba = clf.predict_proba(X_test)[:, 1]
         artifact = clf
+    elif model_type == "hist_gb":
+        from sklearn.ensemble import HistGradientBoostingClassifier
+        clf = HistGradientBoostingClassifier(
+            max_depth=6, learning_rate=0.05, max_iter=400, random_state=42,
+        )
+        clf.fit(X_train, y_train)
+        proba = clf.predict_proba(X_test)[:, 1]
+        artifact = clf
     else:
         from sklearn.linear_model import LogisticRegression
         C = 1.0
@@ -582,9 +596,16 @@ def _train_from_xy(
         clf.fit(X_train_sc, y_train)
         proba = clf.predict_proba(X_test_sc)[:, 1]
 
-    # Wrap all model types in TrainedModel for consistent pickling
+    # Wrap in TrainedModel — only store scaler for models trained on scaled data.
+    # Tree-based models (RF, XGB, LGB, hist_gb) are fitted on raw features;
+    # storing a scaler would corrupt inference.
     from hogan_bot.ml import TrainedModel
-    artifact = TrainedModel(scaler=scaler, model=clf, feature_columns=feature_cols)
+    _needs_scaler = model_type not in ("random_forest", "xgboost", "lightgbm", "hist_gb")
+    artifact = TrainedModel(
+        scaler=scaler if _needs_scaler else None,
+        model=clf,
+        feature_columns=feature_cols,
+    )
 
     Path(model_path).parent.mkdir(parents=True, exist_ok=True)
     with open(model_path, "wb") as fh:
