@@ -47,11 +47,13 @@ class ExitEvaluator:
         max_consolidation_bars: int = 12,
         drawdown_panic_pct: float = 0.03,
         volatility_expansion_threshold: float = 2.0,
+        time_decay_threshold: float = 0.75,
     ):
         self._trend_reversal_threshold = trend_reversal_threshold
         self._max_consolidation_bars = max_consolidation_bars
         self._drawdown_panic_pct = drawdown_panic_pct
         self._vol_expansion_threshold = volatility_expansion_threshold
+        self._time_decay_threshold = time_decay_threshold
 
     def should_exit(
         self,
@@ -62,6 +64,7 @@ class ExitEvaluator:
         side: str = "long",
         max_hold_bars: int = 24,
         entry_atr: float | None = None,
+        vol_ratio: float | None = None,
     ) -> ExitDecision:
         """Evaluate whether the current position should be exited.
 
@@ -102,7 +105,7 @@ class ExitEvaluator:
 
         # 3. Time decay: position has aged past expected hold window
         hold_ratio = bars_held / max(max_hold_bars, 1)
-        if hold_ratio > 0.75 and upnl_pct < 0.005:
+        if hold_ratio > self._time_decay_threshold and upnl_pct < 0.005:
             logger.debug("EXIT_MODEL: time decay (held %.0f%%, upnl=%.3f)", hold_ratio * 100, upnl_pct)
             return ExitDecision(
                 should_exit=True,
@@ -129,6 +132,15 @@ class ExitEvaluator:
                 should_exit=True,
                 reason="stagnation",
                 urgency=0.3,
+            )
+
+        # 6. Volume fade: volume dried up while position stalls in mild profit
+        if vol_ratio is not None and vol_ratio < 0.5 and 0.0 <= upnl_pct < 0.005:
+            logger.debug("EXIT_MODEL: volume fade (vol_ratio=%.2f, upnl=%.4f)", vol_ratio, upnl_pct)
+            return ExitDecision(
+                should_exit=True,
+                reason="volume_fade",
+                urgency=0.25,
             )
 
         return ExitDecision()
