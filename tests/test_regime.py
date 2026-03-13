@@ -11,7 +11,16 @@ from hogan_bot.regime import (
     _wilder_adx,
     detect_regime,
     effective_thresholds,
+    reset_regime_history,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_regime_history():
+    """Reset regime hysteresis buffer before each test."""
+    reset_regime_history()
+    yield
+    reset_regime_history()
 
 
 # ---------------------------------------------------------------------------

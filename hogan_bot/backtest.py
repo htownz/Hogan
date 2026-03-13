@@ -7,13 +7,16 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from hogan_bot.agent_pipeline import AgentPipeline
+from hogan_bot.champion import apply_champion_mode, is_champion_mode
 from hogan_bot.decision import (
     apply_ml_filter, edge_gate, entry_quality_gate, ml_confidence,
     estimate_spread_from_candles,
 )
+from hogan_bot.exit_model import ExitEvaluator
 from hogan_bot.expectancy import ExpectancyTracker
 from hogan_bot.ml import TrainedModel, predict_up_probability
 from hogan_bot.paper import PaperPortfolio
+from hogan_bot.regime import detect_regime, reset_regime_history
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
 from hogan_bot.timeframe_utils import bars_per_year as tf_bars_per_year
 from hogan_bot.timeframe_utils import infer_timeframe_from_candles
@@ -289,6 +292,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
+    reset_regime_history()
+
     if candles.empty:
         return BacktestResult(starting_balance_usd, starting_balance_usd, 0.0, 0.0, 0, 0.0)
 
@@ -362,6 +367,15 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     _min_hold_bars: int = 3
     _exit_confirm_bars: int = 2
 
+    # ExitEvaluator (parity with event_loop)
+    _exit_eval = ExitEvaluator()
+
+    # Regime tracking (parity with event_loop)
+    _current_regime: str | None = None
+    _regime_conf: float | None = None
+    _whipsaw_count: int = 0
+    _last_signal: str = "hold"
+
     # Next-open execution: pending buys/sells to fill at next bar's open
     _pending_buys: dict[str, float] = {}
     _pending_sells: dict[str, tuple[float, float, int | None, str]] = {}
@@ -401,7 +415,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     trade_log.append({"bar": bar_ts, "action": "sell", "reason": reason, "price": sell_px, "qty": qty})
                     gross_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
                     _expectancy.record_trade(
-                        symbol=sym, regime="backtest",
+                        symbol=sym, regime=_current_regime or "backtest",
                         gross_pnl_pct=gross_pct, net_pnl_pct=gross_pct - 2 * fee_rate,
                         hold_bars=(i - 1 - entry_bar_idx) if entry_bar_idx is not None else 0,
                         close_reason=reason,
@@ -432,6 +446,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 continue
             qty = pos.qty
             avg_entry = pos.avg_entry
+            _mae = getattr(pos, "max_adverse_pct", 0.0)
+            _mfe = getattr(pos, "max_favorable_pct", 0.0)
             entry_bar = _entry_bar.get(exit_symbol)
             if use_next_open and i < len(candles):
                 _pending_sells[exit_symbol] = (qty, avg_entry, entry_bar, reason)
@@ -452,10 +468,11 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     )
                     gross_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
                     _expectancy.record_trade(
-                        symbol=exit_symbol, regime="backtest",
+                        symbol=exit_symbol, regime=_current_regime or "backtest",
                         gross_pnl_pct=gross_pct, net_pnl_pct=gross_pct - 2 * fee_rate,
                         hold_bars=(i - 1 - entry_bar) if entry_bar is not None else 0,
                         close_reason=reason,
+                        mae_pct=_mae, mfe_pct=_mfe,
                     )
                     if entry_bar is not None:
                         exit_bar_idx = min(i - 1, len(candles) - 1)
@@ -485,6 +502,15 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             _rl_upnl = 0.0
             _rl_bars_in_trade = 0
 
+        # Regime detection (parity with event_loop)
+        if len(window) >= 80:
+            try:
+                _rstate = detect_regime(window)
+                _current_regime = _rstate.regime
+                _regime_conf = _rstate.confidence
+            except Exception:
+                pass
+
         _as_of = _bar_ts_ms(candles, i - 1) if _bt_conn is not None else None
         signal = _pipeline.run(
             window,
@@ -493,6 +519,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             rl_in_position=_rl_in_pos,
             rl_unrealized_pnl=_rl_upnl,
             rl_bars_in_trade=_rl_bars_in_trade,
+            regime=_current_regime,
         )
 
         action = signal.action
@@ -506,11 +533,20 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         # Fee- and spread-aware edge gate (parity with live/paper)
         _atr_pct = signal.stop_distance_pct / max(atr_stop_multiplier, 1.0)
         _spread_est = estimate_spread_from_candles(window)
+        _forecast_ret = None
+        if signal.forecast is not None and getattr(signal.forecast, 'confidence', 0) > 0.2:
+            _er = signal.forecast.expected_return
+            if isinstance(_er, dict) and _er:
+                _forecast_ret = max(abs(v) for v in _er.values())
+            elif isinstance(_er, (int, float)):
+                _forecast_ret = abs(float(_er))
         action = edge_gate(
             action,
             atr_pct=_atr_pct,
             take_profit_pct=take_profit_pct,
             fee_rate=fee_rate,
+            min_edge_multiple=1.5,
+            forecast_expected_return=_forecast_ret,
             estimated_spread=_spread_est,
         )
 
@@ -520,6 +556,9 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             action,
             final_confidence=signal.confidence,
             tech_confidence=_tech_conf,
+            regime=_current_regime,
+            regime_confidence=_regime_conf,
+            recent_whipsaw_count=_whipsaw_count,
         )
 
         equity = portfolio.total_equity(mark)
@@ -538,6 +577,13 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             fee_rate=fee_rate,
         )
 
+        # Track whipsaws (signal flipped from last bar)
+        if action != "hold" and _last_signal != "hold" and action != _last_signal:
+            _whipsaw_count = min(_whipsaw_count + 1, 10)
+        elif action == _last_signal:
+            _whipsaw_count = max(0, _whipsaw_count - 1)
+        _last_signal = action
+
         if action == "buy":
             _consecutive_exit_signals = 0
             if symbol in portfolio.positions:
@@ -553,6 +599,9 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     trailing_stop_pct=trailing_stop_pct,
                     take_profit_pct=take_profit_pct,
                 ):
+                    _pos = portfolio.positions.get(symbol)
+                    if _pos is not None:
+                        _pos.entry_atr_pct = _atr_pct
                     trades += 1
                     _entry_bar[symbol] = i - 1
                     trade_log.append(
@@ -567,15 +616,30 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             if qty <= 0:
                 _consecutive_exit_signals = 0
                 continue
+
+            # ExitEvaluator: is the thesis actually broken? (parity with event_loop)
+            _exit_dec = _exit_eval.should_exit(
+                candles=window,
+                entry_price=pos.avg_entry,
+                current_price=px,
+                bars_held=pos.bars_held,
+                side="long",
+                max_hold_bars=max_hold_bars,
+                entry_atr=getattr(pos, "entry_atr_pct", None) or None,
+            )
+
             _consecutive_exit_signals += 1
             # Conviction persistence: block signal exits before min hold
             if pos.bars_held < _min_hold_bars:
                 continue
-            if _consecutive_exit_signals < _exit_confirm_bars:
+            # If ExitEvaluator says thesis is intact, require more confirmation bars
+            if not _exit_dec.should_exit and _consecutive_exit_signals < _exit_confirm_bars:
                 continue
             _consecutive_exit_signals = 0
             sell_qty = min(qty, size)
             avg_entry = pos.avg_entry
+            _mae = getattr(pos, "max_adverse_pct", 0.0)
+            _mfe = getattr(pos, "max_favorable_pct", 0.0)
             entry_bar_idx = _entry_bar.get(symbol)
             if use_next_open and i < len(candles):
                 _pending_sells[symbol] = (sell_qty, avg_entry, entry_bar_idx, "signal")
@@ -596,10 +660,11 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     )
                     gross_pct = (sell_px_sig - avg_entry) / avg_entry if avg_entry else 0
                     _expectancy.record_trade(
-                        symbol=symbol, regime="backtest",
+                        symbol=symbol, regime=_current_regime or "backtest",
                         gross_pnl_pct=gross_pct, net_pnl_pct=gross_pct - 2 * fee_rate,
                         hold_bars=(i - 1 - entry_bar_idx) if entry_bar_idx is not None else 0,
                         close_reason="signal",
+                        mae_pct=_mae, mfe_pct=_mfe,
                     )
                     if entry_bar_idx is not None:
                         exit_bar_idx = min(i - 1, len(candles) - 1)

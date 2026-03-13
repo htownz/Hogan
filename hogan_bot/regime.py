@@ -132,6 +132,15 @@ def _atr_percentile_rank(candles: pd.DataFrame, lookback: int = 100) -> float:
 # Public API
 # ---------------------------------------------------------------------------
 
+_REGIME_HISTORY: list[str] = []
+_REGIME_HYSTERESIS_BARS: int = 3
+
+
+def reset_regime_history() -> None:
+    """Clear the hysteresis buffer. Useful for tests and backtest initialization."""
+    _REGIME_HISTORY.clear()
+
+
 def detect_regime(
     candles: pd.DataFrame,
     adx_period: int = 14,
@@ -143,6 +152,7 @@ def detect_regime(
     atr_volatile_pct: float = 0.80,
     btc_dominance: float | None = None,
     fear_greed: float | None = None,
+    hysteresis_bars: int = _REGIME_HYSTERESIS_BARS,
 ) -> RegimeState:
     """Classify the current market regime from OHLCV candles.
 
@@ -224,6 +234,18 @@ def detect_regime(
         # Fear & Greed in neutral zone (40–60) suggests ranging
         elif 40 <= fear_greed <= 60 and regime == "ranging":
             confidence = min(1.0, confidence + 0.05)
+
+    # Hysteresis: require N consecutive bars of the new regime before switching
+    _REGIME_HISTORY.append(regime)
+    if len(_REGIME_HISTORY) > hysteresis_bars * 3:
+        del _REGIME_HISTORY[:-hysteresis_bars * 3]
+
+    if len(_REGIME_HISTORY) >= hysteresis_bars + 1:
+        prev_regime = _REGIME_HISTORY[-(hysteresis_bars + 1)]
+        recent = _REGIME_HISTORY[-hysteresis_bars:]
+        if regime != prev_regime and not all(r == regime for r in recent):
+            regime = prev_regime
+            confidence *= 0.8
 
     return RegimeState(
         regime=regime,

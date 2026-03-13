@@ -143,7 +143,9 @@ def generate_signal(
         lma_now = float(long_ma.iloc[-1])
 
         ma_spread_pct = abs(sma_now - lma_now) / max(lma_now, 1e-9)
-        trend_strong = ma_spread_pct > 0.01
+        # Adaptive threshold: 0.7× ATR stop distance (scales with volatility)
+        _trend_spread_threshold = max(0.005, stop_distance_pct * 0.7)
+        trend_strong = ma_spread_pct > _trend_spread_threshold
 
         if trend_strong and in_uptrend:
             bars_below = sum(
