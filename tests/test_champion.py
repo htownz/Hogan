@@ -153,7 +153,7 @@ class TestChampionFeatureSubset:
 
         from hogan_bot.feature_registry import CHAMPION_FEATURE_COLUMNS
 
-        x, y, feature_cols = build_training_set(
+        x, y, feature_cols, _mq = build_training_set(
             candles, horizon_bars=12, db_conn=None, use_champion_features=True
         )
         assert x is not None and y is not None

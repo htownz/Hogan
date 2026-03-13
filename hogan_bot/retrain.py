@@ -322,7 +322,7 @@ def _build_multi_symbol_dataset(
                 logger.warning("No candles in DB for %s / %s — skipping", sym, args.timeframe)
                 continue
             # Pass db_conn so macro features (SPY/VIX/GLD…) are joined during training
-            x_sym, y_sym, fc = build_training_set(df, horizon_bars=args.horizon_bars, db_conn=conn)
+            x_sym, y_sym, fc, _mq = build_training_set(df, horizon_bars=args.horizon_bars, db_conn=conn)
             if x_sym is not None:
                 x_frames.append(x_sym)
                 y_frames.append(y_sym)
@@ -336,7 +336,7 @@ def _build_multi_symbol_dataset(
         primary = symbols[0]
         client = ExchangeClient(args.exchange)
         df = client.fetch_ohlcv_df(primary, timeframe=args.timeframe, limit=args.window_bars)
-        x_sym, y_sym, feature_columns = build_training_set(df, horizon_bars=args.horizon_bars)
+        x_sym, y_sym, feature_columns, _mq = build_training_set(df, horizon_bars=args.horizon_bars)
         if x_sym is not None:
             x_frames.append(x_sym)
             y_frames.append(y_sym)
