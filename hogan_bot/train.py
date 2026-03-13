@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import statistics
 
 from hogan_bot.exchange import ExchangeClient
@@ -77,11 +78,22 @@ def parse_args() -> argparse.Namespace:
         default="data/hogan.db",
         help="DB path (used with --from-db)",
     )
+    parser.add_argument(
+        "--champion",
+        action="store_true",
+        help="Use 16-feature champion subset and save to models/hogan_champion.pkl",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+
+    if getattr(args, "champion", False):
+        os.environ["HOGAN_CHAMPION_MODE"] = "true"
+        if args.model_path == "models/hogan_logreg.pkl":
+            args.model_path = "models/hogan_champion.pkl"
+        print("Champion mode: training on 16-feature subset ->", args.model_path)
 
     if getattr(args, "from_db", False):
         from hogan_bot.storage import get_connection, load_candles
