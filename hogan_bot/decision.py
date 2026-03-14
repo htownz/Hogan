@@ -386,7 +386,7 @@ def ranging_gate(
     tech_action: str | None = None,
     up_prob: float | None = None,
     recent_whipsaw_count: int = 0,
-    ml_separation_min: float = 0.12,
+    ml_separation_min: float = 0.06,
     whipsaw_block_threshold: int = 2,
     soft_mode: bool = True,
 ) -> GateDecision:

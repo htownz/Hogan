@@ -14,6 +14,7 @@ from hogan_bot.decision import (
 )
 from hogan_bot.exit_model import ExitEvaluator
 from hogan_bot.expectancy import ExpectancyTracker
+from hogan_bot.indicators import compute_atr
 from hogan_bot.ml import TrainedModel, predict_up_probability
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.regime import detect_regime, reset_regime_history
@@ -58,10 +59,11 @@ class BacktestResult:
     closed_trades: list[dict] = field(default_factory=list)
     expectancy_report: dict = field(default_factory=dict)
     regime_log: list[str | None] = field(default_factory=list)
+    signal_funnel: dict = field(default_factory=dict)
 
     def summary_dict(self) -> dict:
         """Return all scalar fields as a plain dict (omits large lists)."""
-        return {
+        d = {
             "start_equity": self.start_equity,
             "end_equity": self.end_equity,
             "total_return_pct": round(self.total_return_pct, 4),
@@ -72,6 +74,9 @@ class BacktestResult:
             "sortino_ratio": round(self.sortino_ratio, 4) if self.sortino_ratio is not None else None,
             "calmar_ratio": round(self.calmar_ratio, 4) if self.calmar_ratio is not None else None,
         }
+        if self.signal_funnel:
+            d["signal_funnel"] = self.signal_funnel
+        return d
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +443,24 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     _min_hold_bars: int = 3
     _exit_confirm_bars: int = 2
 
+    # Signal funnel counters — where do signals die?
+    _funnel = {
+        "bars_evaluated": 0,
+        "pipeline_buy": 0, "pipeline_sell": 0,
+        "post_ml_buy": 0, "post_ml_sell": 0,
+        "post_edge_buy": 0, "post_edge_sell": 0,
+        "post_quality_buy": 0, "post_quality_sell": 0,
+        "post_ranging_buy": 0, "post_ranging_sell": 0,
+        "executed_buy": 0, "blocked_already_long": 0,
+        "blocked_cooldown": 0,
+        "edge_blocked_atr": 0, "edge_blocked_tp": 0,
+        "edge_blocked_forecast": 0, "edge_blocked_spread": 0,
+        "ranging_blocked_tech": 0, "ranging_blocked_ml": 0,
+        "ranging_blocked_whipsaw": 0,
+    }
+    # ML probability histogram (to understand model output distribution)
+    _ml_probs: list[float] = []
+
     # ExitEvaluator (parity with event_loop — configurable thresholds)
     _exit_eval = ExitEvaluator(
         drawdown_panic_pct=0.03,
@@ -618,16 +641,32 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             regime_state=_rstate,
         )
 
+        _funnel["bars_evaluated"] += 1
         action = signal.action
         conf_scale = signal.confidence or 1.0
+
+        # Track pipeline output before any filtering
+        if action == "buy":
+            _funnel["pipeline_buy"] += 1
+        elif action == "sell":
+            _funnel["pipeline_sell"] += 1
+
+        up_prob = None
         if ml_model is not None:
             up_prob = predict_up_probability(window, ml_model)
+            _ml_probs.append(up_prob)
             _ml_gd = apply_ml_filter(action, up_prob, _eff_ml_buy, _eff_ml_sell)
             action = _ml_gd.action
             if ml_confidence_sizing:
                 conf_scale *= ml_confidence(up_prob)
 
-        _atr_pct = signal.stop_distance_pct / max(atr_stop_multiplier, 1.0)
+        if action == "buy":
+            _funnel["post_ml_buy"] += 1
+        elif action == "sell":
+            _funnel["post_ml_sell"] += 1
+
+        _atr_series = compute_atr(window, window=14)
+        _atr_pct = float(_atr_series.iloc[-1]) / max(px, 1e-9)
         _spread_est = estimate_spread_from_candles(window)
         _forecast_ret = None
         if signal.forecast is not None and getattr(signal.forecast, 'confidence', 0) > 0.2:
@@ -647,6 +686,22 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         )
         action = _edge_gd.action
 
+        if _edge_gd.blocked_by:
+            blk = _edge_gd.blocked_by
+            if "atr" in blk:
+                _funnel["edge_blocked_atr"] += 1
+            elif "tp" in blk:
+                _funnel["edge_blocked_tp"] += 1
+            elif "forecast" in blk:
+                _funnel["edge_blocked_forecast"] += 1
+            elif "spread" in blk:
+                _funnel["edge_blocked_spread"] += 1
+
+        if action == "buy":
+            _funnel["post_edge_buy"] += 1
+        elif action == "sell":
+            _funnel["post_edge_sell"] += 1
+
         _tech_conf = signal.tech.confidence if signal.tech else None
         _quality_gd = entry_quality_gate(
             action,
@@ -663,6 +718,11 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         action = _quality_gd.action
         _quality_scale = _quality_gd.size_scale
 
+        if action == "buy":
+            _funnel["post_quality_buy"] += 1
+        elif action == "sell":
+            _funnel["post_quality_sell"] += 1
+
         _tech_action = signal.tech.action if signal.tech else None
         _ranging_gd = ranging_gate(
             action,
@@ -673,6 +733,20 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         )
         action = _ranging_gd.action
         _ranging_scale = _ranging_gd.size_scale
+
+        if _ranging_gd.blocked_by:
+            blk = _ranging_gd.blocked_by
+            if "tech" in blk:
+                _funnel["ranging_blocked_tech"] += 1
+            elif "ml" in blk:
+                _funnel["ranging_blocked_ml"] += 1
+            elif "whipsaw" in blk:
+                _funnel["ranging_blocked_whipsaw"] += 1
+
+        if action == "buy":
+            _funnel["post_ranging_buy"] += 1
+        elif action == "sell":
+            _funnel["post_ranging_sell"] += 1
 
         equity = portfolio.total_equity(mark)
         equity_curve.append(equity)
@@ -700,9 +774,9 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         if action == "buy":
             _consecutive_exit_signals = 0
             if symbol in portfolio.positions:
-                pass
+                _funnel["blocked_already_long"] += 1
             elif _cooldown_remaining > 0:
-                pass
+                _funnel["blocked_cooldown"] += 1
             elif use_next_open and i < len(candles):
                 _pending_buys[symbol] = size
             else:
@@ -716,6 +790,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     if _pos is not None:
                         _pos.entry_atr_pct = _atr_pct
                     trades += 1
+                    _funnel["executed_buy"] += 1
                     _entry_bar[symbol] = i - 1
                     trade_log.append(
                         {"bar": bar_ts, "action": "buy", "reason": "signal", "price": buy_px, "qty": size}
@@ -812,6 +887,31 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     if _bt_conn is not None:
         _bt_conn.close()
 
+    # Build ML probability distribution summary
+    if _ml_probs:
+        import numpy as np
+        _probs_arr = np.array(_ml_probs)
+        _funnel["ml_prob_stats"] = {
+            "mean": round(float(np.mean(_probs_arr)), 4),
+            "std": round(float(np.std(_probs_arr)), 4),
+            "min": round(float(np.min(_probs_arr)), 4),
+            "p10": round(float(np.percentile(_probs_arr, 10)), 4),
+            "p25": round(float(np.percentile(_probs_arr, 25)), 4),
+            "median": round(float(np.median(_probs_arr)), 4),
+            "p75": round(float(np.percentile(_probs_arr, 75)), 4),
+            "p90": round(float(np.percentile(_probs_arr, 90)), 4),
+            "max": round(float(np.max(_probs_arr)), 4),
+            "pct_above_buy_thresh": round(float(np.mean(_probs_arr >= ml_buy_threshold) * 100), 2),
+            "pct_below_sell_thresh": round(float(np.mean(_probs_arr <= ml_sell_threshold) * 100), 2),
+        }
+
+    # Regime distribution from actual market detection (not equity curve)
+    _regime_counts: dict[str, int] = {}
+    for _r in _regime_per_bar:
+        if _r is not None:
+            _regime_counts[_r] = _regime_counts.get(_r, 0) + 1
+    _funnel["regime_distribution"] = _regime_counts
+
     return BacktestResult(
         start_equity=starting_balance_usd,
         end_equity=end_equity,
@@ -828,4 +928,5 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         closed_trades=closed_trades,
         expectancy_report=_expectancy.summary(),
         regime_log=_regime_per_bar,
+        signal_funnel=_funnel,
     )
