@@ -42,8 +42,8 @@ class BotConfig:
     use_ml_filter: bool = False
     ml_model_path: str = "models/hogan_logreg.pkl"
     champion_ml_model_path: str = "models/hogan_champion.pkl"
-    ml_buy_threshold: float = 0.52
-    ml_sell_threshold: float = 0.48
+    ml_buy_threshold: float = 0.55
+    ml_sell_threshold: float = 0.45
 
     # Ripster EMA cloud settings (disabled: empirically hurts win rate as
     # cloud-based confirmation filters out good crossover trades)
@@ -240,8 +240,8 @@ class RegimeConfig:
     - effective_thresholds: execution economics (ML gates, TP/SL, position_scale)
     """
     volume_threshold_mult: float = 1.0
-    ml_buy_threshold: float = 0.52
-    ml_sell_threshold: float = 0.48
+    ml_buy_threshold: float = 0.55
+    ml_sell_threshold: float = 0.45
     trailing_stop_mult: float = 1.0
     take_profit_mult: float = 1.0
     position_scale: float = 1.0
@@ -260,8 +260,8 @@ class RegimeConfig:
 DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
     "trending_up": RegimeConfig(
         volume_threshold_mult=0.55,
-        ml_buy_threshold=0.52,
-        ml_sell_threshold=0.48,
+        ml_buy_threshold=0.53,
+        ml_sell_threshold=0.47,
         trailing_stop_mult=1.30,
         take_profit_mult=2.00,
         position_scale=1.00,
@@ -276,8 +276,8 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
     ),
     "trending_down": RegimeConfig(
         volume_threshold_mult=0.55,
-        ml_buy_threshold=0.52,
-        ml_sell_threshold=0.48,
+        ml_buy_threshold=0.57,
+        ml_sell_threshold=0.43,
         trailing_stop_mult=1.30,
         take_profit_mult=1.70,
         position_scale=1.00,
@@ -292,8 +292,8 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
     ),
     "ranging": RegimeConfig(
         volume_threshold_mult=1.10,
-        ml_buy_threshold=0.52,
-        ml_sell_threshold=0.48,
+        ml_buy_threshold=0.58,
+        ml_sell_threshold=0.42,
         trailing_stop_mult=0.80,
         take_profit_mult=0.70,
         position_scale=0.75,
@@ -308,8 +308,8 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
     ),
     "volatile": RegimeConfig(
         volume_threshold_mult=0.70,
-        ml_buy_threshold=0.52,
-        ml_sell_threshold=0.48,
+        ml_buy_threshold=0.57,
+        ml_sell_threshold=0.43,
         trailing_stop_mult=0.80,
         take_profit_mult=1.40,
         position_scale=0.50,
@@ -447,8 +447,8 @@ def load_config() -> BotConfig:
         use_ml_filter=os.getenv("HOGAN_USE_ML_FILTER", "false").lower() == "true",
         ml_model_path=os.getenv("HOGAN_ML_MODEL_PATH", "models/hogan_logreg.pkl"),
         champion_ml_model_path=os.getenv("HOGAN_CHAMPION_ML_MODEL_PATH", "models/hogan_champion.pkl"),
-        ml_buy_threshold=float(os.getenv("HOGAN_ML_BUY_THRESHOLD", "0.52")),
-        ml_sell_threshold=float(os.getenv("HOGAN_ML_SELL_THRESHOLD", "0.48")),
+        ml_buy_threshold=float(os.getenv("HOGAN_ML_BUY_THRESHOLD", "0.55")),
+        ml_sell_threshold=float(os.getenv("HOGAN_ML_SELL_THRESHOLD", "0.45")),
         use_ema_clouds=os.getenv("HOGAN_USE_EMA_CLOUDS", "false").lower() == "true",
         ema_fast_short=int(os.getenv("HOGAN_EMA_FAST_SHORT", "8")),
         ema_fast_long=int(os.getenv("HOGAN_EMA_FAST_LONG", "9")),
