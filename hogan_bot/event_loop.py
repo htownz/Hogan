@@ -1,26 +1,23 @@
-"""Async event loop — Phase 2b.
+"""Hogan async event loop — the canonical trading runtime.
 
-Replaces the blocking ``while True`` in ``main.py`` with an ``asyncio``
-pipeline:
+Called by ``main.py`` (the public entry point).  All trading logic lives here.
+
+Pipeline::
 
     LiveDataEngine (WebSocket candles)
         -> CandleEvent queue
         -> SignalEvaluator (AgentPipeline + ML filter)
         -> RiskManager (DrawdownGuard + position sizing)
-        -> ExecutionEngine (PaperExecution | LiveExecution)
+        -> ExecutionEngine (open_long / close_long / close_short / emergency_flatten)
         -> SQLite journal + Prometheus metrics
 
 Each symbol's signal evaluation is wrapped in a per-symbol try/except so a
-single symbol failure never aborts the whole loop (Phase 7 hardening).
+single symbol failure never aborts the whole loop.
 
-Run directly::
+Usage::
 
-    python -m hogan_bot.event_loop
-
-Or import::
-
-    from hogan_bot.event_loop import run_event_loop
-    asyncio.run(run_event_loop())
+    python -m hogan_bot.main              # preferred entry point
+    python -m hogan_bot.event_loop        # direct (same effect)
 """
 from __future__ import annotations
 
@@ -578,21 +575,18 @@ async def run_event_loop(
                 logger.error("Drawdown limit hit: equity=%.2f peak=%.2f", equity, guard.peak_equity)
                 if notifier:
                     notifier.notify("drawdown_breach", {"equity": equity, "peak": guard.peak_equity})
-                # Flatten all positions before stopping
-                for _flat_sym, _flat_pos in list(portfolio.positions.items()):
+                # Flatten all positions before stopping — use emergency_flatten
+                # which routes through the proper exit_long / exit_short methods
+                _flat_syms = set(portfolio.positions) | set(portfolio.short_positions)
+                for _flat_sym in _flat_syms:
                     try:
-                        _flat_px = mark_prices.get(_flat_sym, _flat_pos.avg_entry)
-                        executor.sell(_flat_sym, _flat_px, _flat_pos.qty, reason="drawdown_flatten")
-                        logger.warning("FLATTEN long %s qty=%.6f px=%.2f", _flat_sym, _flat_pos.qty, _flat_px)
+                        _flat_px = mark_prices.get(_flat_sym, 0.0)
+                        if _flat_px <= 0:
+                            continue
+                        res = executor.emergency_flatten(_flat_sym, _flat_px)
+                        logger.warning("FLATTEN %s px=%.2f ok=%s", _flat_sym, _flat_px, res.ok)
                     except Exception as _flat_exc:
-                        logger.error("Failed to flatten long %s: %s", _flat_sym, _flat_exc)
-                for _flat_sym, _flat_pos in list(portfolio.short_positions.items()):
-                    try:
-                        _flat_px = mark_prices.get(_flat_sym, _flat_pos.avg_entry)
-                        executor.exit_short(_flat_sym, _flat_px, _flat_pos.qty, reason="drawdown_flatten")
-                        logger.warning("FLATTEN short %s qty=%.6f px=%.2f", _flat_sym, _flat_pos.qty, _flat_px)
-                    except Exception as _flat_exc:
-                        logger.error("Failed to flatten short %s: %s", _flat_sym, _flat_exc)
+                        logger.error("Failed to flatten %s: %s", _flat_sym, _flat_exc)
                 break
 
             # Decrement loss cooldown each iteration
@@ -619,7 +613,7 @@ async def run_event_loop(
                     bars_held = getattr(pos, "bars_held", 0)
                     mae_pct = getattr(pos, "max_adverse_pct", 0.0)
                     mfe_pct = getattr(pos, "max_favorable_pct", 0.0)
-                    res = executor.exit_long(exit_symbol, ep, qty, reason=reason)
+                    res = executor.close_long(exit_symbol, ep, qty, reason=reason)
                     executed = bool(res.ok)
                     sell_px = ep
                     if executed:
@@ -675,7 +669,7 @@ async def run_event_loop(
                     mae_pct = getattr(pos, "max_adverse_pct", 0.0)
                     mfe_pct = getattr(pos, "max_favorable_pct", 0.0)
                     cover_px = ep
-                    res = executor.exit_short(exit_symbol, cover_px, qty, reason=reason)
+                    res = executor.close_short(exit_symbol, cover_px, qty, reason=reason)
                     executed = bool(res.ok)
                     if executed:
                         fee = qty * cover_px * config.fee_rate
@@ -839,9 +833,9 @@ async def run_event_loop(
                     logger.debug("FX_SESSION_BLOCK %s — outside allowed trading hours", symbol)
                 else:
                     buy_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
-                    res = executor.buy(symbol, buy_px, size,
-                                       trailing_stop_pct=_eff_stop,
-                                       take_profit_pct=_eff_tp)
+                    res = executor.open_long(symbol, buy_px, size,
+                                            trailing_stop_pct=_eff_stop,
+                                            take_profit_pct=_eff_tp)
                     executed = bool(res.ok)
                     if executed:
                         pos = portfolio.positions.get(symbol)
@@ -903,7 +897,7 @@ async def run_event_loop(
                     sell_qty = min(pos.qty, size)
                     sell_px = px if _executor_owns_fill else px * (1.0 - slip_mult)
                     avg_entry = pos.avg_entry
-                    res = executor.exit_long(symbol, sell_px, sell_qty, reason="signal")
+                    res = executor.close_long(symbol, sell_px, sell_qty, reason="signal")
                     executed = bool(res.ok)
                     if executed:
                         now_ms = int(time.time() * 1000)

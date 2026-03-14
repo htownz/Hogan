@@ -235,7 +235,7 @@ def get_feature_columns(use_champion: bool | None = None) -> list[str]:
     """Return the feature column list for training/inference.
 
     When *use_champion* is True or when HOGAN_CHAMPION_MODE is set,
-    returns the 16-feature champion subset. Otherwise returns the full 59.
+    returns the 15-feature champion subset. Otherwise returns the full 59.
     """
     if use_champion is None:
         try:
