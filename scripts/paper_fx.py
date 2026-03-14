@@ -165,12 +165,12 @@ def _run_once(
                 # Cover any existing short first
                 spos = portfolio.short_positions.get(symbol)
                 if spos and spos.qty > 0:
-                    executor.exit_short(symbol, px, spos.qty, reason="flip_to_long")
+                    executor.close_short(symbol, px, spos.qty, reason="flip_to_long")
                     close_paper_trade(conn, symbol, "short", px, spos.qty * px * fee_rate, now_ms,
                                       close_reason="flip_to_long")
 
                 tp = pip_take_profit(symbol, px, "long", tp_pips)
-                res = executor.buy(
+                res = executor.open_long(
                     symbol, px, size,
                     trailing_stop_pct=stop_pips * pip_size(symbol) / px,
                     take_profit_pct=(tp - px) / px,
@@ -190,7 +190,7 @@ def _run_once(
                 if pos is not None:
                     qty = pos.qty
                     avg_entry = pos.avg_entry
-                    res = executor.exit_long(symbol, px, qty, reason="signal")
+                    res = executor.close_long(symbol, px, qty, reason="signal")
                     if res.ok:
                         fee = qty * px * fee_rate
                         close_paper_trade(conn, symbol, "long", px, fee, now_ms, close_reason="signal")
@@ -229,7 +229,7 @@ def _run_once(
                 if epos is not None:
                     eqty = epos.qty
                     eavg = epos.avg_entry
-                    res = executor.exit_long(exit_sym, px, eqty, reason=exit_reason)
+                    res = executor.close_long(exit_sym, px, eqty, reason=exit_reason)
                     if res.ok:
                         fee = eqty * px * _fx_fee_rate(exit_sym)
                         close_paper_trade(conn, exit_sym, "long", px, fee, now_ms, close_reason=exit_reason)
