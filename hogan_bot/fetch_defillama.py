@@ -174,6 +174,139 @@ def _fetch_stablecoins() -> dict[str, float]:
 
 
 # ---------------------------------------------------------------------------
+# Historical backfill
+# ---------------------------------------------------------------------------
+
+def backfill_historical_tvl(
+    symbol: str = "BTC/USD",
+    db_path: str = "data/hogan.db",
+    days: int = 730,
+) -> int:
+    """Backfill daily DeFi TVL metrics from DeFi Llama historical endpoints.
+
+    Uses ``/v2/historicalChainTvl`` (total + per-chain) and
+    ``stablecoins.llama.fi/stablecoincharts/all`` for stablecoin mcap.
+
+    Computes per-day: defi_total_tvl_b, defi_tvl_change_1d, defi_tvl_change_7d,
+    defi_eth_tvl_pct, defi_btc_tvl_b, defi_stablecoin_b.
+    """
+    from hogan_bot.storage import get_connection, upsert_onchain
+    import math
+
+    conn = get_connection(db_path)
+    cutoff_ts = int((datetime.now(timezone.utc) - timedelta(days=days)).timestamp())
+    total_written = 0
+
+    # 1. Total TVL history
+    logger.info("Fetching total TVL history...")
+    total_data = _get_json(f"{_BASE}/v2/historicalChainTvl")
+    if not isinstance(total_data, list):
+        logger.warning("historicalChainTvl returned unexpected type")
+        conn.close()
+        return 0
+
+    total_by_date: dict[str, float] = {}
+    for entry in total_data:
+        ts = int(entry.get("date", 0))
+        if ts < cutoff_ts:
+            continue
+        tvl = float(entry.get("tvl", 0))
+        d = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+        total_by_date[d] = tvl
+
+    # Store total TVL + compute changes
+    sorted_dates = sorted(total_by_date.keys())
+    records: list[tuple[str, str, float]] = []
+    for i, d in enumerate(sorted_dates):
+        tvl_b = total_by_date[d] / 1e9
+        records.append((d, "defi_total_tvl_b", round(tvl_b, 4)))
+
+        if i >= 1:
+            prev = total_by_date[sorted_dates[i - 1]]
+            if prev > 0:
+                chg = (total_by_date[d] - prev) / prev * 100
+                records.append((d, "defi_tvl_change_1d", round(chg, 4)))
+        if i >= 7:
+            prev7 = total_by_date[sorted_dates[i - 7]]
+            if prev7 > 0:
+                chg7 = (total_by_date[d] - prev7) / prev7 * 100
+                records.append((d, "defi_tvl_change_7d", round(chg7, 4)))
+
+    if records:
+        total_written += upsert_onchain(conn, symbol, records)
+        logger.info("Total TVL: %d dates, %d records", len(sorted_dates), len(records))
+
+    # 2. Ethereum chain TVL (for defi_eth_tvl_pct)
+    time.sleep(0.5)
+    logger.info("Fetching Ethereum chain TVL history...")
+    try:
+        eth_data = _get_json(f"{_BASE}/v2/historicalChainTvl/Ethereum")
+        if isinstance(eth_data, list):
+            eth_records: list[tuple[str, str, float]] = []
+            for entry in eth_data:
+                ts = int(entry.get("date", 0))
+                if ts < cutoff_ts:
+                    continue
+                eth_tvl = float(entry.get("tvl", 0))
+                d = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+                total_tvl = total_by_date.get(d, 0)
+                if total_tvl > 0:
+                    pct = eth_tvl / total_tvl * 100
+                    eth_records.append((d, "defi_eth_tvl_pct", round(pct, 4)))
+            if eth_records:
+                total_written += upsert_onchain(conn, symbol, eth_records)
+                logger.info("ETH TVL %%: %d records", len(eth_records))
+    except Exception as exc:
+        logger.warning("Ethereum chain TVL backfill failed: %s", exc)
+
+    # 3. Bitcoin chain TVL (for defi_btc_tvl_b)
+    time.sleep(0.5)
+    logger.info("Fetching Bitcoin chain TVL history...")
+    try:
+        btc_data = _get_json(f"{_BASE}/v2/historicalChainTvl/Bitcoin")
+        if isinstance(btc_data, list):
+            btc_records: list[tuple[str, str, float]] = []
+            for entry in btc_data:
+                ts = int(entry.get("date", 0))
+                if ts < cutoff_ts:
+                    continue
+                btc_tvl = float(entry.get("tvl", 0))
+                d = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+                btc_records.append((d, "defi_btc_tvl_b", round(btc_tvl / 1e9, 4)))
+            if btc_records:
+                total_written += upsert_onchain(conn, symbol, btc_records)
+                logger.info("BTC TVL: %d records", len(btc_records))
+    except Exception as exc:
+        logger.warning("Bitcoin chain TVL backfill failed: %s", exc)
+
+    # 4. Stablecoin market cap history
+    time.sleep(0.5)
+    logger.info("Fetching stablecoin mcap history...")
+    try:
+        stable_data = _get_json(f"{_STABLECOIN_BASE}/stablecoincharts/all?stablecoin=1")
+        if isinstance(stable_data, list):
+            stable_records: list[tuple[str, str, float]] = []
+            for entry in stable_data:
+                ts = int(entry.get("date", 0))
+                if ts < cutoff_ts:
+                    continue
+                total_circulating = entry.get("totalCirculating", {})
+                pegged_usd = float(total_circulating.get("peggedUSD", 0))
+                if pegged_usd > 0:
+                    d = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+                    stable_records.append((d, "defi_stablecoin_b", round(pegged_usd / 1e9, 4)))
+            if stable_records:
+                total_written += upsert_onchain(conn, symbol, stable_records)
+                logger.info("Stablecoin mcap: %d records", len(stable_records))
+    except Exception as exc:
+        logger.warning("Stablecoin mcap backfill failed: %s", exc)
+
+    conn.close()
+    logger.info("DeFiLlama backfill complete: %d total records written", total_written)
+    return total_written
+
+
+# ---------------------------------------------------------------------------
 # Main fetch → DB
 # ---------------------------------------------------------------------------
 
@@ -231,6 +364,10 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument("--symbol", default="BTC/USD")
     p.add_argument("--db", default="data/hogan.db")
+    p.add_argument("--backfill", action="store_true",
+                   help="Backfill historical TVL, chain dominance, and stablecoin mcap")
+    p.add_argument("--days", type=int, default=730,
+                   help="Number of days to backfill (with --backfill)")
     return p.parse_args()
 
 
@@ -242,8 +379,15 @@ def main() -> None:
         load_dotenv()
     except ImportError:
         pass
-    result = fetch_all_defillama(symbol=args.symbol, db_path=args.db)
-    print(json.dumps(result, indent=2))
+
+    if args.backfill:
+        n = backfill_historical_tvl(
+            symbol=args.symbol, db_path=args.db, days=args.days,
+        )
+        print(f"Backfill complete: {n} records written")
+    else:
+        result = fetch_all_defillama(symbol=args.symbol, db_path=args.db)
+        print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":
