@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from hogan_bot.backtest import evaluate_market_regimes, evaluate_regimes, run_backtest_on_candles
+from hogan_bot.backtest import evaluate_market_regimes, evaluate_regimes, evaluate_regimes_by_market, run_backtest_on_candles
 from hogan_bot.config import load_config
 from hogan_bot.exchange import ExchangeClient
 from hogan_bot.ml import load_model
@@ -48,6 +48,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Sweep 5 signal configurations and print a comparison table instead of a single result",
     )
+    parser.add_argument(
+        "--enable-shorts",
+        action="store_true",
+        help="Enable short selling in backtest (sell signals open shorts when flat)",
+    )
     return parser.parse_args()
 
 
@@ -58,7 +63,7 @@ def _load_rl_policy(model_path: str):
     return _RL_POLICY_CACHE[model_path]
 
 
-def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, overrides: dict | None = None, use_ict: bool = False, use_rl_agent: bool = False, rl_policy=None, db_path: str | None = None):
+def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, overrides: dict | None = None, use_ict: bool = False, use_rl_agent: bool = False, rl_policy=None, db_path: str | None = None, enable_shorts: bool = False):
     """Run one backtest with optional per-key overrides on *cfg*.
 
     Returns the full :class:`~hogan_bot.backtest.BacktestResult` object so
@@ -115,6 +120,7 @@ def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, ov
         min_regime_confidence=cfg.min_regime_confidence,
         max_whipsaws=cfg.max_whipsaws,
         db_path=db_path,
+        enable_shorts=enable_shorts,
     )
 
 
@@ -155,7 +161,7 @@ def main() -> None:
                 cfg, candles, args.symbol, ml_model,
                 timeframe=timeframe, overrides=overrides,
                 use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
-                db_path=_db,
+                db_path=_db, enable_shorts=args.enable_shorts,
             )
             rows.append({"config": label, **result.summary_dict()})
 
@@ -166,7 +172,7 @@ def main() -> None:
             cfg, candles, args.symbol, ml_model,
             timeframe=timeframe,
             use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
-            db_path=_db,
+            db_path=_db, enable_shorts=args.enable_shorts,
         )
         print(json.dumps(result.summary_dict(), indent=2))
 
@@ -175,26 +181,28 @@ def main() -> None:
             _print_signal_funnel(result.signal_funnel)
 
         if args.regime_report:
-            # Market-condition regime breakdown (from detect_regime)
+            # Bar-level equity curve segmented by actual market regime
+            by_market = evaluate_regimes_by_market(result)
+            if by_market:
+                print("\n-- Performance by market regime (detect_regime) --------")
+                print(f"  {'regime':<14s}  {'bars':>5s}  {'return%':>8s}  {'maxdd%':>7s}  {'sharpe':>8s}  {'avg_bar%':>9s}")
+                print(f"  {'-'*14}  {'-'*5}  {'-'*8}  {'-'*7}  {'-'*8}  {'-'*9}")
+                for regime, m in by_market.items():
+                    sharpe_s = f"{m['sharpe']:.4f}" if m['sharpe'] is not None else "N/A"
+                    print(f"  {regime:<14s}  {m['bars']:>5d}  {m['total_return_pct']:>8.3f}  "
+                          f"{m['max_drawdown_pct']:>7.3f}  {sharpe_s:>8s}  {m['avg_bar_return_pct']:>9.5f}")
+                print()
+
+            # Trade-level analytics by entry regime
             market_regimes = evaluate_market_regimes(result)
             if market_regimes:
-                print("\n-- Market regime trade analytics -----------------------")
+                print("-- Trade analytics by entry regime ---------------------")
                 for regime, metrics in sorted(market_regimes.items()):
                     print(f"  {regime:<14s}  trades={metrics.get('trade_count', 0):>3d}  "
                           f"win_rate={metrics.get('win_rate', 0):>5.1%}  "
                           f"avg_pnl={metrics.get('avg_gross_pnl_pct', 0):>7.2f}%  "
                           f"payoff={metrics.get('payoff_ratio', 0):>5.2f}")
                 print()
-
-            # Equity-curve regime breakdown (legacy)
-            regimes = evaluate_regimes(result)
-            print("-- Equity-curve regime breakdown (legacy) --------------")
-            for regime, metrics in regimes.items():
-                print(f"  {regime:<10s}  bars={metrics['bars']:>5d}  "
-                      f"sharpe={str(metrics['sharpe']):<8s}  "
-                      f"return={metrics['total_return_pct']:>7.2f}%  "
-                      f"maxdd={metrics['max_drawdown_pct']:>6.2f}%")
-            print()
 
 
 def _print_signal_funnel(funnel: dict) -> None:
@@ -222,12 +230,36 @@ def _print_signal_funnel(funnel: dict) -> None:
         prev_buy, prev_sell = b, s
 
     executed = funnel.get("executed_buy", 0)
+    exec_short = funnel.get("executed_short_entry", 0)
     blocked_long = funnel.get("blocked_already_long", 0)
+    blocked_short = funnel.get("blocked_already_short", 0)
     blocked_cd = funnel.get("blocked_cooldown", 0)
-    print(f"  {'Executed entries':<22s}  buy={executed:>5d}")
-    if blocked_long or blocked_cd:
-        print(f"  {'Blocked (in position)':<22s}       {blocked_long:>5d}")
-        print(f"  {'Blocked (cooldown)':<22s}       {blocked_cd:>5d}")
+    if exec_short:
+        print(f"  {'Executed entries':<22s}  long={executed:>4d}  short={exec_short:>4d}")
+    else:
+        print(f"  {'Executed entries':<22s}  buy={executed:>5d}")
+    if blocked_long or blocked_short or blocked_cd:
+        if blocked_long:
+            print(f"  {'Blocked (already long)':<22s}       {blocked_long:>5d}")
+        if blocked_short:
+            print(f"  {'Blocked (already short)':<22s}      {blocked_short:>5d}")
+        if blocked_cd:
+            print(f"  {'Blocked (cooldown)':<22s}       {blocked_cd:>5d}")
+
+    s_sig = funnel.get("short_covered_signal", 0)
+    s_stop = funnel.get("short_covered_stop", 0)
+    s_tp = funnel.get("short_covered_tp", 0)
+    s_hold = funnel.get("short_covered_max_hold", 0)
+    if any([s_sig, s_stop, s_tp, s_hold]):
+        print(f"\n  Short exits breakdown:")
+        if s_sig:
+            print(f"    Buy signal cover:    {s_sig:>5d}")
+        if s_stop:
+            print(f"    Trailing stop:       {s_stop:>5d}")
+        if s_tp:
+            print(f"    Take profit:         {s_tp:>5d}")
+        if s_hold:
+            print(f"    Max hold time:       {s_hold:>5d}")
 
     edge_atr = funnel.get("edge_blocked_atr", 0)
     edge_tp = funnel.get("edge_blocked_tp", 0)
