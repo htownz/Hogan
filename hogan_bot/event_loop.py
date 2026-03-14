@@ -44,6 +44,7 @@ from hogan_bot.execution import (
     PaperExecution, LiveExecution, SmartExecution, SmartExecConfig,
     RealisticPaperExecution, FillSimConfig,
 )
+from hogan_bot.indicators import compute_atr
 from hogan_bot.ml import TrainedModel, load_model, predict_up_probability
 from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
@@ -195,7 +196,8 @@ class SignalEvaluator:
                 forecast_ret = max(abs(v) for v in er.values())
             elif isinstance(er, (int, float)):
                 forecast_ret = abs(float(er))
-        atr_pct = result.stop_distance_pct / max(getattr(cfg, "atr_stop_multiplier", 2.5), 1.0)
+        _atr_s = compute_atr(candles, window=14)
+        atr_pct = float(_atr_s.iloc[-1]) / max(px, 1e-9)
         spread_est = estimate_spread_from_candles(candles)
         edge_gd = edge_gate(
             action,
