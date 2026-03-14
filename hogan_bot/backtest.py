@@ -369,6 +369,59 @@ def evaluate_market_regimes(result: "BacktestResult") -> dict[str, dict]:
     return report
 
 
+def evaluate_trades_by_regime_side(result: "BacktestResult") -> dict[str, dict]:
+    """Break down closed trades by (regime, side) and exit reason.
+
+    Returns a nested dict:
+    ``{ "trending_down|short": { "count": 5, "win_rate": 0.6, ... }, ... }``
+
+    Each bucket includes: ``count``, ``win_rate``, ``avg_pnl_pct``,
+    ``total_pnl_pct``, ``payoff_ratio``, ``exit_reasons`` (counter dict).
+    """
+    closed = getattr(result, "closed_trades", None)
+    if not closed:
+        return {}
+
+    buckets: dict[str, list[dict]] = {}
+    for trade in closed:
+        regime = trade.get("entry_regime") or "unknown"
+        side = trade.get("side", "long")
+        key = f"{regime}|{side}"
+        buckets.setdefault(key, []).append(trade)
+
+    report: dict[str, dict] = {}
+    for key, trades in sorted(buckets.items()):
+        n = len(trades)
+        wins = sum(1 for t in trades if t.get("pnl_usd", 0) > 0)
+        pnls = [t.get("pnl_pct", 0.0) for t in trades]
+        avg_pnl = sum(pnls) / n if n else 0.0
+        total_pnl = sum(pnls)
+        win_rate = wins / n if n else 0.0
+
+        wins_pnl = [p for p in pnls if p > 0]
+        losses_pnl = [-p for p in pnls if p <= 0]
+        avg_win = sum(wins_pnl) / len(wins_pnl) if wins_pnl else 0.0
+        avg_loss = sum(losses_pnl) / len(losses_pnl) if losses_pnl else 0.0
+        payoff = avg_win / avg_loss if avg_loss > 0 else float("inf") if avg_win > 0 else 0.0
+
+        exit_reasons: dict[str, int] = {}
+        for t in trades:
+            r = t.get("close_reason", "unknown")
+            exit_reasons[r] = exit_reasons.get(r, 0) + 1
+
+        report[key] = {
+            "count": n,
+            "wins": wins,
+            "win_rate": round(win_rate, 4),
+            "avg_pnl_pct": round(avg_pnl, 4),
+            "total_pnl_pct": round(total_pnl, 4),
+            "payoff_ratio": round(payoff, 3) if payoff != float("inf") else "inf",
+            "exit_reasons": exit_reasons,
+        }
+
+    return report
+
+
 def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     candles,
     symbol: str,
@@ -533,7 +586,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         "post_quality_buy": 0, "post_quality_sell": 0,
         "post_ranging_buy": 0, "post_ranging_sell": 0,
         "executed_buy": 0, "blocked_already_long": 0,
-        "blocked_cooldown": 0,
+        "blocked_cooldown": 0, "blocked_regime_no_longs": 0, "blocked_regime_no_shorts": 0,
         "executed_short_entry": 0, "blocked_already_short": 0,
         "short_covered_signal": 0, "short_covered_stop": 0,
         "short_covered_tp": 0, "short_covered_max_hold": 0,
@@ -622,6 +675,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "pnl_usd": pnl_usd,
                             "pnl_pct": pnl_pct,
                             "entry_regime": _current_regime,
+                            "close_reason": reason,
                         })
             for sym, size in list(_pending_shorts.items()):
                 _pending_shorts.pop(sym, None)
@@ -667,6 +721,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "pnl_usd": pnl_usd,
                             "pnl_pct": pnl_pct,
                             "entry_regime": _current_regime,
+                            "close_reason": reason,
                         })
 
         mark = {symbol: px}
@@ -731,6 +786,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                 "pnl_usd": pnl_usd,
                                 "pnl_pct": pnl_pct,
                                 "entry_regime": _current_regime,
+                                "close_reason": reason,
                             })
                 continue
 
@@ -784,6 +840,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "pnl_usd": pnl_usd,
                             "pnl_pct": pnl_pct,
                             "entry_regime": _current_regime,
+                            "close_reason": reason,
                         })
 
         # Build RL position state for this bar
@@ -819,6 +876,10 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         _eff_ml_sell = _eff.get("ml_sell_threshold", ml_sell_threshold)
         _eff_tp = _eff.get("take_profit_pct", take_profit_pct)
         _eff_position_scale = _eff.get("position_scale", 1.0)
+        _eff_allow_longs = _eff.get("allow_longs", True)
+        _eff_allow_shorts = _eff.get("allow_shorts", True)
+        _eff_long_size_scale = _eff.get("long_size_scale", 1.0)
+        _eff_short_size_scale = _eff.get("short_size_scale", 1.0)
 
         _as_of = _bar_ts_ms(candles, i - 1) if _bt_conn is not None else None
         signal = _pipeline.run(
@@ -1016,20 +1077,26 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                     "pnl_usd": pnl_usd,
                                     "pnl_pct": pnl_pct,
                                     "entry_regime": _current_regime,
+                                    "close_reason": "buy_signal",
                                 })
 
-            if symbol in portfolio.positions:
+            _long_size = size * _eff_long_size_scale
+            if not _eff_allow_longs:
+                _funnel["blocked_regime_no_longs"] += 1
+            elif symbol in portfolio.positions:
                 _funnel["blocked_already_long"] += 1
             elif _cooldown_remaining > 0:
                 _funnel["blocked_cooldown"] += 1
             elif symbol in portfolio.short_positions:
                 pass
+            elif _long_size <= 0:
+                _funnel["blocked_regime_no_longs"] += 1
             elif use_next_open and i < len(candles):
-                _pending_buys[symbol] = size
+                _pending_buys[symbol] = _long_size
             else:
                 buy_px = px * (1.0 + slip_mult)
                 if portfolio.execute_buy(
-                    symbol, buy_px, size,
+                    symbol, buy_px, _long_size,
                     trailing_stop_pct=trailing_stop_pct,
                     take_profit_pct=take_profit_pct,
                 ):
@@ -1040,7 +1107,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     _funnel["executed_buy"] += 1
                     _entry_bar[symbol] = i - 1
                     trade_log.append(
-                        {"bar": bar_ts, "action": "buy", "reason": "signal", "price": buy_px, "qty": size}
+                        {"bar": bar_ts, "action": "buy", "reason": "signal", "price": buy_px, "qty": _long_size}
                     )
         elif action == "sell":
             # Close existing long (with ExitEvaluator confirmation)
@@ -1114,18 +1181,24 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                         "pnl_usd": pnl_usd,
                                         "pnl_pct": pnl_pct,
                                         "entry_regime": _current_regime,
+                                        "close_reason": "signal",
                                     })
             # Open short when flat and shorts enabled
             elif enable_shorts and symbol not in portfolio.short_positions:
                 _consecutive_exit_signals = 0
-                if _cooldown_remaining > 0:
+                _short_size = size * _eff_short_size_scale
+                if not _eff_allow_shorts:
+                    _funnel["blocked_regime_no_shorts"] += 1
+                elif _cooldown_remaining > 0:
                     _funnel["blocked_cooldown"] += 1
+                elif _short_size <= 0:
+                    _funnel["blocked_regime_no_shorts"] += 1
                 elif use_next_open and i < len(candles):
-                    _pending_shorts[symbol] = size
+                    _pending_shorts[symbol] = _short_size
                 else:
                     short_px = px * (1.0 - slip_mult)
                     if portfolio.execute_short(
-                        symbol, short_px, size,
+                        symbol, short_px, _short_size,
                         trailing_stop_pct=trailing_stop_pct,
                         take_profit_pct=take_profit_pct,
                     ):
@@ -1136,7 +1209,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         _funnel["executed_short_entry"] += 1
                         _short_entry_bar[symbol] = i - 1
                         trade_log.append(
-                            {"bar": bar_ts, "action": "short", "reason": "signal", "price": short_px, "qty": size}
+                            {"bar": bar_ts, "action": "short", "reason": "signal", "price": short_px, "qty": _short_size}
                         )
             elif enable_shorts and symbol in portfolio.short_positions:
                 _funnel["blocked_already_short"] += 1

@@ -256,6 +256,12 @@ class RegimeConfig:
     quality_final_mult: float = 1.0
     quality_tech_mult: float = 1.0
 
+    # Side-specific participation controls
+    allow_longs: bool = True
+    allow_shorts: bool = True
+    long_size_scale: float = 1.0
+    short_size_scale: float = 1.0
+
 
 DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
     "trending_up": RegimeConfig(
@@ -273,6 +279,10 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         meta_sell_threshold=-0.12,
         quality_final_mult=0.80,
         quality_tech_mult=1.00,
+        allow_longs=True,
+        allow_shorts=False,
+        long_size_scale=1.0,
+        short_size_scale=0.0,
     ),
     "trending_down": RegimeConfig(
         volume_threshold_mult=0.55,
@@ -289,6 +299,10 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         meta_sell_threshold=-0.12,
         quality_final_mult=0.80,
         quality_tech_mult=1.00,
+        allow_longs=True,
+        allow_shorts=True,
+        long_size_scale=0.5,
+        short_size_scale=1.0,
     ),
     "ranging": RegimeConfig(
         volume_threshold_mult=1.10,
@@ -305,6 +319,10 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         meta_sell_threshold=-0.15,
         quality_final_mult=1.00,
         quality_tech_mult=1.25,
+        allow_longs=True,
+        allow_shorts=True,
+        long_size_scale=1.0,
+        short_size_scale=0.4,
     ),
     "volatile": RegimeConfig(
         volume_threshold_mult=0.70,
@@ -321,6 +339,10 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         meta_sell_threshold=-0.18,
         quality_final_mult=1.20,
         quality_tech_mult=1.10,
+        allow_longs=True,
+        allow_shorts=False,
+        long_size_scale=0.75,
+        short_size_scale=0.0,
     ),
 }
 

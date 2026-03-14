@@ -3,7 +3,10 @@ from __future__ import annotations
 import argparse
 import json
 
-from hogan_bot.backtest import evaluate_market_regimes, evaluate_regimes, evaluate_regimes_by_market, run_backtest_on_candles
+from hogan_bot.backtest import (
+    evaluate_market_regimes, evaluate_regimes, evaluate_regimes_by_market,
+    evaluate_trades_by_regime_side, run_backtest_on_candles,
+)
 from hogan_bot.config import load_config
 from hogan_bot.exchange import ExchangeClient
 from hogan_bot.ml import load_model
@@ -52,6 +55,11 @@ def parse_args() -> argparse.Namespace:
         "--enable-shorts",
         action="store_true",
         help="Enable short selling in backtest (sell signals open shorts when flat)",
+    )
+    parser.add_argument(
+        "--compare-shorts",
+        action="store_true",
+        help="Run three configs side-by-side: long-only, shorts+regime-gated, shorts-ungated",
     )
     return parser.parse_args()
 
@@ -154,7 +162,34 @@ def main() -> None:
 
     _db = args.db if args.from_db else None
 
-    if args.compare:
+    if args.compare_shorts:
+        _compare_short_configs = [
+            ("long_only", False),
+            ("shorts_regime_gated", True),
+        ]
+        rows = []
+        for label, shorts_on in _compare_short_configs:
+            result = _run_single(
+                cfg, candles, args.symbol, ml_model,
+                timeframe=timeframe,
+                use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
+                db_path=_db, enable_shorts=shorts_on,
+            )
+            summary = result.summary_dict()
+            funnel = summary.pop("signal_funnel", {})
+            summary["config"] = label
+            summary["long_entries"] = funnel.get("executed_buy", 0)
+            summary["short_entries"] = funnel.get("executed_short_entry", 0)
+            summary["regime_blocked_shorts"] = funnel.get("blocked_regime_no_shorts", 0)
+            rows.append(summary)
+
+        _print_table(rows)
+        for row in rows:
+            print(f"  {row['config']:<24s}  longs={row.get('long_entries', 0):>3d}  "
+                  f"shorts={row.get('short_entries', 0):>3d}  "
+                  f"regime_blocked={row.get('regime_blocked_shorts', 0):>3d}")
+        print()
+    elif args.compare:
         rows = []
         for label, overrides in _COMPARE_CONFIGS:
             result = _run_single(
@@ -204,6 +239,19 @@ def main() -> None:
                           f"payoff={metrics.get('payoff_ratio', 0):>5.2f}")
                 print()
 
+            # Regime x side breakdown
+            by_regime_side = evaluate_trades_by_regime_side(result)
+            if by_regime_side:
+                print("-- Trade analytics by regime x side --------------------")
+                print(f"  {'bucket':<22s}  {'n':>3s}  {'win%':>5s}  {'avg_pnl%':>8s}  {'total%':>7s}  {'payoff':>6s}  exit_reasons")
+                print(f"  {'-'*22}  {'-'*3}  {'-'*5}  {'-'*8}  {'-'*7}  {'-'*6}  {'-'*20}")
+                for key, m in by_regime_side.items():
+                    payoff_s = f"{m['payoff_ratio']:>6.2f}" if m["payoff_ratio"] != "inf" else "   inf"
+                    exits = "  ".join(f"{k}={v}" for k, v in sorted(m["exit_reasons"].items()))
+                    print(f"  {key:<22s}  {m['count']:>3d}  {m['win_rate']:>5.1%}  "
+                          f"{m['avg_pnl_pct']:>8.2f}  {m['total_pnl_pct']:>7.2f}  {payoff_s}  {exits}")
+                print()
+
 
 def _print_signal_funnel(funnel: dict) -> None:
     """Print a human-readable signal funnel showing where signals die."""
@@ -238,13 +286,19 @@ def _print_signal_funnel(funnel: dict) -> None:
         print(f"  {'Executed entries':<22s}  long={executed:>4d}  short={exec_short:>4d}")
     else:
         print(f"  {'Executed entries':<22s}  buy={executed:>5d}")
-    if blocked_long or blocked_short or blocked_cd:
+    regime_no_long = funnel.get("blocked_regime_no_longs", 0)
+    regime_no_short = funnel.get("blocked_regime_no_shorts", 0)
+    if any([blocked_long, blocked_short, blocked_cd, regime_no_long, regime_no_short]):
         if blocked_long:
-            print(f"  {'Blocked (already long)':<22s}       {blocked_long:>5d}")
+            print(f"  {'Blocked (already long)':<24s}     {blocked_long:>5d}")
         if blocked_short:
-            print(f"  {'Blocked (already short)':<22s}      {blocked_short:>5d}")
+            print(f"  {'Blocked (already short)':<24s}    {blocked_short:>5d}")
         if blocked_cd:
-            print(f"  {'Blocked (cooldown)':<22s}       {blocked_cd:>5d}")
+            print(f"  {'Blocked (cooldown)':<24s}     {blocked_cd:>5d}")
+        if regime_no_long:
+            print(f"  {'Blocked (regime no long)':<24s}   {regime_no_long:>5d}")
+        if regime_no_short:
+            print(f"  {'Blocked (regime no short)':<24s}  {regime_no_short:>5d}")
 
     s_sig = funnel.get("short_covered_signal", 0)
     s_stop = funnel.get("short_covered_stop", 0)

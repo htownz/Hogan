@@ -267,10 +267,10 @@ def detect_regime(
 # keeps its optimised proportions.  ML thresholds remain absolute because
 # they operate on a fixed 0–1 probability scale.
 
-def _build_regime_overrides() -> dict[str, dict[str, float]]:
+def _build_regime_overrides() -> dict[str, dict]:
     """Build _REGIME_OVERRIDES from DEFAULT_REGIME_CONFIGS for backward compat."""
     from hogan_bot.config import DEFAULT_REGIME_CONFIGS
-    out: dict[str, dict[str, float]] = {}
+    out: dict[str, dict] = {}
     for regime, rc in DEFAULT_REGIME_CONFIGS.items():
         out[regime] = {
             "volume_threshold_mult": rc.volume_threshold_mult,
@@ -279,6 +279,10 @@ def _build_regime_overrides() -> dict[str, dict[str, float]]:
             "trailing_stop_mult": rc.trailing_stop_mult,
             "take_profit_mult": rc.take_profit_mult,
             "position_scale": rc.position_scale,
+            "allow_longs": rc.allow_longs,
+            "allow_shorts": rc.allow_shorts,
+            "long_size_scale": rc.long_size_scale,
+            "short_size_scale": rc.short_size_scale,
         }
     return out
 
@@ -312,6 +316,10 @@ def effective_thresholds(
         "trailing_stop_pct": config.trailing_stop_pct,
         "take_profit_pct":   config.take_profit_pct,
         "position_scale":    1.0,
+        "allow_longs":       True,
+        "allow_shorts":      True,
+        "long_size_scale":   1.0,
+        "short_size_scale":  1.0,
     }
 
     if not getattr(config, "use_regime_detection", False):
@@ -332,8 +340,9 @@ def effective_thresholds(
         result["trailing_stop_pct"] = defaults["trailing_stop_pct"] * overrides["trailing_stop_mult"]
     if "take_profit_mult" in overrides:
         result["take_profit_pct"] = defaults["take_profit_pct"] * overrides["take_profit_mult"]
-    # Absolute keys: ML thresholds and position scale
-    for key in ("ml_buy_threshold", "ml_sell_threshold", "position_scale"):
+    # Absolute keys: ML thresholds, position scale, side participation
+    for key in ("ml_buy_threshold", "ml_sell_threshold", "position_scale",
+                "allow_longs", "allow_shorts", "long_size_scale", "short_size_scale"):
         if key in overrides:
             result[key] = overrides[key]
     return result

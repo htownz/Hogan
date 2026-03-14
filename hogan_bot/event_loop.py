@@ -150,6 +150,10 @@ class SignalEvaluator:
         eff_ml_sell = eff.get("ml_sell_threshold", cfg.ml_sell_threshold)
         eff_tp = eff.get("take_profit_pct", cfg.take_profit_pct)
         eff_position_scale = eff.get("position_scale", 1.0)
+        eff_allow_longs = eff.get("allow_longs", True)
+        eff_allow_shorts = eff.get("allow_shorts", True)
+        eff_long_size_scale = eff.get("long_size_scale", 1.0)
+        eff_short_size_scale = eff.get("short_size_scale", 1.0)
 
         result = self.pipeline.run(
             candles, symbol=symbol, config_override=cfg,
@@ -827,15 +831,18 @@ async def run_event_loop(
                 pass
 
             if action == "buy" and px > 0:
-                if symbol in portfolio.positions:
+                if not eff_allow_longs:
+                    logger.debug("REGIME_BLOCK %s — longs not allowed in %s", symbol, regime_name)
+                elif symbol in portfolio.positions:
                     pass  # already long
                 elif _cooldown_remaining > 0:
                     logger.debug("COOLDOWN %s — %d bars remaining", symbol, _cooldown_remaining)
                 elif not _fx_session_ok:
                     logger.debug("FX_SESSION_BLOCK %s — outside allowed trading hours", symbol)
                 else:
+                    _long_size = size * eff_long_size_scale
                     buy_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
-                    res = executor.open_long(symbol, buy_px, size,
+                    res = executor.open_long(symbol, buy_px, _long_size,
                                             trailing_stop_pct=_eff_stop,
                                             take_profit_pct=_eff_tp)
                     executed = bool(res.ok)
@@ -844,17 +851,17 @@ async def run_event_loop(
                         if pos is not None:
                             pos.entry_atr_pct = _sym_atr_pct
                         now_ms = int(time.time() * 1000)
-                        fee = size * buy_px * config.fee_rate
+                        fee = _long_size * buy_px * config.fee_rate
                         if not allow_live:
-                            open_paper_trade(conn, symbol, "long", buy_px, size, fee, now_ms,
+                            open_paper_trade(conn, symbol, "long", buy_px, _long_size, fee, now_ms,
                                              ml_up_prob=up_prob,
                                              strategy_conf=sig.final_confidence,
                                              vol_ratio=sig.vol_ratio)
                         if notifier:
                             notifier.notify("buy", {"symbol": symbol, "price": buy_px,
-                                                    "qty": size, "ml_up_prob": up_prob})
-                    logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
-                                symbol, buy_px, size, up_prob or -1, equity)
+                                                    "qty": _long_size, "ml_up_prob": up_prob})
+                    logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s long_scale=%.2f",
+                                symbol, buy_px, _long_size, up_prob or -1, equity, regime_name, eff_long_size_scale)
 
             elif action == "sell" and symbol in portfolio.positions:
                 pos = portfolio.positions[symbol]
