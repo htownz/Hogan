@@ -454,8 +454,8 @@ def pullback_gate(
     candles: pd.DataFrame,
     *,
     lookback: int = 12,
-    max_range_position: float = 0.70,
-    max_run_up_pct: float = 3.0,
+    max_range_position: float = 0.55,
+    max_run_up_pct: float = 2.0,
 ) -> GateDecision:
     """Block buy entries that chase recent price run-ups.
 

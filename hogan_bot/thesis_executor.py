@@ -89,7 +89,7 @@ def check_15m_entry(
     thesis: Thesis,
     *,
     lookback_15m: int = 16,
-    min_pullback_pct: float = 0.8,
+    min_pullback_pct: float = 1.2,
     long_rsi_ceiling: float = 45.0,
     short_rsi_floor: float = 55.0,
 ) -> ExecutionTrigger | None:
