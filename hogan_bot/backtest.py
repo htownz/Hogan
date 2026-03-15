@@ -9,8 +9,8 @@ import pandas as pd
 from hogan_bot.agent_pipeline import AgentPipeline
 from hogan_bot.champion import apply_champion_mode, is_champion_mode
 from hogan_bot.decision import (
-    apply_ml_filter, edge_gate, entry_quality_gate, ml_confidence,
-    estimate_spread_from_candles, ranging_gate,
+    GateDecision, apply_ml_filter, edge_gate, entry_quality_gate,
+    ml_confidence, estimate_spread_from_candles, pullback_gate, ranging_gate,
 )
 from hogan_bot.exit_model import ExitEvaluator
 from hogan_bot.expectancy import ExpectancyTracker
@@ -422,6 +422,312 @@ def evaluate_trades_by_regime_side(result: "BacktestResult") -> dict[str, dict]:
     return report
 
 
+def enrich_trades_with_entry_context(
+    candles: pd.DataFrame,
+    closed_trades: list[dict],
+    lookback: int = 12,
+    forward: int = 24,
+) -> list[dict]:
+    """Add entry-timing diagnostics to each closed trade.
+
+    For each trade, measures where the entry price sits relative to
+    recent price action and what the price does after entry.
+
+    Added fields per trade:
+    - ``pct_from_local_high``:  (entry - N-bar high) / N-bar high
+    - ``pct_from_local_low``:   (entry - N-bar low) / N-bar low
+    - ``local_range_position``: 0 = entered at low, 1 = entered at high
+    - ``run_up_before_entry``:  how much price rose in lookback bars
+    - ``max_favorable_excursion``: best unrealized PnL during trade (%)
+    - ``max_adverse_excursion``:   worst unrealized PnL during trade (%)
+    - ``bars_to_peak``:  bars from entry to MFE
+    - ``bars_to_trough``: bars from entry to MAE
+    """
+    import numpy as np
+
+    highs = candles["high"].values if "high" in candles.columns else candles["close"].values
+    lows = candles["low"].values if "low" in candles.columns else candles["close"].values
+    closes = candles["close"].values
+
+    for trade in closed_trades:
+        entry_bar = trade.get("entry_bar_idx")
+        exit_bar = trade.get("exit_bar_idx")
+        entry_px = trade.get("entry_price", 0.0)
+        side = trade.get("side", "long")
+
+        if entry_bar is None or entry_px <= 0:
+            continue
+
+        lb_start = max(0, entry_bar - lookback)
+        local_high = float(np.max(highs[lb_start:entry_bar + 1]))
+        local_low = float(np.min(lows[lb_start:entry_bar + 1]))
+        local_range = local_high - local_low if local_high > local_low else 1e-9
+
+        trade["pct_from_local_high"] = round((entry_px - local_high) / local_high * 100, 3)
+        trade["pct_from_local_low"] = round((entry_px - local_low) / local_low * 100, 3)
+        trade["local_range_position"] = round((entry_px - local_low) / local_range, 3)
+
+        lb_close_start = float(closes[lb_start])
+        trade["run_up_before_entry"] = round((entry_px - lb_close_start) / lb_close_start * 100, 3)
+
+        fw_end = min(len(candles), (exit_bar or entry_bar) + 1)
+        fw_highs = highs[entry_bar:fw_end]
+        fw_lows = lows[entry_bar:fw_end]
+
+        if side == "long":
+            if len(fw_highs) > 0:
+                mfe_val = float(np.max(fw_highs))
+                mae_val = float(np.min(fw_lows))
+                trade["max_favorable_excursion"] = round((mfe_val - entry_px) / entry_px * 100, 3)
+                trade["max_adverse_excursion"] = round((mae_val - entry_px) / entry_px * 100, 3)
+                trade["bars_to_peak"] = int(np.argmax(fw_highs))
+                trade["bars_to_trough"] = int(np.argmin(fw_lows))
+            else:
+                trade["max_favorable_excursion"] = 0.0
+                trade["max_adverse_excursion"] = 0.0
+                trade["bars_to_peak"] = 0
+                trade["bars_to_trough"] = 0
+        else:
+            if len(fw_lows) > 0:
+                mfe_val = float(np.min(fw_lows))
+                mae_val = float(np.max(fw_highs))
+                trade["max_favorable_excursion"] = round((entry_px - mfe_val) / entry_px * 100, 3)
+                trade["max_adverse_excursion"] = round((entry_px - mae_val) / entry_px * 100, 3)
+                trade["bars_to_peak"] = int(np.argmin(fw_lows))
+                trade["bars_to_trough"] = int(np.argmax(fw_highs))
+            else:
+                trade["max_favorable_excursion"] = 0.0
+                trade["max_adverse_excursion"] = 0.0
+                trade["bars_to_peak"] = 0
+                trade["bars_to_trough"] = 0
+
+    return closed_trades
+
+
+def enrich_trades_with_post_exit(
+    closed_trades: list[dict],
+    candles: pd.DataFrame,
+    post_exit_bars: int = 24,
+) -> list[dict]:
+    """Add post-exit price analysis to each closed trade.
+
+    For each trade, looks at the ``post_exit_bars`` bars AFTER the exit
+    and records:
+
+    - ``post_exit_max_favorable``: best outcome if the stop had NOT fired
+      (max price rise for longs, max price drop for shorts, as % of exit px)
+    - ``post_exit_max_adverse``: worst case (continued move against, as %)
+    - ``post_exit_recovery``: True if price recovered above the trade's
+      peak (the high-water-mark the trailing stop tracked)
+    - ``post_exit_would_tp``: True if price hit the take-profit level
+    - ``post_exit_final_pct``: price change from exit to N bars later (%)
+    - ``stop_verdict``: "premature" if recovery, "correct" otherwise
+    """
+    import numpy as np
+
+    if candles.empty:
+        return closed_trades
+
+    closes = candles["close"].values
+    highs = candles["high"].values
+    lows = candles["low"].values
+
+    for trade in closed_trades:
+        exit_idx = trade.get("exit_bar_idx")
+        if exit_idx is None:
+            continue
+
+        entry_px = trade.get("entry_price", 0)
+        exit_px = trade.get("exit_price", 0)
+        side = trade.get("side", "long")
+        tp_pct = trade.get("take_profit_pct", 0.054)
+
+        start = exit_idx + 1
+        end = min(exit_idx + 1 + post_exit_bars, len(candles))
+        if start >= len(candles) or start >= end:
+            trade["post_exit_max_favorable"] = 0.0
+            trade["post_exit_max_adverse"] = 0.0
+            trade["post_exit_recovery"] = False
+            trade["post_exit_would_tp"] = False
+            trade["post_exit_final_pct"] = 0.0
+            trade["stop_verdict"] = "no_data"
+            continue
+
+        post_highs = highs[start:end]
+        post_lows = lows[start:end]
+        post_closes = closes[start:end]
+
+        if side == "long":
+            post_max_high = float(np.max(post_highs))
+            post_min_low = float(np.min(post_lows))
+            post_mfe = (post_max_high - exit_px) / exit_px * 100 if exit_px > 0 else 0
+            post_mae = (post_min_low - exit_px) / exit_px * 100 if exit_px > 0 else 0
+            post_final = (float(post_closes[-1]) - exit_px) / exit_px * 100 if exit_px > 0 else 0
+
+            peak_px = entry_px * (1 + trade.get("max_favorable_excursion", 0) / 100) if entry_px else exit_px
+            recovered = post_max_high > peak_px
+            tp_level = entry_px * (1 + tp_pct) if entry_px > 0 else 0
+            would_tp = post_max_high >= tp_level if tp_level > 0 else False
+        else:
+            post_min_low = float(np.min(post_lows))
+            post_max_high = float(np.max(post_highs))
+            post_mfe = (exit_px - post_min_low) / exit_px * 100 if exit_px > 0 else 0
+            post_mae = (exit_px - post_max_high) / exit_px * 100 if exit_px > 0 else 0
+            post_final = (exit_px - float(post_closes[-1])) / exit_px * 100 if exit_px > 0 else 0
+
+            trough_px = entry_px * (1 - trade.get("max_favorable_excursion", 0) / 100) if entry_px else exit_px
+            recovered = post_min_low < trough_px
+            tp_level = entry_px * (1 - tp_pct) if entry_px > 0 else 0
+            would_tp = post_min_low <= tp_level if tp_level > 0 else False
+
+        trade["post_exit_max_favorable"] = round(post_mfe, 3)
+        trade["post_exit_max_adverse"] = round(post_mae, 3)
+        trade["post_exit_recovery"] = recovered
+        trade["post_exit_would_tp"] = would_tp
+        trade["post_exit_final_pct"] = round(post_final, 3)
+
+        if trade.get("close_reason") in ("trailing_stop", "short_trailing_stop"):
+            if recovered or would_tp:
+                trade["stop_verdict"] = "premature"
+            elif post_mfe > 1.0:
+                trade["stop_verdict"] = "early_but_ok"
+            else:
+                trade["stop_verdict"] = "correct"
+        else:
+            trade["stop_verdict"] = "n/a"
+
+    return closed_trades
+
+
+def diagnose_exits(closed_trades: list[dict]) -> dict:
+    """Aggregate post-exit diagnostics for all trailing-stop exits.
+
+    Requires trades enriched by :func:`enrich_trades_with_post_exit`.
+    Returns summary showing how many stops were premature vs correct.
+    """
+    stop_trades = [
+        t for t in closed_trades
+        if t.get("close_reason") in ("trailing_stop", "short_trailing_stop")
+        and "post_exit_max_favorable" in t
+    ]
+    if not stop_trades:
+        return {}
+
+    long_stops = [t for t in stop_trades if t.get("side") == "long"]
+    short_stops = [t for t in stop_trades if t.get("side") == "short"]
+
+    def _summarize(trades: list[dict]) -> dict:
+        if not trades:
+            return {}
+        n = len(trades)
+        premature = sum(1 for t in trades if t.get("stop_verdict") == "premature")
+        correct = sum(1 for t in trades if t.get("stop_verdict") == "correct")
+        early_ok = sum(1 for t in trades if t.get("stop_verdict") == "early_but_ok")
+        avg_post_mfe = sum(t.get("post_exit_max_favorable", 0) for t in trades) / n
+        avg_post_mae = sum(t.get("post_exit_max_adverse", 0) for t in trades) / n
+        avg_post_final = sum(t.get("post_exit_final_pct", 0) for t in trades) / n
+        would_tp = sum(1 for t in trades if t.get("post_exit_would_tp"))
+        avg_pnl = sum(t.get("pnl_pct", 0) for t in trades) / n
+        return {
+            "count": n,
+            "premature": premature,
+            "correct": correct,
+            "early_but_ok": early_ok,
+            "would_have_hit_tp": would_tp,
+            "avg_trade_pnl_pct": round(avg_pnl, 3),
+            "avg_post_exit_mfe_pct": round(avg_post_mfe, 3),
+            "avg_post_exit_mae_pct": round(avg_post_mae, 3),
+            "avg_post_exit_final_pct": round(avg_post_final, 3),
+        }
+
+    per_trade = []
+    for t in stop_trades:
+        per_trade.append({
+            "bar": t.get("entry_bar_idx"),
+            "side": t.get("side"),
+            "regime": t.get("entry_regime"),
+            "pnl_pct": round(t.get("pnl_pct", 0), 2),
+            "in_trade_mfe": t.get("max_favorable_excursion"),
+            "exit_reason": t.get("close_reason"),
+            "post_mfe": t.get("post_exit_max_favorable"),
+            "post_mae": t.get("post_exit_max_adverse"),
+            "post_final": t.get("post_exit_final_pct"),
+            "recovered": t.get("post_exit_recovery"),
+            "would_tp": t.get("post_exit_would_tp"),
+            "verdict": t.get("stop_verdict"),
+        })
+
+    return {
+        "long_stops": _summarize(long_stops),
+        "short_stops": _summarize(short_stops),
+        "per_trade": per_trade,
+    }
+
+
+def diagnose_long_entries(closed_trades: list[dict]) -> dict:
+    """Aggregate entry-timing diagnostics for long trades only.
+
+    Requires trades enriched by :func:`enrich_trades_with_entry_context`.
+    Returns summary statistics that reveal whether longs are entering
+    at local highs (top-chasing) or local lows (dip-buying).
+    """
+    longs = [t for t in closed_trades if t.get("side") == "long" and "local_range_position" in t]
+    if not longs:
+        return {}
+
+    winners = [t for t in longs if t.get("pnl_usd", 0) > 0]
+    losers = [t for t in longs if t.get("pnl_usd", 0) <= 0]
+
+    def _avg(trades: list[dict], key: str) -> float:
+        vals = [t[key] for t in trades if key in t]
+        return round(sum(vals) / len(vals), 3) if vals else 0.0
+
+    return {
+        "total_longs": len(longs),
+        "winners": len(winners),
+        "losers": len(losers),
+        "all": {
+            "avg_range_position": _avg(longs, "local_range_position"),
+            "avg_pct_from_high": _avg(longs, "pct_from_local_high"),
+            "avg_run_up_before": _avg(longs, "run_up_before_entry"),
+            "avg_mfe": _avg(longs, "max_favorable_excursion"),
+            "avg_mae": _avg(longs, "max_adverse_excursion"),
+            "avg_bars_to_peak": _avg(longs, "bars_to_peak"),
+            "avg_bars_to_trough": _avg(longs, "bars_to_trough"),
+        },
+        "winners": {
+            "count": len(winners),
+            "avg_range_position": _avg(winners, "local_range_position"),
+            "avg_pct_from_high": _avg(winners, "pct_from_local_high"),
+            "avg_run_up_before": _avg(winners, "run_up_before_entry"),
+            "avg_mfe": _avg(winners, "max_favorable_excursion"),
+            "avg_mae": _avg(winners, "max_adverse_excursion"),
+        },
+        "losers": {
+            "count": len(losers),
+            "avg_range_position": _avg(losers, "local_range_position"),
+            "avg_pct_from_high": _avg(losers, "pct_from_local_high"),
+            "avg_run_up_before": _avg(losers, "run_up_before_entry"),
+            "avg_mfe": _avg(losers, "max_favorable_excursion"),
+            "avg_mae": _avg(losers, "max_adverse_excursion"),
+        },
+        "per_trade": [
+            {
+                "bar": t.get("entry_bar_idx"),
+                "regime": t.get("entry_regime"),
+                "pnl_pct": round(t.get("pnl_pct", 0), 2),
+                "range_pos": t.get("local_range_position"),
+                "run_up": t.get("run_up_before_entry"),
+                "mfe": t.get("max_favorable_excursion"),
+                "mae": t.get("max_adverse_excursion"),
+                "bars_to_peak": t.get("bars_to_peak"),
+                "exit": t.get("close_reason"),
+            }
+            for t in longs
+        ],
+    }
+
+
 def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     candles,
     symbol: str,
@@ -477,6 +783,9 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     execution_mode: str = "same_bar",
     # Short support: when True, sell signals open shorts when flat
     enable_shorts: bool = False,
+    # MTF execution: use 15m candles for entry timing within 1h thesis
+    candles_15m: pd.DataFrame | None = None,
+    mtf_thesis_max_age: int = 4,
     # DB path for sentiment/macro agents (as-of timestamp semantics)
     db_path: str | None = None,
     # Entry quality / edge gate (from config)
@@ -577,6 +886,16 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     short_wins: int = 0
     short_closed: int = 0
 
+    # ── MTF thesis/execution state ──────────────────────────────────────
+    _use_mtf = candles_15m is not None and not candles_15m.empty
+    _active_thesis: Thesis | None = None
+    _mtf_map: dict[int, list[int]] = {}
+    if _use_mtf:
+        from hogan_bot.thesis_executor import (
+            Thesis, align_15m_to_1h, find_15m_entry_in_window,
+        )
+        _mtf_map = align_15m_to_1h(candles, candles_15m)
+
     # Signal funnel counters — where do signals die?
     _funnel = {
         "bars_evaluated": 0,
@@ -594,6 +913,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         "edge_blocked_forecast": 0, "edge_blocked_spread": 0,
         "ranging_blocked_tech": 0, "ranging_blocked_ml": 0,
         "ranging_blocked_whipsaw": 0,
+        "mtf_thesis_created": 0, "mtf_thesis_executed": 0,
+        "mtf_thesis_expired": 0, "mtf_15m_entry_used": 0,
     }
     # ML probability histogram (to understand model output distribution)
     _ml_probs: list[float] = []
@@ -996,6 +1317,14 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             elif "whipsaw" in blk:
                 _funnel["ranging_blocked_whipsaw"] += 1
 
+        _pullback_gd = pullback_gate(action, window)
+        action = _pullback_gd.action
+        _pullback_scale = _pullback_gd.size_scale
+        if _pullback_gd.blocked_by:
+            _funnel["pullback_blocked"] = _funnel.get("pullback_blocked", 0) + 1
+        elif _pullback_scale < 1.0 and action == "buy":
+            _funnel["pullback_halved"] = _funnel.get("pullback_halved", 0) + 1
+
         if action == "buy":
             _funnel["post_ranging_buy"] += 1
         elif action == "sell":
@@ -1013,7 +1342,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             stop_distance_pct=signal.stop_distance_pct,
             max_risk_per_trade=max_risk_per_trade,
             max_allocation_pct=aggressive_allocation,
-            confidence_scale=conf_scale * _quality_scale * _ranging_scale * _eff_position_scale,
+            confidence_scale=conf_scale * _quality_scale * _ranging_scale * _pullback_scale * _eff_position_scale,
             fee_rate=fee_rate,
         )
 
@@ -1023,6 +1352,108 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         elif action == _last_signal:
             _whipsaw_count = max(0, _whipsaw_count - 1)
         _last_signal = action
+
+        # ── MTF thesis / 15m execution ──────────────────────────────────
+        if _use_mtf:
+            # Clear executed thesis once the position has closed
+            if _active_thesis is not None and _active_thesis.executed:
+                if _active_thesis.direction == "long" and symbol not in portfolio.positions:
+                    _active_thesis = None
+                elif _active_thesis.direction == "short" and symbol not in portfolio.short_positions:
+                    _active_thesis = None
+
+            # Expire stale thesis
+            if _active_thesis is not None and not _active_thesis.executed:
+                age = (i - 1) - _active_thesis.created_bar_1h
+                if age >= _active_thesis.max_age_1h_bars:
+                    _active_thesis.expired = True
+                    _funnel["mtf_thesis_expired"] += 1
+                    _active_thesis = None
+
+            # Check active thesis for 15m entry
+            if (
+                _active_thesis is not None
+                and not _active_thesis.executed
+                and symbol not in portfolio.positions
+                and symbol not in portfolio.short_positions
+                and _cooldown_remaining <= 0
+            ):
+                _thesis_bar = i - 1
+                _15m_indices = _mtf_map.get(_thesis_bar, [])
+                if _15m_indices:
+                    _trigger = find_15m_entry_in_window(
+                        candles_15m, _15m_indices, _active_thesis,
+                    )
+                    if _trigger is not None:
+                        _mtf_px = _trigger.entry_price * (
+                            1.0 + slip_mult if _active_thesis.direction == "long"
+                            else 1.0 - slip_mult
+                        )
+                        _mtf_size = size * _eff_long_size_scale * _pullback_scale
+                        if _active_thesis.direction == "long" and _eff_allow_longs and _mtf_size > 0:
+                            if portfolio.execute_buy(
+                                symbol, _mtf_px, _mtf_size,
+                                trailing_stop_pct=_eff_ts,
+                                take_profit_pct=_eff_tp,
+                            ):
+                                _pos = portfolio.positions.get(symbol)
+                                if _pos is not None:
+                                    _pos.entry_atr_pct = _atr_pct
+                                trades += 1
+                                _funnel["executed_buy"] += 1
+                                _funnel["mtf_15m_entry_used"] += 1
+                                _funnel["mtf_thesis_executed"] += 1
+                                _entry_bar[symbol] = _thesis_bar
+                                trade_log.append({
+                                    "bar": bar_ts, "action": "buy",
+                                    "reason": f"mtf_15m_{_trigger.trigger_reason}",
+                                    "price": _mtf_px, "qty": _mtf_size,
+                                })
+                                _active_thesis.executed = True
+
+            # New thesis creation: defer new ENTRIES to 15m timing.
+            # Sell signals for closing existing longs pass through untouched.
+            # Regime gating is applied here to prevent thesis creation
+            # when the regime blocks the direction.
+            _has_open_long = symbol in portfolio.positions
+            _has_open_short = symbol in portfolio.short_positions
+            # Only defer LONG entries to 15m timing. Short entries execute
+            # immediately because waiting for a 15m bounce in a downtrend
+            # degrades short entry quality.
+            _is_new_entry = action == "buy" and not _has_open_long and _eff_allow_longs
+            if action == "buy" and not _eff_allow_longs and not _has_open_long:
+                _funnel["blocked_regime_no_longs"] += 1
+            elif action == "sell" and enable_shorts and not _eff_allow_shorts and not _has_open_long:
+                _funnel["blocked_regime_no_shorts"] += 1
+            if _is_new_entry and _active_thesis is None:
+                _thesis_dir = "long" if action == "buy" else "short"
+                _active_thesis = Thesis(
+                    direction=_thesis_dir,
+                    created_bar_1h=i - 1,
+                    confidence=signal.confidence,
+                    creation_price=px,
+                    regime=_current_regime,
+                    max_age_1h_bars=mtf_thesis_max_age,
+                )
+                _funnel["mtf_thesis_created"] += 1
+                action = "hold"
+            elif _is_new_entry and _active_thesis is not None:
+                if (action == "buy" and _active_thesis.direction == "long") or \
+                   (action == "sell" and _active_thesis.direction == "short"):
+                    _active_thesis.created_bar_1h = i - 1
+                    _active_thesis.confidence = signal.confidence
+                    _active_thesis.creation_price = px
+                else:
+                    _active_thesis = Thesis(
+                        direction="long" if action == "buy" else "short",
+                        created_bar_1h=i - 1,
+                        confidence=signal.confidence,
+                        creation_price=px,
+                        regime=_current_regime,
+                        max_age_1h_bars=mtf_thesis_max_age,
+                    )
+                    _funnel["mtf_thesis_created"] += 1
+                action = "hold"
 
         if action == "buy":
             _consecutive_exit_signals = 0
@@ -1081,7 +1512,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                     "close_reason": "buy_signal",
                                 })
 
-            _long_size = size * _eff_long_size_scale
+            _long_size = size * _eff_long_size_scale * _pullback_scale
             if not _eff_allow_longs:
                 _funnel["blocked_regime_no_longs"] += 1
             elif symbol in portfolio.positions:
@@ -1098,8 +1529,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 buy_px = px * (1.0 + slip_mult)
                 if portfolio.execute_buy(
                     symbol, buy_px, _long_size,
-                    trailing_stop_pct=trailing_stop_pct,
-                    take_profit_pct=take_profit_pct,
+                    trailing_stop_pct=_eff_ts,
+                    take_profit_pct=_eff_tp,
                 ):
                     _pos = portfolio.positions.get(symbol)
                     if _pos is not None:
@@ -1200,8 +1631,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     short_px = px * (1.0 - slip_mult)
                     if portfolio.execute_short(
                         symbol, short_px, _short_size,
-                        trailing_stop_pct=trailing_stop_pct,
-                        take_profit_pct=take_profit_pct,
+                        trailing_stop_pct=_eff_ts,
+                        take_profit_pct=_eff_tp,
                     ):
                         spos = portfolio.short_positions.get(symbol)
                         if spos is not None:
@@ -1256,6 +1687,9 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         if _r is not None:
             _regime_counts[_r] = _regime_counts.get(_r, 0) + 1
     _funnel["regime_distribution"] = _regime_counts
+
+    enrich_trades_with_entry_context(candles, closed_trades)
+    enrich_trades_with_post_exit(closed_trades, candles)
 
     return BacktestResult(
         start_equity=starting_balance_usd,
