@@ -875,6 +875,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         _eff_ml_buy = _eff.get("ml_buy_threshold", ml_buy_threshold)
         _eff_ml_sell = _eff.get("ml_sell_threshold", ml_sell_threshold)
         _eff_tp = _eff.get("take_profit_pct", take_profit_pct)
+        _eff_ts = _eff.get("trailing_stop_pct", trailing_stop_pct)
         _eff_position_scale = _eff.get("position_scale", 1.0)
         _eff_allow_longs = _eff.get("allow_longs", True)
         _eff_allow_shorts = _eff.get("allow_shorts", True)

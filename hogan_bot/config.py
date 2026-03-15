@@ -320,9 +320,9 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         quality_final_mult=1.00,
         quality_tech_mult=1.25,
         allow_longs=True,
-        allow_shorts=True,
-        long_size_scale=1.0,
-        short_size_scale=0.4,
+        allow_shorts=False,
+        long_size_scale=0.5,
+        short_size_scale=0.0,
     ),
     "volatile": RegimeConfig(
         volume_threshold_mult=0.70,
@@ -341,7 +341,7 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         quality_tech_mult=1.10,
         allow_longs=True,
         allow_shorts=False,
-        long_size_scale=0.75,
+        long_size_scale=0.5,
         short_size_scale=0.0,
     ),
 }

@@ -325,24 +325,32 @@ def effective_thresholds(
     if not getattr(config, "use_regime_detection", False):
         return defaults
 
-    if state.confidence < min_confidence:
-        return defaults
-
     overrides = _REGIME_OVERRIDES.get(state.regime, {})
     if not overrides:
         return defaults
 
     result = defaults.copy()
-    # Multiplier-based keys: scale from the per-symbol base
+
+    # Side participation rules apply at a lower confidence bar — they're
+    # safety policy ("don't short in volatile") not precision tuning.
+    _SIDE_KEYS = ("allow_longs", "allow_shorts", "long_size_scale", "short_size_scale")
+    _side_conf_floor = min_confidence * 0.5
+    if state.confidence >= _side_conf_floor:
+        for key in _SIDE_KEYS:
+            if key in overrides:
+                result[key] = overrides[key]
+
+    if state.confidence < min_confidence:
+        return result
+
+    # Threshold tuning requires higher confidence
     if "volume_threshold_mult" in overrides:
         result["volume_threshold"] = defaults["volume_threshold"] * overrides["volume_threshold_mult"]
     if "trailing_stop_mult" in overrides:
         result["trailing_stop_pct"] = defaults["trailing_stop_pct"] * overrides["trailing_stop_mult"]
     if "take_profit_mult" in overrides:
         result["take_profit_pct"] = defaults["take_profit_pct"] * overrides["take_profit_mult"]
-    # Absolute keys: ML thresholds, position scale, side participation
-    for key in ("ml_buy_threshold", "ml_sell_threshold", "position_scale",
-                "allow_longs", "allow_shorts", "long_size_scale", "short_size_scale"):
+    for key in ("ml_buy_threshold", "ml_sell_threshold", "position_scale"):
         if key in overrides:
             result[key] = overrides[key]
     return result
