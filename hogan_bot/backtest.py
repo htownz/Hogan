@@ -786,6 +786,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     # MTF execution: use 15m candles for entry timing within 1h thesis
     candles_15m: pd.DataFrame | None = None,
     mtf_thesis_max_age: int = 4,
+    # Pullback gate: when False, skip the anti-chase pullback filter
+    enable_pullback_gate: bool = True,
     # DB path for sentiment/macro agents (as-of timestamp semantics)
     db_path: str | None = None,
     # Entry quality / edge gate (from config)
@@ -1317,13 +1319,16 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             elif "whipsaw" in blk:
                 _funnel["ranging_blocked_whipsaw"] += 1
 
-        _pullback_gd = pullback_gate(action, window)
-        action = _pullback_gd.action
-        _pullback_scale = _pullback_gd.size_scale
-        if _pullback_gd.blocked_by:
-            _funnel["pullback_blocked"] = _funnel.get("pullback_blocked", 0) + 1
-        elif _pullback_scale < 1.0 and action == "buy":
-            _funnel["pullback_halved"] = _funnel.get("pullback_halved", 0) + 1
+        if enable_pullback_gate:
+            _pullback_gd = pullback_gate(action, window)
+            action = _pullback_gd.action
+            _pullback_scale = _pullback_gd.size_scale
+            if _pullback_gd.blocked_by:
+                _funnel["pullback_blocked"] = _funnel.get("pullback_blocked", 0) + 1
+            elif _pullback_scale < 1.0 and action == "buy":
+                _funnel["pullback_halved"] = _funnel.get("pullback_halved", 0) + 1
+        else:
+            _pullback_scale = 1.0
 
         if action == "buy":
             _funnel["post_ranging_buy"] += 1
