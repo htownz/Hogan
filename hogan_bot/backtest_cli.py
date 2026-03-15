@@ -4,7 +4,8 @@ import argparse
 import json
 
 from hogan_bot.backtest import (
-    evaluate_market_regimes, evaluate_regimes, evaluate_regimes_by_market,
+    diagnose_exits, diagnose_long_entries, evaluate_market_regimes,
+    evaluate_regimes, evaluate_regimes_by_market,
     evaluate_trades_by_regime_side, run_backtest_on_candles,
 )
 from hogan_bot.config import load_config
@@ -61,6 +62,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run three configs side-by-side: long-only, shorts+regime-gated, shorts-ungated",
     )
+    parser.add_argument(
+        "--mtf-exec",
+        action="store_true",
+        help="Use 1h thesis / 15m execution: defer entries to 15m pullback timing",
+    )
+    parser.add_argument(
+        "--mtf-thesis-age",
+        type=int,
+        default=4,
+        help="Max 1h bars a thesis stays active before expiring (default 4)",
+    )
     return parser.parse_args()
 
 
@@ -71,7 +83,7 @@ def _load_rl_policy(model_path: str):
     return _RL_POLICY_CACHE[model_path]
 
 
-def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, overrides: dict | None = None, use_ict: bool = False, use_rl_agent: bool = False, rl_policy=None, db_path: str | None = None, enable_shorts: bool = False):
+def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, overrides: dict | None = None, use_ict: bool = False, use_rl_agent: bool = False, rl_policy=None, db_path: str | None = None, enable_shorts: bool = False, candles_15m=None, mtf_thesis_max_age: int = 4):
     """Run one backtest with optional per-key overrides on *cfg*.
 
     Returns the full :class:`~hogan_bot.backtest.BacktestResult` object so
@@ -129,6 +141,8 @@ def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, ov
         max_whipsaws=cfg.max_whipsaws,
         db_path=db_path,
         enable_shorts=enable_shorts,
+        candles_15m=candles_15m,
+        mtf_thesis_max_age=mtf_thesis_max_age,
     )
 
 
@@ -162,6 +176,17 @@ def main() -> None:
 
     _db = args.db if args.from_db else None
 
+    _candles_15m = None
+    if args.mtf_exec and args.from_db:
+        from hogan_bot.storage import get_connection, load_candles as _load_candles
+        conn = get_connection(args.db)
+        _candles_15m = _load_candles(conn, args.symbol, "15m")
+        conn.close()
+        if _candles_15m.empty:
+            print("No 15m candles in DB. Run backfill_15m.py first.")
+            return
+        print(f"Loaded {len(_candles_15m)} candles for 15m execution timing")
+
     if args.compare_shorts:
         _compare_short_configs = [
             ("long_only", False),
@@ -174,6 +199,7 @@ def main() -> None:
                 timeframe=timeframe,
                 use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
                 db_path=_db, enable_shorts=shorts_on,
+                candles_15m=_candles_15m, mtf_thesis_max_age=args.mtf_thesis_age,
             )
             summary = result.summary_dict()
             funnel = summary.pop("signal_funnel", {})
@@ -197,6 +223,7 @@ def main() -> None:
                 timeframe=timeframe, overrides=overrides,
                 use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
                 db_path=_db, enable_shorts=args.enable_shorts,
+                candles_15m=_candles_15m, mtf_thesis_max_age=args.mtf_thesis_age,
             )
             rows.append({"config": label, **result.summary_dict()})
 
@@ -208,6 +235,7 @@ def main() -> None:
             timeframe=timeframe,
             use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
             db_path=_db, enable_shorts=args.enable_shorts,
+            candles_15m=_candles_15m, mtf_thesis_max_age=args.mtf_thesis_age,
         )
         print(json.dumps(result.summary_dict(), indent=2))
 
@@ -233,10 +261,12 @@ def main() -> None:
             if market_regimes:
                 print("-- Trade analytics by entry regime ---------------------")
                 for regime, metrics in sorted(market_regimes.items()):
+                    _p = metrics.get("payoff_ratio", 0)
+                    _ps = f"{_p:>5.2f}" if isinstance(_p, (int, float)) else f"{_p:>5s}"
                     print(f"  {regime:<14s}  trades={metrics.get('trade_count', 0):>3d}  "
                           f"win_rate={metrics.get('win_rate', 0):>5.1%}  "
                           f"avg_pnl={metrics.get('avg_gross_pnl_pct', 0):>7.2f}%  "
-                          f"payoff={metrics.get('payoff_ratio', 0):>5.2f}")
+                          f"payoff={_ps}")
                 print()
 
             # Regime x side breakdown
@@ -251,6 +281,67 @@ def main() -> None:
                     print(f"  {key:<22s}  {m['count']:>3d}  {m['win_rate']:>5.1%}  "
                           f"{m['avg_pnl_pct']:>8.2f}  {m['total_pnl_pct']:>7.2f}  {payoff_s}  {exits}")
                 print()
+
+        diag = diagnose_long_entries(result.closed_trades)
+        if diag and diag.get("total_longs", 0) > 0:
+            print("-- Long entry timing diagnostic -------------------------")
+            for label, group_key in [("ALL LONGS", "all"), ("WINNERS", "winners"), ("LOSERS", "losers")]:
+                g = diag.get(group_key, {})
+                if isinstance(g, dict) and "avg_range_position" in g:
+                    cnt = g.get("count", diag.get("total_longs", "?"))
+                    print(f"  {label} (n={cnt}):")
+                    print(f"    Avg range position:  {g['avg_range_position']:.2f}  (0=low, 1=high)")
+                    print(f"    Avg % from high:     {g['avg_pct_from_high']:+.2f}%")
+                    print(f"    Avg run-up before:   {g['avg_run_up_before']:+.2f}%")
+                    print(f"    Avg MFE:             {g['avg_mfe']:+.2f}%")
+                    print(f"    Avg MAE:             {g['avg_mae']:+.2f}%")
+                    if "avg_bars_to_peak" in g:
+                        print(f"    Avg bars to peak:    {g['avg_bars_to_peak']:.1f}")
+                        print(f"    Avg bars to trough:  {g['avg_bars_to_trough']:.1f}")
+            print()
+            per_trade = diag.get("per_trade", [])
+            if per_trade:
+                print("  Per-trade detail:")
+                print(f"  {'bar':>5s}  {'regime':<15s}  {'pnl%':>6s}  {'range':>5s}  {'runup':>6s}  "
+                      f"{'MFE':>6s}  {'MAE':>6s}  {'pk_bar':>6s}  exit")
+                print(f"  {'-'*5}  {'-'*15}  {'-'*6}  {'-'*5}  {'-'*6}  {'-'*6}  {'-'*6}  {'-'*6}  {'-'*15}")
+                for t in per_trade:
+                    print(f"  {t['bar']:>5d}  {(t['regime'] or '?'):<15s}  {t['pnl_pct']:>+6.2f}  "
+                          f"{t['range_pos']:>5.2f}  {t['run_up']:>+6.2f}  "
+                          f"{t['mfe']:>+6.2f}  {t['mae']:>+6.2f}  {t['bars_to_peak']:>6d}  {t['exit'] or '?'}")
+            print()
+
+        # Exit diagnostic: trailing stop analysis
+        exit_diag = diagnose_exits(result.closed_trades)
+        if exit_diag:
+            print("-- Exit diagnostic: trailing stop analysis ---------------")
+            for side_label, key in [("LONG STOPS", "long_stops"), ("SHORT STOPS", "short_stops")]:
+                s = exit_diag.get(key, {})
+                if not s:
+                    continue
+                print(f"  {side_label} (n={s['count']}):")
+                print(f"    Premature (price recovered/hit TP):  {s['premature']}")
+                print(f"    Correct (price kept falling):        {s['correct']}")
+                print(f"    Early but OK (minor bounce >1%):     {s['early_but_ok']}")
+                print(f"    Would have hit take-profit:          {s['would_have_hit_tp']}")
+                print(f"    Avg trade PnL at stop:   {s['avg_trade_pnl_pct']:>+7.3f}%")
+                print(f"    Avg post-exit MFE:       {s['avg_post_exit_mfe_pct']:>+7.3f}%  (money left on table)")
+                print(f"    Avg post-exit MAE:       {s['avg_post_exit_mae_pct']:>+7.3f}%  (avoided loss)")
+                print(f"    Avg post-exit final:     {s['avg_post_exit_final_pct']:>+7.3f}%  (where price ended)")
+                print()
+
+            per_stop = exit_diag.get("per_trade", [])
+            if per_stop:
+                print("  Per-trade stop detail:")
+                print(f"  {'bar':>5s}  {'side':<6s} {'regime':<14s} {'pnl%':>6s}  {'inMFE':>6s}  "
+                      f"{'postMFE':>7s}  {'postMAE':>7s}  {'final':>6s}  {'recover':>7s}  verdict")
+                print(f"  {'-'*5}  {'-'*6} {'-'*14} {'-'*6}  {'-'*6}  {'-'*7}  {'-'*7}  {'-'*6}  {'-'*7}  {'-'*12}")
+                for t in per_stop:
+                    print(f"  {t['bar'] or 0:>5d}  {t['side']:<6s} {(t['regime'] or '?'):<14s} "
+                          f"{t['pnl_pct']:>+6.2f}  {t.get('in_trade_mfe', 0) or 0:>+6.2f}  "
+                          f"{t['post_mfe']:>+7.3f}  {t['post_mae']:>+7.3f}  {t['post_final']:>+6.3f}  "
+                          f"{'yes' if t['recovered'] else 'no':>7s}  {t['verdict']}")
+            print()
 
 
 def _print_signal_funnel(funnel: dict) -> None:
@@ -299,6 +390,25 @@ def _print_signal_funnel(funnel: dict) -> None:
             print(f"  {'Blocked (regime no long)':<24s}   {regime_no_long:>5d}")
         if regime_no_short:
             print(f"  {'Blocked (regime no short)':<24s}  {regime_no_short:>5d}")
+    pullback_blocked = funnel.get("pullback_blocked", 0)
+    pullback_halved = funnel.get("pullback_halved", 0)
+    if pullback_blocked or pullback_halved:
+        print(f"\n  Pullback gate:")
+        if pullback_blocked:
+            print(f"    Blocked (chasing):   {pullback_blocked:>5d}")
+        if pullback_halved:
+            print(f"    Half-sized (near top):{pullback_halved:>5d}")
+
+    mtf_created = funnel.get("mtf_thesis_created", 0)
+    mtf_executed = funnel.get("mtf_thesis_executed", 0)
+    mtf_expired = funnel.get("mtf_thesis_expired", 0)
+    mtf_15m = funnel.get("mtf_15m_entry_used", 0)
+    if mtf_created:
+        print(f"\n  MTF thesis/execution:")
+        print(f"    Theses created:      {mtf_created:>5d}")
+        print(f"    Theses executed:     {mtf_executed:>5d}")
+        print(f"    Theses expired:      {mtf_expired:>5d}")
+        print(f"    15m entries used:    {mtf_15m:>5d}")
 
     s_sig = funnel.get("short_covered_signal", 0)
     s_stop = funnel.get("short_covered_stop", 0)

@@ -65,8 +65,8 @@ class BotConfig:
     signal_min_vote_margin: int = 1
 
     # Exit management (0 = disabled)
-    trailing_stop_pct: float = 0.02
-    take_profit_pct: float = 0.054
+    trailing_stop_pct: float = 0.025
+    take_profit_pct: float = 0.035
 
     # ATR stop-distance multiplier (strategy.py line: ATR × multiplier)
     atr_stop_multiplier: float = 2.5
@@ -308,8 +308,8 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         volume_threshold_mult=1.10,
         ml_buy_threshold=0.58,
         ml_sell_threshold=0.42,
-        trailing_stop_mult=0.80,
-        take_profit_mult=0.70,
+        trailing_stop_mult=1.20,
+        take_profit_mult=0.85,
         position_scale=0.75,
         strategy_family="mean_revert",
         meta_tech_delta=-0.05,

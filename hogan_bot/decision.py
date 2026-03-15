@@ -42,6 +42,7 @@ def compute_quality_components(
     recent_whipsaw_count: int = 0,
     freshness_summary: dict | None = None,
     ranging_scale: float = 1.0,
+    pullback_scale: float = 1.0,
     quality_gate_scale: float = 1.0,
 ) -> QualityComponents:
     """Compute a structured quality score from signal evaluation inputs."""
@@ -77,7 +78,7 @@ def compute_quality_components(
         + 0.15 * spread_penalty
         + 0.10 * whipsaw_penalty
         + 0.10 * freshness_penalty
-    ) * ranging_scale * quality_gate_scale
+    ) * ranging_scale * pullback_scale * quality_gate_scale
 
     return QualityComponents(
         final_conf=round(final_conf, 4),
@@ -443,6 +444,75 @@ def ranging_gate(
         return GateDecision(
             action="hold", blocked_by="ranging_gate_whipsaw",
             detail={"whipsaws": recent_whipsaw_count, "threshold": whipsaw_block_threshold},
+        )
+
+    return GateDecision(action=action)
+
+
+def pullback_gate(
+    action: str,
+    candles: pd.DataFrame,
+    *,
+    lookback: int = 12,
+    max_range_position: float = 0.70,
+    max_run_up_pct: float = 3.0,
+) -> GateDecision:
+    """Block buy entries that chase recent price run-ups.
+
+    Diagnostic evidence shows longs entering in the upper 25% of the
+    recent range (range_position > 0.75) with positive run-up have an
+    average PnL of -1.09% across 11 trades (2 wins, 9 losses), while
+    entries in the lower 30% average ~0%.
+
+    Checks (buy signals only):
+    1. Where the close sits in the [low, high] range of the last N bars.
+       If near the top (> max_range_position), block.
+    2. How much the close has risen from N bars ago.
+       If the run-up exceeds max_run_up_pct, block.
+
+    Both conditions must fail to block — a single warning is not enough.
+    """
+    if action != "buy" or len(candles) < lookback + 1:
+        return GateDecision(action=action)
+
+    close = float(candles["close"].iloc[-1])
+    highs = candles["high"].iloc[-(lookback + 1):]
+    lows = candles["low"].iloc[-(lookback + 1):]
+    local_high = float(highs.max())
+    local_low = float(lows.min())
+
+    local_range = local_high - local_low
+    if local_range <= 0:
+        return GateDecision(action=action)
+    range_pos = (close - local_low) / local_range
+
+    close_lookback = float(candles["close"].iloc[-(lookback + 1)])
+    run_up_pct = (close - close_lookback) / close_lookback * 100
+
+    near_top = range_pos > max_range_position
+    chasing = run_up_pct > max_run_up_pct
+
+    if near_top and chasing:
+        return GateDecision(
+            action="hold",
+            blocked_by="pullback_gate_chasing",
+            detail={
+                "range_position": round(range_pos, 3),
+                "max_range_position": max_range_position,
+                "run_up_pct": round(run_up_pct, 2),
+                "max_run_up_pct": max_run_up_pct,
+            },
+        )
+
+    if near_top:
+        return GateDecision(
+            action=action,
+            size_scale=0.5,
+            detail={
+                "range_position": round(range_pos, 3),
+                "run_up_pct": round(run_up_pct, 2),
+                "note": "near top but no excessive run-up; half-size",
+            },
         )
 
     return GateDecision(action=action)

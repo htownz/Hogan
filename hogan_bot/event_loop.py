@@ -37,7 +37,7 @@ from hogan_bot.config import BotConfig, load_config, symbol_config, effective_ho
 from hogan_bot.data_engine import CandleEvent, LiveDataEngine, CandleRingBuffer
 from hogan_bot.decision import (
     apply_ml_filter, edge_gate, entry_quality_gate, ml_confidence,
-    estimate_spread_from_candles, ranging_gate,
+    estimate_spread_from_candles, pullback_gate, ranging_gate,
     compute_quality_components, QualityComponents, GateDecision,
 )
 from hogan_bot.execution import (
@@ -247,6 +247,12 @@ class SignalEvaluator:
         if ranging_gd.blocked_by:
             block_reasons.append(ranging_gd.blocked_by)
 
+        pullback_gd = pullback_gate(action, candles)
+        action = pullback_gd.action
+        pullback_scale = pullback_gd.size_scale
+        if pullback_gd.blocked_by:
+            block_reasons.append(pullback_gd.blocked_by)
+
         # MTF ensemble: daily bias + 30m confirmation
         _mtf_conf_mult = 1.0
         if cfg.use_mtf_ensemble and action != "hold" and mtf_candles:
@@ -312,6 +318,7 @@ class SignalEvaluator:
             recent_whipsaw_count=recent_whipsaw_count,
             freshness_summary=_freshness,
             ranging_scale=ranging_scale,
+            pullback_scale=pullback_scale,
             quality_gate_scale=quality_scale,
         )
 
@@ -321,13 +328,13 @@ class SignalEvaluator:
             stop_distance_pct=result.stop_distance_pct,
             max_risk_per_trade=cfg.max_risk_per_trade,
             max_allocation_pct=cfg.aggressive_allocation,
-            confidence_scale=conf_scale * quality_scale * ranging_scale * eff_position_scale * _freshness_scale * _mtf_conf_mult,
+            confidence_scale=conf_scale * quality_scale * ranging_scale * pullback_scale * eff_position_scale * _freshness_scale * _mtf_conf_mult,
             fee_rate=cfg.fee_rate,
         )
 
         _direction_score = getattr(result, "combined_score", 0.0)
         _quality_score = _qc.overall
-        _size_score = min(1.0, conf_scale * quality_scale * ranging_scale * eff_position_scale)
+        _size_score = min(1.0, conf_scale * quality_scale * ranging_scale * pullback_scale * eff_position_scale)
 
         if action != "hold":
             logger.info(
@@ -840,7 +847,7 @@ async def run_event_loop(
                 elif not _fx_session_ok:
                     logger.debug("FX_SESSION_BLOCK %s — outside allowed trading hours", symbol)
                 else:
-                    _long_size = size * eff_long_size_scale
+                    _long_size = size * eff_long_size_scale * pullback_scale
                     buy_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
                     res = executor.open_long(symbol, buy_px, _long_size,
                                             trailing_stop_pct=_eff_stop,
