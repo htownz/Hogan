@@ -1048,7 +1048,11 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         })
 
         mark = {symbol: px}
-        exits = portfolio.check_exits(mark, max_hold_bars=max_hold_bars)
+        _short_max = max(max_hold_bars * 2 // 3, 1) if enable_shorts else 0
+        exits = portfolio.check_exits(
+            mark, max_hold_bars=max_hold_bars,
+            short_max_hold_bars=_short_max,
+        )
         for exit_symbol, reason in exits:
             _is_short_exit = reason.startswith("short_")
 
@@ -1554,6 +1558,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     )
         elif action == "sell":
             # Close existing long (with ExitEvaluator confirmation)
+            _closed_long_this_bar = False
             if symbol in portfolio.positions:
                 pos = portfolio.positions[symbol]
                 qty = pos.qty
@@ -1589,6 +1594,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             sell_px_sig = px * (1.0 - slip_mult)
                             _entry_bar.pop(symbol, None)
                             if portfolio.execute_sell(symbol, sell_px_sig, sell_qty):
+                                _closed_long_this_bar = True
                                 trades += 1
                                 closed += 1
                                 is_win = sell_px_sig > avg_entry
@@ -1626,8 +1632,18 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                         "entry_regime": _current_regime,
                                         "close_reason": "signal",
                                     })
-            # Open short when flat and shorts enabled
-            elif enable_shorts and symbol not in portfolio.short_positions:
+
+            # Open short when flat and shorts enabled.
+            # Uses `if` (not elif) so close-and-reverse works on the same bar:
+            # a sell signal can close a long AND open a short in one step.
+            if (
+                enable_shorts
+                and symbol not in portfolio.positions
+                and symbol not in portfolio.short_positions
+            ):
+                if _closed_long_this_bar:
+                    _funnel["close_and_reverse"] = _funnel.get("close_and_reverse", 0) + 1
+                    _cooldown_remaining = 0
                 _consecutive_exit_signals = 0
                 _short_size = size * _eff_short_size_scale
                 if not _eff_allow_shorts:
