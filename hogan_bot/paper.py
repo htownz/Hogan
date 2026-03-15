@@ -160,6 +160,7 @@ class PaperPortfolio:
         self,
         mark_prices: dict[str, float],
         max_hold_bars: int = 0,
+        short_max_hold_bars: int = 0,
     ) -> list[tuple[str, str]]:
         """Check open long and short positions and return exit signals.
 
@@ -209,7 +210,8 @@ class PaperPortfolio:
                     pos.max_adverse_pct = max(pos.max_adverse_pct, abs(move_pct))
                 else:
                     pos.max_favorable_pct = max(pos.max_favorable_pct, move_pct)
-            if max_hold_bars > 0 and pos.bars_held >= max_hold_bars:
+            _s_max = short_max_hold_bars if short_max_hold_bars > 0 else max_hold_bars
+            if _s_max > 0 and pos.bars_held >= _s_max:
                 exits.append((symbol, "short_max_hold_time"))
                 continue
             # Trailing stop: tracks lowest price, fires when price rebounds up

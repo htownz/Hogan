@@ -399,6 +399,9 @@ def _print_signal_funnel(funnel: dict) -> None:
             print(f"  {'Blocked (regime no long)':<24s}   {regime_no_long:>5d}")
         if regime_no_short:
             print(f"  {'Blocked (regime no short)':<24s}  {regime_no_short:>5d}")
+    close_reverse = funnel.get("close_and_reverse", 0)
+    if close_reverse:
+        print(f"  {'Close-and-reverse':<24s}       {close_reverse:>5d}")
     pullback_blocked = funnel.get("pullback_blocked", 0)
     pullback_halved = funnel.get("pullback_halved", 0)
     if pullback_blocked or pullback_halved:
