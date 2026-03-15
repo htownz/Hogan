@@ -73,6 +73,11 @@ def parse_args() -> argparse.Namespace:
         default=4,
         help="Max 1h bars a thesis stays active before expiring (default 4)",
     )
+    parser.add_argument(
+        "--no-pullback-gate",
+        action="store_true",
+        help="Disable the anti-chase pullback gate (for A/B comparison)",
+    )
     return parser.parse_args()
 
 
@@ -83,7 +88,7 @@ def _load_rl_policy(model_path: str):
     return _RL_POLICY_CACHE[model_path]
 
 
-def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, overrides: dict | None = None, use_ict: bool = False, use_rl_agent: bool = False, rl_policy=None, db_path: str | None = None, enable_shorts: bool = False, candles_15m=None, mtf_thesis_max_age: int = 4):
+def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, overrides: dict | None = None, use_ict: bool = False, use_rl_agent: bool = False, rl_policy=None, db_path: str | None = None, enable_shorts: bool = False, candles_15m=None, mtf_thesis_max_age: int = 4, enable_pullback_gate: bool = True):
     """Run one backtest with optional per-key overrides on *cfg*.
 
     Returns the full :class:`~hogan_bot.backtest.BacktestResult` object so
@@ -143,6 +148,7 @@ def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, ov
         enable_shorts=enable_shorts,
         candles_15m=candles_15m,
         mtf_thesis_max_age=mtf_thesis_max_age,
+        enable_pullback_gate=enable_pullback_gate,
     )
 
 
@@ -200,6 +206,7 @@ def main() -> None:
                 use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
                 db_path=_db, enable_shorts=shorts_on,
                 candles_15m=_candles_15m, mtf_thesis_max_age=args.mtf_thesis_age,
+                enable_pullback_gate=not args.no_pullback_gate,
             )
             summary = result.summary_dict()
             funnel = summary.pop("signal_funnel", {})
@@ -224,6 +231,7 @@ def main() -> None:
                 use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
                 db_path=_db, enable_shorts=args.enable_shorts,
                 candles_15m=_candles_15m, mtf_thesis_max_age=args.mtf_thesis_age,
+                enable_pullback_gate=not args.no_pullback_gate,
             )
             rows.append({"config": label, **result.summary_dict()})
 
@@ -236,6 +244,7 @@ def main() -> None:
             use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
             db_path=_db, enable_shorts=args.enable_shorts,
             candles_15m=_candles_15m, mtf_thesis_max_age=args.mtf_thesis_age,
+            enable_pullback_gate=not args.no_pullback_gate,
         )
         print(json.dumps(result.summary_dict(), indent=2))
 
