@@ -4,7 +4,8 @@ import argparse
 import json
 
 from hogan_bot.backtest import (
-    diagnose_exits, diagnose_long_entries, diagnose_shorts_by_confidence,
+    diagnose_exits, diagnose_long_entries,
+    diagnose_longs_by_confidence, diagnose_shorts_by_confidence,
     evaluate_market_regimes,
     evaluate_regimes, evaluate_regimes_by_market,
     evaluate_trades_by_regime_side, run_backtest_on_candles,
@@ -372,6 +373,30 @@ def main() -> None:
                           f"{'yes' if t['recovered'] else 'no':>7s}  {t['verdict']}")
             print()
 
+        # Long confidence bucket analysis
+        long_conf = diagnose_longs_by_confidence(result.closed_trades)
+        if long_conf:
+            by_rc = long_conf.get("by_regime_confidence", {})
+            if by_rc:
+                print("-- Long trades by regime x confidence bucket -----------")
+                print(f"  {'bucket':<26s}  {'n':>3s}  {'win%':>5s}  {'avg_pnl%':>8s}  {'total%':>7s}")
+                print(f"  {'-'*26}  {'-'*3}  {'-'*5}  {'-'*8}  {'-'*7}")
+                for key, m in by_rc.items():
+                    print(f"  {key:<26s}  {m['count']:>3d}  {m['win_rate']:>5.1%}  "
+                          f"{m['avg_pnl_pct']:>8.2f}  {m['total_pnl_pct']:>7.2f}")
+                print()
+
+            per_long = long_conf.get("per_trade", [])
+            if per_long:
+                print("  Per-trade long detail (with confidence):")
+                print(f"  {'bar':>5s}  {'regime':<14s}  {'conf':>5s}  {'bucket':<7s}  {'pnl%':>6s}  {'hold':>4s}  exit")
+                print(f"  {'-'*5}  {'-'*14}  {'-'*5}  {'-'*7}  {'-'*6}  {'-'*4}  {'-'*20}")
+                for t in per_long:
+                    print(f"  {t['bar'] or 0:>5d}  {(t['regime'] or '?'):<14s}  "
+                          f"{t['regime_conf']:>5.3f}  {t['conf_bucket']:<7s}  "
+                          f"{t['pnl_pct']:>+6.2f}  {t['hold_bars']:>4d}  {t['exit'] or '?'}")
+                print()
+
         # Short confidence bucket analysis
         short_conf = diagnose_shorts_by_confidence(result.closed_trades)
         if short_conf:
@@ -447,11 +472,17 @@ def _print_signal_funnel(funnel: dict) -> None:
     if close_reverse:
         print(f"  {'Close-and-reverse':<24s}       {close_reverse:>5d}")
     pullback_blocked = funnel.get("pullback_blocked", 0)
+    pullback_blocked_resistance = funnel.get("pullback_blocked_resistance", 0)
     pullback_halved = funnel.get("pullback_halved", 0)
     if pullback_blocked or pullback_halved:
         print(f"\n  Pullback gate:")
         if pullback_blocked:
-            print(f"    Blocked (chasing):   {pullback_blocked:>5d}")
+            print(f"    Blocked total:       {pullback_blocked:>5d}")
+            if pullback_blocked_resistance:
+                print(f"      regime resistance: {pullback_blocked_resistance:>5d}")
+            _chase_blocked = pullback_blocked - pullback_blocked_resistance
+            if _chase_blocked:
+                print(f"      chasing run-up:    {_chase_blocked:>5d}")
         if pullback_halved:
             print(f"    Half-sized (near top):{pullback_halved:>5d}")
 

@@ -289,7 +289,7 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         volume_threshold_mult=0.55,
         ml_buy_threshold=0.57,
         ml_sell_threshold=0.43,
-        trailing_stop_mult=1.30,
+        trailing_stop_mult=1.50,
         take_profit_mult=1.70,
         position_scale=1.00,
         strategy_family="trend_follow",
@@ -322,7 +322,7 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         quality_tech_mult=1.25,
         allow_longs=True,
         allow_shorts=False,
-        long_size_scale=0.5,
+        long_size_scale=0.25,
         short_size_scale=0.0,
     ),
     "volatile": RegimeConfig(

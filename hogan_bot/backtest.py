@@ -729,6 +729,69 @@ def diagnose_shorts_by_confidence(closed_trades: list[dict]) -> dict:
     return {"by_regime_confidence": report, "per_trade": per_trade}
 
 
+def diagnose_longs_by_confidence(closed_trades: list[dict]) -> dict:
+    """Break down long trades by regime and regime confidence bucket.
+
+    Mirrors :func:`diagnose_shorts_by_confidence` for the long side.
+
+    Confidence buckets:
+    - high:   >= 0.60
+    - medium: 0.40 – 0.59
+    - low:    < 0.40  (regime classification is uncertain)
+    """
+    longs = [t for t in closed_trades if t.get("side") == "long"]
+    if not longs:
+        return {}
+
+    def _bucket(conf: float | None) -> str:
+        if conf is None:
+            return "unknown"
+        if conf >= 0.60:
+            return "high"
+        if conf >= 0.40:
+            return "medium"
+        return "low"
+
+    def _summarize(trades: list[dict]) -> dict:
+        if not trades:
+            return {}
+        n = len(trades)
+        wins = sum(1 for t in trades if t.get("pnl_usd", 0) > 0)
+        pnls = [t.get("pnl_pct", 0.0) for t in trades]
+        return {
+            "count": n,
+            "wins": wins,
+            "win_rate": round(wins / n, 3) if n else 0,
+            "avg_pnl_pct": round(sum(pnls) / n, 3) if n else 0,
+            "total_pnl_pct": round(sum(pnls), 3),
+        }
+
+    by_regime_conf: dict[str, list[dict]] = {}
+    for t in longs:
+        regime = t.get("entry_regime") or "unknown"
+        bucket = _bucket(t.get("regime_confidence"))
+        key = f"{regime}|{bucket}"
+        by_regime_conf.setdefault(key, []).append(t)
+
+    report: dict[str, dict] = {}
+    for key in sorted(by_regime_conf.keys()):
+        report[key] = _summarize(by_regime_conf[key])
+
+    per_trade = []
+    for t in longs:
+        per_trade.append({
+            "bar": t.get("entry_bar_idx"),
+            "regime": t.get("entry_regime"),
+            "regime_conf": round(t.get("regime_confidence", 0) or 0, 3),
+            "conf_bucket": _bucket(t.get("regime_confidence")),
+            "pnl_pct": round(t.get("pnl_pct", 0), 2),
+            "exit": t.get("close_reason"),
+            "hold_bars": (t.get("exit_bar_idx", 0) or 0) - (t.get("entry_bar_idx", 0) or 0),
+        })
+
+    return {"by_regime_confidence": report, "per_trade": per_trade}
+
+
 def diagnose_long_entries(closed_trades: list[dict]) -> dict:
     """Aggregate entry-timing diagnostics for long trades only.
 
@@ -1418,11 +1481,14 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 action, window,
                 max_range_position=_pb_range,
                 max_run_up_pct=_pb_runup,
+                regime=_current_regime,
             )
             action = _pullback_gd.action
             _pullback_scale = _pullback_gd.size_scale
             if _pullback_gd.blocked_by:
                 _funnel["pullback_blocked"] = _funnel.get("pullback_blocked", 0) + 1
+                if "resistance" in (_pullback_gd.blocked_by or ""):
+                    _funnel["pullback_blocked_resistance"] = _funnel.get("pullback_blocked_resistance", 0) + 1
             elif _pullback_scale < 1.0 and action == "buy":
                 _funnel["pullback_halved"] = _funnel.get("pullback_halved", 0) + 1
         else:
