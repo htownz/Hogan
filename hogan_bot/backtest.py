@@ -664,6 +664,71 @@ def diagnose_exits(closed_trades: list[dict]) -> dict:
     }
 
 
+def diagnose_shorts_by_confidence(closed_trades: list[dict]) -> dict:
+    """Break down short trades by regime and regime confidence bucket.
+
+    Requires ``regime_confidence`` field on each trade (set by the backtest).
+    Returns per-bucket stats that separate genuine regime-classified shorts
+    from ambiguity-window trades (low confidence).
+
+    Confidence buckets:
+    - high:   >= 0.60
+    - medium: 0.40 – 0.59
+    - low:    < 0.40  (regime classification is uncertain)
+    """
+    shorts = [t for t in closed_trades if t.get("side") == "short"]
+    if not shorts:
+        return {}
+
+    def _bucket(conf: float | None) -> str:
+        if conf is None:
+            return "unknown"
+        if conf >= 0.60:
+            return "high"
+        if conf >= 0.40:
+            return "medium"
+        return "low"
+
+    def _summarize(trades: list[dict]) -> dict:
+        if not trades:
+            return {}
+        n = len(trades)
+        wins = sum(1 for t in trades if t.get("pnl_usd", 0) > 0)
+        pnls = [t.get("pnl_pct", 0.0) for t in trades]
+        return {
+            "count": n,
+            "wins": wins,
+            "win_rate": round(wins / n, 3) if n else 0,
+            "avg_pnl_pct": round(sum(pnls) / n, 3) if n else 0,
+            "total_pnl_pct": round(sum(pnls), 3),
+        }
+
+    by_regime_conf: dict[str, list[dict]] = {}
+    for t in shorts:
+        regime = t.get("entry_regime") or "unknown"
+        bucket = _bucket(t.get("regime_confidence"))
+        key = f"{regime}|{bucket}"
+        by_regime_conf.setdefault(key, []).append(t)
+
+    report: dict[str, dict] = {}
+    for key in sorted(by_regime_conf.keys()):
+        report[key] = _summarize(by_regime_conf[key])
+
+    per_trade = []
+    for t in shorts:
+        per_trade.append({
+            "bar": t.get("entry_bar_idx"),
+            "regime": t.get("entry_regime"),
+            "regime_conf": round(t.get("regime_confidence", 0) or 0, 3),
+            "conf_bucket": _bucket(t.get("regime_confidence")),
+            "pnl_pct": round(t.get("pnl_pct", 0), 2),
+            "exit": t.get("close_reason"),
+            "hold_bars": (t.get("exit_bar_idx", 0) or 0) - (t.get("entry_bar_idx", 0) or 0),
+        })
+
+    return {"by_regime_confidence": report, "per_trade": per_trade}
+
+
 def diagnose_long_entries(closed_trades: list[dict]) -> dict:
     """Aggregate entry-timing diagnostics for long trades only.
 
@@ -788,6 +853,11 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     mtf_thesis_max_age: int = 4,
     # Pullback gate: when False, skip the anti-chase pullback filter
     enable_pullback_gate: bool = True,
+    # Close-and-reverse: when True, a sell signal can close a long AND open
+    # a short on the same bar.  When False, short entry waits until next signal.
+    enable_close_and_reverse: bool = True,
+    # Short max hold (hours): explicit side-specific hold.  0 = use long max hold.
+    short_max_hold_hours: float = 0.0,
     # DB path for sentiment/macro agents (as-of timestamp semantics)
     db_path: str | None = None,
     # Entry quality / edge gate (from config)
@@ -867,8 +937,10 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     closed_trades: list[dict] = []
     _expectancy = ExpectancyTracker()
 
-    # Track entry bar index for each symbol (for closed_trades / ML learning)
+    # Track entry bar index and regime for each symbol (for closed_trades)
     _entry_bar: dict[str, int] = {}
+    _entry_regime: dict[str, str | None] = {}
+    _entry_regime_conf: dict[str, float | None] = {}
 
     # Cooldown: bars remaining before next entry is allowed
     _cooldown_remaining: int = 0
@@ -882,6 +954,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
 
     # Short position tracking
     _short_entry_bar: dict[str, int] = {}
+    _short_entry_regime: dict[str, str | None] = {}
+    _short_entry_regime_conf: dict[str, float | None] = {}
     _consecutive_short_exit_signals: int = 0
     _pending_shorts: dict[str, float] = {}
     _pending_covers: dict[str, tuple[float, float, int | None, str]] = {}
@@ -960,6 +1034,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 if portfolio.execute_buy(sym, buy_px, size, trailing_stop_pct=trailing_stop_pct, take_profit_pct=take_profit_pct):
                     trades += 1
                     _entry_bar[sym] = i - 1
+                    _entry_regime[sym] = _current_regime
+                    _entry_regime_conf[sym] = _regime_conf
                     trade_log.append({"bar": bar_ts, "action": "buy", "reason": "signal", "price": buy_px, "qty": size})
             for sym, (qty, avg_entry, entry_bar_idx, reason) in list(_pending_sells.items()):
                 _pending_sells.pop(sym, None)
@@ -997,7 +1073,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "qty": qty,
                             "pnl_usd": pnl_usd,
                             "pnl_pct": pnl_pct,
-                            "entry_regime": _current_regime,
+                            "entry_regime": _entry_regime.pop(sym, _current_regime),
+                            "regime_confidence": _entry_regime_conf.pop(sym, _regime_conf),
                             "close_reason": reason,
                         })
             for sym, size in list(_pending_shorts.items()):
@@ -1006,6 +1083,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 if portfolio.execute_short(sym, short_px, size, trailing_stop_pct=trailing_stop_pct, take_profit_pct=take_profit_pct):
                     trades += 1
                     _short_entry_bar[sym] = i - 1
+                    _short_entry_regime[sym] = _current_regime
+                    _short_entry_regime_conf[sym] = _regime_conf
                     trade_log.append({"bar": bar_ts, "action": "short", "reason": "signal", "price": short_px, "qty": size})
             for sym, (qty, avg_entry, entry_bar_idx, reason) in list(_pending_covers.items()):
                 _pending_covers.pop(sym, None)
@@ -1043,12 +1122,19 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "qty": qty,
                             "pnl_usd": pnl_usd,
                             "pnl_pct": pnl_pct,
-                            "entry_regime": _current_regime,
+                            "entry_regime": _short_entry_regime.pop(sym, _current_regime),
+                            "regime_confidence": _short_entry_regime_conf.pop(sym, _regime_conf),
                             "close_reason": reason,
                         })
 
         mark = {symbol: px}
-        _short_max = max(max_hold_bars * 2 // 3, 1) if enable_shorts else 0
+        if enable_shorts and short_max_hold_hours > 0:
+            from hogan_bot.timeframe_utils import hours_to_bars
+            _short_max = hours_to_bars(short_max_hold_hours, _tf)
+        elif enable_shorts:
+            _short_max = max_hold_bars
+        else:
+            _short_max = 0
         exits = portfolio.check_exits(
             mark, max_hold_bars=max_hold_bars,
             short_max_hold_bars=_short_max,
@@ -1112,7 +1198,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                 "qty": qty,
                                 "pnl_usd": pnl_usd,
                                 "pnl_pct": pnl_pct,
-                                "entry_regime": _current_regime,
+                                "entry_regime": _short_entry_regime.pop(exit_symbol, _current_regime),
+                                "regime_confidence": _short_entry_regime_conf.pop(exit_symbol, _regime_conf),
                                 "close_reason": reason,
                             })
                 continue
@@ -1166,7 +1253,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "qty": qty,
                             "pnl_usd": pnl_usd,
                             "pnl_pct": pnl_pct,
-                            "entry_regime": _current_regime,
+                            "entry_regime": _entry_regime.pop(exit_symbol, _current_regime),
+                            "regime_confidence": _entry_regime_conf.pop(exit_symbol, _regime_conf),
                             "close_reason": reason,
                         })
 
@@ -1419,6 +1507,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                 _funnel["mtf_15m_entry_used"] += 1
                                 _funnel["mtf_thesis_executed"] += 1
                                 _entry_bar[symbol] = _thesis_bar
+                                _entry_regime[symbol] = _current_regime
+                                _entry_regime_conf[symbol] = _regime_conf
                                 trade_log.append({
                                     "bar": bar_ts, "action": "buy",
                                     "reason": f"mtf_15m_{_trigger.trigger_reason}",
@@ -1523,7 +1613,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                     "qty": cover_qty,
                                     "pnl_usd": pnl_usd,
                                     "pnl_pct": pnl_pct,
-                                    "entry_regime": _current_regime,
+                                    "entry_regime": _short_entry_regime.pop(symbol, _current_regime),
+                                    "regime_confidence": _short_entry_regime_conf.pop(symbol, _regime_conf),
                                     "close_reason": "buy_signal",
                                 })
 
@@ -1553,6 +1644,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     trades += 1
                     _funnel["executed_buy"] += 1
                     _entry_bar[symbol] = i - 1
+                    _entry_regime[symbol] = _current_regime
+                    _entry_regime_conf[symbol] = _regime_conf
                     trade_log.append(
                         {"bar": bar_ts, "action": "buy", "reason": "signal", "price": buy_px, "qty": _long_size}
                     )
@@ -1629,18 +1722,22 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                         "qty": sell_qty,
                                         "pnl_usd": pnl_usd,
                                         "pnl_pct": pnl_pct,
-                                        "entry_regime": _current_regime,
+                                        "entry_regime": _entry_regime.pop(symbol, _current_regime),
+                                        "regime_confidence": _entry_regime_conf.pop(symbol, _regime_conf),
                                         "close_reason": "signal",
                                     })
 
             # Open short when flat and shorts enabled.
-            # Uses `if` (not elif) so close-and-reverse works on the same bar:
-            # a sell signal can close a long AND open a short in one step.
-            if (
+            # When enable_close_and_reverse is True, uses `if` (not elif) so a
+            # sell signal can close a long AND open a short in one step.
+            _allow_short_entry = (
                 enable_shorts
                 and symbol not in portfolio.positions
                 and symbol not in portfolio.short_positions
-            ):
+            )
+            if _closed_long_this_bar and not enable_close_and_reverse:
+                _allow_short_entry = False
+            if _allow_short_entry:
                 if _closed_long_this_bar:
                     _funnel["close_and_reverse"] = _funnel.get("close_and_reverse", 0) + 1
                     _cooldown_remaining = 0
@@ -1667,6 +1764,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         trades += 1
                         _funnel["executed_short_entry"] += 1
                         _short_entry_bar[symbol] = i - 1
+                        _short_entry_regime[symbol] = _current_regime
+                        _short_entry_regime_conf[symbol] = _regime_conf
                         trade_log.append(
                             {"bar": bar_ts, "action": "short", "reason": "signal", "price": short_px, "qty": _short_size}
                         )
