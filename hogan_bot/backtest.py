@@ -1320,7 +1320,13 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 _funnel["ranging_blocked_whipsaw"] += 1
 
         if enable_pullback_gate:
-            _pullback_gd = pullback_gate(action, window)
+            _pb_range = 0.70 if _use_mtf else 0.55
+            _pb_runup = 3.0 if _use_mtf else 2.0
+            _pullback_gd = pullback_gate(
+                action, window,
+                max_range_position=_pb_range,
+                max_run_up_pct=_pb_runup,
+            )
             action = _pullback_gd.action
             _pullback_scale = _pullback_gd.size_scale
             if _pullback_gd.blocked_by:
