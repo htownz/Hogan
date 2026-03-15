@@ -80,6 +80,7 @@ class BotConfig:
     # Hour-based overrides (preferred): convert to bars using timeframe at runtime.
     # Ensures parity between backtest and live/paper across different timeframes.
     max_hold_hours: float = 24.0     # 24h max hold (canonical)
+    short_max_hold_hours: float = 16.0  # shorter hold for shorts (higher turnover)
     loss_cooldown_hours: float = 2.0 # 2h cooldown (canonical)
 
     # Exit model thresholds (ExitEvaluator)
@@ -367,6 +368,19 @@ def effective_hold_cooldown_bars(config: BotConfig, timeframe: str) -> tuple[int
     else:
         cooldown = config.loss_cooldown_bars
     return max_hold, cooldown
+
+
+def effective_short_max_hold_bars(config: BotConfig, timeframe: str) -> int:
+    """Return short_max_hold_bars for the given timeframe.
+
+    Uses ``short_max_hold_hours`` when > 0, otherwise falls back to
+    the long ``max_hold_bars`` (no separate short hold).
+    """
+    from hogan_bot.timeframe_utils import hours_to_bars
+    if config.short_max_hold_hours > 0:
+        return hours_to_bars(config.short_max_hold_hours, timeframe)
+    max_hold, _ = effective_hold_cooldown_bars(config, timeframe)
+    return max_hold
 
 
 # ---------------------------------------------------------------------------
