@@ -247,7 +247,7 @@ class SignalEvaluator:
         if ranging_gd.blocked_by:
             block_reasons.append(ranging_gd.blocked_by)
 
-        pullback_gd = pullback_gate(action, candles)
+        pullback_gd = pullback_gate(action, candles, regime=regime_name)
         action = pullback_gd.action
         pullback_scale = pullback_gd.size_scale
         if pullback_gd.blocked_by:

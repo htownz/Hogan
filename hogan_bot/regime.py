@@ -331,25 +331,33 @@ def effective_thresholds(
 
     result = defaults.copy()
 
-    # Side participation rules apply at a lower confidence bar — they're
-    # safety policy ("don't short in volatile") not precision tuning.
+    # Three confidence tiers:
+    #   1. Side participation (allow/block, sizing) — lowest bar: 0.25
+    #      Safety policy so it applies even with low regime certainty.
+    #   2. Risk management (stops, TP) — medium bar: 0.35
+    #      If confident enough to open, use the right risk parameters.
+    #   3. Signal tuning (ML, volume, position_scale) — highest bar: 0.50
+    #      Precision tuning needs strong regime conviction.
     _SIDE_KEYS = ("allow_longs", "allow_shorts", "long_size_scale", "short_size_scale")
-    _side_conf_floor = min_confidence * 0.5
+    _side_conf_floor = min_confidence * 0.5          # 0.25
+    _risk_conf_floor = min_confidence * 0.7          # 0.35
+
     if state.confidence >= _side_conf_floor:
         for key in _SIDE_KEYS:
             if key in overrides:
                 result[key] = overrides[key]
 
+    if state.confidence >= _risk_conf_floor:
+        if "trailing_stop_mult" in overrides:
+            result["trailing_stop_pct"] = defaults["trailing_stop_pct"] * overrides["trailing_stop_mult"]
+        if "take_profit_mult" in overrides:
+            result["take_profit_pct"] = defaults["take_profit_pct"] * overrides["take_profit_mult"]
+
     if state.confidence < min_confidence:
         return result
 
-    # Threshold tuning requires higher confidence
     if "volume_threshold_mult" in overrides:
         result["volume_threshold"] = defaults["volume_threshold"] * overrides["volume_threshold_mult"]
-    if "trailing_stop_mult" in overrides:
-        result["trailing_stop_pct"] = defaults["trailing_stop_pct"] * overrides["trailing_stop_mult"]
-    if "take_profit_mult" in overrides:
-        result["take_profit_pct"] = defaults["take_profit_pct"] * overrides["take_profit_mult"]
     for key in ("ml_buy_threshold", "ml_sell_threshold", "position_scale"):
         if key in overrides:
             result[key] = overrides[key]
