@@ -33,7 +33,7 @@ from datetime import datetime
 import pandas as pd
 
 from hogan_bot.agent_pipeline import AgentPipeline
-from hogan_bot.config import BotConfig, load_config, symbol_config, effective_hold_cooldown_bars
+from hogan_bot.config import BotConfig, load_config, symbol_config, effective_hold_cooldown_bars, effective_short_max_hold_bars
 from hogan_bot.data_engine import CandleEvent, LiveDataEngine, CandleRingBuffer
 from hogan_bot.decision import (
     apply_ml_filter, edge_gate, entry_quality_gate, ml_confidence,
@@ -101,6 +101,12 @@ class SignalResult:
     size_score: float = 0.0
     quality_components: QualityComponents | None = None
     block_reasons: list[str] | None = None
+    eff_trailing_stop_pct: float | None = None
+    eff_take_profit_pct: float | None = None
+    eff_allow_longs: bool = True
+    eff_allow_shorts: bool = True
+    eff_long_size_scale: float = 1.0
+    eff_short_size_scale: float = 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +155,7 @@ class SignalEvaluator:
         eff_ml_buy = eff.get("ml_buy_threshold", cfg.ml_buy_threshold)
         eff_ml_sell = eff.get("ml_sell_threshold", cfg.ml_sell_threshold)
         eff_tp = eff.get("take_profit_pct", cfg.take_profit_pct)
+        eff_ts = eff.get("trailing_stop_pct", cfg.trailing_stop_pct)
         eff_position_scale = eff.get("position_scale", 1.0)
         eff_allow_longs = eff.get("allow_longs", True)
         eff_allow_shorts = eff.get("allow_shorts", True)
@@ -362,6 +369,12 @@ class SignalEvaluator:
             size_score=_size_score,
             quality_components=_qc,
             block_reasons=block_reasons if block_reasons else None,
+            eff_trailing_stop_pct=eff_ts,
+            eff_take_profit_pct=eff_tp,
+            eff_allow_longs=eff_allow_longs,
+            eff_allow_shorts=eff_allow_shorts,
+            eff_long_size_scale=eff_long_size_scale,
+            eff_short_size_scale=eff_short_size_scale,
         )
 
 
@@ -472,6 +485,7 @@ async def run_event_loop(
 
     # Parity with backtest: max_hold_bars, loss_cooldown, slippage
     max_hold_bars, loss_cooldown_bars = effective_hold_cooldown_bars(config, config.timeframe)
+    short_max_hold_bars = effective_short_max_hold_bars(config, config.timeframe)
     slippage_bps = float(os.getenv("HOGAN_SLIPPAGE_BPS", "5.0"))
     slip_mult = slippage_bps / 10_000.0
     # When the executor owns fill simulation (RealisticPaperExecution), skip
@@ -519,6 +533,8 @@ async def run_event_loop(
     event_count = 0
     _signal_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     _current_regime: dict[str, str] = {}
+    _entry_regime: dict[str, str] = {}
+    _entry_regime_conf: dict[str, float] = {}
     _EXPECTANCY_LOG_INTERVAL = 50
 
     # FX session filter (active when any symbol looks like an FX pair)
@@ -612,7 +628,7 @@ async def run_event_loop(
 
             # Auto-exit trailing stops / take profits / max_hold_time
             # All exits go through the executor so live orders are always sent.
-            exits = portfolio.check_exits(mark_prices, max_hold_bars=max_hold_bars)
+            exits = portfolio.check_exits(mark_prices, max_hold_bars=max_hold_bars, short_max_hold_bars=short_max_hold_bars)
             for exit_symbol, reason in exits:
                 ep = mark_prices.get(exit_symbol, 0.0)
                 now_ms = int(time.time() * 1000)
@@ -629,6 +645,7 @@ async def run_event_loop(
                     res = executor.close_long(exit_symbol, ep, qty, reason=reason)
                     executed = bool(res.ok)
                     sell_px = ep
+                    _exit_entry_regime = _entry_regime.pop(exit_symbol, _current_regime.get(exit_symbol, "unknown"))
                     if executed:
                         fee = qty * sell_px * config.fee_rate
                         if not allow_live:
@@ -636,14 +653,14 @@ async def run_event_loop(
                                 conn, exit_symbol, "long", sell_px, fee, now_ms, close_reason=reason,
                                 max_adverse_pct=mae_pct, max_favorable_pct=mfe_pct,
                                 bars_held=bars_held,
-                                exit_regime=_current_regime.get(exit_symbol),
+                                exit_regime=_exit_entry_regime,
                                 entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                             )
                         gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
                         net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                         _expectancy.record_trade(
                             symbol=exit_symbol,
-                            regime=_current_regime.get(exit_symbol, "unknown"),
+                            regime=_exit_entry_regime,
                             gross_pnl_pct=gross_pnl_pct,
                             net_pnl_pct=net_pnl_pct,
                             mae_pct=mae_pct,
@@ -655,7 +672,7 @@ async def run_event_loop(
                             try:
                                 _perf_tracker.record_trade_outcome(
                                     symbol=exit_symbol,
-                                    regime=_current_regime.get(exit_symbol, "unknown"),
+                                    regime=_exit_entry_regime,
                                     tech_action="sell", tech_confidence=0.0,
                                     sent_bias="neutral", sent_strength=0.0,
                                     macro_regime="unknown",
@@ -684,6 +701,7 @@ async def run_event_loop(
                     cover_px = ep
                     res = executor.close_short(exit_symbol, cover_px, qty, reason=reason)
                     executed = bool(res.ok)
+                    _exit_s_entry_regime = _entry_regime.pop(exit_symbol, _current_regime.get(exit_symbol, "unknown"))
                     if executed:
                         fee = qty * cover_px * config.fee_rate
                         if not allow_live:
@@ -691,14 +709,14 @@ async def run_event_loop(
                                 conn, exit_symbol, "short", cover_px, fee, now_ms, close_reason=reason,
                                 max_adverse_pct=mae_pct, max_favorable_pct=mfe_pct,
                                 bars_held=bars_held,
-                                exit_regime=_current_regime.get(exit_symbol),
+                                exit_regime=_exit_s_entry_regime,
                                 entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                             )
                         gross_pnl_pct = (avg_entry - cover_px) / avg_entry if avg_entry else 0
                         net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                         _expectancy.record_trade(
                             symbol=exit_symbol,
-                            regime=_current_regime.get(exit_symbol, "unknown"),
+                            regime=_exit_s_entry_regime,
                             gross_pnl_pct=gross_pnl_pct,
                             net_pnl_pct=net_pnl_pct,
                             mae_pct=mae_pct,
@@ -710,7 +728,7 @@ async def run_event_loop(
                             try:
                                 _perf_tracker.record_trade_outcome(
                                     symbol=exit_symbol,
-                                    regime=_current_regime.get(exit_symbol, "unknown"),
+                                    regime=_exit_s_entry_regime,
                                     tech_action="buy", tech_confidence=0.0,
                                     sent_bias="neutral", sent_strength=0.0,
                                     macro_regime="unknown",
@@ -812,9 +830,10 @@ async def run_event_loop(
             else:
                 _consecutive_exit_signals[symbol] = 0
 
-            # Instrument-profile-aware stop/TP (FX uses pip-based, crypto uses %)
-            _eff_stop = config.trailing_stop_pct
-            _eff_tp = config.take_profit_pct
+            # Regime-adjusted stop/TP from three-tier confidence gate,
+            # with instrument-profile override for FX pip-based risk.
+            _eff_stop = sig.eff_trailing_stop_pct or config.trailing_stop_pct
+            _eff_tp = sig.eff_take_profit_pct or config.take_profit_pct
             try:
                 from hogan_bot.instrument_profiles import get_profile
                 _iprofile = get_profile(symbol)
@@ -838,8 +857,8 @@ async def run_event_loop(
                 pass
 
             if action == "buy" and px > 0:
-                if not eff_allow_longs:
-                    logger.debug("REGIME_BLOCK %s — longs not allowed in %s", symbol, regime_name)
+                if not sig.eff_allow_longs:
+                    logger.debug("REGIME_BLOCK %s — longs not allowed in %s", symbol, _sym_regime)
                 elif symbol in portfolio.positions:
                     pass  # already long
                 elif _cooldown_remaining > 0:
@@ -847,13 +866,15 @@ async def run_event_loop(
                 elif not _fx_session_ok:
                     logger.debug("FX_SESSION_BLOCK %s — outside allowed trading hours", symbol)
                 else:
-                    _long_size = size * eff_long_size_scale * pullback_scale
+                    _long_size = size * sig.eff_long_size_scale
                     buy_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
                     res = executor.open_long(symbol, buy_px, _long_size,
                                             trailing_stop_pct=_eff_stop,
                                             take_profit_pct=_eff_tp)
                     executed = bool(res.ok)
                     if executed:
+                        _entry_regime[symbol] = _sym_regime or "unknown"
+                        _entry_regime_conf[symbol] = getattr(sig, "final_confidence", 0.0)
                         pos = portfolio.positions.get(symbol)
                         if pos is not None:
                             pos.entry_atr_pct = _sym_atr_pct
@@ -868,7 +889,7 @@ async def run_event_loop(
                             notifier.notify("buy", {"symbol": symbol, "price": buy_px,
                                                     "qty": _long_size, "ml_up_prob": up_prob})
                     logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s long_scale=%.2f",
-                                symbol, buy_px, _long_size, up_prob or -1, equity, regime_name, eff_long_size_scale)
+                                symbol, buy_px, _long_size, up_prob or -1, equity, _sym_regime, sig.eff_long_size_scale)
 
             elif action == "sell" and symbol in portfolio.positions:
                 pos = portfolio.positions[symbol]
@@ -915,6 +936,7 @@ async def run_event_loop(
                     avg_entry = pos.avg_entry
                     res = executor.close_long(symbol, sell_px, sell_qty, reason="signal")
                     executed = bool(res.ok)
+                    _sig_entry_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
                     if executed:
                         now_ms = int(time.time() * 1000)
                         exit_fee = sell_qty * sell_px * config.fee_rate
@@ -925,7 +947,7 @@ async def run_event_loop(
                                 max_adverse_pct=getattr(pos, "max_adverse_pct", None),
                                 max_favorable_pct=getattr(pos, "max_favorable_pct", None),
                                 bars_held=_sig_bars,
-                                exit_regime=_current_regime.get(symbol),
+                                exit_regime=_sig_entry_regime,
                                 entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                             )
                         gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
@@ -933,7 +955,7 @@ async def run_event_loop(
                         bars_held = getattr(pos, "bars_held", 0)
                         _expectancy.record_trade(
                             symbol=symbol,
-                            regime=_current_regime.get(symbol, "unknown"),
+                            regime=_sig_entry_regime,
                             gross_pnl_pct=gross_pnl_pct,
                             net_pnl_pct=net_pnl_pct,
                             mae_pct=getattr(pos, "max_adverse_pct", 0.0),
@@ -945,7 +967,7 @@ async def run_event_loop(
                             try:
                                 _perf_tracker.record_trade_outcome(
                                     symbol=symbol,
-                                    regime=_current_regime.get(symbol, "unknown"),
+                                    regime=_sig_entry_regime,
                                     tech_action=action, tech_confidence=sig.tech_confidence or 0.0,
                                     sent_bias="neutral", sent_strength=0.0,
                                     macro_regime="unknown",
