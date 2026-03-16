@@ -932,6 +932,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     min_regime_confidence: float = 0.30,
     max_whipsaws: int = 3,
     reversal_confidence_mult: float = 1.3,
+    macro_sitout=None,
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
@@ -1517,6 +1518,17 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             confidence_scale=conf_scale * _quality_scale * _ranging_scale * _pullback_scale * _eff_position_scale,
             fee_rate=fee_rate,
         )
+
+        # ── Macro sitout filter ────────────────────────────────────────
+        if macro_sitout is not None and action != "hold":
+            _bar_ts = candles.iloc[i - 1].get("timestamp") if i > 0 else None
+            _sitout = macro_sitout.check(_bar_ts)
+            if _sitout.should_sitout:
+                _funnel["macro_sitout"] = _funnel.get("macro_sitout", 0) + 1
+                action = "hold"
+            elif _sitout.size_scale < 1.0:
+                size *= _sitout.size_scale
+                _funnel["macro_scaled"] = _funnel.get("macro_scaled", 0) + 1
 
         # Track whipsaws (signal flipped from last bar)
         if action != "hold" and _last_signal != "hold" and action != _last_signal:
