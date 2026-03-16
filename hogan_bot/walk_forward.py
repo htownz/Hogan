@@ -85,6 +85,12 @@ class WindowResult:
     train_auc: float | None = None
     error: str | None = None
 
+    signal_funnel: dict = field(default_factory=dict)
+    regime_distribution: dict = field(default_factory=dict)
+    closed_trades: list[dict] = field(default_factory=list)
+    test_start_date: str | None = None
+    test_end_date: str | None = None
+
     def summary_line(self) -> str:
         s = self.sharpe if self.sharpe is not None else 0.0
         return (
@@ -343,6 +349,13 @@ def _train_and_evaluate_window(
         result.trades = bt.trades
         result.win_rate = bt.win_rate
         result.net_positive = bt.total_return_pct > 0.0
+        result.signal_funnel = dict(bt.signal_funnel)
+        result.regime_distribution = bt.signal_funnel.get("regime_distribution", {})
+        result.closed_trades = list(bt.closed_trades)
+
+        if "timestamp" in test_candles.columns:
+            result.test_start_date = str(test_candles["timestamp"].iloc[0])
+            result.test_end_date = str(test_candles["timestamp"].iloc[-1])
 
     except Exception as exc:
         result.error = str(exc)
@@ -399,6 +412,92 @@ def walk_forward_validate(
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
+def _print_funnel_comparison(report: WalkForwardReport) -> None:
+    """Print a per-window funnel comparison table to stdout."""
+
+    print(f"\n{'=' * 90}")
+    print("PER-WINDOW FUNNEL ANALYSIS")
+    print(f"{'=' * 90}")
+
+    for w in report.windows:
+        f = w.signal_funnel
+        label = "PASS" if w.net_positive else "FAIL"
+        print(f"\n--- W{w.window_idx} ({label}) | {w.test_start_date or '?'} to {w.test_end_date or '?'} ---")
+        print(f"  Return: {w.total_return_pct:+.2f}%  Sharpe: {w.sharpe or 0:.2f}  "
+              f"Trades: {w.trades}  Win: {w.win_rate:.0%}")
+
+        bars = f.get("bars_evaluated", 0)
+        pipe_buy = f.get("pipeline_buy", 0)
+        pipe_sell = f.get("pipeline_sell", 0)
+        post_ml_buy = f.get("post_ml_buy", 0)
+        post_ml_sell = f.get("post_ml_sell", 0)
+        post_edge_buy = f.get("post_edge_buy", 0)
+        post_edge_sell = f.get("post_edge_sell", 0)
+        post_qual_buy = f.get("post_quality_buy", 0)
+        post_qual_sell = f.get("post_quality_sell", 0)
+        post_rang_buy = f.get("post_ranging_buy", 0)
+        post_rang_sell = f.get("post_ranging_sell", 0)
+        exec_buy = f.get("executed_buy", 0)
+        exec_short = f.get("executed_short_entry", 0)
+        blk_regime_long = f.get("blocked_regime_no_longs", 0)
+        blk_regime_short = f.get("blocked_regime_no_shorts", 0)
+        blk_cooldown = f.get("blocked_cooldown", 0)
+        blk_already = f.get("blocked_already_long", 0)
+
+        print(f"  Bars evaluated:     {bars}")
+        print(f"  Pipeline signals:   buy={pipe_buy}  sell={pipe_sell}")
+
+        if post_ml_buy or post_ml_sell:
+            ml_kill_buy = pipe_buy - post_ml_buy if pipe_buy else 0
+            ml_kill_pct = (ml_kill_buy / pipe_buy * 100) if pipe_buy else 0
+            print(f"  Post-ML filter:     buy={post_ml_buy}  sell={post_ml_sell}  "
+                  f"(ML killed {ml_kill_pct:.0f}% of buys)")
+        else:
+            print(f"  Post-ML filter:     (ML disabled)")
+
+        edge_kill = (post_ml_buy or pipe_buy) - post_edge_buy
+        print(f"  Post-edge gate:     buy={post_edge_buy}  sell={post_edge_sell}  "
+              f"(edge killed {edge_kill})")
+
+        qual_kill = post_edge_buy - post_qual_buy
+        print(f"  Post-quality gate:  buy={post_qual_buy}  sell={post_qual_sell}  "
+              f"(quality killed {qual_kill})")
+
+        rang_kill = post_qual_buy - post_rang_buy
+        print(f"  Post-ranging gate:  buy={post_rang_buy}  sell={post_rang_sell}  "
+              f"(ranging killed {rang_kill})")
+
+        print(f"  Executed:           longs={exec_buy}  shorts={exec_short}")
+        print(f"  Blocked:            regime_long={blk_regime_long}  "
+              f"regime_short={blk_regime_short}  cooldown={blk_cooldown}  "
+              f"already_long={blk_already}")
+
+        regime = w.regime_distribution
+        if regime:
+            total_regime_bars = sum(regime.values())
+            print(f"  Regime distribution:")
+            for r, cnt in sorted(regime.items(), key=lambda x: -x[1]):
+                pct = cnt / total_regime_bars * 100 if total_regime_bars else 0
+                print(f"    {r:<16} {cnt:>5} bars ({pct:.1f}%)")
+
+        if w.closed_trades:
+            wins = [t for t in w.closed_trades if t.get("pnl_pct", 0) > 0]
+            losses = [t for t in w.closed_trades if t.get("pnl_pct", 0) <= 0]
+            avg_win = sum(t.get("pnl_pct", 0) for t in wins) / len(wins) if wins else 0
+            avg_loss = sum(t.get("pnl_pct", 0) for t in losses) / len(losses) if losses else 0
+            sides = {}
+            for t in w.closed_trades:
+                s = t.get("side", "unknown")
+                sides[s] = sides.get(s, 0) + 1
+            side_str = "  ".join(f"{s}={c}" for s, c in sorted(sides.items()))
+            print(f"  Trade breakdown:    {side_str}")
+            print(f"  Avg win: {avg_win:+.3f}%  Avg loss: {avg_loss:+.3f}%  "
+                  f"Payoff ratio: {abs(avg_win/avg_loss):.2f}x" if avg_loss != 0
+                  else f"  Avg win: {avg_win:+.3f}%  No losses")
+
+    print(f"\n{'=' * 90}\n")
+
 
 def main() -> None:
     import argparse
@@ -462,6 +561,8 @@ def main() -> None:
                 "window_idx": w.window_idx,
                 "train_bars": w.train_bars,
                 "test_bars": w.test_bars,
+                "test_start_date": w.test_start_date,
+                "test_end_date": w.test_end_date,
                 "total_return_pct": round(w.total_return_pct, 4),
                 "max_drawdown_pct": round(w.max_drawdown_pct, 2),
                 "sharpe": round(w.sharpe, 4) if w.sharpe is not None else None,
@@ -471,6 +572,8 @@ def main() -> None:
                 "net_positive": w.net_positive,
                 "train_auc": round(w.train_auc, 4) if w.train_auc is not None else None,
                 "error": w.error,
+                "signal_funnel": w.signal_funnel,
+                "regime_distribution": w.regime_distribution,
             }
             for w in report.windows
         ],
@@ -487,7 +590,9 @@ def main() -> None:
     print(f"  Mean Return: {report.mean_return:+.2f}%")
     print(f"  Worst Drawdown: {report.worst_drawdown:.1f}%")
     print(f"  Total Trades: {report.total_trades}")
-    print(f"{'=' * 60}\n")
+    print(f"{'=' * 60}")
+
+    _print_funnel_comparison(report)
 
 
 if __name__ == "__main__":
