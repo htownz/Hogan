@@ -188,9 +188,9 @@ class MacroSitout:
             events = []
             if date_str in _FOMC_DATES:
                 events.append("FOMC")
-            if date_str in [d for d in _CPI_DATES]:
+            if date_str in _CPI_DATES:
                 events.append("CPI")
-            if date_str in [d for d in _NFP_DATES]:
+            if date_str in _NFP_DATES:
                 events.append("NFP")
             result.reasons.append(f"event_day({'+'.join(events)})")
             return
