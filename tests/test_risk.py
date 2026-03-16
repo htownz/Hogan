@@ -5,7 +5,6 @@ import pytest
 
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
 
-
 # ---------------------------------------------------------------------------
 # Position sizing
 # ---------------------------------------------------------------------------

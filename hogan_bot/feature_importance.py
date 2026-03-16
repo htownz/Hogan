@@ -17,7 +17,6 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -48,7 +47,6 @@ def run_feature_importance(
     from sklearn.preprocessing import StandardScaler
 
     from hogan_bot.feature_registry import (
-        CHAMPION_FEATURE_COLUMNS,
         CHAMPION_FEATURE_DECISIONS,
     )
     from hogan_bot.ml import build_training_set

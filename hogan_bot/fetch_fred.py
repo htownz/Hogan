@@ -43,7 +43,7 @@ import json
 import logging
 import os
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 

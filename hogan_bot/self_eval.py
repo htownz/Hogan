@@ -33,7 +33,6 @@ import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -162,7 +161,7 @@ class StrategyEvaluator:
     ) -> dict | None:
         """Trigger a walk-forward retrain cycle."""
         try:
-            from hogan_bot.retrain import retrain_once, _build_parser
+            from hogan_bot.retrain import _build_parser, retrain_once
 
             argv = [
                 "--symbol", symbol,

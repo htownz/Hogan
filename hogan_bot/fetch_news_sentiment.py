@@ -38,7 +38,7 @@ import os
 import sys
 import time
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -128,9 +128,8 @@ def fetch_and_store(
     int
         Number of rows written.
     """
-    from hogan_bot.storage import get_connection, upsert_onchain
 
-    import sqlite3
+    from hogan_bot.storage import get_connection, upsert_onchain
 
     if pages > _QUOTA_WARN_PAGES:
         print(

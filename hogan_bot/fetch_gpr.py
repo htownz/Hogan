@@ -33,11 +33,10 @@ Usage
 from __future__ import annotations
 
 import argparse
-import os
 import time
 from pathlib import Path
 from urllib.error import URLError
-from urllib.request import Request, urlretrieve
+from urllib.request import urlretrieve
 
 _GPR_URL = "https://www.matteoiacoviello.com/gpr_files/data_gpr_daily_recent.xls"
 _CACHE_PATH = Path("data") / "gpr_daily_cache.xls"

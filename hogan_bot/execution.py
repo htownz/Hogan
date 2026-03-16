@@ -1,14 +1,13 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from hogan_bot.exchange import ExchangeClient
-from hogan_bot.paper import PaperPortfolio, Position
-from hogan_bot.storage import record_order, record_fill, upsert_position
+from hogan_bot.paper import PaperPortfolio
+from hogan_bot.storage import record_fill, record_order, upsert_position
 
 logger = logging.getLogger(__name__)
 

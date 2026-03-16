@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone, time as dt_time
+from datetime import datetime, timezone
+from datetime import time as dt_time
 from typing import Literal
 
 import pandas as pd

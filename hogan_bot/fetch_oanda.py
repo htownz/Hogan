@@ -246,7 +246,7 @@ def fetch_all_oanda(
         return {}
 
     conn = get_connection(db_path)
-    written = upsert_onchain(conn, symbol, records)
+    upsert_onchain(conn, symbol, records)
     conn.close()
     return {r[1]: 1 for r in records}
 

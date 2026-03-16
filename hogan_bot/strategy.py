@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 from hogan_bot.indicators import (
@@ -110,8 +110,6 @@ class MeanRevertFamily:
             return StrategySignal("hold", 0.01, 0.0, 0.0)
 
         close = candles["close"].astype(float)
-        high = candles["high"].astype(float)
-        low = candles["low"].astype(float)
         volume = candles["volume"].astype(float)
 
         atr_series = compute_atr(candles, window=14)
@@ -182,8 +180,6 @@ class BreakoutFamily:
             return StrategySignal("hold", 0.01, 0.0, 0.0)
 
         close = candles["close"].astype(float)
-        high = candles["high"].astype(float)
-        low = candles["low"].astype(float)
         volume = candles["volume"].astype(float)
 
         atr_series = compute_atr(candles, window=14)
@@ -284,8 +280,6 @@ def generate_signal(
         return StrategySignal("hold", 0.01, 0.0, 0.0)
 
     close = candles["close"].astype(float)
-    high = candles["high"].astype(float)
-    low = candles["low"].astype(float)
     volume = candles["volume"].astype(float)
 
     short_ma = close.rolling(short_window).mean()
@@ -350,7 +344,6 @@ def generate_signal(
                 confidence = max(confidence, 0.8)
 
     # Fast path: MA-only mode or no extras enabled
-    extra_enabled = use_ema_clouds or (use_fvg and not use_ict) or use_ict or use_rl_agent
     if signal_mode == "ma_only":
         if ma_action != "hold":
             return StrategySignal(ma_action, stop_distance_pct, confidence, volume_ratio)

@@ -252,10 +252,10 @@ class LiveDataEngine(DataEngineBase):
             try:
                 ohlcv_list = await exchange.watchOHLCV(symbol, timeframe)
                 for ohlcv in ohlcv_list:
-                    ts_ms, o, h, l, c, v = ohlcv
+                    ts_ms, o, h, lo, c, v = ohlcv
                     row = {
                         "ts_ms": ts_ms, "open": o, "high": h,
-                        "low": l, "close": c, "volume": v,
+                        "low": lo, "close": c, "volume": v,
                     }
                     self.buffer.push(symbol, timeframe, row)
                     event = CandleEvent(
@@ -312,9 +312,9 @@ class LiveDataEngine(DataEngineBase):
                     try:
                         raw = exchange.fetch_ohlcv(symbol, tf, limit=2)
                         for ohlcv in raw:
-                            ts_ms, o, h, l, c, v = ohlcv
+                            ts_ms, o, h, lo, c, v = ohlcv
                             row = {"ts_ms": ts_ms, "open": o, "high": h,
-                                   "low": l, "close": c, "volume": v}
+                                   "low": lo, "close": c, "volume": v}
                             self.buffer.push(symbol, tf, row)
                             event = CandleEvent(
                                 symbol=symbol,

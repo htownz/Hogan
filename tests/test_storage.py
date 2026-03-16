@@ -10,9 +10,11 @@ from hogan_bot.storage import (
     _create_schema,
     candle_count,
     close_paper_trade,
-    get_connection,
     load_candles,
+    load_equity,
+    load_latest_fill_ts,
     load_paper_trades,
+    load_positions,
     log_decision,
     normalize_side,
     open_paper_trade,
@@ -21,10 +23,6 @@ from hogan_bot.storage import (
     record_order,
     upsert_candles,
     upsert_position,
-    load_positions,
-    load_equity,
-    load_fills,
-    load_latest_fill_ts,
 )
 
 

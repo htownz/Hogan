@@ -218,12 +218,9 @@ class SentimentAgent:
         if as_of_ms is not None:
             cutoff_date = pd.Timestamp(as_of_ms, unit="ms", tz="UTC").strftime("%Y-%m-%d")
             cutoff_ts = int(as_of_ms)
-            now_ts = int(as_of_ms)
         else:
             cutoff_date = pd.Timestamp.utcnow().strftime("%Y-%m-%d")
             cutoff_ts = int(pd.Timestamp.utcnow().timestamp() * 1000)
-            now_ts = cutoff_ts
-
         scores: dict[str, float] = {}
         _sent_ages: list[float] = []
         try:

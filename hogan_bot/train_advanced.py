@@ -5,7 +5,7 @@ import argparse
 import logging
 
 from hogan_bot.exchange import ExchangeClient
-from hogan_bot.ml_advanced import train_advanced_ensemble, save_artifact
+from hogan_bot.ml_advanced import save_artifact, train_advanced_ensemble
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 

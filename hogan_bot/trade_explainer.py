@@ -84,8 +84,8 @@ def _build_prompt(
 
 def _call_ollama(prompt: str) -> str | None:
     """Call local Ollama API."""
-    import urllib.request
     import urllib.error
+    import urllib.request
 
     url = os.getenv("HOGAN_OLLAMA_URL", "http://localhost:11434")
     model = os.getenv("HOGAN_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL)
@@ -113,8 +113,8 @@ def _call_ollama(prompt: str) -> str | None:
 
 def _call_openai(prompt: str) -> str | None:
     """Call OpenAI API."""
-    import urllib.request
     import urllib.error
+    import urllib.request
 
     api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key:
