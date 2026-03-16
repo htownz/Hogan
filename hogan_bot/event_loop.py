@@ -463,6 +463,17 @@ async def run_event_loop(
             logger.warning("ML model load error: %s", exc)
 
     evaluator = SignalEvaluator(config, ml_model, conn=conn)
+
+    _macro_sitout = None
+    _use_macro_sitout = os.getenv("HOGAN_MACRO_SITOUT", "").strip().lower() in ("1", "true", "yes")
+    if _use_macro_sitout:
+        try:
+            from hogan_bot.macro_sitout import MacroSitout
+            _macro_sitout = MacroSitout.from_db(conn)
+            logger.info("Macro sitout filter enabled (greed-only scaling)")
+        except Exception as exc:
+            logger.warning("Macro sitout init failed: %s", exc)
+
     from hogan_bot.exit_model import ExitEvaluator
     _exit_eval = ExitEvaluator(
         drawdown_panic_pct=config.exit_drawdown_pct,
