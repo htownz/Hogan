@@ -53,6 +53,7 @@ class WFConfig:
     max_hold_hours: float = 24.0
     loss_cooldown_hours: float = 2.0
 
+    use_ml_filter: bool = True
     ml_buy_threshold: float = 0.51
     ml_sell_threshold: float = 0.49
 
@@ -237,55 +238,63 @@ def _train_and_evaluate_window(
         test_candles = candles.iloc[test_start:test_end].copy()
 
         t0 = _time.perf_counter()
-        logger.info("    [W%d] Building training set (%d bars)...", window_idx, len(train_candles))
-        sys.stdout.flush()
+        trained = None
 
-        X, y, feature_cols, _ = build_training_set(
-            train_candles,
-            horizon_bars=6,
-            fee_rate=cfg.fee_rate,
-            use_champion_features=True,
-        )
+        if cfg.use_ml_filter:
+            logger.info("    [W%d] Building training set (%d bars)...", window_idx, len(train_candles))
+            sys.stdout.flush()
 
-        if len(X) < 100:
-            result.error = f"insufficient_training_samples ({len(X)})"
-            return result
+            X, y, feature_cols, _ = build_training_set(
+                train_candles,
+                horizon_bars=6,
+                fee_rate=cfg.fee_rate,
+                use_champion_features=True,
+            )
 
-        from sklearn.linear_model import LogisticRegression
-        from sklearn.preprocessing import StandardScaler
-        from sklearn.metrics import roc_auc_score
+            if len(X) < 100:
+                result.error = f"insufficient_training_samples ({len(X)})"
+                return result
 
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
+            from sklearn.linear_model import LogisticRegression
+            from sklearn.preprocessing import StandardScaler
+            from sklearn.metrics import roc_auc_score
 
-        model = LogisticRegression(
-            max_iter=1000, C=0.1, class_weight="balanced", solver="lbfgs"
-        )
-        model.fit(X_scaled, y)
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X)
 
-        t_train = _time.perf_counter() - t0
-        logger.info("    [W%d] Model trained in %.1fs (samples=%d, features=%d)",
-                     window_idx, t_train, len(X), X.shape[1])
-        sys.stdout.flush()
+            model = LogisticRegression(
+                max_iter=1000, C=0.1, class_weight="balanced", solver="lbfgs"
+            )
+            model.fit(X_scaled, y)
 
-        try:
-            y_prob = model.predict_proba(X_scaled)[:, 1]
-            result.train_auc = float(roc_auc_score(y, y_prob))
-            logger.info("    [W%d] Train AUC: %.4f", window_idx, result.train_auc)
-        except Exception:
-            pass
+            t_train = _time.perf_counter() - t0
+            logger.info("    [W%d] Model trained in %.1fs (samples=%d, features=%d)",
+                         window_idx, t_train, len(X), X.shape[1])
+            sys.stdout.flush()
 
-        trained = TrainedModel(
-            model=model,
-            feature_columns=feature_cols,
-            scaler=scaler,
-        )
+            try:
+                y_prob = model.predict_proba(X_scaled)[:, 1]
+                result.train_auc = float(roc_auc_score(y, y_prob))
+                logger.info("    [W%d] Train AUC: %.4f", window_idx, result.train_auc)
+            except Exception:
+                pass
+
+            trained = TrainedModel(
+                model=model,
+                feature_columns=feature_cols,
+                scaler=scaler,
+            )
+        else:
+            logger.info("    [W%d] ML filter disabled — technical pipeline only", window_idx)
+            sys.stdout.flush()
 
         bot_cfg = load_config()
         if is_champion_mode():
             bot_cfg = apply_champion_mode(bot_cfg)
 
-        logger.info("    [W%d] Running backtest on %d test bars...", window_idx, len(test_candles))
+        logger.info("    [W%d] Running backtest on %d test bars%s...",
+                     window_idx, len(test_candles),
+                     "" if trained else " (no ML)")
         sys.stdout.flush()
         t1 = _time.perf_counter()
 
@@ -409,6 +418,7 @@ def main() -> None:
     p.add_argument("--min-test", type=int, default=200)
     p.add_argument("--min-sharpe", type=float, default=0.5)
     p.add_argument("--max-dd", type=float, default=15.0)
+    p.add_argument("--no-ml", action="store_true", help="Disable ML filter (technical pipeline only)")
     p.add_argument("--output", default="diagnostics/walk_forward_report.json")
     args = p.parse_args()
 
@@ -437,6 +447,7 @@ def main() -> None:
         timeframe=args.timeframe,
         min_sharpe=args.min_sharpe,
         max_drawdown_pct=args.max_dd,
+        use_ml_filter=not args.no_ml,
     )
 
     report = walk_forward_validate(df, cfg)

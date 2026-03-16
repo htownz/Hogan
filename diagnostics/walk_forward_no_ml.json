@@ -1,0 +1,90 @@
+{
+  "summary": {
+    "n_windows": 5,
+    "n_positive": 2,
+    "n_failed": 0,
+    "total_trades": 283,
+    "mean_return_pct": -0.1447,
+    "mean_sharpe": -0.7523,
+    "mean_drawdown_pct": 1.2,
+    "worst_drawdown_pct": 1.47,
+    "passes_gate": false,
+    "gate_config": {
+      "min_sharpe": 0.5,
+      "max_drawdown_pct": 15.0,
+      "min_windows_positive": 3
+    }
+  },
+  "windows": [
+    {
+      "window_idx": 0,
+      "train_bars": 2000,
+      "test_bars": 3117,
+      "total_return_pct": 0.42,
+      "max_drawdown_pct": 1.39,
+      "sharpe": 0.3576,
+      "sortino": 0.1751,
+      "trades": 77,
+      "win_rate": 0.5263,
+      "net_positive": true,
+      "train_auc": null,
+      "error": null
+    },
+    {
+      "window_idx": 1,
+      "train_bars": 5117,
+      "test_bars": 3117,
+      "total_return_pct": -0.6133,
+      "max_drawdown_pct": 1.47,
+      "sharpe": -0.6977,
+      "sortino": -0.2572,
+      "trades": 58,
+      "win_rate": 0.3448,
+      "net_positive": false,
+      "train_auc": null,
+      "error": null
+    },
+    {
+      "window_idx": 2,
+      "train_bars": 8234,
+      "test_bars": 3117,
+      "total_return_pct": -0.9179,
+      "max_drawdown_pct": 1.03,
+      "sharpe": -1.8323,
+      "sortino": -0.416,
+      "trades": 40,
+      "win_rate": 0.3,
+      "net_positive": false,
+      "train_auc": null,
+      "error": null
+    },
+    {
+      "window_idx": 3,
+      "train_bars": 11351,
+      "test_bars": 3117,
+      "total_return_pct": -1.2568,
+      "max_drawdown_pct": 1.28,
+      "sharpe": -3.7423,
+      "sortino": -0.9283,
+      "trades": 38,
+      "win_rate": 0.3684,
+      "net_positive": false,
+      "train_auc": null,
+      "error": null
+    },
+    {
+      "window_idx": 4,
+      "train_bars": 14468,
+      "test_bars": 3117,
+      "total_return_pct": 1.6446,
+      "max_drawdown_pct": 0.83,
+      "sharpe": 2.1534,
+      "sortino": 1.1877,
+      "trades": 70,
+      "win_rate": 0.4857,
+      "net_positive": true,
+      "train_auc": null,
+      "error": null
+    }
+  ]
+}
