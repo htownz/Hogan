@@ -86,6 +86,84 @@ class TestPaperExecution:
 
 
 # ---------------------------------------------------------------------------
+# PaperExecution — Intent-based API (open_long/close_long/open_short/close_short)
+# ---------------------------------------------------------------------------
+
+class TestPaperExecutionIntentAPI:
+    def test_open_long_single_mutation(self):
+        p = PaperPortfolio(cash_usd=10_000, fee_rate=0.0)
+        ex = PaperExecution(p)
+        result = ex.open_long("BTC/USD", 100.0, 5.0)
+        assert result.ok is True
+        assert "BTC/USD" in p.positions
+        assert p.positions["BTC/USD"].qty == pytest.approx(5.0)
+        assert p.cash_usd == pytest.approx(9_500.0)
+
+    def test_close_long_removes_position(self):
+        p = PaperPortfolio(cash_usd=10_000, fee_rate=0.0)
+        ex = PaperExecution(p)
+        ex.open_long("BTC/USD", 100.0, 5.0)
+        result = ex.close_long("BTC/USD", 110.0, 5.0, reason="take_profit")
+        assert result.ok is True
+        assert "BTC/USD" not in p.positions
+        assert p.cash_usd == pytest.approx(10_050.0)
+
+    def test_open_short_single_mutation(self):
+        p = PaperPortfolio(cash_usd=10_000, fee_rate=0.0)
+        ex = PaperExecution(p)
+        result = ex.open_short("BTC/USD", 100.0, 3.0)
+        assert result.ok is True
+        assert "BTC/USD" in p.short_positions
+        assert p.short_positions["BTC/USD"].qty == pytest.approx(3.0)
+
+    def test_close_short_removes_position(self):
+        p = PaperPortfolio(cash_usd=10_000, fee_rate=0.0)
+        ex = PaperExecution(p)
+        ex.open_short("BTC/USD", 100.0, 3.0)
+        result = ex.close_short("BTC/USD", 90.0, 3.0, reason="take_profit")
+        assert result.ok is True
+        assert "BTC/USD" not in p.short_positions
+
+    def test_close_long_no_position_fails(self):
+        p = PaperPortfolio(cash_usd=10_000, fee_rate=0.0)
+        ex = PaperExecution(p)
+        result = ex.close_long("BTC/USD", 100.0, 5.0)
+        assert result.ok is False
+
+    def test_close_short_no_position_fails(self):
+        p = PaperPortfolio(cash_usd=10_000, fee_rate=0.0)
+        ex = PaperExecution(p)
+        result = ex.close_short("BTC/USD", 100.0, 5.0)
+        assert result.ok is False
+
+    def test_open_long_with_stops_sets_params(self):
+        p = PaperPortfolio(cash_usd=50_000, fee_rate=0.0)
+        ex = PaperExecution(p)
+        ex.open_long("BTC/USD", 100.0, 5.0, trailing_stop_pct=0.02, take_profit_pct=0.05)
+        pos = p.positions["BTC/USD"]
+        assert pos.qty == pytest.approx(5.0)
+
+    def test_open_short_journals_to_db(self):
+        p = PaperPortfolio(cash_usd=10_000, fee_rate=0.0)
+        conn = _mem_db()
+        ex = PaperExecution(p, conn=conn)
+        ex.open_short("BTC/USD", 100.0, 3.0)
+        row = conn.execute("SELECT qty FROM positions WHERE symbol='BTC/USD'").fetchone()
+        assert row is not None
+        assert float(row[0]) == pytest.approx(-3.0)
+
+    def test_emergency_flatten_closes_both(self):
+        p = PaperPortfolio(cash_usd=50_000, fee_rate=0.0)
+        ex = PaperExecution(p)
+        ex.open_long("BTC/USD", 100.0, 2.0)
+        ex.open_short("ETH/USD", 50.0, 5.0)
+        ex.emergency_flatten("BTC/USD", 100.0)
+        assert "BTC/USD" not in p.positions
+        ex.emergency_flatten("ETH/USD", 50.0)
+        assert "ETH/USD" not in p.short_positions
+
+
+# ---------------------------------------------------------------------------
 # RealisticPaperExecution
 # ---------------------------------------------------------------------------
 
