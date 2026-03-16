@@ -129,6 +129,21 @@ class PaperExecution(ExecutionEngine):
                 upsert_position(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
         return ExecResult(ok=ok)
 
+    def open_short(self, symbol: str, price: float, qty: float,
+                   trailing_stop_pct: float = 0.0,
+                   take_profit_pct: float = 0.0) -> ExecResult:
+        ok = self.portfolio.execute_short(
+            symbol, price, qty,
+            trailing_stop_pct=trailing_stop_pct,
+            take_profit_pct=take_profit_pct,
+        )
+        if ok and self.conn is not None:
+            ts_ms = int(time.time() * 1000)
+            pos = self.portfolio.short_positions.get(symbol)
+            if pos is not None:
+                upsert_position(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
+        return ExecResult(ok=ok)
+
     def close_short(self, symbol: str, price: float, qty: float,
                     reason: str = "signal") -> ExecResult:
         ok = self.portfolio.execute_cover(symbol, price, qty)
@@ -502,6 +517,31 @@ class RealisticPaperExecution(ExecutionEngine):
         if ok:
             logger.debug(
                 "REALISTIC_CLOSE_LONG %s fill=%.2f (signal=%.2f, slip=%.1fbps) qty=%.6f",
+                symbol, fill_price, price,
+                (1 - fill_price / price) * 10_000, fill_qty,
+            )
+        return ExecResult(ok=ok)
+
+    def open_short(self, symbol: str, price: float, qty: float,
+                   trailing_stop_pct: float = 0.0,
+                   take_profit_pct: float = 0.0) -> ExecResult:
+        fill_price = self._apply_slippage_sell(price)
+        fill_qty = self._maybe_partial(qty)
+
+        ok = self.portfolio.execute_short(
+            symbol, fill_price, fill_qty,
+            trailing_stop_pct=trailing_stop_pct,
+            take_profit_pct=take_profit_pct,
+        )
+        if ok and self.conn is not None:
+            ts_ms = int(time.time() * 1000)
+            pos = self.portfolio.short_positions.get(symbol)
+            if pos:
+                upsert_position(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
+
+        if ok:
+            logger.debug(
+                "REALISTIC_OPEN_SHORT %s fill=%.2f (signal=%.2f, slip=%.1fbps) qty=%.6f",
                 symbol, fill_price, price,
                 (1 - fill_price / price) * 10_000, fill_qty,
             )
