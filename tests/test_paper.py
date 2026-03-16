@@ -3,8 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from hogan_bot.paper import PaperPortfolio, Position, ShortPosition
-
+from hogan_bot.paper import PaperPortfolio, Position
 
 # ---------------------------------------------------------------------------
 # Position dataclass

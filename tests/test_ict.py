@@ -22,11 +22,9 @@ from hogan_bot.ict import (
     in_time_window,
     is_in_discount,
     is_in_premium,
-    liquidity_pools,
     ote_zone,
     parse_time_windows,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

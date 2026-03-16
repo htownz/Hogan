@@ -7,7 +7,6 @@ import pytest
 
 from hogan_bot.backtest import compute_calmar, compute_sharpe, compute_sortino
 
-
 # ---------------------------------------------------------------------------
 # Sharpe ratio
 # ---------------------------------------------------------------------------

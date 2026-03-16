@@ -531,8 +531,13 @@ def _train_from_xy(
     per-symbol then concatenated before training.
     """
     import pickle
+
     from sklearn.metrics import (
-        accuracy_score, f1_score, precision_score, recall_score, roc_auc_score,
+        accuracy_score,
+        f1_score,
+        precision_score,
+        recall_score,
+        roc_auc_score,
     )
     from sklearn.preprocessing import StandardScaler
 

@@ -51,8 +51,7 @@ import os
 import sqlite3
 import urllib.error
 import urllib.request
-from datetime import date, datetime, timezone
-from typing import Any
+from datetime import date
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +78,6 @@ def _get(path: str, key: str, params: dict[str, str] | None = None) -> dict:
 
 
 import urllib.parse  # noqa: E402 (needed above)
-
 
 # ---------------------------------------------------------------------------
 # Global market metrics  (1 credit)

@@ -17,11 +17,11 @@ from __future__ import annotations
 import logging
 import time
 
-from hogan_bot.execution import ExecutionEngine, ExecResult
+from hogan_bot.execution import ExecResult, ExecutionEngine
 from hogan_bot.fx_utils import pip_size
 from hogan_bot.oanda_client import OandaClient
 from hogan_bot.paper import PaperPortfolio
-from hogan_bot.storage import record_order, record_fill, upsert_position
+from hogan_bot.storage import record_fill, record_order, upsert_position
 
 logger = logging.getLogger(__name__)
 
@@ -282,7 +282,6 @@ class OandaExecution(ExecutionEngine):
             open_trades = self.client.get_open_trades(symbol)
             for trade in open_trades:
                 units = float(trade.get("currentUnits", 0))
-                trade_id = trade["id"]
                 if units > 0:
                     results.append(self.close_long(symbol, price, units, reason="emergency"))
                 elif units < 0:

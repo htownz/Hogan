@@ -5,8 +5,6 @@ import os
 from dataclasses import dataclass
 from unittest.mock import patch
 
-import pytest
-
 from hogan_bot.champion import (
     CHAMPION_LOCKS,
     ChampionLocks,
@@ -56,7 +54,6 @@ class TestApplyChampionMode:
             use_ict=True,
             use_rl_agent=True,
         )
-        import logging
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("HOGAN_CHAMPION_MODE", None)
             with patch("hogan_bot.champion.logger") as mock_logger:
@@ -108,19 +105,28 @@ class TestChampionFeatureSubset:
     """Tests for champion feature subset enforcement in feature_registry and ml."""
 
     def test_get_feature_columns_true_returns_champion_subset(self):
-        from hogan_bot.feature_registry import CHAMPION_FEATURE_COLUMNS, get_feature_columns
+        from hogan_bot.feature_registry import (
+            CHAMPION_FEATURE_COLUMNS,
+            get_feature_columns,
+        )
         cols = get_feature_columns(True)
         assert cols == list(CHAMPION_FEATURE_COLUMNS)
         assert len(cols) == len(CHAMPION_FEATURE_COLUMNS)
 
     def test_get_feature_columns_false_returns_59(self):
-        from hogan_bot.feature_registry import _FULL_FEATURE_COLUMNS, get_feature_columns
+        from hogan_bot.feature_registry import (
+            _FULL_FEATURE_COLUMNS,
+            get_feature_columns,
+        )
         cols = get_feature_columns(False)
         assert cols == list(_FULL_FEATURE_COLUMNS)
         assert len(cols) == 59
 
     def test_get_feature_columns_none_respects_env(self):
-        from hogan_bot.feature_registry import CHAMPION_FEATURE_COLUMNS, get_feature_columns
+        from hogan_bot.feature_registry import (
+            CHAMPION_FEATURE_COLUMNS,
+            get_feature_columns,
+        )
         with patch.dict(os.environ, {"HOGAN_CHAMPION_MODE": "1"}):
             cols = get_feature_columns(None)
         assert cols == list(CHAMPION_FEATURE_COLUMNS)
@@ -136,6 +142,7 @@ class TestChampionFeatureSubset:
     def test_build_training_set_champion_returns_champion_columns(self):
         import numpy as np
         import pandas as pd
+
         from hogan_bot.ml import build_training_set
 
         # Minimal candles with enough rows for training

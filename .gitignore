@@ -30,3 +30,4 @@ secrets.txt
 # Logs — keep structure but ignore contents
 logs/*.log
 .pytest_cache
+mlruns/

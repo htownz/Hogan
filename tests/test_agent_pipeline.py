@@ -14,7 +14,6 @@ from hogan_bot.agent_pipeline import (
 )
 from hogan_bot.config import DEFAULT_REGIME_CONFIGS
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -38,7 +38,6 @@ import os
 import secrets
 import sqlite3
 import time
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +61,9 @@ def encrypt_aes256(plaintext: str, password: str) -> str:
     Format: ``<salt_hex>$<iv_hex>$<ciphertext_hex>``
     """
     try:
-        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
         from cryptography.hazmat.backends import default_backend
         from cryptography.hazmat.primitives import padding
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
     except ImportError:
         raise RuntimeError(
             "cryptography package not installed. Run: pip install cryptography"
@@ -86,9 +85,9 @@ def encrypt_aes256(plaintext: str, password: str) -> str:
 def decrypt_aes256(encrypted: str, password: str) -> str:
     """Decrypt an AES-256-CBC encrypted string. Returns plaintext."""
     try:
-        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
         from cryptography.hazmat.backends import default_backend
         from cryptography.hazmat.primitives import padding
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
     except ImportError:
         raise RuntimeError(
             "cryptography package not installed. Run: pip install cryptography"

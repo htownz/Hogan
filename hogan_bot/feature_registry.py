@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 # Decision relevance: which decision does this feature help?
 # "entry_edge" | "regime" | "stop" | "sizing" | "veto" | "execution_timing" | "experimental"
 DECISION_ENTRY_EDGE = "entry_edge"

@@ -46,8 +46,7 @@ import json
 import logging
 import os
 import sqlite3
-from datetime import date, timedelta, datetime, timezone
-from pathlib import Path
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -102,7 +101,7 @@ def _check_keys() -> None:
 def _try_import() -> tuple[Any, Any, Any]:
     """Import alpaca-py clients; raise ImportError with install hint if absent."""
     try:
-        from alpaca.data import StockHistoricalDataClient, CryptoHistoricalDataClient
+        from alpaca.data import CryptoHistoricalDataClient, StockHistoricalDataClient
         from alpaca.data.timeframe import TimeFrame
         return StockHistoricalDataClient, CryptoHistoricalDataClient, TimeFrame
     except ImportError as exc:
@@ -230,7 +229,8 @@ def fetch_crypto_spread(
 def _build_alpaca_timeframe(timeframe_str: str) -> Any:
     """Convert an Alpaca timeframe string to an Alpaca TimeFrame object."""
     _, _, TimeFrame = _try_import()
-    from alpaca.data.timeframe import TimeFrame as TF, TimeFrameUnit
+    from alpaca.data.timeframe import TimeFrame as TF
+    from alpaca.data.timeframe import TimeFrameUnit
 
     _DIRECT = {
         "1Min":  TF(1, TimeFrameUnit.Minute),

@@ -13,9 +13,14 @@ from sklearn.metrics import roc_auc_score
 
 from hogan_bot.config import load_config
 from hogan_bot.ml import build_feature_frame
-from hogan_bot.ml_advanced import train_advanced_ensemble, save_artifact, load_artifact, triple_barrier_labels
-from hogan_bot.storage import get_connection, load_candles
+from hogan_bot.ml_advanced import (
+    load_artifact,
+    save_artifact,
+    train_advanced_ensemble,
+    triple_barrier_labels,
+)
 from hogan_bot.notifier import make_notifier
+from hogan_bot.storage import get_connection, load_candles
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("hogan.trainer")

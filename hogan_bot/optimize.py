@@ -33,7 +33,6 @@ Metrics
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import logging
 import math
@@ -771,7 +770,7 @@ def main(argv: list[str] | None = None) -> None:
             print(f"\n  >>> AUTO-PROMOTED: {promo.reason}")
             if promo.backup_file:
                 print(f"  >>> Archived incumbent to {promo.backup_file}")
-            print(f"  >>> Live bot will use new config on next iteration.\n")
+            print("  >>> Live bot will use new config on next iteration.\n")
         else:
             print(f"\n  >>> NOT PROMOTED: {promo.reason}\n")
     except Exception as exc:
