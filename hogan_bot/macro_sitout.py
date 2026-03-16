@@ -97,10 +97,6 @@ class MacroSitout:
     event_blackout_hours: float = 4.0
     fng_extreme_fear: int = 20
     fng_extreme_greed: int = 80
-    # NOTE: Fear/Greed scaling is intentionally asymmetric. A fear scale of 1.0
-    # means extreme fear does NOT reduce position size; this field is retained
-    # for config/API compatibility and is effectively a no-op at the default.
-    fng_fear_scale: float = 1.0
     fng_greed_scale: float = 0.30
     vix_caution: float = 25.0
     vix_block: float = 35.0
@@ -219,7 +215,6 @@ class MacroSitout:
             return
 
         if fng <= self.fng_extreme_fear:
-            result.size_scale = min(result.size_scale, self.fng_fear_scale)
             result.reasons.append(f"extreme_fear(FnG={fng})")
         elif fng >= self.fng_extreme_greed:
             result.size_scale = min(result.size_scale, self.fng_greed_scale)
