@@ -1,11 +1,17 @@
 """Short-hold sweep: compare 8h, 12h, 16h, 20h, 24h with shorts enabled.
 
 Run from repo root:
-    python sweep_short_hold.py
+    python sweep_short_hold.py [--limit N]
+
+Uses last 8000 candles by default (~11 months of 1h) to keep each run
+under 10 minutes while still being statistically meaningful.
+Results are saved incrementally to sweep_results.json.
 """
 from __future__ import annotations
 
 import json
+import sys
+import time
 
 from hogan_bot.backtest import (
     evaluate_trades_by_regime_side,
@@ -19,16 +25,24 @@ from hogan_bot.storage import get_connection, load_candles
 HOLD_HOURS = [8, 12, 16, 20, 24]
 SYMBOL = "BTC/USD"
 DB_PATH = "data/hogan.db"
+RESULTS_FILE = "sweep_results.json"
+DEFAULT_LIMIT = 8000
 
 
 def main() -> None:
+    limit = DEFAULT_LIMIT
+    if "--limit" in sys.argv:
+        idx = sys.argv.index("--limit")
+        if idx + 1 < len(sys.argv):
+            limit = int(sys.argv[idx + 1])
+
     cfg = load_config()
     if is_champion_mode():
         cfg = apply_champion_mode(cfg)
 
     timeframe = cfg.timeframe
     conn = get_connection(DB_PATH)
-    candles = load_candles(conn, SYMBOL, timeframe)
+    candles = load_candles(conn, SYMBOL, timeframe, limit=limit)
     conn.close()
 
     if candles.empty:
@@ -44,6 +58,7 @@ def main() -> None:
 
     rows = []
     for hours in HOLD_HOURS:
+        t0 = time.time()
         print(f"--- Running short_max_hold={hours}h ---")
         result = run_backtest_on_candles(
             candles=candles,
@@ -131,9 +146,13 @@ def main() -> None:
             "td_s_tot": td_short_pnl,
         }
         rows.append(row)
+        elapsed = time.time() - t0
         print(f"  return={row['return%']:.2f}%  dd={row['maxdd%']:.2f}%  "
               f"trades={row['trades']}  shorts={row['shorts']}  "
-              f"s_avg={row['s_avg%']:+.3f}%  td_s_avg={row['td_s_avg']:+.3f}%\n")
+              f"s_avg={row['s_avg%']:+.3f}%  td_s_avg={row['td_s_avg']:+.3f}%  "
+              f"({elapsed:.0f}s)\n")
+        with open(RESULTS_FILE, "w") as f:
+            json.dump(rows, f, indent=2)
 
     # ── Comparison table ──────────────────────────────────────────────
     print("\n" + "=" * 120)
