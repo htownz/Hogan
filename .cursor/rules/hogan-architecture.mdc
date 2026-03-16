@@ -35,6 +35,8 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 | `macro_sitout.py` | Macro event sit-out filter (FOMC/CPI/NFP calendar + Fear&Greed + VIX) |
 | `macro_filter.py` | SPY/QQQ/DXY/VIX/GLD macro correlation filter |
 | `fetch_feargreed.py` | Crypto Fear & Greed Index fetcher (alternative.me, stored in DB) |
+| `funding_overlay.py` | BTC funding rate crowded-positioning overlay (derivatives_metrics) |
+| `decision.py` | Gate functions: ml_filter, edge_gate, quality_gate, ml_probability_sizer |
 
 ## Champion Mode
 - `HOGAN_CHAMPION_MODE=true` → locks experimental features off
@@ -69,10 +71,24 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 - VIX > 35 = full sitout, VIX > 25 = 50% size reduction
 - Walk-forward validated: halves losses during FOMO rallies, enhances fear-recovery windows
 
+## ML Probability Sizer
+- `HOGAN_ML_AS_SIZER=true` replaces binary ML filter with continuous position sizing
+- Walk-forward validated: +0.11% mean return (vs -0.01% without), Sharpe -0.24 (vs -0.60)
+- Key insight: AUC ~0.52 is too weak for binary decisions but adds value as continuous sizer
+- `ml_probability_sizer(action, up_prob)` maps probability to [0.30, 1.50] position scale
+- When enabled, replaces both `apply_ml_filter` and `ml_confidence` sizing
+
+## Regime Mean-Reversion Score
+- `RegimeState.mean_reversion_score` computed from return autocorrelation (24-bar window)
+- Score > 0 = mean-reverting (favorable), score < 0 = trending (unfavorable)
+- Walk-forward tested as position sizer: net negative, kept as diagnostic only
+
 ## Validation
 - Walk-forward: `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5`
 - Walk-forward (no ML): `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --no-ml`
 - Walk-forward (macro sitout): `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --no-ml --macro-sitout`
+- Walk-forward (ML sizer + macro): `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --ml-sizer --macro-sitout`
+- Exit parameter sweep: `python diagnostics/exit_sweep.py`
 - Feature audit: `python -m hogan_bot.feature_importance --db data/hogan.db`
 - CI: `.github/workflows/ci.yml` runs all tests on push/PR
 

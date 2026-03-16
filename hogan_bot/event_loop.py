@@ -37,8 +37,8 @@ from hogan_bot.config import BotConfig, load_config, symbol_config, effective_ho
 from hogan_bot.data_engine import CandleEvent, LiveDataEngine, CandleRingBuffer
 from hogan_bot.decision import (
     apply_ml_filter, edge_gate, entry_quality_gate, ml_confidence,
-    estimate_spread_from_candles, pullback_gate, ranging_gate,
-    compute_quality_components, QualityComponents, GateDecision,
+    ml_probability_sizer, estimate_spread_from_candles, pullback_gate,
+    ranging_gate, compute_quality_components, QualityComponents, GateDecision,
 )
 from hogan_bot.execution import (
     PaperExecution, LiveExecution, SmartExecution, SmartExecConfig,
@@ -193,12 +193,15 @@ class SignalEvaluator:
                 except Exception as exc:
                     logger.debug("MTF features fallback: %s", exc)
             up_prob = predict_up_probability(candles, self.ml_model)
-            ml_gate = apply_ml_filter(action, up_prob, eff_ml_buy, eff_ml_sell)
-            action = ml_gate.action
-            if ml_gate.blocked_by:
-                block_reasons.append(ml_gate.blocked_by)
-            if cfg.ml_confidence_sizing:
-                conf_scale = ml_confidence(up_prob) * (result.confidence or 1.0)
+            if cfg.use_ml_as_sizer:
+                conf_scale = ml_probability_sizer(action, up_prob) * (result.confidence or 1.0)
+            else:
+                ml_gate = apply_ml_filter(action, up_prob, eff_ml_buy, eff_ml_sell)
+                action = ml_gate.action
+                if ml_gate.blocked_by:
+                    block_reasons.append(ml_gate.blocked_by)
+                if cfg.ml_confidence_sizing:
+                    conf_scale = ml_confidence(up_prob) * (result.confidence or 1.0)
 
         forecast_ret = None
         if result.forecast is not None and result.forecast.confidence > 0.2:

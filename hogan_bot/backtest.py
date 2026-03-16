@@ -935,6 +935,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     reversal_confidence_mult: float = 1.3,
     macro_sitout=None,
     use_ml_as_sizer: bool = False,
+    funding_overlay=None,
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
@@ -1705,6 +1706,9 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                 })
 
             _long_size = size * _eff_long_size_scale
+            if funding_overlay is not None:
+                _bar_ts_val = candles.iloc[i - 1].get("timestamp") if i > 0 else None
+                _long_size *= funding_overlay.position_scale("buy", _bar_ts_val)
             if not _eff_allow_longs:
                 _funnel["blocked_regime_no_longs"] += 1
             elif symbol in portfolio.positions:
@@ -1834,6 +1838,9 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     _cooldown_remaining = 0
                 _consecutive_exit_signals = 0
                 _short_size = size * _eff_short_size_scale
+                if funding_overlay is not None:
+                    _bar_ts_val = candles.iloc[i - 1].get("timestamp") if i > 0 else None
+                    _short_size *= funding_overlay.position_scale("sell", _bar_ts_val)
                 if not _eff_allow_shorts:
                     _funnel["blocked_regime_no_shorts"] += 1
                 elif _cooldown_remaining > 0:
