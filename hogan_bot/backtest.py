@@ -10,7 +10,8 @@ from hogan_bot.agent_pipeline import AgentPipeline
 from hogan_bot.champion import apply_champion_mode, is_champion_mode
 from hogan_bot.decision import (
     GateDecision, apply_ml_filter, edge_gate, entry_quality_gate,
-    ml_confidence, estimate_spread_from_candles, pullback_gate, ranging_gate,
+    ml_confidence, ml_probability_sizer, estimate_spread_from_candles,
+    pullback_gate, ranging_gate,
 )
 from hogan_bot.exit_model import ExitEvaluator
 from hogan_bot.expectancy import ExpectancyTracker
@@ -933,6 +934,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     max_whipsaws: int = 3,
     reversal_confidence_mult: float = 1.3,
     macro_sitout=None,
+    use_ml_as_sizer: bool = False,
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
@@ -1390,10 +1392,13 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         if ml_model is not None:
             up_prob = predict_up_probability(window, ml_model)
             _ml_probs.append(up_prob)
-            _ml_gd = apply_ml_filter(action, up_prob, _eff_ml_buy, _eff_ml_sell)
-            action = _ml_gd.action
-            if ml_confidence_sizing:
-                conf_scale *= ml_confidence(up_prob)
+            if use_ml_as_sizer:
+                conf_scale *= ml_probability_sizer(action, up_prob)
+            else:
+                _ml_gd = apply_ml_filter(action, up_prob, _eff_ml_buy, _eff_ml_sell)
+                action = _ml_gd.action
+                if ml_confidence_sizing:
+                    conf_scale *= ml_confidence(up_prob)
 
         if action == "buy":
             _funnel["post_ml_buy"] += 1

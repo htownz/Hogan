@@ -544,6 +544,39 @@ def ml_confidence(up_prob: float) -> float:
     return min(1.0, abs(up_prob - 0.5) * 2.0)
 
 
+def ml_probability_sizer(
+    action: str,
+    up_prob: float,
+    sensitivity: float = 3.0,
+    floor: float = 0.30,
+    ceiling: float = 1.50,
+) -> float:
+    """Map ML probability to a continuous position-size scale.
+
+    Unlike the binary ml_filter (which blocks trades), this function
+    never blocks — it scales position size proportionally to how much
+    the model agrees with the technical signal.
+
+    For buy:  scale = 1.0 + (up_prob - 0.50) * sensitivity
+    For sell: scale = 1.0 + (0.50 - up_prob) * sensitivity
+    Clamped to [floor, ceiling].
+
+    With sensitivity=3.0:
+      buy  @ prob=0.40 → 0.70x     buy  @ prob=0.55 → 1.15x
+      sell @ prob=0.60 → 0.70x     sell @ prob=0.45 → 1.15x
+    """
+    if up_prob is None or np.isnan(up_prob):
+        return 1.0
+    up_prob = max(0.0, min(1.0, up_prob))
+    if action == "buy":
+        scale = 1.0 + (up_prob - 0.50) * sensitivity
+    elif action == "sell":
+        scale = 1.0 + (0.50 - up_prob) * sensitivity
+    else:
+        return 1.0
+    return max(floor, min(ceiling, scale))
+
+
 class AdaptiveConfidence:
     """Compute position-size scaling that adapts to recent model accuracy,
     forecast agreement, and calibration quality.
