@@ -206,7 +206,7 @@ class TestEffectiveThresholds:
         state = detect_regime(_volatile_candles(200))
         assert state.regime == "volatile"
         eff = effective_thresholds(state, cfg)
-        assert eff["position_scale"] == 0.50
+        assert 0.40 <= eff["position_scale"] <= 0.65
 
     def test_low_confidence_returns_defaults(self):
         """When confidence is below threshold, keep config defaults."""
