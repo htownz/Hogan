@@ -92,6 +92,9 @@ class MacroSitout:
     event_blackout_hours: float = 4.0
     fng_extreme_fear: int = 20
     fng_extreme_greed: int = 80
+    # NOTE: Fear/Greed scaling is intentionally asymmetric. A fear scale of 1.0
+    # means extreme fear does NOT reduce position size; this field is retained
+    # for config/API compatibility and is effectively a no-op at the default.
     fng_fear_scale: float = 1.0
     fng_greed_scale: float = 0.30
     vix_caution: float = 25.0
