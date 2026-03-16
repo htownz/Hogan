@@ -51,7 +51,17 @@ Each regime-aware component has a clearly defined role. Avoid double-counting.
 - Short max hold: 12h (from sweep optimization)
 - Use via backtest CLI: `--profile canonical`
 
-## Testing
+## Validation & Testing
 ```bash
-pytest tests/test_champion.py tests/test_ml.py tests/test_exchange.py -v
+# Unit tests (CI runs these on push/PR)
+pytest tests/ -v
+
+# Walk-forward validation (rolling OOS with promotion gate)
+python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5
+
+# Feature importance audit (permutation importance on champion features)
+python -m hogan_bot.feature_importance --db data/hogan.db
 ```
+
+## CI/CD
+- `.github/workflows/ci.yml` runs all tests + ruff lint on push/PR to main/develop

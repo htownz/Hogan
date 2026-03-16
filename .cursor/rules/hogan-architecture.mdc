@@ -29,6 +29,9 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 | `exchange.py` | ExchangeClient, fetch_ohlcv_df (CCXT) |
 | `agent_pipeline.py` | Decision brain (Technical + Sentiment + Macro) |
 | `profiles.py` | CANONICAL_PROFILE, get_profile, apply_profile |
+| `walk_forward.py` | Rolling walk-forward validation harness with promotion gate |
+| `feature_importance.py` | Permutation importance audit for champion features |
+| `oos_eval.py` | Single-window OOS evaluation for retrain pipeline |
 
 ## Champion Mode
 - `HOGAN_CHAMPION_MODE=true` → locks experimental features off
@@ -54,6 +57,11 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 - BTC/USD, 1h, ML on (0.51), shorts enabled, pullback gate on, close-and-reverse off
 - Short max hold: 12h, long max hold: 24h
 - Backtest CLI: `--profile canonical`
+
+## Validation
+- Walk-forward: `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5`
+- Feature audit: `python -m hogan_bot.feature_importance --db data/hogan.db`
+- CI: `.github/workflows/ci.yml` runs all tests on push/PR
 
 ## Conventions
 - Use `logger` from `logging`; config from `load_config()` then `apply_champion_mode(config)`
