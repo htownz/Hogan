@@ -81,9 +81,9 @@ def parse_args() -> argparse.Namespace:
         help="Disable the anti-chase pullback gate (for A/B comparison)",
     )
     parser.add_argument(
-        "--no-close-and-reverse",
+        "--enable-close-and-reverse",
         action="store_true",
-        help="Disable close-and-reverse (sell signal won't open short on same bar as long close)",
+        help="Enable close-and-reverse (sell signal can open short on same bar as long close; off by default)",
     )
     parser.add_argument(
         "--short-max-hold-hours",
@@ -101,7 +101,7 @@ def _load_rl_policy(model_path: str):
     return _RL_POLICY_CACHE[model_path]
 
 
-def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, overrides: dict | None = None, use_ict: bool = False, use_rl_agent: bool = False, rl_policy=None, db_path: str | None = None, enable_shorts: bool = False, candles_15m=None, mtf_thesis_max_age: int = 4, enable_pullback_gate: bool = True, enable_close_and_reverse: bool = True, short_max_hold_hours: float | None = None):
+def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, overrides: dict | None = None, use_ict: bool = False, use_rl_agent: bool = False, rl_policy=None, db_path: str | None = None, enable_shorts: bool = False, candles_15m=None, mtf_thesis_max_age: int = 4, enable_pullback_gate: bool = True, enable_close_and_reverse: bool = False, short_max_hold_hours: float | None = None):
     """Run one backtest with optional per-key overrides on *cfg*.
 
     Returns the full :class:`~hogan_bot.backtest.BacktestResult` object so
@@ -222,7 +222,7 @@ def main() -> None:
                 db_path=_db, enable_shorts=shorts_on,
                 candles_15m=_candles_15m, mtf_thesis_max_age=args.mtf_thesis_age,
                 enable_pullback_gate=not args.no_pullback_gate,
-                enable_close_and_reverse=not args.no_close_and_reverse,
+                enable_close_and_reverse=args.enable_close_and_reverse,
                 short_max_hold_hours=args.short_max_hold_hours,
             )
             summary = result.summary_dict()
@@ -249,7 +249,7 @@ def main() -> None:
                 db_path=_db, enable_shorts=args.enable_shorts,
                 candles_15m=_candles_15m, mtf_thesis_max_age=args.mtf_thesis_age,
                 enable_pullback_gate=not args.no_pullback_gate,
-                enable_close_and_reverse=not args.no_close_and_reverse,
+                enable_close_and_reverse=args.enable_close_and_reverse,
                 short_max_hold_hours=args.short_max_hold_hours,
             )
             rows.append({"config": label, **result.summary_dict()})
@@ -264,7 +264,7 @@ def main() -> None:
             db_path=_db, enable_shorts=args.enable_shorts,
             candles_15m=_candles_15m, mtf_thesis_max_age=args.mtf_thesis_age,
             enable_pullback_gate=not args.no_pullback_gate,
-            enable_close_and_reverse=not args.no_close_and_reverse,
+            enable_close_and_reverse=args.enable_close_and_reverse,
             short_max_hold_hours=args.short_max_hold_hours,
         )
         print(json.dumps(result.summary_dict(), indent=2))
