@@ -879,7 +879,7 @@ async def run_event_loop(
             if _macro_sitout is not None and action != "hold":
                 try:
                     from datetime import timezone as _tz
-                    _bar_dt = datetime.utcnow().replace(tzinfo=_tz.utc)
+                    _bar_dt = datetime.now(tz=_tz.utc)
                     _sitout_r = _macro_sitout.check(_bar_dt)
                     if _sitout_r.should_sitout:
                         logger.debug("MACRO_SITOUT %s — %s", symbol, _sitout_r.summary)
