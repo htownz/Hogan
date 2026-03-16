@@ -92,7 +92,7 @@ class MacroSitout:
     event_blackout_hours: float = 4.0
     fng_extreme_fear: int = 20
     fng_extreme_greed: int = 80
-    fng_fear_scale: float = 0.30
+    fng_fear_scale: float = 1.0
     fng_greed_scale: float = 0.30
     vix_caution: float = 25.0
     vix_block: float = 35.0
