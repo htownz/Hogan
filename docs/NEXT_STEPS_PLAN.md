@@ -158,9 +158,19 @@ is degrading, and triggers a retrain or parameter re-optimization automatically.
 | P1 | Short-entry live parity | **DONE** | Critical |
 | P1 | Signal funnel diagnosis + gate tuning | **DONE** | High |
 | P1 | Canonical profile (`--profile canonical`) | **DONE** | High |
+| P1 | GitHub Actions CI pipeline | **DONE** | High |
+| P1 | Walk-forward validation harness | **DONE** | Critical |
+| P1 | Feature importance audit tool | **DONE** | High |
 | P2 | Paper labels for multi-symbol | Planned | Medium |
 | P2 | Freqtrade evaluation discipline | Planned | High |
+| P2 | Regime-specific Optuna optimization | Next | High |
+| P2 | Enhanced triple-barrier labels for champion | Next | High |
+| P2 | Multi-model ensemble voting | Next | High |
 | P3 | Event-driven architecture cleanup | **DONE** | Medium |
+| P3 | Champion-specific retrain path (BTC 1h only) | Next | High |
+| P3 | Data freshness enforcement in live loop | Next | Medium |
+| P3 | Containerization (Dockerfile) | Planned | Medium |
+| P3 | Live reconciliation loop | Planned | High |
 | P3 | MLflow model governance | Planned | Medium |
 | P3 | OpenBB analyst cockpit | Planned | Medium |
 | P4 | RL agent training | Planned | High |
@@ -168,6 +178,9 @@ is degrading, and triggers a retrain or parameter re-optimization automatically.
 | P4 | Self-evaluation loop | **DONE** | High |
 | P4 | Adaptive ML confidence | **DONE** | High |
 | P4 | Performance tracker + auto-weight tuning | **DONE** | High |
+| P4 | Cross-asset regime signals | Planned | Medium |
+| P4 | Adaptive MetaWeigher auto-promotion | Planned | Medium |
+| P4 | Execution timing optimization (15m entry) | Planned | Medium |
 
 ---
 
@@ -183,3 +196,10 @@ Signal funnel diagnosis on full 17,587-candle dataset revealed ML filter kills 9
 buys and regime blocks 98% of shorts. Enabled volatile shorts (short_size_scale=0.50),
 trade count 22→72 with positive edge. Canonical profile locked in `hogan_bot/profiles.py`.
 Short max hold optimized to 12h.*
+
+*Tier 1 update (2026-03-16): GitHub Actions CI pipeline (`.github/workflows/ci.yml`),
+walk-forward validation harness (`hogan_bot/walk_forward.py`), and feature importance
+audit (`hogan_bot/feature_importance.py`) are complete. Walk-forward provides rolling
+N-fold OOS validation with a structured promotion gate (min Sharpe, max drawdown,
+min positive windows). Feature importance uses permutation importance to rank the 15
+champion features and flag noise/harmful ones for removal.*
