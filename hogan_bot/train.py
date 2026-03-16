@@ -81,7 +81,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--champion",
         action="store_true",
-        help="Use 16-feature champion subset and save to models/hogan_champion.pkl",
+        help="Use 15-feature champion subset and save to models/hogan_champion.pkl",
     )
     parser.add_argument(
         "--label-mode",
@@ -99,7 +99,7 @@ def main() -> None:
         os.environ["HOGAN_CHAMPION_MODE"] = "true"
         if args.model_path == "models/hogan_logreg.pkl":
             args.model_path = "models/hogan_champion.pkl"
-        print("Champion mode: training on 16-feature subset ->", args.model_path)
+        print("Champion mode: training on 15-feature subset ->", args.model_path)
 
     train_db_conn = None
     if getattr(args, "from_db", False):

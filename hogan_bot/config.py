@@ -504,6 +504,7 @@ def load_config() -> BotConfig:
         max_hold_bars=int(os.getenv("HOGAN_MAX_HOLD_BARS", "24")),
         loss_cooldown_bars=int(os.getenv("HOGAN_LOSS_COOLDOWN_BARS", "2")),
         max_hold_hours=float(os.getenv("HOGAN_MAX_HOLD_HOURS", "0")),
+        short_max_hold_hours=float(os.getenv("HOGAN_SHORT_MAX_HOLD_HOURS", "12")),
         loss_cooldown_hours=float(os.getenv("HOGAN_LOSS_COOLDOWN_HOURS", "2")),
         min_hold_bars=int(os.getenv("HOGAN_MIN_HOLD_BARS", "3")),
         exit_confirmation_bars=int(os.getenv("HOGAN_EXIT_CONFIRM_BARS", "2")),
