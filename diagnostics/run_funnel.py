@@ -110,6 +110,7 @@ def main() -> None:
         min_tech_confidence=cfg.min_tech_confidence,
         min_regime_confidence=cfg.min_regime_confidence,
         max_whipsaws=cfg.max_whipsaws,
+        reversal_confidence_mult=cfg.reversal_confidence_multiplier,
         enable_shorts=True,
         short_max_hold_hours=cfg.short_max_hold_hours,
         enable_pullback_gate=True,

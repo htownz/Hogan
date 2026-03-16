@@ -931,6 +931,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     min_tech_confidence: float = 0.15,
     min_regime_confidence: float = 0.30,
     max_whipsaws: int = 3,
+    reversal_confidence_mult: float = 1.3,
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
@@ -1560,7 +1561,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             1.0 + slip_mult if _active_thesis.direction == "long"
                             else 1.0 - slip_mult
                         )
-                        _mtf_size = size * _eff_long_size_scale * _pullback_scale
+                        _mtf_size = size * _eff_long_size_scale
                         if _active_thesis.direction == "long" and _eff_allow_longs and _mtf_size > 0:
                             if portfolio.execute_buy(
                                 symbol, _mtf_px, _mtf_size,
@@ -1686,7 +1687,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                     "close_reason": "buy_signal",
                                 })
 
-            _long_size = size * _eff_long_size_scale * _pullback_scale
+            _long_size = size * _eff_long_size_scale
             if not _eff_allow_longs:
                 _funnel["blocked_regime_no_longs"] += 1
             elif symbol in portfolio.positions:
@@ -1737,9 +1738,14 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         vol_ratio=signal.volume_ratio,
                     )
                     _consecutive_exit_signals += 1
+                    _rev_thresh = min_final_confidence * reversal_confidence_mult
                     if pos.bars_held < _min_hold_bars:
                         pass
-                    elif not _exit_dec.should_exit and _consecutive_exit_signals < _exit_confirm_bars:
+                    elif signal.final_confidence < _rev_thresh:
+                        pass
+                    elif _consecutive_exit_signals < _exit_confirm_bars:
+                        pass
+                    elif not _exit_dec.should_exit:
                         pass
                     else:
                         _consecutive_exit_signals = 0

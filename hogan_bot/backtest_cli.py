@@ -160,6 +160,7 @@ def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, ov
         min_tech_confidence=cfg.min_tech_confidence,
         min_regime_confidence=cfg.min_regime_confidence,
         max_whipsaws=cfg.max_whipsaws,
+        reversal_confidence_mult=cfg.reversal_confidence_multiplier,
         db_path=db_path,
         enable_shorts=enable_shorts,
         candles_15m=candles_15m,

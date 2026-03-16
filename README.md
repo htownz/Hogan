@@ -67,7 +67,7 @@ Hogan follows a multi-layer architecture:
 - SQLite storage for candles and trade journal
 - Ripster EMA clouds (fast 8/9, slow 34/50) — cloud direction per bar
 - 24/5 behavior toggle (`HOGAN_TRADE_WEEKENDS=false` by default)
-- `--max-loops` option for finite test runs
+- `--max-events` option for finite test runs
 - Dashboard and Discord notifications
 
 ### Experimental Features (Quarantined)
