@@ -1,7 +1,7 @@
 # Hogan Enhancement Plan — Next Level
 
 A prioritized roadmap based on deep codebase audit. Current state: bot is paper-trading,
-59 ML features (15 champion), online learning wired, Optuna optimizer running, multi-symbol training
+59 ML features (8 champion), online learning wired, Optuna optimizer running, multi-symbol training
 across BTC/ETH/SOL, XGBoost promoted as best model.
 
 ---

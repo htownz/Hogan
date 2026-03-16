@@ -24,7 +24,7 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 | `data_engine.py` | LiveDataEngine (WebSocket/REST), BacktestDataEngine |
 | `config.py` | BotConfig, load_config, symbol_config, RegimeConfig, DEFAULT_REGIME_CONFIGS |
 | `champion.py` | Champion mode locks; apply_champion_mode overrides config |
-| `feature_registry.py` | CHAMPION_FEATURE_COLUMNS (15), get_feature_columns |
+| `feature_registry.py` | CHAMPION_FEATURE_COLUMNS (8), get_feature_columns |
 | `ml.py` | build_feature_row, build_training_set, predict_up_probability |
 | `exchange.py` | ExchangeClient, fetch_ohlcv_df (CCXT) |
 | `agent_pipeline.py` | Decision brain (Technical + Sentiment + Macro) |
@@ -35,7 +35,7 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 
 ## Champion Mode
 - `HOGAN_CHAMPION_MODE=true` → locks experimental features off
-- Uses 15-feature champion subset; model path → `champion_ml_model_path`
+- Uses 8-feature champion subset; model path → `champion_ml_model_path`
 - Train champion: `python -m hogan_bot.train --champion`
 
 ## Data & Exchanges

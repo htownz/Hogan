@@ -466,7 +466,7 @@ def build_feature_row(
     from the DB (SPY/VIX/GLD etc.); otherwise they default to 0.
 
     When *use_champion_features* is True (or HOGAN_CHAMPION_MODE is set),
-    returns only the 15-feature champion subset. Otherwise returns the full 59.
+    returns only the 8-feature champion subset. Otherwise returns the full 59.
 
     Returns ``None`` when there is insufficient history (< 60 bars).
     """
@@ -1209,7 +1209,7 @@ def calibrate_model(
     calibration_fraction:
         Fraction of labelled rows reserved for calibration (default 20 %).
     use_champion_features:
-        When True, build only the champion 15-feature subset. When None,
+        When True, build only the champion 8-feature subset. When None,
         follows HOGAN_CHAMPION_MODE environment variable.
     """
     try:

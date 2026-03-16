@@ -22,7 +22,7 @@ Hogan follows a multi-layer architecture:
          ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    ML PROBABILITY FILTER                             │
-│  15 champion features · HistGradientBoosting · Walk-forward retrain │
+│  8 champion features · HistGradientBoosting · Walk-forward retrain │
 └─────────────────────────────────────────────────────────────────────┘
          │  calibrated probability
          ▼
@@ -119,7 +119,7 @@ python -m hogan_bot.main --max-events 100
 
 ## ML Enhancement Workflow (Recommended)
 
-The ML pipeline uses **15 champion features** in production (59 available for experimentation). The champion model is a HistGradientBoosting classifier trained with enhanced triple-barrier labels and meta-quality sample weighting. Retraining supports LogReg, Random Forest, XGBoost, LightGBM, and HistGradientBoosting.
+The ML pipeline uses **8 champion features** in production (59 available for experimentation). The champion model is a HistGradientBoosting classifier trained with enhanced triple-barrier labels and meta-quality sample weighting. Retraining supports LogReg, Random Forest, XGBoost, LightGBM, and HistGradientBoosting.
 
 ### 1. Validate with walk-forward cross-validation first
 
