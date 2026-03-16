@@ -911,6 +911,8 @@ async def run_event_loop(
                     logger.debug("REGIME_BLOCK %s — longs not allowed in %s", symbol, _sym_regime)
                 elif symbol in portfolio.positions:
                     pass  # already long
+                elif symbol in portfolio.short_positions:
+                    pass  # short still held (min_hold_bars not met); block long to prevent simultaneous long+short
                 elif _cooldown_remaining > 0:
                     logger.debug("COOLDOWN %s — %d bars remaining", symbol, _cooldown_remaining)
                 elif not _fx_session_ok:
