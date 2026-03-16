@@ -92,7 +92,6 @@ class MacroSitout:
     event_blackout_hours: float = 4.0
     fng_extreme_fear: int = 20
     fng_extreme_greed: int = 80
-    fng_fear_scale: float = 1.0
     fng_greed_scale: float = 0.30
     vix_caution: float = 25.0
     vix_block: float = 35.0
@@ -188,9 +187,9 @@ class MacroSitout:
             events = []
             if date_str in _FOMC_DATES:
                 events.append("FOMC")
-            if date_str in [d for d in _CPI_DATES]:
+            if date_str in _CPI_DATES:
                 events.append("CPI")
-            if date_str in [d for d in _NFP_DATES]:
+            if date_str in _NFP_DATES:
                 events.append("NFP")
             result.reasons.append(f"event_day({'+'.join(events)})")
             return
@@ -209,7 +208,6 @@ class MacroSitout:
             return
 
         if fng <= self.fng_extreme_fear:
-            result.size_scale = min(result.size_scale, self.fng_fear_scale)
             result.reasons.append(f"extreme_fear(FnG={fng})")
         elif fng >= self.fng_extreme_greed:
             result.size_scale = min(result.size_scale, self.fng_greed_scale)
