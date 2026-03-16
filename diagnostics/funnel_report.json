@@ -2,17 +2,17 @@
   "candles": 17587,
   "symbol": "BTC/USD",
   "timeframe": "1h",
-  "elapsed_seconds": 1042,
+  "elapsed_seconds": 927,
   "summary": {
     "start_equity": 10000.0,
-    "end_equity": 10009.046996847339,
-    "total_return_pct": 0.0905,
-    "max_drawdown_pct": 0.0083,
-    "trades": 22,
-    "win_rate": 0.5455,
-    "sharpe_ratio": 1.3398,
-    "sortino_ratio": 0.441,
-    "calmar_ratio": 10.9568
+    "end_equity": 10004.096990997014,
+    "total_return_pct": 0.041,
+    "max_drawdown_pct": 0.061,
+    "trades": 72,
+    "win_rate": 0.5,
+    "sharpe_ratio": 0.4806,
+    "sortino_ratio": 0.1002,
+    "calmar_ratio": 0.6714
   },
   "signal_funnel": {
     "bars_evaluated": 17514,
@@ -30,13 +30,13 @@
     "blocked_already_long": 5,
     "blocked_cooldown": 0,
     "blocked_regime_no_longs": 0,
-    "blocked_regime_no_shorts": 51,
-    "executed_short_entry": 1,
-    "blocked_already_short": 0,
+    "blocked_regime_no_shorts": 20,
+    "executed_short_entry": 26,
+    "blocked_already_short": 6,
     "short_covered_signal": 0,
-    "short_covered_stop": 0,
+    "short_covered_stop": 11,
     "short_covered_tp": 0,
-    "short_covered_max_hold": 1,
+    "short_covered_max_hold": 15,
     "edge_blocked_atr": 210,
     "edge_blocked_tp": 0,
     "edge_blocked_forecast": 0,
@@ -85,6 +85,14 @@
       "avg_pnl_pct": 5.9653,
       "total_pnl_pct": 5.9653,
       "payoff_ratio": "inf"
+    },
+    "volatile|short": {
+      "count": 25,
+      "wins": 8,
+      "win_rate": 0.32,
+      "avg_pnl_pct": 0.0132,
+      "total_pnl_pct": 0.3309,
+      "payoff_ratio": 1.106
     }
   },
   "longs_by_confidence": {
@@ -103,6 +111,20 @@
       "win_rate": 1.0,
       "avg_pnl_pct": 5.965,
       "total_pnl_pct": 5.965
+    },
+    "volatile|high": {
+      "count": 24,
+      "wins": 7,
+      "win_rate": 0.292,
+      "avg_pnl_pct": -0.057,
+      "total_pnl_pct": -1.357
+    },
+    "volatile|medium": {
+      "count": 1,
+      "wins": 1,
+      "win_rate": 1.0,
+      "avg_pnl_pct": 1.688,
+      "total_pnl_pct": 1.688
     }
   },
   "config_snapshot": {

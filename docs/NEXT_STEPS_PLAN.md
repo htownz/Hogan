@@ -72,7 +72,22 @@ to overcome fees. 1h typical moves: 0.5–2%.
 2. Retrain on 1h: `python -m hogan_bot.retrain --from-db --symbol BTC/USD --timeframe 1h`
 3. If backtest improves, set `HOGAN_TIMEFRAME=1h` in `.env`.
 
-### 2.4 Paper Labels for Multi-Symbol Retrain
+### 2.4 ~~Short-Entry Live Parity~~ DONE
+**What:** Backtest had full short-entry logic but the live event loop did not.
+**Fix:** Added `open_short` to `PaperExecution` and `RealisticPaperExecution`.
+Wired comprehensive short-entry (on sell signals) and buy-covers-short (on buy signals)
+logic into `event_loop.py` with regime gating, size scaling, risk parameter application,
+and journaling. (Commit e54fc30)
+
+### 2.5 Signal Funnel Diagnosis & Trade Frequency Optimization
+**What:** Full-dataset funnel diagnostic revealed ML filter kills 91.4% of buy signals
+and 84.6% of the market was regime-blocked from shorting.
+**Fix:** Enabled shorts in volatile regime (`allow_shorts=True`, `short_size_scale=0.50`).
+Trade count: 22 → 72 (10 longs, 26 shorts). Edge preserved (positive return, positive Sharpe).
+Created canonical profile (`hogan_bot/profiles.py`) and `--profile` CLI flag.
+Short max hold set to 12h from sweep optimization.
+
+### 2.6 Paper Labels for Multi-Symbol Retrain
 **Problem:** `--use-paper-labels` is skipped for multi-symbol training.
 **Fix:** For each symbol, call `make_paper_trade_labels(db_path, candles_sym, sym)`,
 concatenate the extra (X, y) rows, and pass to `_train_from_xy`.
@@ -89,12 +104,11 @@ fees/slippage/drawdown.
 - Lookahead-bias checker (verify no future data leaks in features)
 - Automatic A/B test: challenger must outperform on out-of-sample window
 
-### 3.2 Event-Driven Architecture Cleanup
+### 3.2 ~~Event-Driven Architecture Cleanup~~ DONE
 **What:** Ensure backtest and live share one event model.
-**Status:** `event_loop.py` (async), `main.py` (sync), `trader_service.py` (sync +
-threads) all exist. Consolidate to one event-driven path that works for both
-backtest and live. Decision flow: MarketData → Signal → RiskDecision → OrderIntent
-→ Fill → PositionUpdate.
+**Status:** `main.py` now delegates to `event_loop.py`, which holds the full
+implementation. One brain, one signal flow. Live/backtest parity is maintained
+through `SignalResult` carrying regime-adjusted execution fields.
 
 ### 3.3 MLflow Model Governance
 **What:** Every retrain, promotion, and live decision gets traced. Use MLflow for
@@ -140,10 +154,13 @@ is degrading, and triggers a retrain or parameter re-optimization automatically.
 | P0 | Guard unfinished feature flags | DONE | High |
 | P1 | Regime-aware strategy switching | Next | High |
 | P1 | Multi-strategy ensemble | Next | High |
-| P1 | Test 1h timeframe | Next | High |
+| P1 | Test 1h timeframe | **DONE** | High |
+| P1 | Short-entry live parity | **DONE** | Critical |
+| P1 | Signal funnel diagnosis + gate tuning | **DONE** | High |
+| P1 | Canonical profile (`--profile canonical`) | **DONE** | High |
 | P2 | Paper labels for multi-symbol | Planned | Medium |
 | P2 | Freqtrade evaluation discipline | Planned | High |
-| P3 | Event-driven architecture cleanup | Planned | Medium |
+| P3 | Event-driven architecture cleanup | **DONE** | Medium |
 | P3 | MLflow model governance | Planned | Medium |
 | P3 | OpenBB analyst cockpit | Planned | Medium |
 | P4 | RL agent training | Planned | High |
@@ -160,3 +177,9 @@ data from this point forward has accurate accounting.*
 *Phase 4 update: Self-evaluation loop, enhanced triple-barrier labeling, adaptive ML
 confidence, and performance-based MetaWeigher tuning are now implemented and wired into
 the agent pipeline.*
+
+*Phase 2.4–2.5 update (2026-03-16): Short-entry live parity wired in (commit e54fc30).
+Signal funnel diagnosis on full 17,587-candle dataset revealed ML filter kills 91.4% of
+buys and regime blocks 98% of shorts. Enabled volatile shorts (short_size_scale=0.50),
+trade count 22→72 with positive edge. Canonical profile locked in `hogan_bot/profiles.py`.
+Short max hold optimized to 12h.*

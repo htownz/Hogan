@@ -13,6 +13,7 @@ from hogan_bot.backtest import (
 from hogan_bot.config import load_config
 from hogan_bot.exchange import ExchangeClient
 from hogan_bot.ml import load_model
+from hogan_bot.profiles import PROFILES, apply_profile, get_profile
 
 # RL policy is loaded lazily so that missing stable-baselines3 doesn't break
 # non-RL backtests.
@@ -34,6 +35,8 @@ _COMPARE_CONFIGS: list[tuple[str, dict]] = [
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Hogan backtest on Kraken OHLCV or local DB")
+    parser.add_argument("--profile", choices=list(PROFILES.keys()), default=None,
+                        help="Named strategy profile (overrides config defaults)")
     parser.add_argument("--symbol", default="BTC/USD")
     parser.add_argument("--timeframe", default=None)
     parser.add_argument("--limit", type=int, default=None)
@@ -174,7 +177,13 @@ def main() -> None:
     if is_champion_mode():
         cfg = apply_champion_mode(cfg)
 
-    timeframe = args.timeframe or cfg.timeframe
+    profile_cli: dict[str, object] = {}
+    if args.profile:
+        profile = get_profile(args.profile)
+        cfg, profile_cli = apply_profile(cfg, profile)
+        print(f"Using profile: {args.profile}")
+
+    timeframe = args.timeframe or profile_cli.get("timeframe") or cfg.timeframe
     limit = args.limit or cfg.ohlcv_limit
 
     if args.from_db:
@@ -190,12 +199,17 @@ def main() -> None:
         client = ExchangeClient(cfg.exchange_id, cfg.kraken_api_key, cfg.kraken_api_secret)
         candles = client.fetch_ohlcv_df(args.symbol, timeframe=timeframe, limit=limit)
 
-    ml_model = load_model(cfg.ml_model_path) if args.use_ml else None
+    _use_ml = args.use_ml or (cfg.use_ml_filter if args.profile else False)
+    ml_model = load_model(cfg.ml_model_path) if _use_ml else None
 
     use_rl = args.use_rl or cfg.use_rl_agent
     rl_policy = _load_rl_policy(cfg.rl_model_path) if use_rl else None
 
     _db = args.db if args.from_db else None
+
+    _enable_shorts = args.enable_shorts or profile_cli.get("enable_shorts", False)
+    _enable_pullback = (not args.no_pullback_gate) and profile_cli.get("enable_pullback_gate", True)
+    _enable_car = args.enable_close_and_reverse or profile_cli.get("enable_close_and_reverse", False)
 
     _candles_15m = None
     if args.mtf_exec and args.from_db:
@@ -221,8 +235,8 @@ def main() -> None:
                 use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
                 db_path=_db, enable_shorts=shorts_on,
                 candles_15m=_candles_15m, mtf_thesis_max_age=args.mtf_thesis_age,
-                enable_pullback_gate=not args.no_pullback_gate,
-                enable_close_and_reverse=args.enable_close_and_reverse,
+                enable_pullback_gate=_enable_pullback,
+                enable_close_and_reverse=_enable_car,
                 short_max_hold_hours=args.short_max_hold_hours,
             )
             summary = result.summary_dict()
@@ -246,10 +260,10 @@ def main() -> None:
                 cfg, candles, args.symbol, ml_model,
                 timeframe=timeframe, overrides=overrides,
                 use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
-                db_path=_db, enable_shorts=args.enable_shorts,
+                db_path=_db, enable_shorts=_enable_shorts,
                 candles_15m=_candles_15m, mtf_thesis_max_age=args.mtf_thesis_age,
-                enable_pullback_gate=not args.no_pullback_gate,
-                enable_close_and_reverse=args.enable_close_and_reverse,
+                enable_pullback_gate=_enable_pullback,
+                enable_close_and_reverse=_enable_car,
                 short_max_hold_hours=args.short_max_hold_hours,
             )
             rows.append({"config": label, **result.summary_dict()})
@@ -261,10 +275,10 @@ def main() -> None:
             cfg, candles, args.symbol, ml_model,
             timeframe=timeframe,
             use_ict=args.use_ict, use_rl_agent=use_rl, rl_policy=rl_policy,
-            db_path=_db, enable_shorts=args.enable_shorts,
+            db_path=_db, enable_shorts=_enable_shorts,
             candles_15m=_candles_15m, mtf_thesis_max_age=args.mtf_thesis_age,
-            enable_pullback_gate=not args.no_pullback_gate,
-            enable_close_and_reverse=args.enable_close_and_reverse,
+            enable_pullback_gate=_enable_pullback,
+            enable_close_and_reverse=_enable_car,
             short_max_hold_hours=args.short_max_hold_hours,
         )
         print(json.dumps(result.summary_dict(), indent=2))
