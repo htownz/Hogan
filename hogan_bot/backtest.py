@@ -918,7 +918,9 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     enable_pullback_gate: bool = True,
     # Close-and-reverse: when True, a sell signal can close a long AND open
     # a short on the same bar.  When False, short entry waits until next signal.
-    enable_close_and_reverse: bool = True,
+    # Attribution testing showed close-and-reverse adds nothing on BTC/USD;
+    # keep off by default, enable via CLI when testing other assets.
+    enable_close_and_reverse: bool = False,
     # Short max hold (hours): explicit side-specific hold.  0 = use long max hold.
     short_max_hold_hours: float = 0.0,
     # DB path for sentiment/macro agents (as-of timestamp semantics)
