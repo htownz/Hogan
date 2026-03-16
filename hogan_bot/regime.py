@@ -51,6 +51,7 @@ class RegimeState:
     trend_direction: int  # +1 up, -1 down, 0 flat
     ma_spread: float      # (fast_ma − slow_ma) / slow_ma — positive = uptrend
     confidence: float     # 0.0–1.0 composite confidence in the regime label
+    mean_reversion_score: float = 0.0  # −1 (strong trend) to +1 (strong mean-reversion)
     btc_dominance: float | None = None  # latest BTC dominance % from DB (if available)
     fear_greed: float | None = None     # Fear & Greed index value (0–100, if available)
 
@@ -128,6 +129,32 @@ def _atr_percentile_rank(candles: pd.DataFrame, lookback: int = 100) -> float:
     return rank
 
 
+def _mean_reversion_score(close: pd.Series, lookback: int = 24) -> float:
+    """Compute mean-reversion score from return autocorrelation.
+
+    Uses lag-1 autocorrelation of log-returns over a rolling window.
+    Negative autocorrelation = mean-reverting (price tends to reverse).
+    Positive autocorrelation = trending (price tends to continue).
+
+    Returns a value in [-1, +1]:
+      < -0.1  strong mean-reversion (favorable for our strategy)
+        ~0    random walk
+      > +0.1  trending (unfavorable — reduces position quality)
+    """
+    if len(close) < lookback + 2:
+        return 0.0
+    returns = close.pct_change().dropna()
+    if len(returns) < lookback:
+        return 0.0
+    window = returns.iloc[-lookback:]
+    shifted = window.shift(1).iloc[1:]
+    current = window.iloc[1:]
+    if shifted.std() < 1e-9 or current.std() < 1e-9:
+        return 0.0
+    autocorr = float(current.corr(shifted))
+    return max(-1.0, min(1.0, -autocorr))
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -202,6 +229,9 @@ def detect_regime(
     # --- ATR percentile rank ---
     atr_rank = _atr_percentile_rank(candles, lookback=atr_lookback)
 
+    # --- Mean-reversion score ---
+    mr_score = _mean_reversion_score(close, lookback=24)
+
     # --- Regime classification ---
     # Volatile overrides everything when ATR is in the top *atr_volatile_pct* tier
     if atr_rank >= atr_volatile_pct:
@@ -254,6 +284,7 @@ def detect_regime(
         trend_direction=trend_dir,
         ma_spread=ma_spread,
         confidence=float(confidence),
+        mean_reversion_score=mr_score,
         btc_dominance=btc_dominance,
         fear_greed=fear_greed,
     )
@@ -361,6 +392,16 @@ def effective_thresholds(
     for key in ("ml_buy_threshold", "ml_sell_threshold", "position_scale"):
         if key in overrides:
             result[key] = overrides[key]
+
+    # Mean-reversion score is available in RegimeState for diagnostics
+    # and future use, but walk-forward testing showed that applying it
+    # as a position scaling factor is net negative (hurts trend-following
+    # entries in W1-type rally conditions more than it helps W4-type
+    # mean-reverting conditions).
+    mr_scale = 1.0
+    result["position_scale"] = result["position_scale"] * mr_scale
+    result["mean_reversion_scale"] = mr_scale
+
     return result
 
 
