@@ -58,8 +58,11 @@ Hogan follows a multi-layer architecture:
 - Paper mode (default), CCXT live (spot market orders), Smart passive-limit execution, Oanda FX
 - Executor owns all portfolio state mutation — no double-counting
 - Paper-trade journaling gated behind paper mode (live mode uses order/fill journal)
+- **Short entry live parity**: `HOGAN_ENABLE_SHORTS=true` enables regime-gated short selling in the live event loop (volatile + trending_down)
+- Canonical short max hold: **12h** (from short-hold sweep)
 
 ### Infrastructure
+- **Canonical profile** system (`hogan_bot/profiles.py`): named configs for reproducible backtests (`--profile canonical`)
 - Backtest engine + CLI to evaluate strategy/ML settings on historical candles
 - SQLite storage for candles and trade journal
 - Ripster EMA clouds (fast 8/9, slow 34/50) — cloud direction per bar
@@ -199,6 +202,14 @@ HOGAN_USE_FVG=false
 HOGAN_FVG_MIN_GAP_PCT=0.001
 HOGAN_SIGNAL_MODE=any
 ```
+
+### Short selling & position management env vars
+
+| Variable | Default | Description |
+|---|---|---|
+| `HOGAN_ENABLE_SHORTS` | `false` | Enable short selling (regime-gated: volatile + trending_down) |
+| `HOGAN_CLOSE_AND_REVERSE` | `false` | Allow close-and-reverse on same bar (off by default — attribution testing showed no benefit) |
+| `HOGAN_SHORT_MAX_HOLD_HOURS` | `12.0` | Maximum short hold time (12h from sweep optimization) |
 
 ### Signal indicator env vars
 
