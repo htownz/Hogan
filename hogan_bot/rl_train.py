@@ -129,8 +129,8 @@ def _evaluate(env, policy, n_episodes: int = 1) -> dict[str, float]:
     equity = all_equity_curves[0]
     equity_arr = np.array(equity)
     step_returns = np.diff(equity_arr) / np.maximum(equity_arr[:-1], 1e-9)
-    from hogan_bot.timeframe_utils import bars_per_year, infer_timeframe_from_candles
-    tf = infer_timeframe_from_candles(candles) or "1h"
+    from hogan_bot.timeframe_utils import bars_per_year
+    tf = "1h"  # RL env always uses 1h bars
     bpy = float(bars_per_year(tf))
     sharpe = (
         float(np.mean(step_returns) / (np.std(step_returns) + 1e-9)) * np.sqrt(bpy)
@@ -216,7 +216,7 @@ def train(
     dict
         Evaluation metrics from the held-out 20 % window.
     """
-    from hogan_bot.rl_env import TradingEnv, N_OBS, N_OBS_EXTENDED
+    from hogan_bot.rl_env import N_OBS, N_OBS_EXTENDED, TradingEnv
 
     split = int(len(candles) * 0.8)
     train_candles = candles.iloc[:split].reset_index(drop=True)
@@ -484,8 +484,9 @@ def main() -> None:
 
         # MLflow logging (best-effort)
         try:
-            import mlflow
             import os
+
+            import mlflow
             mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "mlruns"))
             mlflow.set_experiment("hogan-rl")
             with mlflow.start_run(run_name=f"PPO-{args.symbol}-{args.reward}"):

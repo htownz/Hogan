@@ -11,15 +11,15 @@ the heavy RL dependencies (~700 MB PyTorch install).
 from __future__ import annotations
 
 import math
-import pytest
+
 import numpy as np
 import pandas as pd
+import pytest
 
 # Skip the entire module if gymnasium is not installed
 gymnasium = pytest.importorskip("gymnasium", reason="gymnasium not installed")
 
-from hogan_bot.rl_env import TradingEnv, N_OBS, _MAX_EPISODE_DRAWDOWN
-
+from hogan_bot.rl_env import N_OBS, TradingEnv  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixtures

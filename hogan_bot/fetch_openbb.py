@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import argparse
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -161,7 +161,6 @@ def fetch_spy_return(days: int = _DEFAULT_DAYS) -> list[tuple[str, str, float]]:
 
     try:
         import yfinance as yf
-        import pandas as pd
         df = _flatten_yf(yf.download("SPY", start=str(start_date), end=str(end_date), progress=False))
         if not df.empty:
             close_col = "Close" if "Close" in df.columns else "close"

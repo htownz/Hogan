@@ -123,7 +123,7 @@ def _ml_forecast(candles: pd.DataFrame) -> ForecastResult | None:
         return None
 
     try:
-        from hogan_bot.ml import _feature_frame, _FEATURE_COLUMNS
+        from hogan_bot.ml import _FEATURE_COLUMNS, _feature_frame
         frame = _feature_frame(candles)
         last_row = frame[_FEATURE_COLUMNS].iloc[[-1]]
         if last_row.isna().any(axis=1).iloc[0]:
@@ -309,7 +309,12 @@ def train_forecast_models(
     from datetime import datetime, timezone
 
     from sklearn.calibration import CalibratedClassifierCV
-    from sklearn.metrics import brier_score_loss, precision_score, recall_score, roc_auc_score
+    from sklearn.metrics import (
+        brier_score_loss,
+        precision_score,
+        recall_score,
+        roc_auc_score,
+    )
     from sklearn.preprocessing import StandardScaler
 
     try:
@@ -317,7 +322,7 @@ def train_forecast_models(
     except ImportError:
         from sklearn.ensemble import HistGradientBoostingClassifier as LGBMClassifier
 
-    from hogan_bot.ml import TrainedModel, _feature_frame, _FEATURE_COLUMNS
+    from hogan_bot.ml import _FEATURE_COLUMNS, TrainedModel, _feature_frame
 
     frame = _feature_frame(candles)
 

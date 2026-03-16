@@ -35,8 +35,6 @@ import argparse
 import logging
 import os
 import sqlite3
-from datetime import datetime, timezone
-from typing import Any
 
 import pandas as pd
 

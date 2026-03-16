@@ -23,8 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
-import math
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -215,8 +214,8 @@ def _train_and_evaluate_window(
 ) -> WindowResult:
     """Train on [train_start:train_end], evaluate on [test_start:test_end]."""
     from hogan_bot.backtest import run_backtest_on_candles
-    from hogan_bot.config import BotConfig, load_config
     from hogan_bot.champion import apply_champion_mode, is_champion_mode
+    from hogan_bot.config import load_config
     from hogan_bot.ml import TrainedModel, build_training_set
 
     result = WindowResult(
@@ -245,8 +244,8 @@ def _train_and_evaluate_window(
             return result
 
         from sklearn.linear_model import LogisticRegression
-        from sklearn.preprocessing import StandardScaler
         from sklearn.metrics import roc_auc_score
+        from sklearn.preprocessing import StandardScaler
 
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)

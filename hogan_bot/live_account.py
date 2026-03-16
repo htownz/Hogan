@@ -1,10 +1,9 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Dict, Tuple
-import time
-import math
 
 from hogan_bot.exchange import ExchangeClient
 

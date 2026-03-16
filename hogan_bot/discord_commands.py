@@ -247,7 +247,6 @@ def cmd_fills(db_path: str) -> list[dict]:
     for sym, side, qty, entry_px, exit_px, pnl, pnl_pct, open_ms, close_ms, reason, ml_prob in rows:
         dt_open = datetime.fromtimestamp(open_ms / 1000, tz=timezone.utc).strftime("%m-%d %H:%M")
         if exit_px is not None:
-            dt_close = datetime.fromtimestamp(close_ms / 1000, tz=timezone.utc).strftime("%H:%M") if close_ms else "?"
             pnl_str = f"P&L ${pnl:+,.4f} ({pnl_pct*100:+.2f}%)" if pnl is not None else ""
             status = f"CLOSED @ ${exit_px:,.2f} [{reason}] {pnl_str}"
             icon = "🟢" if (pnl or 0) >= 0 else "🔴"

@@ -71,8 +71,6 @@ def _get_json(url: str) -> dict | list:
 def _fetch_global_tvl() -> dict[str, float]:
     """Fetch total DeFi TVL and chain breakdown from /v2/chains."""
     result: dict[str, float] = {}
-    today = date.today().isoformat()
-
     try:
         # /v2/chains returns per-chain TVL
         chains_data = _get_json(f"{_BASE}/v2/chains")
@@ -190,8 +188,8 @@ def backfill_historical_tvl(
     Computes per-day: defi_total_tvl_b, defi_tvl_change_1d, defi_tvl_change_7d,
     defi_eth_tvl_pct, defi_btc_tvl_b, defi_stablecoin_b.
     """
+
     from hogan_bot.storage import get_connection, upsert_onchain
-    import math
 
     conn = get_connection(db_path)
     cutoff_ts = int((datetime.now(timezone.utc) - timedelta(days=days)).timestamp())

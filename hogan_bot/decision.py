@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
@@ -130,23 +130,23 @@ def estimate_spread_from_candles(candles: pd.DataFrame, window: int = 20) -> flo
         return 0.0005
 
     h = candles["high"].values[-window:]
-    l = candles["low"].values[-window:]
+    lo = candles["low"].values[-window:]
     c = candles["close"].values[-window:]
 
     if len(h) < 3:
-        avg_range = np.mean((h - l) / np.maximum(c, 1e-9))
+        avg_range = np.mean((h - lo) / np.maximum(c, 1e-9))
         return max(0.0001, float(avg_range * 0.25))
 
     # Simple range-based proxy: spread ≈ small fraction of avg bar range
-    avg_range_pct = float(np.mean((h - l) / np.maximum(c, 1e-9)))
+    avg_range_pct = float(np.mean((h - lo) / np.maximum(c, 1e-9)))
     simple_est = avg_range_pct * 0.15
 
     # Corwin-Schultz high-low estimator
-    hl_ratio = np.log(h / np.maximum(l, 1e-9))
+    hl_ratio = np.log(h / np.maximum(lo, 1e-9))
     gamma = hl_ratio[:-1] ** 2 + hl_ratio[1:] ** 2
 
     h2 = np.maximum(h[:-1], h[1:])
-    l2 = np.minimum(l[:-1], l[1:])
+    l2 = np.minimum(lo[:-1], lo[1:])
     beta = np.log(h2 / np.maximum(l2, 1e-9)) ** 2
 
     valid = beta > gamma

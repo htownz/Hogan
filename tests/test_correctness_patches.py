@@ -10,17 +10,28 @@ Each test targets a specific bug that was identified and fixed:
 from __future__ import annotations
 
 import argparse
+import json
 import sqlite3
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from hogan_bot.auto_promote import evaluate_and_promote, promote_all
+from hogan_bot.config import (
+    BotConfig,
+    load_symbol_overrides,
+    reload_symbol_configs,
+    symbol_config,
+)
+from hogan_bot.execution import PaperExecution
+from hogan_bot.macro_filter import evaluate_macro
+from hogan_bot.mtf_ensemble import daily_trend_bias, evaluate_mtf, m30_confirms
 from hogan_bot.paper import PaperPortfolio
-from hogan_bot.execution import PaperExecution, ExecResult
-
+from hogan_bot.regime import RegimeState, effective_thresholds
+from hogan_bot.retrain import default_horizon_bars
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -204,7 +215,7 @@ class TestJournalSideNormalization:
         assert row[0] == "long"
 
     def test_close_matches_long_side(self):
-        from hogan_bot.storage import open_paper_trade, close_paper_trade
+        from hogan_bot.storage import close_paper_trade, open_paper_trade
         conn = _in_memory_db()
 
         open_paper_trade(conn, "BTC/USD", "long", 100.0, 1.0, 0.1, 1000)
@@ -219,7 +230,7 @@ class TestJournalSideNormalization:
 
     def test_buy_side_normalizes_to_long(self):
         """side='buy' is normalized to 'long' on open, so close with 'long' matches."""
-        from hogan_bot.storage import open_paper_trade, close_paper_trade
+        from hogan_bot.storage import close_paper_trade, open_paper_trade
         conn = _in_memory_db()
 
         open_paper_trade(conn, "ETH/USD", "buy", 50.0, 2.0, 0.05, 1000)
@@ -238,7 +249,7 @@ class TestJournalSideNormalization:
         assert row[1] > 0, "Long trade profit should be positive when exit > entry"
 
     def test_short_side_round_trip(self):
-        from hogan_bot.storage import open_paper_trade, close_paper_trade
+        from hogan_bot.storage import close_paper_trade, open_paper_trade
         conn = _in_memory_db()
 
         open_paper_trade(conn, "SOL/USD", "short", 200.0, 5.0, 0.1, 1000)
@@ -257,9 +268,12 @@ class TestDecisionIdLinkage:
 
     def test_outcome_links_to_entry_decision(self):
         from hogan_bot.storage import (
-            open_paper_trade, close_paper_trade,
-            log_decision, update_decision_outcome, link_decision_to_trade,
             _create_schema,
+            close_paper_trade,
+            link_decision_to_trade,
+            log_decision,
+            open_paper_trade,
+            update_decision_outcome,
         )
         conn = sqlite3.connect(":memory:")
         _create_schema(conn)
@@ -290,9 +304,11 @@ class TestDecisionIdLinkage:
     def test_multiple_buys_different_symbols(self):
         """Each symbol's outcome links to ITS entry decision, not the most recent one."""
         from hogan_bot.storage import (
-            open_paper_trade, close_paper_trade,
-            log_decision, update_decision_outcome,
             _create_schema,
+            close_paper_trade,
+            log_decision,
+            open_paper_trade,
+            update_decision_outcome,
         )
         conn = sqlite3.connect(":memory:")
         _create_schema(conn)
@@ -352,7 +368,6 @@ class TestRetrainNoFallthrough:
             paper_labels_weight=3.0,
         )
 
-        mock_conn = MagicMock()
         with patch("hogan_bot.retrain._build_multi_symbol_dataset") as mock_build, \
              patch("hogan_bot.retrain._train_from_xy") as mock_train:
 
@@ -411,14 +426,6 @@ class TestRetrainNoFallthrough:
 # ═══════════════════════════════════════════════════════════════════════════
 # 5. Per-symbol Optuna config overrides
 # ═══════════════════════════════════════════════════════════════════════════
-
-import json
-import tempfile
-from pathlib import Path
-from hogan_bot.config import (
-    BotConfig, symbol_config, load_symbol_overrides,
-    reload_symbol_configs, _optuna_json_path,
-)
 
 
 class TestPerSymbolConfig:
@@ -512,8 +519,6 @@ class TestPerSymbolConfig:
 # 6. Regime multiplier-based overrides
 # ═══════════════════════════════════════════════════════════════════════════
 
-from hogan_bot.regime import effective_thresholds, RegimeState
-
 
 class TestRegimeMultipliers:
     """Verify regime overrides use multipliers for strategy params."""
@@ -588,8 +593,6 @@ class TestRegimeMultipliers:
 # ═══════════════════════════════════════════════════════════════════════════
 # 7. Multi-timeframe ensemble
 # ═══════════════════════════════════════════════════════════════════════════
-
-from hogan_bot.mtf_ensemble import daily_trend_bias, m30_confirms, evaluate_mtf
 
 
 def _make_candles(closes: list[float], n: int | None = None) -> pd.DataFrame:
@@ -696,8 +699,6 @@ class TestEvaluateMTF:
 # 8. Timeframe-aware horizon computation
 # ═══════════════════════════════════════════════════════════════════════════
 
-from hogan_bot.retrain import default_horizon_bars
-
 
 class TestHorizonBars:
 
@@ -724,8 +725,6 @@ class TestHorizonBars:
 # ═══════════════════════════════════════════════════════════════════════════
 # 9. Auto-promotion pipeline
 # ═══════════════════════════════════════════════════════════════════════════
-
-from hogan_bot.auto_promote import evaluate_and_promote, promote_all
 
 
 class TestAutoPromotion:
@@ -806,8 +805,6 @@ class TestAutoPromotion:
 # ═══════════════════════════════════════════════════════════════════════════
 # 10. Macro correlation filter
 # ═══════════════════════════════════════════════════════════════════════════
-
-from hogan_bot.macro_filter import evaluate_macro, _is_bullish
 
 
 def _macro_candles(closes: list[float]) -> pd.DataFrame:

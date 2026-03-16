@@ -14,7 +14,6 @@ import pytest
 
 from hogan_bot.storage import _create_schema
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -295,7 +294,7 @@ class TestFreshness:
 
     def test_empty_db_returns_neutral_gracefully(self):
         """Agents with an empty DB should not crash — just return neutral."""
-        from hogan_bot.agent_pipeline import SentimentAgent, MacroAgent
+        from hogan_bot.agent_pipeline import MacroAgent, SentimentAgent
 
         conn = sqlite3.connect(":memory:")
         _create_schema(conn)
@@ -313,7 +312,7 @@ class TestFreshness:
 
     def test_no_conn_returns_neutral(self):
         """Agents with conn=None should not crash."""
-        from hogan_bot.agent_pipeline import SentimentAgent, MacroAgent
+        from hogan_bot.agent_pipeline import MacroAgent, SentimentAgent
 
         sent = SentimentAgent(conn=None)
         macro = MacroAgent(conn=None)

@@ -1,25 +1,21 @@
 """Dedicated tests for hogan_bot.decision — edge gate, entry quality, ML filter, spread estimation, adaptive confidence."""
 from __future__ import annotations
 
-import math
-
 import numpy as np
 import pandas as pd
 import pytest
 
 from hogan_bot.decision import (
     AdaptiveConfidence,
+    QualityComponents,
     apply_ml_filter,
+    compute_quality_components,
     edge_gate,
     entry_quality_gate,
     estimate_spread_from_candles,
     estimate_spread_from_order_book,
     ml_confidence,
-    compute_quality_components,
-    QualityComponents,
-    GateDecision,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

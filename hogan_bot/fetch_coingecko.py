@@ -298,7 +298,8 @@ def backfill_historical(
             records.append((dates[i], "cg_mcap_change_24h", float(pct)))
 
     conn = get_connection(db_path)
-    written = upsert_onchain(conn, symbol, records) if records else 0
+    if records:
+        upsert_onchain(conn, symbol, records)
     conn.close()
 
     ath_written = sum(1 for r in records if r[1] == "cg_btc_ath_pct")

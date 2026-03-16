@@ -39,7 +39,6 @@ import logging
 import subprocess
 import sys
 import time
-from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -63,7 +62,7 @@ def tool_get_portfolio(db_path: str | None = None) -> dict:
     """Return current paper portfolio state."""
     db = db_path or _get_db_path()
     try:
-        from hogan_bot.storage import get_connection, load_positions, load_equity
+        from hogan_bot.storage import get_connection, load_equity, load_positions
         conn = get_connection(db)
         positions_df = load_positions(conn)
         equity_df = load_equity(conn, limit=1)
@@ -221,8 +220,9 @@ def tool_get_data_coverage(db_path: str | None = None) -> dict:
     """Return candle counts and external metric freshness."""
     db = db_path or _get_db_path()
     try:
-        from hogan_bot.storage import get_connection, available_symbols
         import sqlite3
+
+        from hogan_bot.storage import available_symbols, get_connection
 
         conn = get_connection(db)
         series = available_symbols(conn)
@@ -293,8 +293,9 @@ def tool_get_recent_trades(
     """Return recent fills with optional LLM explanations."""
     db = db_path or _get_db_path()
     try:
-        from hogan_bot.storage import get_connection, load_fills
         import sqlite3
+
+        from hogan_bot.storage import get_connection, load_fills
 
         conn = get_connection(db)
         df = load_fills(conn, limit=limit)

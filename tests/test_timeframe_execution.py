@@ -9,6 +9,7 @@ try:
 except ModuleNotFoundError:
     np = pd = None
 
+from hogan_bot.backtest import compute_sharpe, run_backtest_on_candles
 from hogan_bot.timeframe_utils import (
     bars_per_day,
     bars_per_year,
@@ -16,7 +17,6 @@ from hogan_bot.timeframe_utils import (
     infer_timeframe_from_candles,
     parse_timeframe_to_minutes,
 )
-from hogan_bot.backtest import run_backtest_on_candles, compute_sharpe
 
 
 @unittest.skipUnless(pd is not None and np is not None, "pandas/numpy required")

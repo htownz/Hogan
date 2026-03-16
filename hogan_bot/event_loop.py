@@ -26,31 +26,52 @@ import asyncio
 import logging
 import os
 import time
-from collections import defaultdict, deque
+from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
 
 import pandas as pd
 
 from hogan_bot.agent_pipeline import AgentPipeline
-from hogan_bot.config import BotConfig, load_config, symbol_config, effective_hold_cooldown_bars, effective_short_max_hold_bars
-from hogan_bot.data_engine import CandleEvent, LiveDataEngine, CandleRingBuffer
+from hogan_bot.config import (
+    BotConfig,
+    effective_hold_cooldown_bars,
+    effective_short_max_hold_bars,
+    load_config,
+    symbol_config,
+)
+from hogan_bot.data_engine import CandleRingBuffer, LiveDataEngine
 from hogan_bot.decision import (
-    apply_ml_filter, edge_gate, entry_quality_gate, ml_confidence,
-    estimate_spread_from_candles, pullback_gate, ranging_gate,
-    compute_quality_components, QualityComponents, GateDecision,
+    QualityComponents,
+    apply_ml_filter,
+    compute_quality_components,
+    edge_gate,
+    entry_quality_gate,
+    estimate_spread_from_candles,
+    ml_confidence,
+    pullback_gate,
+    ranging_gate,
 )
 from hogan_bot.execution import (
-    PaperExecution, LiveExecution, SmartExecution, SmartExecConfig,
-    RealisticPaperExecution, FillSimConfig,
+    FillSimConfig,
+    LiveExecution,
+    PaperExecution,
+    RealisticPaperExecution,
+    SmartExecConfig,
+    SmartExecution,
 )
+from hogan_bot.expectancy import ExpectancyTracker
 from hogan_bot.indicators import compute_atr
 from hogan_bot.ml import TrainedModel, load_model, predict_up_probability
 from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
-from hogan_bot.expectancy import ExpectancyTracker
-from hogan_bot.storage import get_connection, record_equity, upsert_position, open_paper_trade, close_paper_trade, log_decision
+from hogan_bot.storage import (
+    close_paper_trade,
+    get_connection,
+    log_decision,
+    open_paper_trade,
+    record_equity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -502,7 +523,13 @@ async def run_event_loop(
     _consecutive_short_exit_signals: dict[str, int] = defaultdict(int)
 
     try:
-        from hogan_bot.metrics import MetricsServer, LoopTimer, EQUITY, CASH, DRAWDOWN, EXCEPTIONS
+        from hogan_bot.metrics import (
+            CASH,
+            DRAWDOWN,
+            EQUITY,
+            EXCEPTIONS,
+            MetricsServer,
+        )
         metrics_server = MetricsServer(port=getattr(config, "metrics_port", 8000))
         metrics_server.start()
         _has_metrics = True

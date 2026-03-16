@@ -530,7 +530,10 @@ def build_feature_row_checked(
         ``None`` when insufficient data, otherwise a FeatureResult with
         the feature vector and staleness info.
     """
-    from hogan_bot.feature_registry import FeatureResult, check_staleness, get_feature_columns
+    from hogan_bot.feature_registry import (
+        check_staleness,
+        get_feature_columns,
+    )
 
     values = build_feature_row(candles, db_conn=db_conn, use_champion_features=use_champion_features)
     if values is None:
@@ -572,7 +575,7 @@ def build_training_set(
 
     if db_conn is not None:
         try:
-            from hogan_bot.macro_features import add_macro_features, MACRO_FEATURE_NAMES
+            from hogan_bot.macro_features import MACRO_FEATURE_NAMES, add_macro_features
             frame = add_macro_features(frame, db_conn)
         except Exception as exc:
             import logging
@@ -729,7 +732,7 @@ def make_backtest_labels(
     frame = _feature_frame(candles)
     if db_conn is not None:
         try:
-            from hogan_bot.macro_features import add_macro_features, MACRO_FEATURE_NAMES
+            from hogan_bot.macro_features import MACRO_FEATURE_NAMES, add_macro_features
             frame = add_macro_features(frame, db_conn)
         except Exception:
             from hogan_bot.macro_features import MACRO_FEATURE_NAMES
@@ -1465,7 +1468,13 @@ def train_hist_gradient_boosting(
 ) -> dict[str, object]:
     """Train + save sklearn HistGradientBoostingClassifier (strong tabular baseline)."""
     from sklearn.ensemble import HistGradientBoostingClassifier
-    from sklearn.metrics import accuracy_score, roc_auc_score, precision_score, recall_score, f1_score
+    from sklearn.metrics import (
+        accuracy_score,
+        f1_score,
+        precision_score,
+        recall_score,
+        roc_auc_score,
+    )
 
     X, y, feature_cols, meta_quality = build_training_set(
         candles, horizon_bars=horizon_bars, db_conn=db_conn, label_mode=label_mode,

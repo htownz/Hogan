@@ -8,11 +8,11 @@ import statistics
 from hogan_bot.exchange import ExchangeClient
 from hogan_bot.ml import (
     calibrate_model,
+    train_hist_gradient_boosting,
     train_lightgbm,
     train_logistic_regression,
     train_random_forest,
     train_xgboost,
-    train_hist_gradient_boosting,
     walk_forward_cv,
 )
 from hogan_bot.registry import ModelRegistry
