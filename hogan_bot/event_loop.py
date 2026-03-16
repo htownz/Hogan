@@ -874,6 +874,22 @@ async def run_event_loop(
             except Exception:
                 pass
 
+            # ── Macro sitout filter (parity with backtest) ────────────
+            _macro_scale = 1.0
+            if _macro_sitout is not None and action != "hold":
+                try:
+                    from datetime import timezone as _tz
+                    _bar_dt = datetime.utcnow().replace(tzinfo=_tz.utc)
+                    _sitout_r = _macro_sitout.check(_bar_dt)
+                    if _sitout_r.should_sitout:
+                        logger.debug("MACRO_SITOUT %s — %s", symbol, _sitout_r.summary)
+                        action = "hold"
+                    elif _sitout_r.size_scale < 1.0:
+                        _macro_scale = _sitout_r.size_scale
+                        logger.debug("MACRO_SCALE %s — %.2fx — %s", symbol, _macro_scale, _sitout_r.summary)
+                except Exception as _mse:
+                    logger.debug("Macro sitout check error: %s", _mse)
+
             if action == "buy" and px > 0:
                 # Cover existing short first (parity with backtest)
                 if enable_shorts and symbol in portfolio.short_positions:
@@ -929,7 +945,7 @@ async def run_event_loop(
                 elif not _fx_session_ok:
                     logger.debug("FX_SESSION_BLOCK %s — outside allowed trading hours", symbol)
                 else:
-                    _long_size = size * sig.eff_long_size_scale
+                    _long_size = size * sig.eff_long_size_scale * _macro_scale
                     buy_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
                     res = executor.open_long(symbol, buy_px, _long_size,
                                             trailing_stop_pct=_eff_stop,
@@ -1062,7 +1078,7 @@ async def run_event_loop(
                 if _allow_short_entry:
                     if _closed_long_this_bar:
                         _cooldown_remaining = 0
-                    _short_size = size * sig.eff_short_size_scale
+                    _short_size = size * sig.eff_short_size_scale * _macro_scale
                     if not sig.eff_allow_shorts:
                         logger.debug("REGIME_BLOCK %s — shorts not allowed in %s", symbol, _sym_regime)
                     elif _cooldown_remaining > 0:

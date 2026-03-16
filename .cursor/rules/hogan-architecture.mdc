@@ -32,6 +32,9 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 | `walk_forward.py` | Rolling walk-forward validation harness with promotion gate |
 | `feature_importance.py` | Permutation importance audit for champion features |
 | `oos_eval.py` | Single-window OOS evaluation for retrain pipeline |
+| `macro_sitout.py` | Macro event sit-out filter (FOMC/CPI/NFP calendar + Fear&Greed + VIX) |
+| `macro_filter.py` | SPY/QQQ/DXY/VIX/GLD macro correlation filter |
+| `fetch_feargreed.py` | Crypto Fear & Greed Index fetcher (alternative.me, stored in DB) |
 
 ## Champion Mode
 - `HOGAN_CHAMPION_MODE=true` → locks experimental features off
@@ -58,8 +61,18 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 - Short max hold: 12h, long max hold: 24h
 - Backtest CLI: `--profile canonical`
 
+## Macro Sitout Filter
+- `HOGAN_MACRO_SITOUT=true` enables the macro event sit-out filter
+- Blocks trades on FOMC/CPI/NFP event days (deterministic calendar)
+- Scales down position size during extreme greed (Fear & Greed > 80)
+- Asymmetric: does NOT penalize extreme fear (strategy thrives in fear-driven volatility)
+- VIX > 35 = full sitout, VIX > 25 = 50% size reduction
+- Walk-forward validated: halves losses during FOMO rallies, enhances fear-recovery windows
+
 ## Validation
 - Walk-forward: `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5`
+- Walk-forward (no ML): `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --no-ml`
+- Walk-forward (macro sitout): `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --no-ml --macro-sitout`
 - Feature audit: `python -m hogan_bot.feature_importance --db data/hogan.db`
 - CI: `.github/workflows/ci.yml` runs all tests on push/PR
 
