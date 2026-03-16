@@ -92,6 +92,9 @@ class MacroSitout:
     event_blackout_hours: float = 4.0
     fng_extreme_fear: int = 20
     fng_extreme_greed: int = 80
+    # NOTE: Fear/Greed scaling is intentionally asymmetric. A fear scale of 1.0
+    # means extreme fear does NOT reduce position size; this field is retained
+    # for config/API compatibility and is effectively a no-op at the default.
     fng_fear_scale: float = 1.0
     fng_greed_scale: float = 0.30
     vix_caution: float = 25.0
@@ -188,9 +191,9 @@ class MacroSitout:
             events = []
             if date_str in _FOMC_DATES:
                 events.append("FOMC")
-            if date_str in [d for d in _CPI_DATES]:
+            if date_str in _CPI_DATES:
                 events.append("CPI")
-            if date_str in [d for d in _NFP_DATES]:
+            if date_str in _NFP_DATES:
                 events.append("NFP")
             result.reasons.append(f"event_day({'+'.join(events)})")
             return
