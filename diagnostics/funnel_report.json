@@ -1,0 +1,123 @@
+{
+  "candles": 17587,
+  "symbol": "BTC/USD",
+  "timeframe": "1h",
+  "elapsed_seconds": 1042,
+  "summary": {
+    "start_equity": 10000.0,
+    "end_equity": 10009.046996847339,
+    "total_return_pct": 0.0905,
+    "max_drawdown_pct": 0.0083,
+    "trades": 22,
+    "win_rate": 0.5455,
+    "sharpe_ratio": 1.3398,
+    "sortino_ratio": 0.441,
+    "calmar_ratio": 10.9568
+  },
+  "signal_funnel": {
+    "bars_evaluated": 17514,
+    "pipeline_buy": 280,
+    "pipeline_sell": 1728,
+    "post_ml_buy": 24,
+    "post_ml_sell": 396,
+    "post_edge_buy": 18,
+    "post_edge_sell": 192,
+    "post_quality_buy": 18,
+    "post_quality_sell": 53,
+    "post_ranging_buy": 15,
+    "post_ranging_sell": 52,
+    "executed_buy": 10,
+    "blocked_already_long": 5,
+    "blocked_cooldown": 0,
+    "blocked_regime_no_longs": 0,
+    "blocked_regime_no_shorts": 51,
+    "executed_short_entry": 1,
+    "blocked_already_short": 0,
+    "short_covered_signal": 0,
+    "short_covered_stop": 0,
+    "short_covered_tp": 0,
+    "short_covered_max_hold": 1,
+    "edge_blocked_atr": 210,
+    "edge_blocked_tp": 0,
+    "edge_blocked_forecast": 0,
+    "edge_blocked_spread": 0,
+    "ranging_blocked_tech": 0,
+    "ranging_blocked_ml": 2,
+    "ranging_blocked_whipsaw": 0,
+    "mtf_thesis_created": 0,
+    "mtf_thesis_executed": 0,
+    "mtf_thesis_expired": 0,
+    "mtf_15m_entry_used": 0,
+    "pullback_blocked": 2,
+    "ml_prob_stats": {
+      "mean": 0.4848,
+      "std": 0.0991,
+      "min": 0.0606,
+      "p10": 0.3642,
+      "p25": 0.4133,
+      "median": 0.4736,
+      "p75": 0.5573,
+      "p90": 0.6176,
+      "max": 0.826,
+      "pct_above_buy_thresh": 36.39,
+      "pct_below_sell_thresh": 56.5
+    },
+    "regime_distribution": {
+      "ranging": 7816,
+      "volatile": 3848,
+      "trending_up": 3140,
+      "trending_down": 2704
+    }
+  },
+  "trades_by_regime_side": {
+    "ranging|long": {
+      "count": 10,
+      "wins": 5,
+      "win_rate": 0.5,
+      "avg_pnl_pct": 1.0843,
+      "total_pnl_pct": 10.8434,
+      "payoff_ratio": 2.287
+    },
+    "trending_down|short": {
+      "count": 1,
+      "wins": 1,
+      "win_rate": 1.0,
+      "avg_pnl_pct": 5.9653,
+      "total_pnl_pct": 5.9653,
+      "payoff_ratio": "inf"
+    }
+  },
+  "longs_by_confidence": {
+    "ranging|medium": {
+      "count": 10,
+      "wins": 5,
+      "win_rate": 0.5,
+      "avg_pnl_pct": 1.084,
+      "total_pnl_pct": 10.843
+    }
+  },
+  "shorts_by_confidence": {
+    "trending_down|high": {
+      "count": 1,
+      "wins": 1,
+      "win_rate": 1.0,
+      "avg_pnl_pct": 5.965,
+      "total_pnl_pct": 5.965
+    }
+  },
+  "config_snapshot": {
+    "ml_buy_threshold": 0.51,
+    "ml_sell_threshold": 0.49,
+    "use_ml_filter": true,
+    "min_final_confidence": 0.08,
+    "min_tech_confidence": 0.15,
+    "min_regime_confidence": 0.3,
+    "min_edge_multiple": 1.5,
+    "max_whipsaws": 3,
+    "trailing_stop_pct": 0.0184,
+    "take_profit_pct": 0.0572,
+    "short_max_hold_hours": 12.0,
+    "max_hold_hours": 24.0,
+    "fee_rate": 0.0026
+  }
+}

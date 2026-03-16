@@ -80,7 +80,7 @@ class BotConfig:
     # Hour-based overrides (preferred): convert to bars using timeframe at runtime.
     # Ensures parity between backtest and live/paper across different timeframes.
     max_hold_hours: float = 24.0     # 24h max hold (canonical)
-    short_max_hold_hours: float = 16.0  # shorter hold for shorts (higher turnover)
+    short_max_hold_hours: float = 12.0  # 12h from short-hold sweep (best Sharpe/return)
     loss_cooldown_hours: float = 2.0 # 2h cooldown (canonical)
 
     # Exit model thresholds (ExitEvaluator)
@@ -341,9 +341,9 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         quality_final_mult=1.20,
         quality_tech_mult=1.10,
         allow_longs=True,
-        allow_shorts=False,
+        allow_shorts=True,
         long_size_scale=0.25,
-        short_size_scale=0.0,
+        short_size_scale=0.50,
     ),
 }
 
