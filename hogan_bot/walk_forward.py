@@ -54,6 +54,7 @@ class WFConfig:
     loss_cooldown_hours: float = 2.0
 
     use_ml_filter: bool = True
+    use_ml_as_sizer: bool = False
     use_macro_sitout: bool = False
     ml_buy_threshold: float = 0.51
     ml_sell_threshold: float = 0.49
@@ -248,7 +249,7 @@ def _train_and_evaluate_window(
         t0 = _time.perf_counter()
         trained = None
 
-        if cfg.use_ml_filter:
+        if cfg.use_ml_filter or cfg.use_ml_as_sizer:
             logger.info("    [W%d] Building training set (%d bars)...", window_idx, len(train_candles))
             sys.stdout.flush()
 
@@ -338,6 +339,7 @@ def _train_and_evaluate_window(
             max_whipsaws=bot_cfg.max_whipsaws,
             reversal_confidence_mult=bot_cfg.reversal_confidence_multiplier,
             macro_sitout=macro_sitout,
+            use_ml_as_sizer=cfg.use_ml_as_sizer,
         )
 
         t_bt = _time.perf_counter() - t1
@@ -389,9 +391,14 @@ def walk_forward_validate(
     import time as _time
 
     total_test_bars = sum(ve - vs for _, _, vs, ve in windows)
-    ml_label = "ML+macro" if cfg.use_ml_filter and cfg.use_macro_sitout else \
-               "ML only" if cfg.use_ml_filter else \
-               "macro only" if cfg.use_macro_sitout else "no filters"
+    _parts = []
+    if cfg.use_ml_as_sizer:
+        _parts.append("ML-sizer")
+    elif cfg.use_ml_filter:
+        _parts.append("ML")
+    if cfg.use_macro_sitout:
+        _parts.append("macro")
+    ml_label = "+".join(_parts) if _parts else "no filters"
     logger.info(
         "Walk-forward: %d windows over %d bars (%d total test bars) [%s]",
         len(windows), len(candles), total_test_bars, ml_label,
@@ -533,6 +540,7 @@ def main() -> None:
     p.add_argument("--min-sharpe", type=float, default=0.5)
     p.add_argument("--max-dd", type=float, default=15.0)
     p.add_argument("--no-ml", action="store_true", help="Disable ML filter (technical pipeline only)")
+    p.add_argument("--ml-sizer", action="store_true", help="Use ML probability as continuous position sizer instead of binary filter")
     p.add_argument("--macro-sitout", action="store_true", help="Enable macro event sit-out filter")
     p.add_argument("--output", default="diagnostics/walk_forward_report.json")
     args = p.parse_args()
@@ -562,7 +570,8 @@ def main() -> None:
         timeframe=args.timeframe,
         min_sharpe=args.min_sharpe,
         max_drawdown_pct=args.max_dd,
-        use_ml_filter=not args.no_ml,
+        use_ml_filter=not args.no_ml and not args.ml_sizer,
+        use_ml_as_sizer=args.ml_sizer,
         use_macro_sitout=args.macro_sitout,
     )
 
