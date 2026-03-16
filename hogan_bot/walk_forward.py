@@ -54,6 +54,7 @@ class WFConfig:
     loss_cooldown_hours: float = 2.0
 
     use_ml_filter: bool = True
+    use_macro_sitout: bool = False
     ml_buy_threshold: float = 0.51
     ml_sell_threshold: float = 0.49
 
@@ -219,6 +220,7 @@ def _train_and_evaluate_window(
     test_end: int,
     window_idx: int,
     cfg: WFConfig,
+    macro_sitout=None,
 ) -> WindowResult:
     """Train on [train_start:train_end], evaluate on [test_start:test_end]."""
     import sys
@@ -335,6 +337,7 @@ def _train_and_evaluate_window(
             min_regime_confidence=bot_cfg.min_regime_confidence,
             max_whipsaws=bot_cfg.max_whipsaws,
             reversal_confidence_mult=bot_cfg.reversal_confidence_multiplier,
+            macro_sitout=macro_sitout,
         )
 
         t_bt = _time.perf_counter() - t1
@@ -367,6 +370,7 @@ def _train_and_evaluate_window(
 def walk_forward_validate(
     candles: pd.DataFrame,
     cfg: WFConfig | None = None,
+    macro_sitout=None,
 ) -> WalkForwardReport:
     """Run rolling walk-forward validation across the full candle dataset.
 
@@ -385,9 +389,12 @@ def walk_forward_validate(
     import time as _time
 
     total_test_bars = sum(ve - vs for _, _, vs, ve in windows)
+    ml_label = "ML+macro" if cfg.use_ml_filter and cfg.use_macro_sitout else \
+               "ML only" if cfg.use_ml_filter else \
+               "macro only" if cfg.use_macro_sitout else "no filters"
     logger.info(
-        "Walk-forward: %d windows over %d bars (%d total test bars)",
-        len(windows), len(candles), total_test_bars,
+        "Walk-forward: %d windows over %d bars (%d total test bars) [%s]",
+        len(windows), len(candles), total_test_bars, ml_label,
     )
     sys.stdout.flush()
 
@@ -398,7 +405,10 @@ def walk_forward_validate(
             i + 1, len(windows), ts, te, te - ts, vs, ve, ve - vs,
         )
         sys.stdout.flush()
-        w = _train_and_evaluate_window(candles, ts, te, vs, ve, i, cfg)
+        w = _train_and_evaluate_window(
+            candles, ts, te, vs, ve, i, cfg,
+            macro_sitout=macro_sitout,
+        )
         report.windows.append(w)
         logger.info("    %s", w.summary_line())
         sys.stdout.flush()
@@ -468,7 +478,12 @@ def _print_funnel_comparison(report: WalkForwardReport) -> None:
         print(f"  Post-ranging gate:  buy={post_rang_buy}  sell={post_rang_sell}  "
               f"(ranging killed {rang_kill})")
 
+        macro_sitout_cnt = f.get("macro_sitout", 0)
+        macro_scaled_cnt = f.get("macro_scaled", 0)
+
         print(f"  Executed:           longs={exec_buy}  shorts={exec_short}")
+        if macro_sitout_cnt or macro_scaled_cnt:
+            print(f"  Macro sitout:       blocked={macro_sitout_cnt}  scaled={macro_scaled_cnt}")
         print(f"  Blocked:            regime_long={blk_regime_long}  "
               f"regime_short={blk_regime_short}  cooldown={blk_cooldown}  "
               f"already_long={blk_already}")
@@ -518,6 +533,7 @@ def main() -> None:
     p.add_argument("--min-sharpe", type=float, default=0.5)
     p.add_argument("--max-dd", type=float, default=15.0)
     p.add_argument("--no-ml", action="store_true", help="Disable ML filter (technical pipeline only)")
+    p.add_argument("--macro-sitout", action="store_true", help="Enable macro event sit-out filter")
     p.add_argument("--output", default="diagnostics/walk_forward_report.json")
     args = p.parse_args()
 
@@ -547,9 +563,18 @@ def main() -> None:
         min_sharpe=args.min_sharpe,
         max_drawdown_pct=args.max_dd,
         use_ml_filter=not args.no_ml,
+        use_macro_sitout=args.macro_sitout,
     )
 
-    report = walk_forward_validate(df, cfg)
+    sitout = None
+    if args.macro_sitout:
+        macro_conn = sqlite3.connect(args.db)
+        from hogan_bot.macro_sitout import MacroSitout
+        sitout = MacroSitout.from_db(macro_conn)
+        macro_conn.close()
+        logger.info("Macro sitout filter enabled")
+
+    report = walk_forward_validate(df, cfg, macro_sitout=sitout)
 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
