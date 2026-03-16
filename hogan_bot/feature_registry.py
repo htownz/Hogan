@@ -180,50 +180,42 @@ assert len(FEATURE_REGISTRY) == 59, f"Expected 59 features, got {len(FEATURE_REG
 
 
 # ---------------------------------------------------------------------------
-# Champion feature subset (12–20 core features)
+# Champion feature subset — audited via permutation importance
 # ---------------------------------------------------------------------------
-# Point-in-time, low-missingness, decision-relevant features only.
-# When champion mode is on, training and inference use this subset.
-# Every feature declares what decision it helps.
+# Trimmed from 15 to 8 based on feature_importance.py audit (2026-03-16).
+# Dropped: ret_1 (noise), ret_12 (harmful, -0.009), rsi_14 (harmful, -0.003),
+#          range_pct (harmful, -0.002), vol_ratio (noise), macro_spy_trend (zero),
+#          macro_vix_norm (zero).  Kept adx_14 despite marginal ML importance
+#          because it drives regime detection outside the ML model.
 
 CHAMPION_FEATURE_COLUMNS: list[str] = [
-    # Multi-horizon returns (entry edge)
-    "ret_1", "ret_3", "ret_6", "ret_12",
-    # Trend / distance from trend (entry edge, regime)
+    # Medium-horizon momentum (entry edge) — ret_3 and ret_6 carry signal;
+    # ret_1 is noise and ret_12 is actively harmful
+    "ret_3", "ret_6",
+    # Trend distance (entry edge) — 2nd strongest feature
     "ma_spread",
-    # Realized volatility, oscillators (stop, sizing, regime)
-    "volatility_20", "rsi_14", "atr_pct",
-    # Volume participation (entry edge, veto)
-    "vol_ratio",
-    # Range position / breakout pressure (entry edge)
-    "bb_pct_b", "range_pct",
-    # Regime strength (regime, veto)
+    # Volatility pair (stop, sizing) — both carry clear signal
+    "volatility_20", "atr_pct",
+    # Range position (entry edge) — 3rd strongest feature
+    "bb_pct_b",
+    # Regime strength (regime detection input, marginal ML signal)
     "adx_14",
-    # Momentum confirmation (entry edge)
+    # Momentum confirmation (entry edge) — strongest single feature
     "macd_hist_pct",
-    # Higher-timeframe alignment (entry edge, veto)
-    "macro_spy_trend", "macro_vix_norm",
 ]
 
 CHAMPION_FEATURE_DECISIONS: dict[str, str] = {
-    "ret_1": DECISION_ENTRY_EDGE,
     "ret_3": DECISION_ENTRY_EDGE,
     "ret_6": DECISION_ENTRY_EDGE,
-    "ret_12": DECISION_ENTRY_EDGE,
     "ma_spread": DECISION_ENTRY_EDGE,
     "volatility_20": DECISION_STOP,
-    "rsi_14": DECISION_ENTRY_EDGE,
     "atr_pct": DECISION_STOP,
-    "vol_ratio": DECISION_VETO,
     "bb_pct_b": DECISION_ENTRY_EDGE,
-    "range_pct": DECISION_ENTRY_EDGE,
     "adx_14": DECISION_REGIME,
     "macd_hist_pct": DECISION_ENTRY_EDGE,
-    "macro_spy_trend": DECISION_ENTRY_EDGE,
-    "macro_vix_norm": DECISION_VETO,
 }
 
-assert len(CHAMPION_FEATURE_COLUMNS) == 15
+assert len(CHAMPION_FEATURE_COLUMNS) == 8
 assert all(c in FEATURE_REGISTRY for c in CHAMPION_FEATURE_COLUMNS)
 
 
@@ -235,7 +227,7 @@ def get_feature_columns(use_champion: bool | None = None) -> list[str]:
     """Return the feature column list for training/inference.
 
     When *use_champion* is True or when HOGAN_CHAMPION_MODE is set,
-    returns the 15-feature champion subset. Otherwise returns the full 59.
+    returns the 8-feature champion subset. Otherwise returns the full 59.
     """
     if use_champion is None:
         try:

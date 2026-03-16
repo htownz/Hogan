@@ -112,11 +112,11 @@ def apply_champion_mode(config):
             )
             overrides[field_name] = champion_val
 
-    # Champion mode also switches to champion model (trained on 15-feature subset)
+    # Champion mode also switches to champion model (trained on 8-feature subset)
     champion_path = getattr(config, "champion_ml_model_path", "models/hogan_champion.pkl")
     if config.ml_model_path != champion_path:
         overrides["ml_model_path"] = champion_path
-        logger.info("CHAMPION_MODE: ml_model_path -> %s (15-feature model)", champion_path)
+        logger.info("CHAMPION_MODE: ml_model_path -> %s (8-feature model)", champion_path)
 
     if overrides:
         config = replace(config, **overrides)

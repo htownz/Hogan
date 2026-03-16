@@ -1,6 +1,6 @@
 """Feature importance audit for Hogan's champion model.
 
-Runs permutation importance on the 15 champion features against the
+Runs permutation importance on the 8 champion features against the
 full candle dataset.  Identifies which features carry real signal versus
 which add noise and degrade generalization.
 
@@ -137,26 +137,25 @@ def print_report(scores: list[FeatureScore], model_info: dict) -> None:
     print(f"Train AUC: {model_info['train_auc']:.4f}   "
           f"Test AUC: {model_info['test_auc']:.4f}   "
           f"Samples: {model_info['train_samples']}+{model_info['test_samples']}")
-    print(f"{'─' * 72}")
-    print(f"{'Rank':<5} {'Feature':<20} {'Importance':>12} {'±Std':>8} {'Decision':>15} {'Recommendation'}")
-    print(f"{'─' * 72}")
+    print(f"{'-' * 72}")
+    print(f"{'Rank':<5} {'Feature':<20} {'Importance':>12} {'+-Std':>8} {'Decision':>15} {'Recommendation'}")
+    print(f"{'-' * 72}")
     for s in scores:
         print(f"{s.rank:<5} {s.name:<20} {s.importance_mean:>12.6f} {s.importance_std:>8.6f} "
               f"{s.decision_relevance:>15} {s.recommendation}")
-    print(f"{'─' * 72}")
+    print(f"{'-' * 72}")
 
     keep = sum(1 for s in scores if s.recommendation.startswith("KEEP"))
     review = sum(1 for s in scores if s.recommendation.startswith("REVIEW"))
     drop = sum(1 for s in scores if s.recommendation.startswith("DROP"))
     print(f"Summary: {keep} KEEP, {review} REVIEW, {drop} DROP")
 
-    # Model coefficient analysis
-    print(f"\n{'─' * 72}")
+    print(f"\n{'-' * 72}")
     print("LOGISTIC REGRESSION COEFFICIENT MAGNITUDES")
-    print(f"{'─' * 72}")
+    print(f"{'-' * 72}")
     for s in scores:
         bar_len = max(0, int(abs(s.importance_mean) * 2000))
-        bar = "█" * min(bar_len, 40)
+        bar = "#" * min(bar_len, 40)
         sign = "+" if s.importance_mean >= 0 else "-"
         print(f"  {s.name:<20} {sign}{abs(s.importance_mean):.6f} {bar}")
     print(f"{'=' * 72}\n")

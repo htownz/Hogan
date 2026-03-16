@@ -23,7 +23,7 @@ python -m hogan_bot.main
 
 ## Champion Path
 - `HOGAN_CHAMPION_MODE=true` locks experimental features
-- 15-feature subset in `feature_registry.CHAMPION_FEATURE_COLUMNS`
+- 8-feature subset in `feature_registry.CHAMPION_FEATURE_COLUMNS`
 - Train: `python -m hogan_bot.train --champion`
 
 ## Data & Exchanges

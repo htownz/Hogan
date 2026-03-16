@@ -214,6 +214,9 @@ def _train_and_evaluate_window(
     cfg: WFConfig,
 ) -> WindowResult:
     """Train on [train_start:train_end], evaluate on [test_start:test_end]."""
+    import sys
+    import time as _time
+
     from hogan_bot.backtest import run_backtest_on_candles
     from hogan_bot.config import BotConfig, load_config
     from hogan_bot.champion import apply_champion_mode, is_champion_mode
@@ -232,6 +235,10 @@ def _train_and_evaluate_window(
     try:
         train_candles = candles.iloc[train_start:train_end].copy()
         test_candles = candles.iloc[test_start:test_end].copy()
+
+        t0 = _time.perf_counter()
+        logger.info("    [W%d] Building training set (%d bars)...", window_idx, len(train_candles))
+        sys.stdout.flush()
 
         X, y, feature_cols, _ = build_training_set(
             train_candles,
@@ -256,9 +263,15 @@ def _train_and_evaluate_window(
         )
         model.fit(X_scaled, y)
 
+        t_train = _time.perf_counter() - t0
+        logger.info("    [W%d] Model trained in %.1fs (samples=%d, features=%d)",
+                     window_idx, t_train, len(X), X.shape[1])
+        sys.stdout.flush()
+
         try:
             y_prob = model.predict_proba(X_scaled)[:, 1]
             result.train_auc = float(roc_auc_score(y, y_prob))
+            logger.info("    [W%d] Train AUC: %.4f", window_idx, result.train_auc)
         except Exception:
             pass
 
@@ -271,6 +284,10 @@ def _train_and_evaluate_window(
         bot_cfg = load_config()
         if is_champion_mode():
             bot_cfg = apply_champion_mode(bot_cfg)
+
+        logger.info("    [W%d] Running backtest on %d test bars...", window_idx, len(test_candles))
+        sys.stdout.flush()
+        t1 = _time.perf_counter()
 
         bt = run_backtest_on_candles(
             test_candles,
@@ -305,6 +322,11 @@ def _train_and_evaluate_window(
             reversal_confidence_mult=bot_cfg.reversal_confidence_multiplier,
         )
 
+        t_bt = _time.perf_counter() - t1
+        t_total = _time.perf_counter() - t0
+        logger.info("    [W%d] Backtest done in %.1fs (total %.1fs)",
+                     window_idx, t_bt, t_total)
+
         result.total_return_pct = bt.total_return_pct
         result.max_drawdown_pct = bt.max_drawdown_pct
         result.sharpe = bt.sharpe_ratio
@@ -337,21 +359,31 @@ def walk_forward_validate(
     windows = _compute_windows(len(candles), cfg)
     report = WalkForwardReport(config=cfg)
 
-    logger.info(
-        "Walk-forward: %d windows over %d bars (train_ratio=%.0f%%)",
-        len(windows), len(candles), cfg.train_ratio * 100,
-    )
+    import sys
+    import time as _time
 
+    total_test_bars = sum(ve - vs for _, _, vs, ve in windows)
+    logger.info(
+        "Walk-forward: %d windows over %d bars (%d total test bars)",
+        len(windows), len(candles), total_test_bars,
+    )
+    sys.stdout.flush()
+
+    wf_start = _time.perf_counter()
     for i, (ts, te, vs, ve) in enumerate(windows):
         logger.info(
             "  Window %d/%d: train[%d:%d] (%d bars) -> test[%d:%d] (%d bars)",
             i + 1, len(windows), ts, te, te - ts, vs, ve, ve - vs,
         )
+        sys.stdout.flush()
         w = _train_and_evaluate_window(candles, ts, te, vs, ve, i, cfg)
         report.windows.append(w)
         logger.info("    %s", w.summary_line())
+        sys.stdout.flush()
 
-    logger.info("Walk-forward complete: %s", json.dumps(report.summary(), indent=2))
+    elapsed = _time.perf_counter() - wf_start
+    logger.info("Walk-forward complete in %.1fs: %s",
+                elapsed, json.dumps(report.summary(), indent=2))
     return report
 
 
