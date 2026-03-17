@@ -1,0 +1,401 @@
+[
+  {
+    "short_max_hold_hours": 4.0,
+    "mean_return_pct": -0.5788,
+    "mean_sharpe": -1.8493,
+    "total_trades": 268,
+    "n_positive": 0,
+    "worst_drawdown_pct": 1.17,
+    "short_max_hold_exits": 87,
+    "short_stop_exits": 13,
+    "per_window": [
+      {
+        "idx": 0,
+        "ret": -1.137,
+        "sharpe": -2.1688,
+        "trades": 66,
+        "win_rate": 0.4242,
+        "short_max_hold_exits": 21,
+        "short_stop_exits": 2
+      },
+      {
+        "idx": 1,
+        "ret": -0.6341,
+        "sharpe": -1.0642,
+        "trades": 58,
+        "win_rate": 0.3448,
+        "short_max_hold_exits": 14,
+        "short_stop_exits": 4
+      },
+      {
+        "idx": 2,
+        "ret": -0.0889,
+        "sharpe": -0.2982,
+        "trades": 40,
+        "win_rate": 0.4,
+        "short_max_hold_exits": 14,
+        "short_stop_exits": 3
+      },
+      {
+        "idx": 3,
+        "ret": -0.7454,
+        "sharpe": -4.606,
+        "trades": 34,
+        "win_rate": 0.2941,
+        "short_max_hold_exits": 12,
+        "short_stop_exits": 1
+      },
+      {
+        "idx": 4,
+        "ret": -0.2888,
+        "sharpe": -1.1092,
+        "trades": 70,
+        "win_rate": 0.4571,
+        "short_max_hold_exits": 26,
+        "short_stop_exits": 3
+      }
+    ]
+  },
+  {
+    "short_max_hold_hours": 6.0,
+    "mean_return_pct": -0.255,
+    "mean_sharpe": -0.7313,
+    "total_trades": 254,
+    "n_positive": 2,
+    "worst_drawdown_pct": 1.3,
+    "short_max_hold_exits": 72,
+    "short_stop_exits": 21,
+    "per_window": [
+      {
+        "idx": 0,
+        "ret": -0.6355,
+        "sharpe": -1.0797,
+        "trades": 64,
+        "win_rate": 0.5,
+        "short_max_hold_exits": 20,
+        "short_stop_exits": 2
+      },
+      {
+        "idx": 1,
+        "ret": -0.785,
+        "sharpe": -1.1911,
+        "trades": 56,
+        "win_rate": 0.3571,
+        "short_max_hold_exits": 10,
+        "short_stop_exits": 7
+      },
+      {
+        "idx": 2,
+        "ret": 0.1755,
+        "sharpe": 0.6167,
+        "trades": 38,
+        "win_rate": 0.4211,
+        "short_max_hold_exits": 12,
+        "short_stop_exits": 4
+      },
+      {
+        "idx": 3,
+        "ret": -0.7794,
+        "sharpe": -3.9726,
+        "trades": 32,
+        "win_rate": 0.25,
+        "short_max_hold_exits": 9,
+        "short_stop_exits": 3
+      },
+      {
+        "idx": 4,
+        "ret": 0.7494,
+        "sharpe": 1.9702,
+        "trades": 64,
+        "win_rate": 0.4375,
+        "short_max_hold_exits": 21,
+        "short_stop_exits": 5
+      }
+    ]
+  },
+  {
+    "short_max_hold_hours": 8.0,
+    "mean_return_pct": -0.0331,
+    "mean_sharpe": -0.4603,
+    "total_trades": 252,
+    "n_positive": 2,
+    "worst_drawdown_pct": 1.19,
+    "short_max_hold_exits": 63,
+    "short_stop_exits": 29,
+    "per_window": [
+      {
+        "idx": 0,
+        "ret": -0.3056,
+        "sharpe": -0.4494,
+        "trades": 62,
+        "win_rate": 0.5484,
+        "short_max_hold_exits": 16,
+        "short_stop_exits": 5
+      },
+      {
+        "idx": 1,
+        "ret": -0.4212,
+        "sharpe": -0.6268,
+        "trades": 56,
+        "win_rate": 0.3571,
+        "short_max_hold_exits": 8,
+        "short_stop_exits": 9
+      },
+      {
+        "idx": 2,
+        "ret": 0.2235,
+        "sharpe": 0.6301,
+        "trades": 38,
+        "win_rate": 0.3684,
+        "short_max_hold_exits": 12,
+        "short_stop_exits": 4
+      },
+      {
+        "idx": 3,
+        "ret": -0.7834,
+        "sharpe": -4.0895,
+        "trades": 32,
+        "win_rate": 0.25,
+        "short_max_hold_exits": 9,
+        "short_stop_exits": 3
+      },
+      {
+        "idx": 4,
+        "ret": 1.1209,
+        "sharpe": 2.234,
+        "trades": 64,
+        "win_rate": 0.5625,
+        "short_max_hold_exits": 18,
+        "short_stop_exits": 8
+      }
+    ]
+  },
+  {
+    "short_max_hold_hours": 10.0,
+    "mean_return_pct": 0.4483,
+    "mean_sharpe": 0.0437,
+    "total_trades": 244,
+    "n_positive": 2,
+    "worst_drawdown_pct": 1.06,
+    "short_max_hold_exits": 57,
+    "short_stop_exits": 30,
+    "per_window": [
+      {
+        "idx": 0,
+        "ret": 0.8866,
+        "sharpe": 1.0101,
+        "trades": 62,
+        "win_rate": 0.5484,
+        "short_max_hold_exits": 15,
+        "short_stop_exits": 5
+      },
+      {
+        "idx": 1,
+        "ret": -0.0769,
+        "sharpe": -0.0937,
+        "trades": 54,
+        "win_rate": 0.3704,
+        "short_max_hold_exits": 7,
+        "short_stop_exits": 9
+      },
+      {
+        "idx": 2,
+        "ret": -0.563,
+        "sharpe": -1.0634,
+        "trades": 36,
+        "win_rate": 0.2778,
+        "short_max_hold_exits": 9,
+        "short_stop_exits": 6
+      },
+      {
+        "idx": 3,
+        "ret": -0.7603,
+        "sharpe": -3.776,
+        "trades": 32,
+        "win_rate": 0.25,
+        "short_max_hold_exits": 9,
+        "short_stop_exits": 3
+      },
+      {
+        "idx": 4,
+        "ret": 2.7552,
+        "sharpe": 4.1412,
+        "trades": 60,
+        "win_rate": 0.5333,
+        "short_max_hold_exits": 17,
+        "short_stop_exits": 7
+      }
+    ]
+  },
+  {
+    "short_max_hold_hours": 12.0,
+    "mean_return_pct": 0.2685,
+    "mean_sharpe": -0.2775,
+    "total_trades": 244,
+    "n_positive": 2,
+    "worst_drawdown_pct": 1.1,
+    "short_max_hold_exits": 48,
+    "short_stop_exits": 39,
+    "per_window": [
+      {
+        "idx": 0,
+        "ret": 1.0796,
+        "sharpe": 1.0884,
+        "trades": 62,
+        "win_rate": 0.5161,
+        "short_max_hold_exits": 14,
+        "short_stop_exits": 6
+      },
+      {
+        "idx": 1,
+        "ret": -0.4294,
+        "sharpe": -0.5433,
+        "trades": 54,
+        "win_rate": 0.3704,
+        "short_max_hold_exits": 6,
+        "short_stop_exits": 10
+      },
+      {
+        "idx": 2,
+        "ret": -0.6372,
+        "sharpe": -1.1979,
+        "trades": 36,
+        "win_rate": 0.3333,
+        "short_max_hold_exits": 7,
+        "short_stop_exits": 8
+      },
+      {
+        "idx": 3,
+        "ret": -0.9817,
+        "sharpe": -3.9445,
+        "trades": 32,
+        "win_rate": 0.25,
+        "short_max_hold_exits": 8,
+        "short_stop_exits": 4
+      },
+      {
+        "idx": 4,
+        "ret": 2.3113,
+        "sharpe": 3.2099,
+        "trades": 60,
+        "win_rate": 0.5333,
+        "short_max_hold_exits": 13,
+        "short_stop_exits": 11
+      }
+    ]
+  },
+  {
+    "short_max_hold_hours": 16.0,
+    "mean_return_pct": 0.2873,
+    "mean_sharpe": -0.0772,
+    "total_trades": 236,
+    "n_positive": 2,
+    "worst_drawdown_pct": 1.25,
+    "short_max_hold_exits": 33,
+    "short_stop_exits": 49,
+    "per_window": [
+      {
+        "idx": 0,
+        "ret": 1.5637,
+        "sharpe": 1.534,
+        "trades": 56,
+        "win_rate": 0.4643,
+        "short_max_hold_exits": 8,
+        "short_stop_exits": 8
+      },
+      {
+        "idx": 1,
+        "ret": -0.7128,
+        "sharpe": -0.8646,
+        "trades": 54,
+        "win_rate": 0.4074,
+        "short_max_hold_exits": 5,
+        "short_stop_exits": 11
+      },
+      {
+        "idx": 2,
+        "ret": -0.8777,
+        "sharpe": -1.5416,
+        "trades": 36,
+        "win_rate": 0.3333,
+        "short_max_hold_exits": 4,
+        "short_stop_exits": 11
+      },
+      {
+        "idx": 3,
+        "ret": -0.7201,
+        "sharpe": -2.3992,
+        "trades": 32,
+        "win_rate": 0.25,
+        "short_max_hold_exits": 7,
+        "short_stop_exits": 5
+      },
+      {
+        "idx": 4,
+        "ret": 2.1834,
+        "sharpe": 2.8856,
+        "trades": 58,
+        "win_rate": 0.4483,
+        "short_max_hold_exits": 9,
+        "short_stop_exits": 14
+      }
+    ]
+  },
+  {
+    "short_max_hold_hours": 24.0,
+    "mean_return_pct": 0.3408,
+    "mean_sharpe": -0.0013,
+    "total_trades": 226,
+    "n_positive": 2,
+    "worst_drawdown_pct": 1.59,
+    "short_max_hold_exits": 18,
+    "short_stop_exits": 58,
+    "per_window": [
+      {
+        "idx": 0,
+        "ret": 1.4585,
+        "sharpe": 1.3663,
+        "trades": 56,
+        "win_rate": 0.4286,
+        "short_max_hold_exits": 6,
+        "short_stop_exits": 10
+      },
+      {
+        "idx": 1,
+        "ret": -0.0973,
+        "sharpe": -0.0846,
+        "trades": 50,
+        "win_rate": 0.4,
+        "short_max_hold_exits": 2,
+        "short_stop_exits": 12
+      },
+      {
+        "idx": 2,
+        "ret": -0.841,
+        "sharpe": -1.4741,
+        "trades": 34,
+        "win_rate": 0.2353,
+        "short_max_hold_exits": 1,
+        "short_stop_exits": 13
+      },
+      {
+        "idx": 3,
+        "ret": -0.6258,
+        "sharpe": -2.0289,
+        "trades": 30,
+        "win_rate": 0.4,
+        "short_max_hold_exits": 4,
+        "short_stop_exits": 6
+      },
+      {
+        "idx": 4,
+        "ret": 1.8095,
+        "sharpe": 2.215,
+        "trades": 56,
+        "win_rate": 0.4286,
+        "short_max_hold_exits": 5,
+        "short_stop_exits": 17
+      }
+    ]
+  }
+]

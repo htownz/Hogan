@@ -90,6 +90,21 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 - Sells: unchanged strict thresholds
 - Rationale: long side was over-filtered in ranging regimes, losing profitable mean-reversion entries
 
+## Asymmetric Edge Gate
+- `edge_gate()` uses lower ATR friction multiple for buys (0.5x) vs sells (0.8x)
+- Longs benefit from mean-reversion in low-vol periods; shorts do not
+- Walk-forward validated: ATR blocks dropped ~40%, more longs get through
+
+## ML Blind Short Block
+- `ml_blind_blocks_shorts(recent_probs)` blocks short entries when model conviction is near zero
+- Uses stricter threshold (0.015) than the sizing scale (0.02) — only blocks shorts, not longs
+- Walk-forward: W3 blocked 8 shorts, W4 blocked 18 in low-conviction stretches
+
+## Loss Streak Dampener
+- `loss_streak_scale(recent_outcomes)` reduces sizing by 50% after 3 consecutive losses
+- Resets on next win; most active in losing windows (W1: 514 bars, W3: 552)
+- Limits drawdown compounding without reducing trade count
+
 ## Regime Mean-Reversion Score
 - `RegimeState.mean_reversion_score` computed from return autocorrelation (24-bar window)
 - Score > 0 = mean-reverting (favorable), score < 0 = trending (unfavorable)
