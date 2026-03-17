@@ -789,3 +789,255 @@ class TestAgentFailureResilience:
         d = ctrl.decide(symbol="BTC/USD", candles=candles)
         assert isinstance(d, SwarmDecision)
         assert d.final_action == "hold"
+
+
+# ===================================================================
+# 7. LOOKAHEAD BIAS — indicators must not leak future data
+# ===================================================================
+
+class TestLookaheadBias:
+    """Wrap the existing check_lookahead() tool as a hard test gate.
+
+    EMA-based indicators (EMA, RSI, MACD) have infinite theoretical memory,
+    so shifting the starting bar by 1 produces small warm-up diffs.  MACD
+    compounds three EMAs, producing diffs up to ~0.2 at BTC price scale
+    (0.0004% of value).  This is NOT lookahead.  Tolerance=1.0 catches
+    real lookahead (diffs of 10+ for bounded indicators, 100+ at price
+    scale) while allowing all EMA warm-up noise.
+    """
+
+    EMA_WARMUP_TOLERANCE = 1.0
+
+    def test_indicators_no_lookahead(self):
+        from hogan_bot.lookahead_check import check_lookahead
+
+        candles = _synthetic_candles(200, seed=42)
+        result = check_lookahead(candles, tolerance=self.EMA_WARMUP_TOLERANCE)
+        assert result["ok"] is True, (
+            f"Lookahead bias detected in: {result['leaking_columns']} "
+            f"details: {result.get('details', {})}"
+        )
+        assert len(result["clean_columns"]) > 0
+
+    def test_different_data_no_lookahead(self):
+        from hogan_bot.lookahead_check import check_lookahead
+
+        for seed in (1, 99, 777):
+            candles = _synthetic_candles(200, seed=seed)
+            result = check_lookahead(candles, tolerance=self.EMA_WARMUP_TOLERANCE)
+            assert result["ok"] is True, (
+                f"seed={seed}: lookahead in {result['leaking_columns']}"
+            )
+
+    def test_strict_tolerance_catches_ema_warmup(self):
+        """At 1e-9 tolerance, EMA warm-up noise IS flagged — confirming
+        the checker works and the permissive tolerance is intentional."""
+        from hogan_bot.lookahead_check import check_lookahead
+
+        candles = _synthetic_candles(200, seed=42)
+        strict = check_lookahead(candles, tolerance=1e-9)
+        ema_cols = {"ema_9", "ema_21", "rsi_14", "macd_hist"}
+        flagged = set(strict["leaking_columns"])
+        assert flagged & ema_cols, "Strict tolerance should flag EMA warm-up"
+
+    def test_too_few_candles_returns_ok_with_warning(self):
+        from hogan_bot.lookahead_check import check_lookahead
+
+        candles = _synthetic_candles(30)
+        result = check_lookahead(candles)
+        assert result["ok"] is True
+        assert "warning" in result
+
+
+# ===================================================================
+# 8. LONG-SIM STABILITY — multi-hundred bar backtest with swarm
+# ===================================================================
+
+class TestLongSimStability:
+    """Run extended backtests and verify zero crashes, valid equity
+    curves, and consistent logging when swarm is active."""
+
+    def test_500bar_policy_core_no_crash(self):
+        """500-bar backtest with policy_core + swarm shadow must complete
+        cleanly and produce a valid equity curve."""
+        from hogan_bot.backtest import run_backtest_on_candles
+
+        candles = _synthetic_candles(500, seed=42)
+        candles["timestamp"] = pd.to_datetime(candles["ts_ms"], unit="ms", utc=True)
+
+        result = run_backtest_on_candles(
+            candles,
+            symbol="BTC/USD",
+            starting_balance_usd=10000.0,
+            aggressive_allocation=0.30,
+            max_risk_per_trade=0.02,
+            max_drawdown=0.25,
+            short_ma_window=8,
+            long_ma_window=21,
+            volume_window=20,
+            volume_threshold=1.0,
+            fee_rate=0.001,
+            use_policy_core=True,
+            swarm_enabled=True,
+            swarm_mode="shadow",
+        )
+
+        assert result.start_equity == 10000.0
+        assert len(result.equity_curve) >= 400, (
+            f"Expected >=400 equity points, got {len(result.equity_curve)}"
+        )
+        assert all(e > 0 for e in result.equity_curve), "Equity went to zero"
+        assert result.max_drawdown_pct < 1.0, "Max drawdown should be < 100%"
+
+    def test_500bar_swarm_off_no_crash(self):
+        """Baseline sanity — same 500-bar run without swarm must also pass."""
+        from hogan_bot.backtest import run_backtest_on_candles
+
+        candles = _synthetic_candles(500, seed=42)
+        candles["timestamp"] = pd.to_datetime(candles["ts_ms"], unit="ms", utc=True)
+
+        result = run_backtest_on_candles(
+            candles,
+            symbol="BTC/USD",
+            starting_balance_usd=10000.0,
+            aggressive_allocation=0.30,
+            max_risk_per_trade=0.02,
+            max_drawdown=0.25,
+            short_ma_window=8,
+            long_ma_window=21,
+            volume_window=20,
+            volume_threshold=1.0,
+            fee_rate=0.001,
+            use_policy_core=True,
+            swarm_enabled=False,
+        )
+
+        assert result.start_equity == 10000.0
+        assert len(result.equity_curve) >= 400
+
+    def test_different_seeds_all_complete(self):
+        """Multiple 300-bar backtests with diverse data must all complete."""
+        from hogan_bot.backtest import run_backtest_on_candles
+
+        for seed in (1, 123, 456):
+            candles = _synthetic_candles(300, seed=seed)
+            candles["timestamp"] = pd.to_datetime(
+                candles["ts_ms"], unit="ms", utc=True,
+            )
+            result = run_backtest_on_candles(
+                candles,
+                symbol="BTC/USD",
+                starting_balance_usd=10000.0,
+                aggressive_allocation=0.30,
+                max_risk_per_trade=0.02,
+                max_drawdown=0.25,
+                short_ma_window=8,
+                long_ma_window=21,
+                volume_window=20,
+                volume_threshold=1.0,
+                fee_rate=0.001,
+                use_policy_core=True,
+                swarm_enabled=True,
+                swarm_mode="shadow",
+            )
+            assert len(result.equity_curve) > 0, f"seed={seed} produced empty curve"
+
+
+# ===================================================================
+# 9. LOGGING COMPLETENESS — every bar must produce a swarm record
+# ===================================================================
+
+class TestLoggingCompleteness:
+    """When swarm is enabled with a DB connection, every call to decide()
+    must produce exactly one swarm_decisions row and one vote per agent."""
+
+    def test_n_decides_produces_n_decisions(self):
+        from hogan_bot.policy_core import PolicyState, decide
+
+        conn = _in_memory_db()
+        cfg = _base_config(swarm_enabled=True, swarm_mode="shadow")
+        pipeline = _make_pipeline(cfg)
+        state = PolicyState()
+        n_bars = 10
+
+        for i in range(n_bars):
+            candles = _synthetic_candles(200, seed=42 + i)
+            decide(
+                symbol="BTC/USD",
+                candles=candles,
+                equity_usd=10000.0,
+                config=cfg,
+                pipeline=pipeline,
+                state=state,
+                conn=conn,
+                mode="backtest",
+            )
+
+        dec_count = conn.execute(
+            "SELECT COUNT(*) FROM swarm_decisions"
+        ).fetchone()[0]
+        vote_count = conn.execute(
+            "SELECT COUNT(*) FROM swarm_agent_votes"
+        ).fetchone()[0]
+
+        assert dec_count == n_bars, (
+            f"Expected {n_bars} decisions, got {dec_count}"
+        )
+        assert vote_count == n_bars * 4, (
+            f"Expected {n_bars * 4} votes (4 agents × {n_bars} bars), "
+            f"got {vote_count}"
+        )
+
+    def test_every_vote_has_decision_id(self):
+        from hogan_bot.policy_core import PolicyState, decide
+
+        conn = _in_memory_db()
+        cfg = _base_config(swarm_enabled=True, swarm_mode="shadow")
+        pipeline = _make_pipeline(cfg)
+        state = PolicyState()
+
+        for i in range(5):
+            candles = _synthetic_candles(200, seed=100 + i)
+            decide(
+                symbol="BTC/USD",
+                candles=candles,
+                equity_usd=10000.0,
+                config=cfg,
+                pipeline=pipeline,
+                state=state,
+                conn=conn,
+                mode="backtest",
+            )
+
+        orphans = conn.execute(
+            "SELECT COUNT(*) FROM swarm_agent_votes WHERE decision_id IS NULL"
+        ).fetchone()[0]
+        assert orphans == 0, f"{orphans} votes lack a decision_id FK"
+
+    def test_weight_snapshot_logged_once_despite_many_bars(self):
+        from hogan_bot.policy_core import PolicyState, decide
+
+        conn = _in_memory_db()
+        cfg = _base_config(swarm_enabled=True, swarm_mode="shadow")
+        pipeline = _make_pipeline(cfg)
+        state = PolicyState()
+
+        for i in range(10):
+            candles = _synthetic_candles(200, seed=50 + i)
+            decide(
+                symbol="BTC/USD",
+                candles=candles,
+                equity_usd=10000.0,
+                config=cfg,
+                pipeline=pipeline,
+                state=state,
+                conn=conn,
+                mode="backtest",
+            )
+
+        snap_count = conn.execute(
+            "SELECT COUNT(*) FROM swarm_weight_snapshots"
+        ).fetchone()[0]
+        assert snap_count == 1, (
+            f"Expected 1 weight snapshot, got {snap_count}"
+        )
