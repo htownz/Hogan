@@ -373,6 +373,7 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         "ALTER TABLE paper_trades ADD COLUMN bars_held INTEGER",
         "ALTER TABLE paper_trades ADD COLUMN exit_regime TEXT",
         "ALTER TABLE paper_trades ADD COLUMN entry_atr_pct REAL",
+        "ALTER TABLE swarm_agent_votes ADD COLUMN decision_id INTEGER REFERENCES swarm_decisions(id)",
     ):
         try:
             conn.execute(_alt)

@@ -139,6 +139,7 @@ class SignalEvaluator:
         recent_whipsaw_count: int = 0,
         *,
         mtf_candles: dict[str, pd.DataFrame] | None = None,
+        peak_equity: float | None = None,
     ) -> SignalResult:
         """Delegate to policy_core.decide() and translate back to SignalResult."""
         from hogan_bot.policy_core import PolicyState, decide
@@ -163,6 +164,7 @@ class SignalEvaluator:
             mtf_candles=mtf_candles,
             enable_pullback_gate=True,
             enable_freshness_check=True,
+            peak_equity_usd=peak_equity,
         )
 
         px = float(candles["close"].iloc[-1])
@@ -199,12 +201,14 @@ class SignalEvaluator:
         recent_whipsaw_count: int = 0,
         *,
         mtf_candles: dict[str, pd.DataFrame] | None = None,
+        peak_equity: float | None = None,
     ) -> SignalResult:
         """Returns a SignalResult with action, sizing, and rich metadata."""
         if self._use_policy_core:
             return self._policy_core_evaluate(
                 symbol, candles, equity, recent_whipsaw_count,
                 mtf_candles=mtf_candles,
+                peak_equity=peak_equity,
             )
 
         cfg = symbol_config(self.config, symbol)
@@ -898,6 +902,7 @@ async def run_event_loop(
                     symbol, candles, equity,
                     recent_whipsaw_count=_whipsaw_counts.get(symbol, 0),
                     mtf_candles=_mtf_data if _mtf_data else None,
+                    peak_equity=guard.peak_equity,
                 )
                 action = sig.action
                 size = sig.size

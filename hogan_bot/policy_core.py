@@ -72,6 +72,7 @@ class PolicyState:
 
     ml_probs: list[float] = field(default_factory=list)
     trade_outcomes: list[bool] = field(default_factory=list)
+    swarm_weights_logged: bool = False
 
     # Regime transition tracker (created lazily)
     _regime_transition: object | None = None
@@ -111,6 +112,7 @@ def decide(
     mtf_candles: dict[str, pd.DataFrame] | None = None,
     enable_pullback_gate: bool = True,
     enable_freshness_check: bool = False,
+    peak_equity_usd: float | None = None,
 ) -> DecisionIntent:
     """Single canonical decision path used by both live and backtest.
 
@@ -148,6 +150,9 @@ def decide(
         Whether to apply the pullback anti-chase filter.
     enable_freshness_check : bool
         Whether to run feature staleness checks (typically live-only).
+    peak_equity_usd : float | None
+        Portfolio high-water mark.  Used by RiskSteward to detect drawdown.
+        When ``None``, defaults to ``equity_usd`` (no drawdown signal).
     """
     from hogan_bot.config import symbol_config
     from hogan_bot.indicators import compute_atr
@@ -438,16 +443,33 @@ def decide(
                     "regime": regime_name,
                     "regime_state": _rstate,
                     "equity_usd": equity_usd,
-                    "peak_equity_usd": equity_usd,
+                    "peak_equity_usd": peak_equity_usd if peak_equity_usd is not None else equity_usd,
                     "atr_pct": atr_pct,
                     "hist_vol_20": _hist_vol,
                     "take_profit_pct": eff_tp,
+                    "pipeline_signal": signal,
                 }
 
                 controller = SwarmController(
                     agents=agents,
                     config=config,
                 )
+
+                if conn is not None and not state.swarm_weights_logged:
+                    try:
+                        from hogan_bot.swarm_decision.logging import log_weight_snapshot
+                        _bar_ts_ms_sw = int(candles["ts_ms"].iloc[-1]) if "ts_ms" in candles.columns else 0
+                        log_weight_snapshot(
+                            conn, _bar_ts_ms_sw, symbol,
+                            getattr(config, "timeframe", "1h"),
+                            controller.weights,
+                            regime=regime_name,
+                            source="static_init",
+                        )
+                        state.swarm_weights_logged = True
+                    except Exception:
+                        pass
+
                 swarm_decision = controller.decide(
                     symbol=symbol,
                     candles=candles,
@@ -467,7 +489,7 @@ def decide(
                             log_swarm_decision,
                             log_agent_votes,
                         )
-                        log_swarm_decision(
+                        _sw_decision_id = log_swarm_decision(
                             conn, _bar_ts_ms, symbol,
                             getattr(config, "timeframe", "1h"),
                             swarm_decision, _swarm_mode,
@@ -479,6 +501,7 @@ def decide(
                                 getattr(config, "timeframe", "1h"),
                                 swarm_decision.votes,
                                 as_of_ms=as_of_ms,
+                                decision_id=_sw_decision_id,
                             )
                     except Exception:
                         pass

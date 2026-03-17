@@ -939,6 +939,9 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     use_ml_as_sizer: bool = False,
     funding_overlay=None,
     use_policy_core: bool = False,
+    swarm_enabled: bool = False,
+    swarm_mode: str = "shadow",
+    swarm_agents: str = "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1",
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
@@ -1005,7 +1008,13 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         min_tech_confidence=min_tech_confidence,
         min_regime_confidence=min_regime_confidence,
         max_whipsaws=max_whipsaws,
-        swarm_enabled=False,
+        swarm_enabled=swarm_enabled,
+        swarm_mode=swarm_mode,
+        swarm_agents=swarm_agents,
+        swarm_min_agreement=0.60,
+        swarm_min_vote_margin=0.10,
+        swarm_max_entropy=0.95,
+        swarm_log_full_votes=True,
     )
     _bt_conn = None
     if db_path:
@@ -1425,6 +1434,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 funding_overlay=None,
                 enable_pullback_gate=enable_pullback_gate,
                 enable_freshness_check=False,
+                peak_equity_usd=guard.peak_equity,
             )
 
             action = _intent.action
