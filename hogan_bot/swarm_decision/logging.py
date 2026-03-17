@@ -60,6 +60,7 @@ def log_agent_votes(
     timeframe: str,
     votes: list[AgentVote],
     as_of_ms: int | None = None,
+    decision_id: int | None = None,
 ) -> None:
     """Persist individual agent votes for a single bar."""
     rows = []
@@ -77,14 +78,16 @@ def log_agent_votes(
             1 if v.veto else 0,
             json.dumps(v.block_reasons),
             json.dumps(v.to_dict()),
+            decision_id,
         ))
     conn.executemany(
         """
         INSERT INTO swarm_agent_votes (
             ts_ms, symbol, timeframe, as_of_ms,
             agent_id, action, confidence, expected_edge_bps,
-            size_scale, veto, block_reasons_json, vote_json
-        ) VALUES (?,?,?,?, ?,?,?,?, ?,?,?,?)
+            size_scale, veto, block_reasons_json, vote_json,
+            decision_id
+        ) VALUES (?,?,?,?, ?,?,?,?, ?,?,?,?, ?)
         """,
         rows,
     )

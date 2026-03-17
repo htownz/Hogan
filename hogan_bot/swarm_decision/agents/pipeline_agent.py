@@ -26,16 +26,17 @@ class PipelineAgent:
         as_of_ms: int | None,
         shared_context: dict,
     ) -> AgentVote:
-        regime = shared_context.get("regime")
-        regime_state = shared_context.get("regime_state")
-
-        signal = self._pipeline.run(
-            candles,
-            symbol=symbol,
-            as_of_ms=as_of_ms,
-            regime=regime,
-            regime_state=regime_state,
-        )
+        signal = shared_context.get("pipeline_signal")
+        if signal is None:
+            regime = shared_context.get("regime")
+            regime_state = shared_context.get("regime_state")
+            signal = self._pipeline.run(
+                candles,
+                symbol=symbol,
+                as_of_ms=as_of_ms,
+                regime=regime,
+                regime_state=regime_state,
+            )
 
         action = signal.action or "hold"
         confidence = signal.confidence or 0.0
