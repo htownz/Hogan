@@ -411,6 +411,27 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         "ON swarm_promotion_reports (symbol, timeframe, created_ms)"
     )
 
+    # -------------------------------------------------------------------
+    # Swarm attribution — per-decision outcome attribution scores
+    # -------------------------------------------------------------------
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS swarm_attribution (
+            decision_id         INTEGER PRIMARY KEY REFERENCES swarm_decisions(id),
+            outcome_label       TEXT    NOT NULL,
+            direction_attr      REAL    NOT NULL DEFAULT 0.0,
+            veto_attr           REAL    NOT NULL DEFAULT 0.0,
+            posture_attr        REAL    NOT NULL DEFAULT 0.0,
+            entry_attr          REAL    NOT NULL DEFAULT 0.0,
+            cost_attr           REAL    NOT NULL DEFAULT 0.0,
+            disagreement_attr   REAL    NOT NULL DEFAULT 0.0,
+            learning_note       TEXT    NOT NULL DEFAULT '',
+            attr_json           TEXT    NOT NULL DEFAULT '{}',
+            updated_ms          INTEGER NOT NULL
+        )
+        """
+    )
+
     # ── Schema migrations for existing databases ──────────────────────
     for _alt in (
         "ALTER TABLE paper_trades ADD COLUMN entry_decision_id INTEGER",

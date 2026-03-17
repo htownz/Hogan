@@ -523,8 +523,8 @@ def _determine_mood(
 # ---------------------------------------------------------------------------
 # Main tab layout
 # ---------------------------------------------------------------------------
-tab_live, tab_os, tab_signals, tab_model, tab_data, tab_backtest, tab_swarm = st.tabs([
-    "Live Trading", "Market OS", "Signals & Candles", "ML Models", "Data Coverage", "Backtest", "Swarm"
+tab_live, tab_os, tab_signals, tab_model, tab_data, tab_backtest, tab_swarm, tab_replay = st.tabs([
+    "Live Trading", "Market OS", "Signals & Candles", "ML Models", "Data Coverage", "Backtest", "Swarm", "Swarm Replay"
 ])
 
 # ===========================================================================
@@ -1508,6 +1508,295 @@ with tab_swarm:
         _sw_conn.close()
     except Exception as exc:
         st.error(f"Error loading swarm data: {exc}")
+
+# ===========================================================================
+# TAB 8 — SWARM REPLAY
+# ===========================================================================
+with tab_replay:
+    st.header("Swarm Replay")
+
+    try:
+        _rp_conn = sqlite3.connect(DB_PATH)
+        _rp_has_tables = True
+        try:
+            _rp_conn.execute("SELECT 1 FROM swarm_decisions LIMIT 1")
+        except Exception:
+            _rp_has_tables = False
+
+        if not _rp_has_tables:
+            st.info("Swarm tables not found. Enable swarm mode to start logging decisions for replay.")
+        else:
+            from hogan_bot.swarm_replay_queries import ReplayFilter, list_replay_decisions, get_replay_decision
+            from hogan_bot.swarm_attribution import classify_outcome, compute_full_attribution, build_learning_note
+            from hogan_bot.swarm_replay import render_decision_story
+
+            # ── Zone A: Replay Selector ───────────────────────────
+            st.subheader("Replay Selector")
+            za1, za2, za3, za4 = st.columns(4)
+            _rp_symbol = za1.text_input("Symbol", value="BTC/USD", key="rp_sym")
+            _rp_source = za2.selectbox(
+                "Source filter",
+                ["all", "traded", "vetoed", "skipped", "swarm"],
+                key="rp_source",
+            )
+            _rp_sort = za3.selectbox(
+                "Sort by",
+                ["latest", "highest_opportunity", "biggest_winner", "biggest_loser",
+                 "highest_disagreement", "veto_events"],
+                key="rp_sort",
+            )
+            _rp_limit = za4.number_input("Max results", min_value=10, max_value=500, value=100, key="rp_limit")
+
+            flt = ReplayFilter(
+                symbol=_rp_symbol if _rp_symbol else None,
+                source=_rp_source if _rp_source != "all" else None,
+                sort_by=_rp_sort,
+                limit=int(_rp_limit),
+            )
+            decisions = list_replay_decisions(_rp_conn, flt)
+
+            if not decisions:
+                st.info("No swarm decisions found matching your filters.")
+            else:
+                # Build selector labels
+                _labels = []
+                for d in decisions:
+                    ts = pd.to_datetime(d["ts_ms"], unit="ms").strftime("%m-%d %H:%M")
+                    action = d.get("swarm_action", "?")
+                    label_tag = d.get("attr_label") or d.get("outcome_label") or ""
+                    _labels.append(f"#{d['id']} | {ts} | {action} | {label_tag}")
+
+                chosen_label = st.selectbox("Select decision to replay", _labels, key="rp_dec_sel")
+                chosen_idx = _labels.index(chosen_label)
+                chosen_dec_id = decisions[chosen_idx]["id"]
+
+                replay = get_replay_decision(_rp_conn, chosen_dec_id)
+
+                if replay and replay["decision"]:
+                    dec = replay["decision"]
+                    votes_list = replay["votes"]
+                    outcome = replay["outcome"]
+                    attribution = replay["attribution"]
+                    baseline = replay["baseline_compare"]
+                    candles_df = replay["candles"]
+                    similar = replay["similar_events"]
+
+                    # Compute attribution on the fly if not persisted
+                    if not attribution and outcome:
+                        attr = compute_full_attribution(dec, outcome, baseline)
+                        note = build_learning_note(
+                            dec, votes_list, outcome, attr,
+                        )
+                        attr["learning_note"] = note
+                        attribution = attr
+
+                    # ── Zone B: Decision Summary Strip ────────────
+                    st.subheader("Decision Summary")
+                    _ts_str = pd.to_datetime(dec.get("ts_ms", 0), unit="ms").strftime("%Y-%m-%d %H:%M UTC")
+                    zb_cols = st.columns(6)
+                    zb_cols[0].metric("Timestamp", _ts_str)
+                    zb_cols[1].metric("Symbol", dec.get("symbol", "—"))
+                    zb_cols[2].metric("Swarm Action", dec.get("final_action", "—"))
+                    zb_cols[3].metric("Confidence", f"{dec.get('final_conf', 0):.0%}")
+                    zb_cols[4].metric("Agreement", f"{dec.get('agreement', 0):.0%}")
+                    _out_label = (attribution or {}).get("outcome_label", "Pending")
+                    zb_cols[5].metric("Outcome", _out_label)
+
+                    zb2_cols = st.columns(5)
+                    zb2_cols[0].metric("Mode", dec.get("mode", "—"))
+                    _baseline_action = baseline.get("final_action", "—") if baseline else "—"
+                    zb2_cols[1].metric("Baseline Action", _baseline_action)
+                    zb2_cols[2].metric("Vetoed", "Yes" if dec.get("vetoed") else "No")
+                    zb2_cols[3].metric("Entropy", f"{dec.get('entropy', 0):.3f}")
+                    _fwd = outcome.get("forward_60m_bps") if outcome else None
+                    zb2_cols[4].metric("60m Return", f"{_fwd:+.1f} bps" if _fwd is not None else "—")
+
+                    st.divider()
+
+                    # ── Zone C: Market State & Chart ──────────────
+                    st.subheader("Market Context")
+                    if not candles_df.empty and "close" in candles_df.columns:
+                        import plotly.graph_objects as go
+                        fig_rp = go.Figure()
+                        candles_df["ts"] = pd.to_datetime(candles_df["ts_ms"], unit="ms")
+                        fig_rp.add_trace(go.Candlestick(
+                            x=candles_df["ts"],
+                            open=candles_df["open"], high=candles_df["high"],
+                            low=candles_df["low"], close=candles_df["close"],
+                            name="Price",
+                        ))
+                        # Decision marker
+                        dec_ts = pd.to_datetime(dec.get("ts_ms", 0), unit="ms")
+                        dec_price = candles_df.loc[
+                            candles_df["ts_ms"] == dec.get("ts_ms"), "close"
+                        ]
+                        if not dec_price.empty:
+                            _marker_color = {"buy": "#2ecc71", "sell": "#e74c3c"}.get(
+                                dec.get("final_action", "hold"), "#f39c12"
+                            )
+                            fig_rp.add_trace(go.Scatter(
+                                x=[dec_ts], y=[float(dec_price.iloc[0])],
+                                mode="markers", marker=dict(size=14, color=_marker_color, symbol="diamond"),
+                                name=f"Decision: {dec.get('final_action', 'hold')}",
+                            ))
+                        fig_rp.update_layout(
+                            height=350, margin=dict(l=0, r=0, t=10, b=0),
+                            xaxis_rangeslider_visible=False,
+                        )
+                        st.plotly_chart(fig_rp, use_container_width=True)
+                    else:
+                        st.info("No candle data available around this decision.")
+
+                    # Market state table
+                    try:
+                        _dj = json.loads(dec.get("decision_json", "{}") or "{}")
+                    except (json.JSONDecodeError, TypeError):
+                        _dj = {}
+                    _block_reasons = []
+                    try:
+                        _block_reasons = json.loads(dec.get("block_reasons_json", "[]") or "[]")
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                    ms_cols = st.columns(4)
+                    ms_cols[0].metric("Regime", _dj.get("regime", "—"))
+                    ms_cols[1].metric("ATR %", f"{_dj.get('atr_pct', '—')}")
+                    ms_cols[2].metric("Mode", dec.get("mode", "—"))
+                    if _block_reasons:
+                        ms_cols[3].metric("Blockers", len(_block_reasons))
+                        with st.expander("Block reasons"):
+                            for br in _block_reasons:
+                                st.text(f"• {br}")
+                    else:
+                        ms_cols[3].metric("Blockers", 0)
+
+                    st.divider()
+
+                    # ── Zone D: Agent Board + Controller Story ────
+                    zd_left, zd_right = st.columns(2)
+
+                    with zd_left:
+                        st.subheader("Agent Voting Board")
+                        if votes_list:
+                            for v in votes_list:
+                                _veto_badge = " [VETO]" if v.get("veto") else ""
+                                _conf = v.get("confidence", 0)
+                                st.markdown(
+                                    f"**{v.get('agent_id', '?')}**{_veto_badge} — "
+                                    f"`{v.get('action', '?')}` ({_conf:.0%})"
+                                )
+                                v_cols = st.columns(3)
+                                v_cols[0].caption(f"Edge: {v.get('expected_edge_bps', '—')} bps")
+                                v_cols[1].caption(f"Size: {v.get('size_scale', 1.0):.2f}")
+                                try:
+                                    _vr = json.loads(v.get("block_reasons_json", "[]") or "[]")
+                                except (json.JSONDecodeError, TypeError):
+                                    _vr = []
+                                if _vr:
+                                    v_cols[2].caption(f"Reasons: {', '.join(_vr[:2])}")
+                        else:
+                            st.info("No agent votes recorded for this decision.")
+
+                    with zd_right:
+                        st.subheader("Decision Story")
+                        _story = render_decision_story(
+                            dec,
+                            votes=pd.DataFrame(votes_list) if votes_list else None,
+                            baseline=baseline,
+                        )
+                        st.markdown(_story)
+
+                    st.divider()
+
+                    # ── Zone E: Outcome / Attribution / Similar / Learning ──
+                    st.subheader("Analysis")
+                    e_tab1, e_tab2, e_tab3, e_tab4, e_tab5 = st.tabs([
+                        "Outcome", "Attribution", "Similar Events", "Learning Note", "Diagnostics"
+                    ])
+
+                    with e_tab1:
+                        if outcome:
+                            oc1, oc2, oc3, oc4 = st.columns(4)
+                            oc1.metric("60m Return", f"{outcome.get('forward_60m_bps', 0):+.1f} bps")
+                            oc2.metric("MAE", f"{outcome.get('mae_bps', 0):.1f} bps")
+                            oc3.metric("MFE", f"{outcome.get('mfe_bps', 0):.1f} bps")
+                            oc4.metric("Label", outcome.get("outcome_label", "—"))
+
+                            oc5, oc6, oc7 = st.columns(3)
+                            oc5.metric("Trade Taken", "Yes" if outcome.get("was_trade_taken") else "No")
+                            oc6.metric("Veto Correct", {1: "Yes", 0: "No"}.get(
+                                outcome.get("was_veto_correct"), "N/A"))
+                            oc7.metric("Skip Correct", {1: "Yes", 0: "No"}.get(
+                                outcome.get("was_skip_correct"), "N/A"))
+
+                            _5m = outcome.get("forward_5m_bps")
+                            _15m = outcome.get("forward_15m_bps")
+                            _30m = outcome.get("forward_30m_bps")
+                            _60m = outcome.get("forward_60m_bps")
+                            if any(x is not None for x in [_5m, _15m, _30m, _60m]):
+                                markout_df = pd.DataFrame({
+                                    "window": ["5m", "15m", "30m", "60m"],
+                                    "bps": [_5m or 0, _15m or 0, _30m or 0, _60m or 0],
+                                })
+                                st.bar_chart(markout_df.set_index("window"))
+                        else:
+                            st.info("Outcome not yet available — forward window may not have matured.")
+
+                    with e_tab2:
+                        if attribution:
+                            attr_names = ["direction", "veto", "posture", "entry", "cost", "disagreement"]
+                            attr_vals = [attribution.get(f"{n}_attr", 0) for n in attr_names]
+                            attr_df = pd.DataFrame({"component": attr_names, "score": attr_vals})
+
+                            st.bar_chart(attr_df.set_index("component"))
+                            st.caption("Score range: -1 (detracted) to +1 (contributed)")
+
+                            with st.expander("Raw attribution"):
+                                st.json({k: v for k, v in attribution.items() if k != "learning_note"})
+                        else:
+                            st.info("Attribution not yet computed — requires outcome data.")
+
+                    with e_tab3:
+                        if similar:
+                            st.markdown(f"**Top {len(similar)} similar historical decisions:**")
+                            for i, s in enumerate(similar):
+                                s_ts = pd.to_datetime(s.get("ts_ms", 0), unit="ms").strftime("%m-%d %H:%M")
+                                s_action = s.get("final_action", "?")
+                                s_fwd = s.get("forward_60m_bps")
+                                s_label = s.get("attr_label") or s.get("outcome_label") or ""
+                                fwd_str = f"{s_fwd:+.1f}bps" if s_fwd is not None else "—"
+                                st.text(f"{i+1}. #{s.get('id','?')} | {s_ts} | {s_action} | {fwd_str} | {s_label}")
+                        else:
+                            st.info("No similar events found.")
+
+                    with e_tab4:
+                        if attribution and attribution.get("learning_note"):
+                            st.markdown(attribution["learning_note"])
+                        elif attribution:
+                            note = build_learning_note(dec, votes_list, outcome or {}, attribution)
+                            st.markdown(note)
+                        else:
+                            st.info("Learning note requires outcome and attribution data.")
+
+                    with e_tab5:
+                        st.markdown("**Diagnostics**")
+                        _diag_cols = st.columns(3)
+                        _diag_cols[0].metric("Votes recorded", len(votes_list))
+                        _diag_cols[1].metric("Outcome available", "Yes" if outcome else "No")
+                        _diag_cols[2].metric("Attribution available", "Yes" if attribution else "No")
+
+                        _expected_agents = 4
+                        if len(votes_list) < _expected_agents:
+                            st.warning(f"Expected {_expected_agents} agent votes, found {len(votes_list)}.")
+
+                        with st.expander("Raw decision JSON"):
+                            st.json(_dj)
+
+                else:
+                    st.warning("Could not load replay data for the selected decision.")
+
+        _rp_conn.close()
+    except Exception as exc:
+        st.error(f"Error loading replay data: {exc}")
 
 # ---------------------------------------------------------------------------
 # Footer
