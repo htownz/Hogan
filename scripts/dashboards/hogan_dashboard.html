@@ -721,7 +721,7 @@ async function fetchEquity(){
   const url=S.hours>0?`/api/equity?hours=${S.hours}`:`/api/equity`;
   S.equityData=await api(url)||[];drawChart();
 }
-async function fetchCandles(){S.candleData=await api('/api/candles?symbol=BTC/USD&limit=200')||[];if(S.tab==='candles')drawChart();}
+async function fetchCandles(){S.candleData=await api('/api/candles?symbol=BTC/USD&timeframe=1h&limit=200')||[];if(S.tab==='candles')drawChart();}
 async function fetchDecisions(){
   const dec=await api('/api/decisions?limit=100');
   if(Array.isArray(dec)){
