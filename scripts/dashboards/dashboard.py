@@ -1533,6 +1533,13 @@ with tab_replay:
         if not _rp_has_tables:
             st.info("Swarm tables not found. Enable swarm mode to start logging decisions for replay.")
         else:
+            # Ensure newer tables (swarm_attribution, swarm_outcomes, etc.) exist
+            try:
+                from hogan_bot.storage import _create_schema
+                _create_schema(_rp_conn)
+            except Exception:
+                pass
+
             from hogan_bot.swarm_replay_queries import ReplayFilter, list_replay_decisions, get_replay_decision
             from hogan_bot.swarm_attribution import classify_outcome, compute_full_attribution, build_learning_note
             from hogan_bot.swarm_replay import render_decision_story
