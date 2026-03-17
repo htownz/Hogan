@@ -109,6 +109,7 @@ class SignalResult:
     eff_allow_shorts: bool = True
     eff_long_size_scale: float = 1.0
     eff_short_size_scale: float = 1.0
+    swarm_decision_id: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +192,7 @@ class SignalEvaluator:
             eff_allow_shorts=intent.eff_allow_shorts,
             eff_long_size_scale=intent.eff_long_size_scale,
             eff_short_size_scale=intent.eff_short_size_scale,
+            swarm_decision_id=intent.swarm_decision_id,
         )
 
     def evaluate(
@@ -949,6 +951,7 @@ async def run_event_loop(
                     size_score=sig.size_score,
                     quality_components_json=sig.quality_components.to_json() if sig.quality_components else None,
                     block_reasons=sig.block_reasons,
+                    swarm_decision_id=sig.swarm_decision_id,
                 )
             except Exception as exc:
                 logger.debug("Decision log error: %s", exc)

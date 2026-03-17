@@ -426,6 +426,7 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         "ALTER TABLE paper_trades ADD COLUMN exit_regime TEXT",
         "ALTER TABLE paper_trades ADD COLUMN entry_atr_pct REAL",
         "ALTER TABLE swarm_agent_votes ADD COLUMN decision_id INTEGER REFERENCES swarm_decisions(id)",
+        "ALTER TABLE decision_log ADD COLUMN swarm_decision_id INTEGER",
     ):
         try:
             conn.execute(_alt)
@@ -967,6 +968,7 @@ def log_decision(
     size_score: float | None = None,
     quality_components_json: str | None = None,
     block_reasons: list[str] | None = None,
+    swarm_decision_id: int | None = None,
 ) -> int:
     """Insert a structured decision packet.  Returns the row id (decision_id)."""
     cur = conn.execute(
@@ -984,8 +986,9 @@ def log_decision(
             ml_up_prob, conf_scale, explanation,
             linked_trade_id,
             direction_score, quality_score, size_score,
-            quality_components_json, block_reasons_json
-        ) VALUES (?,?,?, ?,?, ?,?, ?,?, ?, ?,?,?,?, ?,?,?,?,?, ?, ?,?,?, ?,?,?, ?, ?,?,?, ?,?)
+            quality_components_json, block_reasons_json,
+            swarm_decision_id
+        ) VALUES (?,?,?, ?,?, ?,?, ?,?, ?, ?,?,?,?, ?,?,?,?,?, ?, ?,?,?, ?,?,?, ?, ?,?,?, ?,?, ?)
         """,
         (
             int(ts_ms), symbol, regime,
@@ -1003,6 +1006,7 @@ def log_decision(
             direction_score, quality_score, size_score,
             quality_components_json,
             json.dumps(block_reasons) if block_reasons else None,
+            swarm_decision_id,
         ),
     )
     conn.commit()
