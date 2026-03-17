@@ -21,6 +21,9 @@ models/hogan_rl_policy.zip
 *.swp
 *.swo
 
+# Personal developer notes (machine-specific paths, scratch commands)
+Command Prompts.md
+
 # Secret / key files — NEVER commit these
 API Keys.txt
 *.key
