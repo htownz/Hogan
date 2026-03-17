@@ -59,6 +59,8 @@ class WFConfig:
     use_funding_overlay: bool = False
     ml_buy_threshold: float = 0.51
     ml_sell_threshold: float = 0.49
+    model_type: str = "logreg"
+    label_mode: str = "fee_threshold"
 
     min_sharpe: float = 0.5
     max_drawdown_pct: float = 15.0
@@ -252,39 +254,67 @@ def _train_and_evaluate_window(
         trained = None
 
         if cfg.use_ml_filter or cfg.use_ml_as_sizer:
-            logger.info("    [W%d] Building training set (%d bars)...", window_idx, len(train_candles))
+            logger.info("    [W%d] Building training set (%d bars, model=%s, labels=%s)...",
+                         window_idx, len(train_candles), cfg.model_type, cfg.label_mode)
             sys.stdout.flush()
 
-            X, y, feature_cols, _ = build_training_set(
+            X, y, feature_cols, meta_quality = build_training_set(
                 train_candles,
                 horizon_bars=6,
                 fee_rate=cfg.fee_rate,
                 use_champion_features=True,
+                label_mode=cfg.label_mode,
             )
 
-            if len(X) < 100:
-                result.error = f"insufficient_training_samples ({len(X)})"
+            if X is None or y is None or len(X) < 100:
+                result.error = f"insufficient_training_samples ({len(X) if X is not None else 0})"
                 return result
 
-            from sklearn.linear_model import LogisticRegression
-            from sklearn.preprocessing import StandardScaler
             from sklearn.metrics import roc_auc_score
 
-            scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(X)
+            scaler = None
+            X_arr = X
 
-            model = LogisticRegression(
-                max_iter=1000, C=0.1, class_weight="balanced", solver="lbfgs"
-            )
-            model.fit(X_scaled, y)
+            if cfg.model_type == "logreg":
+                from sklearn.linear_model import LogisticRegression
+                from sklearn.preprocessing import StandardScaler
+                scaler = StandardScaler()
+                X_arr = scaler.fit_transform(X)
+                model = LogisticRegression(
+                    max_iter=1000, C=0.1, class_weight="balanced", solver="lbfgs"
+                )
+                model.fit(X_arr, y)
+            elif cfg.model_type in ("histgb", "hist_gb"):
+                from sklearn.ensemble import HistGradientBoostingClassifier
+                model = HistGradientBoostingClassifier(
+                    max_depth=3, learning_rate=0.02, max_iter=150,
+                    min_samples_leaf=50, l2_regularization=0.1,
+                    random_state=42,
+                )
+                class_counts = y.value_counts()
+                n_samples, n_classes = len(y), len(class_counts)
+                class_weight = y.map(
+                    {c: n_samples / (n_classes * cnt) for c, cnt in class_counts.items()}
+                ).values
+                if meta_quality is not None:
+                    mq = np.clip(meta_quality, 0.1, 1.0)
+                    sample_weight = class_weight * mq
+                else:
+                    sample_weight = class_weight
+                model.fit(X_arr, y, sample_weight=sample_weight)
+            else:
+                from hogan_bot.ml import _make_cv_model
+                model = _make_cv_model(cfg.model_type)
+                model.fit(X_arr, y)
 
             t_train = _time.perf_counter() - t0
-            logger.info("    [W%d] Model trained in %.1fs (samples=%d, features=%d)",
-                         window_idx, t_train, len(X), X.shape[1])
+            logger.info("    [W%d] %s trained in %.1fs (samples=%d, features=%d)",
+                         window_idx, cfg.model_type, t_train, len(X), X.shape[1])
             sys.stdout.flush()
 
             try:
-                y_prob = model.predict_proba(X_scaled)[:, 1]
+                X_score = X_arr if not hasattr(X_arr, 'values') else X_arr
+                y_prob = model.predict_proba(X_score)[:, 1]
                 result.train_auc = float(roc_auc_score(y, y_prob))
                 logger.info("    [W%d] Train AUC: %.4f", window_idx, result.train_auc)
             except Exception:
@@ -552,6 +582,12 @@ def main() -> None:
     p.add_argument("--ml-sizer", action="store_true", help="Use ML probability as continuous position sizer instead of binary filter")
     p.add_argument("--macro-sitout", action="store_true", help="Enable macro event sit-out filter")
     p.add_argument("--funding", action="store_true", help="Enable BTC funding rate overlay")
+    p.add_argument("--model-type", default="histgb",
+                   choices=["logreg", "histgb", "xgboost", "lightgbm", "random_forest"],
+                   help="ML model type for walk-forward training (default: histgb)")
+    p.add_argument("--label-mode", default="enhanced_triple_barrier",
+                   choices=["fee_threshold", "triple_barrier", "enhanced_triple_barrier"],
+                   help="Label construction method (default: enhanced_triple_barrier)")
     p.add_argument("--output", default="diagnostics/walk_forward_report.json")
     args = p.parse_args()
 
@@ -584,6 +620,8 @@ def main() -> None:
         use_ml_as_sizer=args.ml_sizer,
         use_macro_sitout=args.macro_sitout,
         use_funding_overlay=args.funding,
+        model_type=args.model_type,
+        label_mode=args.label_mode,
     )
 
     sitout = None
@@ -627,6 +665,17 @@ def main() -> None:
                 "error": w.error,
                 "signal_funnel": w.signal_funnel,
                 "regime_distribution": w.regime_distribution,
+                "closed_trades": [
+                    {
+                        "side": t.get("side", "?"),
+                        "pnl_pct": round(t.get("pnl_pct", 0), 4),
+                        "regime": t.get("entry_regime", "?"),
+                        "exit_reason": t.get("close_reason", "?"),
+                        "bars_held": t.get("bars_held", 0),
+                        "entry_bar": t.get("entry_bar_idx"),
+                    }
+                    for t in w.closed_trades
+                ],
             }
             for w in report.windows
         ],
