@@ -207,7 +207,9 @@ class MacroSitout:
         date_str = dt.strftime("%Y-%m-%d")
         prev_date = (dt - timedelta(days=1)).strftime("%Y-%m-%d")
 
-        fng = self._fng_by_date.get(date_str) or self._fng_by_date.get(prev_date)
+        fng = self._fng_by_date.get(date_str)
+        if fng is None:
+            fng = self._fng_by_date.get(prev_date)
         if fng is None:
             return
 
@@ -223,7 +225,9 @@ class MacroSitout:
         hour_key = dt.strftime("%Y-%m-%d-%H")
         prev_key = (dt - timedelta(hours=1)).strftime("%Y-%m-%d-%H")
 
-        vix = self._vix_by_hour.get(hour_key) or self._vix_by_hour.get(prev_key)
+        vix = self._vix_by_hour.get(hour_key)
+        if vix is None:
+            vix = self._vix_by_hour.get(prev_key)
         if vix is None:
             return
 

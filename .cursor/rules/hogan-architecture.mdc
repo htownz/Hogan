@@ -78,6 +78,18 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 - `ml_probability_sizer(action, up_prob)` maps probability to [0.30, 1.50] position scale
 - When enabled, replaces both `apply_ml_filter` and `ml_confidence` sizing
 
+## ML Blind Detection
+- `ml_blind_scale(recent_probs)` detects when model output clusters near 0.50 (low std)
+- Returns scale factor in [0.50, 1.0]; below std_threshold=0.02, sizing shrinks linearly
+- Applied in both backtest and event_loop after ML sizer/filter, before position sizing
+- Prevents the system from trading full size when the model has no conviction
+
+## Asymmetric Ranging Gate
+- `ranging_gate()` now applies different thresholds for buys vs sells in ranging markets
+- Buys: lower ML separation (0.03 vs 0.06), higher whipsaw tolerance (3 vs 2), always soft mode
+- Sells: unchanged strict thresholds
+- Rationale: long side was over-filtered in ranging regimes, losing profitable mean-reversion entries
+
 ## Regime Mean-Reversion Score
 - `RegimeState.mean_reversion_score` computed from return autocorrelation (24-bar window)
 - Score > 0 = mean-reverting (favorable), score < 0 = trending (unfavorable)
@@ -89,6 +101,7 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 - Walk-forward (macro sitout): `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --no-ml --macro-sitout`
 - Walk-forward (ML sizer + macro): `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --ml-sizer --macro-sitout`
 - Exit parameter sweep: `python diagnostics/exit_sweep.py`
+- Short hold sweep: `python diagnostics/short_hold_sweep.py`
 - Feature audit: `python -m hogan_bot.feature_importance --db data/hogan.db`
 - CI: `.github/workflows/ci.yml` runs all tests on push/PR
 
