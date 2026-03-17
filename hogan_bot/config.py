@@ -325,7 +325,7 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         quality_tech_mult=1.25,
         allow_longs=True,
         allow_shorts=False,
-        long_size_scale=0.25,
+        long_size_scale=0.05,
         short_size_scale=0.0,
     ),
     "volatile": RegimeConfig(
@@ -497,7 +497,7 @@ def load_config() -> BotConfig:
         fvg_min_gap_pct=float(os.getenv("HOGAN_FVG_MIN_GAP_PCT", "0.001")),
         signal_mode=os.getenv("HOGAN_SIGNAL_MODE", "any"),
         signal_min_vote_margin=max(1, int(os.getenv("HOGAN_SIGNAL_MIN_VOTE_MARGIN", "1"))),
-        trailing_stop_pct=float(os.getenv("HOGAN_TRAILING_STOP_PCT", "0.02")),
+        trailing_stop_pct=float(os.getenv("HOGAN_TRAILING_STOP_PCT", "0.025")),
         take_profit_pct=float(os.getenv("HOGAN_TAKE_PROFIT_PCT", "0.054")),
         atr_stop_multiplier=float(os.getenv("HOGAN_ATR_STOP_MULTIPLIER", "2.5")),
         exit_drawdown_pct=float(os.getenv("HOGAN_EXIT_DRAWDOWN_PCT", "0.03")),
