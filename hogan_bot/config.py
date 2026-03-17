@@ -217,13 +217,16 @@ class BotConfig:
     rl_reward_type: str = "risk_adjusted"
     rl_timesteps: int = 200_000
 
-    # Unified decision core (policy_core.decide) — set True to use the
-    # canonical decision path in both live and backtest.
-    use_policy_core: bool = False
+    # Unified decision core (policy_core.decide) — the canonical decision
+    # path for both live and backtest.  The swarm decision layer only runs
+    # through this path; setting False reverts to the legacy pipeline path
+    # where the swarm is inert.
+    use_policy_core: bool = True
 
     # Swarm Decision Layer
     swarm_enabled: bool = False
     swarm_mode: str = "shadow"
+    swarm_phase: str = "certification"
     swarm_agents: str = "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1"
     swarm_min_agreement: float = 0.60
     swarm_min_vote_margin: float = 0.10
@@ -609,9 +612,10 @@ def load_config() -> BotConfig:
         macro_vix_block=float(os.getenv("HOGAN_MACRO_VIX_BLOCK", "35.0")),
         macro_equity_ma_period=int(os.getenv("HOGAN_MACRO_EQUITY_MA", "20")),
         use_rl_agent=os.getenv("HOGAN_USE_RL_AGENT", "false").lower() == "true",
-        use_policy_core=os.getenv("HOGAN_USE_POLICY_CORE", "false").lower() == "true",
+        use_policy_core=os.getenv("HOGAN_USE_POLICY_CORE", "true").lower() == "true",
         swarm_enabled=os.getenv("HOGAN_SWARM_ENABLED", "false").lower() == "true",
         swarm_mode=os.getenv("HOGAN_SWARM_MODE", "shadow"),
+        swarm_phase=os.getenv("HOGAN_SWARM_PHASE", "certification"),
         swarm_agents=os.getenv("HOGAN_SWARM_AGENTS", "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1"),
         swarm_min_agreement=float(os.getenv("HOGAN_SWARM_MIN_AGREEMENT", "0.60")),
         swarm_min_vote_margin=float(os.getenv("HOGAN_SWARM_MIN_VOTE_MARGIN", "0.10")),

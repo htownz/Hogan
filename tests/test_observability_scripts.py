@@ -243,3 +243,69 @@ class TestPromotionCheck:
         assert detect_phase({"shadow_decisions": 300, "latest_mode": "active",
                             "active_vetoes": 50, "closed_paper_trades": 80,
                             "weight_proposals": 0}) == "Phase3_SizeEntry"
+
+    def test_detect_phase_swarm_phase_pin(self):
+        """Operator-pinned swarm_phase overrides DB inference."""
+        from scripts.promotion_check import detect_phase
+        ev = {"shadow_decisions": 500, "latest_mode": "shadow",
+              "active_vetoes": 0, "closed_paper_trades": 0,
+              "weight_proposals": 0, "swarm_phase": "paper_veto"}
+        assert detect_phase(ev) == "Phase2_VetoOnly"
+
+    def test_detect_phase_micro_live(self):
+        from scripts.promotion_check import detect_phase
+        ev = {"shadow_decisions": 500, "latest_mode": "active",
+              "active_vetoes": 100, "closed_paper_trades": 300,
+              "weight_proposals": 5, "swarm_phase": "micro_live"}
+        assert detect_phase(ev) == "Phase6_MicroLive"
+
+    def test_phase6_checker(self):
+        from scripts.promotion_check import _check_phase6
+        ev = {"closed_paper_trades": 35, "total_paper_pnl": 150.0,
+              "paper_win_rate": 0.55}
+        gates, blockers = _check_phase6(ev)
+        assert len(gates) == 3
+        assert all(g.passed for g in gates)
+        assert len(blockers) == 0
+
+    def test_phase6_checker_fails(self):
+        from scripts.promotion_check import _check_phase6
+        ev = {"closed_paper_trades": 10, "total_paper_pnl": -50.0,
+              "paper_win_rate": 0.30}
+        gates, blockers = _check_phase6(ev)
+        assert not all(g.passed for g in gates)
+        assert len(blockers) >= 2
+
+    def test_phase0_checks_policy_core(self):
+        from scripts.promotion_check import _check_phase0
+        ev_on = {"use_policy_core": True}
+        gates, blockers = _check_phase0(ev_on)
+        pc_gate = [g for g in gates if g.name == "use_policy_core_enabled"][0]
+        assert pc_gate.passed
+
+        ev_off = {"use_policy_core": False}
+        gates2, blockers2 = _check_phase0(ev_off)
+        pc_gate2 = [g for g in gates2 if g.name == "use_policy_core_enabled"][0]
+        assert not pc_gate2.passed
+        assert len(blockers2) > 0
+
+
+# ===================================================================
+# Config defaults
+# ===================================================================
+
+class TestConfigDefaults:
+    def test_use_policy_core_default_true(self):
+        from hogan_bot.config import BotConfig
+        cfg = BotConfig()
+        assert cfg.use_policy_core is True
+
+    def test_swarm_phase_default(self):
+        from hogan_bot.config import BotConfig
+        cfg = BotConfig()
+        assert cfg.swarm_phase == "certification"
+
+    def test_load_config_policy_core_true(self):
+        from hogan_bot.config import load_config
+        cfg = load_config()
+        assert cfg.use_policy_core is True

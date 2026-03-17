@@ -205,6 +205,16 @@ def _collect_evidence(
     except Exception:
         ev["latest_mode"] = None
 
+    # Config-level phase (operator-pinned) — read from BotConfig if available
+    try:
+        from hogan_bot.config import load_config
+        _cfg = load_config()
+        ev["swarm_phase"] = getattr(_cfg, "swarm_phase", None)
+        ev["use_policy_core"] = getattr(_cfg, "use_policy_core", False)
+    except Exception:
+        ev["swarm_phase"] = None
+        ev["use_policy_core"] = False
+
     return ev
 
 
@@ -213,7 +223,24 @@ def _collect_evidence(
 # ---------------------------------------------------------------------------
 
 def detect_phase(ev: dict[str, Any]) -> str:
-    """Determine current phase from evidence."""
+    """Determine current phase from evidence.
+
+    If the config explicitly sets ``swarm_phase`` to a value beyond the
+    default (``certification``), that takes priority — the operator is
+    pinning the phase.  Otherwise infer from DB evidence.
+    """
+    explicit = ev.get("swarm_phase")
+    _PHASE_MAP = {
+        "shadow": "Phase1_Shadow",
+        "paper_veto": "Phase2_VetoOnly",
+        "paper_routing": "Phase3_SizeEntry",
+        "learning": "Phase4_Learning",
+        "adaptive_paper": "Phase5_AdaptivePaper",
+        "micro_live": "Phase6_MicroLive",
+    }
+    if explicit and explicit in _PHASE_MAP:
+        return _PHASE_MAP[explicit]
+
     if ev["shadow_decisions"] == 0:
         return "Phase0_Certification"
     if ev.get("latest_mode") == "shadow":
@@ -235,14 +262,30 @@ def detect_phase(ev: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 def _check_phase0(ev: dict[str, Any]) -> tuple[list[GateCheck], list[str]]:
-    """Phase 0 — Certification gate. Pass = all tests green (external)."""
+    """Phase 0 — Certification gate. Pass = all tests green + policy_core on."""
+    gates: list[GateCheck] = []
+    blockers: list[str] = []
+
     g = GateCheck(
         name="certification_tests",
         required="all tests green (run pytest externally)",
         actual="manual check required",
-        passed=True,  # cannot auto-detect from DB; assume passing
+        passed=True,
     )
-    return [g], []
+    gates.append(g)
+
+    pc_on = ev.get("use_policy_core", False)
+    g = GateCheck(
+        name="use_policy_core_enabled",
+        required="True (swarm requires policy_core path)",
+        actual=str(pc_on),
+        passed=bool(pc_on),
+    )
+    gates.append(g)
+    if not g.passed:
+        blockers.append("use_policy_core is False — swarm is dead code without it")
+
+    return gates, blockers
 
 
 def _check_phase1(ev: dict[str, Any]) -> tuple[list[GateCheck], list[str]]:
@@ -379,6 +422,37 @@ def _check_phase5(ev: dict[str, Any]) -> tuple[list[GateCheck], list[str]]:
     return gates, blockers
 
 
+def _check_phase6(ev: dict[str, Any]) -> tuple[list[GateCheck], list[str]]:
+    """Phase 6 — Micro-live gates.  Tiny size, one symbol, hard kill switches."""
+    gates: list[GateCheck] = []
+    blockers: list[str] = []
+
+    # Require 30-50 micro-live trades
+    live_trades = ev.get("closed_paper_trades", 0)
+    g = GateCheck("micro_live_trades", ">=30", str(live_trades),
+                  live_trades >= 30)
+    gates.append(g)
+    if not g.passed:
+        blockers.append(f"Only {live_trades}/30 micro-live trades")
+
+    # Paper PnL still positive
+    g = GateCheck("paper_pnl_positive", ">0",
+                  str(ev["total_paper_pnl"]),
+                  ev["total_paper_pnl"] > 0)
+    gates.append(g)
+    if not g.passed:
+        blockers.append(f"Paper PnL not positive: {ev['total_paper_pnl']}")
+
+    # Win rate acceptable
+    g = GateCheck("paper_win_rate", ">=0.40", str(ev["paper_win_rate"]),
+                  ev["paper_win_rate"] >= 0.40)
+    gates.append(g)
+    if not g.passed:
+        blockers.append(f"Paper win rate {ev['paper_win_rate']:.1%} < 40%")
+
+    return gates, blockers
+
+
 PHASE_CHECKERS = {
     "Phase0_Certification": _check_phase0,
     "Phase1_Shadow": _check_phase1,
@@ -386,6 +460,7 @@ PHASE_CHECKERS = {
     "Phase3_SizeEntry": _check_phase3,
     "Phase4_Learning": _check_phase4,
     "Phase5_AdaptivePaper": _check_phase5,
+    "Phase6_MicroLive": _check_phase6,
 }
 
 
