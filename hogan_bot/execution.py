@@ -44,7 +44,8 @@ class ExecutionEngine:
 
     def open_long(self, symbol: str, price: float, qty: float,
                   trailing_stop_pct: float = 0.0,
-                  take_profit_pct: float = 0.0) -> ExecResult:  # pragma: no cover
+                  take_profit_pct: float = 0.0,
+                  trail_activation_pct: float = 0.0) -> ExecResult:  # pragma: no cover
         raise NotImplementedError
 
     def close_long(self, symbol: str, price: float, qty: float,
@@ -53,7 +54,8 @@ class ExecutionEngine:
 
     def open_short(self, symbol: str, price: float, qty: float,
                    trailing_stop_pct: float = 0.0,
-                   take_profit_pct: float = 0.0) -> ExecResult:
+                   take_profit_pct: float = 0.0,
+                   trail_activation_pct: float = 0.0) -> ExecResult:
         """Open a short position. Override in subclasses that support shorts."""
         return ExecResult(ok=False, error="shorts_not_supported")
 
@@ -104,11 +106,13 @@ class PaperExecution(ExecutionEngine):
         qty: float,
         trailing_stop_pct: float = 0.0,
         take_profit_pct: float = 0.0,
+        trail_activation_pct: float = 0.0,
     ) -> ExecResult:
         ok = self.portfolio.execute_buy(
             symbol, price, qty,
             trailing_stop_pct=trailing_stop_pct,
             take_profit_pct=take_profit_pct,
+            trail_activation_pct=trail_activation_pct,
         )
         if ok and self.conn is not None:
             ts_ms = int(time.time() * 1000)
@@ -131,11 +135,13 @@ class PaperExecution(ExecutionEngine):
 
     def open_short(self, symbol: str, price: float, qty: float,
                    trailing_stop_pct: float = 0.0,
-                   take_profit_pct: float = 0.0) -> ExecResult:
+                   take_profit_pct: float = 0.0,
+                   trail_activation_pct: float = 0.0) -> ExecResult:
         ok = self.portfolio.execute_short(
             symbol, price, qty,
             trailing_stop_pct=trailing_stop_pct,
             take_profit_pct=take_profit_pct,
+            trail_activation_pct=trail_activation_pct,
         )
         if ok and self.conn is not None:
             ts_ms = int(time.time() * 1000)
@@ -477,6 +483,7 @@ class RealisticPaperExecution(ExecutionEngine):
         qty: float,
         trailing_stop_pct: float = 0.0,
         take_profit_pct: float = 0.0,
+        trail_activation_pct: float = 0.0,
     ) -> ExecResult:
         fill_price = self._apply_slippage_buy(price)
         fill_qty = self._maybe_partial(qty)
@@ -485,6 +492,7 @@ class RealisticPaperExecution(ExecutionEngine):
             symbol, fill_price, fill_qty,
             trailing_stop_pct=trailing_stop_pct,
             take_profit_pct=take_profit_pct,
+            trail_activation_pct=trail_activation_pct,
         )
         if ok and self.conn is not None:
             ts_ms = int(time.time() * 1000)
@@ -524,7 +532,8 @@ class RealisticPaperExecution(ExecutionEngine):
 
     def open_short(self, symbol: str, price: float, qty: float,
                    trailing_stop_pct: float = 0.0,
-                   take_profit_pct: float = 0.0) -> ExecResult:
+                   take_profit_pct: float = 0.0,
+                   trail_activation_pct: float = 0.0) -> ExecResult:
         fill_price = self._apply_slippage_sell(price)
         fill_qty = self._maybe_partial(qty)
 
@@ -532,6 +541,7 @@ class RealisticPaperExecution(ExecutionEngine):
             symbol, fill_price, fill_qty,
             trailing_stop_pct=trailing_stop_pct,
             take_profit_pct=take_profit_pct,
+            trail_activation_pct=trail_activation_pct,
         )
         if ok and self.conn is not None:
             ts_ms = int(time.time() * 1000)

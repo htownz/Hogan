@@ -966,11 +966,17 @@ async def run_event_loop(
                 elif not _fx_session_ok:
                     logger.debug("FX_SESSION_BLOCK %s — outside allowed trading hours", symbol)
                 else:
-                    _long_size = size * sig.eff_long_size_scale * _macro_scale
+                    _momentum_scale = 1.0
+                    if len(candles) >= 8:
+                        _ema8 = candles["close"].ewm(span=8, min_periods=8).mean().iloc[-1]
+                        if px < _ema8:
+                            _momentum_scale = 0.3
+                    _long_size = size * sig.eff_long_size_scale * _macro_scale * _momentum_scale
                     buy_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
                     res = executor.open_long(symbol, buy_px, _long_size,
                                             trailing_stop_pct=_eff_stop,
-                                            take_profit_pct=_eff_tp)
+                                            take_profit_pct=_eff_tp,
+                                            trail_activation_pct=config.trail_activation_pct)
                     executed = bool(res.ok)
                     if executed:
                         _entry_regime[symbol] = _sym_regime or "unknown"
@@ -1115,6 +1121,7 @@ async def run_event_loop(
                             symbol, short_px, _short_size,
                             trailing_stop_pct=_eff_stop,
                             take_profit_pct=_eff_tp,
+                            trail_activation_pct=config.trail_activation_pct,
                         )
                         if res.ok:
                             _entry_regime[symbol] = _sym_regime or "unknown"
