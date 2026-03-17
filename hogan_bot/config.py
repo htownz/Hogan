@@ -266,9 +266,6 @@ class RegimeConfig:
     long_size_scale: float = 1.0
     short_size_scale: float = 1.0
 
-    # Per-regime max hold override (0 = use global max_hold_hours)
-    max_hold_hours_override: float = 0.0
-
 
 DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
     "trending_up": RegimeConfig(
@@ -288,7 +285,7 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         quality_tech_mult=1.00,
         allow_longs=True,
         allow_shorts=False,
-        long_size_scale=0.50,
+        long_size_scale=0.25,
         short_size_scale=0.0,
     ),
     "trending_down": RegimeConfig(
@@ -307,16 +304,16 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         quality_final_mult=0.50,
         quality_tech_mult=1.00,
         allow_longs=True,
-        allow_shorts=False,
+        allow_shorts=True,
         long_size_scale=0.5,
-        short_size_scale=0.0,
+        short_size_scale=1.0,
     ),
     "ranging": RegimeConfig(
         volume_threshold_mult=1.10,
         ml_buy_threshold=0.58,
         ml_sell_threshold=0.42,
         trailing_stop_mult=1.20,
-        take_profit_mult=0.40,
+        take_profit_mult=0.85,
         position_scale=0.75,
         strategy_family="mean_revert",
         meta_tech_delta=-0.05,
@@ -328,19 +325,17 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         quality_tech_mult=1.25,
         allow_longs=True,
         allow_shorts=False,
-        long_size_scale=0.50,
+        long_size_scale=0.25,
         short_size_scale=0.0,
-        max_hold_hours_override=8.0,
     ),
     "volatile": RegimeConfig(
         volume_threshold_mult=0.70,
         ml_buy_threshold=0.57,
         ml_sell_threshold=0.43,
         trailing_stop_mult=0.80,
-        max_hold_hours_override=6.0,
-        take_profit_mult=0.75,
+        take_profit_mult=1.40,
         position_scale=0.50,
-        strategy_family="squeeze",
+        strategy_family="breakout",
         meta_tech_delta=-0.05,
         meta_sent_delta=+0.00,
         meta_macro_delta=+0.05,
@@ -349,9 +344,9 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         quality_final_mult=1.20,
         quality_tech_mult=1.10,
         allow_longs=True,
-        allow_shorts=False,
-        long_size_scale=0.50,
-        short_size_scale=0.0,
+        allow_shorts=True,
+        long_size_scale=0.25,
+        short_size_scale=0.50,
     ),
 }
 
