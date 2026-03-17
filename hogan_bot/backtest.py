@@ -8,6 +8,7 @@ import pandas as pd
 
 from hogan_bot.agent_pipeline import AgentPipeline
 from hogan_bot.champion import apply_champion_mode, is_champion_mode
+from hogan_bot.config import DEFAULT_REGIME_CONFIGS
 from hogan_bot.decision import (
     GateDecision, apply_ml_filter, edge_gate, entry_quality_gate,
     loss_streak_scale, ml_blind_blocks_shorts, ml_blind_scale,
@@ -1211,8 +1212,17 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             _short_max = max_hold_bars
         else:
             _short_max = 0
+
+        _eff_max_hold = max_hold_bars
+        _pos_regime = _entry_regime.get(symbol)
+        if _pos_regime and _pos_regime in DEFAULT_REGIME_CONFIGS:
+            _rc = DEFAULT_REGIME_CONFIGS[_pos_regime]
+            if _rc.max_hold_hours_override > 0:
+                from hogan_bot.timeframe_utils import hours_to_bars
+                _eff_max_hold = hours_to_bars(_rc.max_hold_hours_override, _tf)
+
         exits = portfolio.check_exits(
-            mark, max_hold_bars=max_hold_bars,
+            mark, max_hold_bars=_eff_max_hold,
             short_max_hold_bars=_short_max,
         )
         for exit_symbol, reason in exits:

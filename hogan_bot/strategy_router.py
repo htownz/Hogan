@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from hogan_bot.strategy import (
     BreakoutFamily,
     MeanRevertFamily,
+    SqueezeFamily,
     StrategySignal,
     TrendFollowFamily,
 )
@@ -30,7 +31,7 @@ class StrategyRouter:
             "trending_up": TrendFollowFamily(),
             "trending_down": TrendFollowFamily(),
             "ranging": MeanRevertFamily(),
-            "volatile": BreakoutFamily(),
+            "volatile": SqueezeFamily(),
         }
         self._config = config
 

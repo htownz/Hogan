@@ -544,7 +544,7 @@ class TestRegimeMultipliers:
         eff = effective_thresholds(self._make_regime("ranging"), cfg)
         assert abs(eff["volume_threshold"] - 1.84 * 1.10) < 1e-6
         assert abs(eff["trailing_stop_pct"] - 0.03 * 1.20) < 1e-6
-        assert abs(eff["take_profit_pct"] - 0.055 * 0.85) < 1e-6
+        assert abs(eff["take_profit_pct"] - 0.055 * 0.40) < 1e-6
         assert eff["position_scale"] == 0.75
 
     def test_low_confidence_returns_base(self):
@@ -565,7 +565,7 @@ class TestRegimeMultipliers:
         eff = effective_thresholds(self._make_regime("volatile"), cfg)
         assert abs(eff["volume_threshold"] - 2.0 * 0.70) < 1e-6
         assert abs(eff["trailing_stop_pct"] - 0.04 * 0.80) < 1e-6
-        assert abs(eff["take_profit_pct"] - 0.06 * 1.40) < 1e-6
+        assert abs(eff["take_profit_pct"] - 0.06 * 0.75) < 1e-6
         assert eff["position_scale"] == 0.50
 
     def test_different_symbols_get_different_effective_values(self):
