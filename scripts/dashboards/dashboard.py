@@ -104,13 +104,13 @@ def _load_paper_trades(db: str) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=_CACHE_TTL)
-def _load_candles(db: str, symbol: str, limit: int = 200) -> pd.DataFrame:
+def _load_candles(db: str, symbol: str, limit: int = 200, timeframe: str = "1h") -> pd.DataFrame:
     try:
         conn = sqlite3.connect(db)
         df = pd.read_sql_query(
             "SELECT ts_ms, open, high, low, close, volume FROM candles "
-            "WHERE symbol=? ORDER BY ts_ms DESC LIMIT ?",
-            conn, params=(symbol, limit),
+            "WHERE symbol=? AND timeframe=? ORDER BY ts_ms DESC LIMIT ?",
+            conn, params=(symbol, timeframe, limit),
         )
         conn.close()
         df["ts"] = pd.to_datetime(df["ts_ms"], unit="ms", utc=True)
@@ -598,8 +598,10 @@ with tab_live:
 with tab_os:
     st.header("Market Operating System")
 
-    os_sym = st.selectbox("Symbol", ["BTC/USD", "ETH/USD"], key="os_sym")
-    os_candles = _load_candles(DB_PATH, os_sym, limit=200)
+    os_col1, os_col2 = st.columns(2)
+    os_sym = os_col1.selectbox("Symbol", ["BTC/USD", "ETH/USD"], key="os_sym")
+    os_tf = os_col2.selectbox("Timeframe", ["1h", "4h", "1d"], key="os_tf")
+    os_candles = _load_candles(DB_PATH, os_sym, limit=200, timeframe=os_tf)
 
     if os_candles.empty:
         st.info("No candle data available.")
@@ -706,8 +708,11 @@ with tab_os:
 with tab_signals:
     st.header("Signals & Candles")
 
-    sig_sym = st.selectbox("Symbol", ["BTC/USD", "ETH/USD"], key="sig_sym")
-    candles = _load_candles(DB_PATH, sig_sym, limit=288)  # last 24h at 5m
+    sig_col1, sig_col2, sig_col3 = st.columns(3)
+    sig_sym = sig_col1.selectbox("Symbol", ["BTC/USD", "ETH/USD"], key="sig_sym")
+    sig_tf = sig_col2.selectbox("Timeframe", ["1h", "15m", "5m", "4h", "1d"], key="sig_tf")
+    sig_limit = sig_col3.number_input("Bars", value=200, min_value=50, max_value=2000, step=50, key="sig_lim")
+    candles = _load_candles(DB_PATH, sig_sym, limit=int(sig_limit), timeframe=sig_tf)
 
     if candles.empty:
         st.warning(f"No candles in DB for {sig_sym}")
@@ -733,7 +738,7 @@ with tab_signals:
             ))
 
         fig_candle.update_layout(
-            title=f"{sig_sym} — Last 24h (5m candles)",
+            title=f"{sig_sym} — {sig_tf} candles (last {sig_limit} bars)",
             xaxis_rangeslider_visible=False,
             height=480,
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
@@ -878,11 +883,15 @@ with tab_data:
 with tab_backtest:
     st.header("Quick Backtest")
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     bt_symbol = col1.selectbox("Symbol", ["BTC/USD", "ETH/USD"], key="bt_sym")
     bt_tf = col2.selectbox("Timeframe", ["1h", "4h", "1d"], key="bt_tf")
     bt_limit = col3.number_input("Bars", value=2000, min_value=200, step=200, key="bt_lim")
-    bt_use_ml = col4.checkbox("Use ML filter", value=True, key="bt_ml")
+
+    opt1, opt2, opt3 = st.columns(3)
+    bt_use_ml = opt1.checkbox("Use ML filter", value=True, key="bt_ml")
+    bt_shorts = opt2.checkbox("Enable shorts", value=True, key="bt_shorts")
+    bt_ml_sizer = opt3.checkbox("ML as sizer", value=False, key="bt_sizer")
 
     if st.button("Run Backtest", type="primary"):
         with st.spinner("Running backtest..."):
@@ -928,6 +937,18 @@ with tab_backtest:
                         min_vote_margin=cfg.signal_min_vote_margin,
                         trailing_stop_pct=cfg.trailing_stop_pct,
                         take_profit_pct=cfg.take_profit_pct,
+                        trail_activation_pct=cfg.trail_activation_pct,
+                        enable_shorts=bt_shorts,
+                        use_ml_as_sizer=bt_ml_sizer,
+                        max_hold_hours=cfg.max_hold_hours,
+                        short_max_hold_hours=cfg.short_max_hold_hours,
+                        min_edge_multiple=cfg.min_edge_multiple,
+                        min_final_confidence=cfg.min_final_confidence,
+                        min_tech_confidence=cfg.min_tech_confidence,
+                        min_regime_confidence=cfg.min_regime_confidence,
+                        max_whipsaws=cfg.max_whipsaws,
+                        reversal_confidence_mult=cfg.reversal_confidence_multiplier,
+                        db_path=DB_PATH,
                     )
 
                     summary = result.summary_dict()
