@@ -1,0 +1,128 @@
+{
+  "champion_only": {
+    "features": [
+      "ret_3",
+      "ret_6",
+      "ma_spread",
+      "volatility_20",
+      "atr_pct",
+      "macd_hist_pct",
+      "bb_pct_b",
+      "adx_14"
+    ],
+    "n_features": 8,
+    "train_auc": 0.5427,
+    "test_auc": 0.5273,
+    "feature_importances": {
+      "ret_3": {
+        "importance": 0.004528,
+        "std": 0.002167
+      },
+      "ret_6": {
+        "importance": -1.7e-05,
+        "std": 6e-06
+      },
+      "ma_spread": {
+        "importance": 0.021644,
+        "std": 0.00631
+      },
+      "volatility_20": {
+        "importance": 0.002637,
+        "std": 0.001156
+      },
+      "atr_pct": {
+        "importance": 0.004362,
+        "std": 0.004594
+      },
+      "macd_hist_pct": {
+        "importance": 0.02202,
+        "std": 0.003823
+      },
+      "bb_pct_b": {
+        "importance": -0.001372,
+        "std": 0.0028
+      },
+      "adx_14": {
+        "importance": 0.00273,
+        "std": 0.001335
+      }
+    }
+  },
+  "champion_plus_ict": {
+    "features": [
+      "ret_3",
+      "ret_6",
+      "ma_spread",
+      "volatility_20",
+      "atr_pct",
+      "macd_hist_pct",
+      "bb_pct_b",
+      "adx_14",
+      "fvg_bull_active",
+      "fvg_bear_active",
+      "in_bull_fvg",
+      "in_bear_fvg"
+    ],
+    "n_features": 12,
+    "train_auc": 0.5681,
+    "test_auc": 0.5082,
+    "feature_importances": {
+      "ret_3": {
+        "importance": 0.001566,
+        "std": 0.000667
+      },
+      "ret_6": {
+        "importance": -0.000813,
+        "std": 0.000231
+      },
+      "ma_spread": {
+        "importance": 0.00418,
+        "std": 0.001845
+      },
+      "volatility_20": {
+        "importance": 0.001605,
+        "std": 0.000329
+      },
+      "atr_pct": {
+        "importance": 7.3e-05,
+        "std": 0.001364
+      },
+      "macd_hist_pct": {
+        "importance": 0.006481,
+        "std": 0.001016
+      },
+      "bb_pct_b": {
+        "importance": -0.002176,
+        "std": 0.001012
+      },
+      "adx_14": {
+        "importance": 0.000241,
+        "std": 0.000263
+      },
+      "fvg_bull_active": {
+        "importance": 0.002394,
+        "std": 0.001238
+      },
+      "fvg_bear_active": {
+        "importance": 0.000175,
+        "std": 0.009036
+      },
+      "in_bull_fvg": {
+        "importance": 0.00087,
+        "std": 0.000836
+      },
+      "in_bear_fvg": {
+        "importance": 0.00071,
+        "std": 0.000701
+      }
+    }
+  },
+  "ict_delta_auc": -0.0191,
+  "ict_features_tested": [
+    "fvg_bull_active",
+    "fvg_bear_active",
+    "in_bull_fvg",
+    "in_bear_fvg"
+  ],
+  "verdict": "ICT features HURT \u2014 do not add to champion"
+}
