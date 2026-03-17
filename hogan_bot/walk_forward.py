@@ -302,6 +302,20 @@ def _train_and_evaluate_window(
                 else:
                     sample_weight = class_weight
                 model.fit(X_arr, y, sample_weight=sample_weight)
+            elif cfg.model_type in ("xgboost", "lightgbm", "random_forest"):
+                from hogan_bot.ml import _make_cv_model
+                model = _make_cv_model(cfg.model_type)
+                if meta_quality is not None:
+                    class_counts = y.value_counts()
+                    n_samples, n_classes = len(y), len(class_counts)
+                    class_weight = y.map(
+                        {c: n_samples / (n_classes * cnt) for c, cnt in class_counts.items()}
+                    ).values
+                    mq = np.clip(meta_quality, 0.1, 1.0)
+                    sample_weight = class_weight * mq
+                    model.fit(X_arr, y, sample_weight=sample_weight)
+                else:
+                    model.fit(X_arr, y)
             else:
                 from hogan_bot.ml import _make_cv_model
                 model = _make_cv_model(cfg.model_type)
@@ -468,6 +482,28 @@ def walk_forward_validate(
 # CLI
 # ---------------------------------------------------------------------------
 
+def _compute_exit_attribution(closed_trades: list[dict]) -> dict:
+    """Compute PnL breakdown by exit reason for JSON output."""
+    from collections import defaultdict
+    by_exit: dict[str, dict] = defaultdict(lambda: {"count": 0, "total_pnl_pct": 0.0, "wins": 0})
+    for t in closed_trades:
+        reason = t.get("close_reason") or t.get("exit_reason") or "unknown"
+        pnl = t.get("pnl_pct", 0)
+        by_exit[reason]["count"] += 1
+        by_exit[reason]["total_pnl_pct"] += pnl
+        if pnl > 0:
+            by_exit[reason]["wins"] += 1
+    return {
+        reason: {
+            "count": v["count"],
+            "total_pnl_pct": round(v["total_pnl_pct"], 4),
+            "avg_pnl_pct": round(v["total_pnl_pct"] / v["count"], 4),
+            "win_rate": round(v["wins"] / v["count"], 4),
+        }
+        for reason, v in sorted(by_exit.items(), key=lambda x: x[1]["total_pnl_pct"], reverse=True)
+    }
+
+
 def _print_funnel_comparison(report: WalkForwardReport) -> None:
     """Print a per-window funnel comparison table to stdout."""
 
@@ -557,6 +593,65 @@ def _print_funnel_comparison(report: WalkForwardReport) -> None:
             print(f"  Avg win: {avg_win:+.3f}%  Avg loss: {avg_loss:+.3f}%  "
                   f"Payoff ratio: {abs(avg_win/avg_loss):.2f}x" if avg_loss != 0
                   else f"  Avg win: {avg_win:+.3f}%  No losses")
+
+    print(f"\n{'=' * 90}\n")
+
+
+def _print_exit_attribution(report: WalkForwardReport) -> None:
+    """Print per-exit-reason PnL attribution across all windows."""
+    from collections import defaultdict
+
+    print(f"\n{'=' * 90}")
+    print("EXIT TYPE ATTRIBUTION")
+    print(f"{'=' * 90}")
+
+    all_trades: list[dict] = []
+    for w in report.windows:
+        for t in w.closed_trades:
+            all_trades.append(t)
+
+    if not all_trades:
+        print("  No trade data available.")
+        return
+
+    # Per-window breakdown
+    for w in report.windows:
+        if not w.closed_trades:
+            continue
+        by_exit: dict[str, dict] = defaultdict(lambda: {"count": 0, "pnl": 0.0, "wins": 0})
+        for t in w.closed_trades:
+            reason = t.get("close_reason") or t.get("exit_reason") or "unknown"
+            pnl = t.get("pnl_pct", 0)
+            by_exit[reason]["count"] += 1
+            by_exit[reason]["pnl"] += pnl
+            if pnl > 0:
+                by_exit[reason]["wins"] += 1
+
+        label = "PASS" if w.net_positive else "FAIL"
+        print(f"\n  W{w.window_idx} ({label}, {w.total_return_pct:+.2f}%):")
+        print(f"    {'Exit Reason':<28} {'Trades':>6} {'Total PnL':>10} {'Avg PnL':>10} {'Win%':>6}")
+        for reason, v in sorted(by_exit.items(), key=lambda x: x[1]["pnl"], reverse=True):
+            avg = v["pnl"] / v["count"]
+            wr = v["wins"] / v["count"] * 100
+            print(f"    {reason:<28} {v['count']:>6} {v['pnl']:>+9.2f}% {avg:>+9.2f}% {wr:>5.0f}%")
+
+    # Aggregate
+    agg: dict[str, dict] = defaultdict(lambda: {"count": 0, "pnl": 0.0, "wins": 0})
+    for t in all_trades:
+        reason = t.get("close_reason") or t.get("exit_reason") or "unknown"
+        pnl = t.get("pnl_pct", 0)
+        agg[reason]["count"] += 1
+        agg[reason]["pnl"] += pnl
+        if pnl > 0:
+            agg[reason]["wins"] += 1
+
+    print(f"\n  AGGREGATE ({len(all_trades)} trades):")
+    print(f"    {'Exit Reason':<28} {'Trades':>6} {'Total PnL':>10} {'Avg PnL':>10} {'Win%':>6}")
+    print(f"    {'-' * 65}")
+    for reason, v in sorted(agg.items(), key=lambda x: x[1]["pnl"], reverse=True):
+        avg = v["pnl"] / v["count"]
+        wr = v["wins"] / v["count"] * 100
+        print(f"    {reason:<28} {v['count']:>6} {v['pnl']:>+9.2f}% {avg:>+9.2f}% {wr:>5.0f}%")
 
     print(f"\n{'=' * 90}\n")
 
@@ -677,6 +772,7 @@ def main() -> None:
                     }
                     for t in w.closed_trades
                 ],
+                "exit_attribution": _compute_exit_attribution(w.closed_trades),
             }
             for w in report.windows
         ],
@@ -696,6 +792,7 @@ def main() -> None:
     print(f"{'=' * 60}")
 
     _print_funnel_comparison(report)
+    _print_exit_attribution(report)
 
 
 if __name__ == "__main__":

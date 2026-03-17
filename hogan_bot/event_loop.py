@@ -28,7 +28,7 @@ import os
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 
@@ -491,6 +491,16 @@ async def run_event_loop(
             logger.info("Macro sitout filter enabled (greed-only scaling)")
         except Exception as exc:
             logger.warning("Macro sitout init failed: %s", exc)
+
+    _funding_overlay = None
+    _use_funding = os.getenv("HOGAN_USE_FUNDING_OVERLAY", "").strip().lower() in ("1", "true", "yes")
+    if _use_funding:
+        try:
+            from hogan_bot.funding_overlay import FundingOverlay
+            _funding_overlay = FundingOverlay.from_db(conn)
+            logger.info("Funding rate overlay enabled")
+        except Exception as exc:
+            logger.warning("Funding overlay init failed: %s", exc)
 
     from hogan_bot.exit_model import ExitEvaluator
     _exit_eval = ExitEvaluator(
@@ -971,7 +981,10 @@ async def run_event_loop(
                         _ema8 = candles["close"].ewm(span=8, min_periods=8).mean().iloc[-1]
                         if px < _ema8:
                             _momentum_scale = 0.3
-                    _long_size = size * sig.eff_long_size_scale * _macro_scale * _momentum_scale
+                    _funding_scale = 1.0
+                    if _funding_overlay is not None:
+                        _funding_scale = _funding_overlay.position_scale("buy", datetime.now(tz=timezone.utc))
+                    _long_size = size * sig.eff_long_size_scale * _macro_scale * _momentum_scale * _funding_scale
                     buy_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
                     res = executor.open_long(symbol, buy_px, _long_size,
                                             trailing_stop_pct=_eff_stop,
@@ -1106,7 +1119,10 @@ async def run_event_loop(
                 if _allow_short_entry:
                     if _closed_long_this_bar:
                         _cooldown_remaining = 0
-                    _short_size = size * sig.eff_short_size_scale * _macro_scale
+                    _funding_short_scale = 1.0
+                    if _funding_overlay is not None:
+                        _funding_short_scale = _funding_overlay.position_scale("sell", datetime.now(tz=timezone.utc))
+                    _short_size = size * sig.eff_short_size_scale * _macro_scale * _funding_short_scale
                     if not sig.eff_allow_shorts:
                         logger.debug("REGIME_BLOCK %s — shorts not allowed in %s", symbol, _sym_regime)
                     elif ml_blind_blocks_shorts(self._ml_probs):

@@ -376,7 +376,45 @@
           "bars_held": 0,
           "entry_bar": 3051
         }
-      ]
+      ],
+      "exit_attribution": {
+        "short_max_hold_time": {
+          "count": 14,
+          "total_pnl_pct": 12.9389,
+          "avg_pnl_pct": 0.9242,
+          "win_rate": 0.6429
+        },
+        "take_profit": {
+          "count": 1,
+          "total_pnl_pct": 4.5816,
+          "avg_pnl_pct": 4.5816,
+          "win_rate": 1.0
+        },
+        "short_trailing_stop": {
+          "count": 4,
+          "total_pnl_pct": 3.0762,
+          "avg_pnl_pct": 0.7691,
+          "win_rate": 0.5
+        },
+        "buy_signal": {
+          "count": 1,
+          "total_pnl_pct": 0.6842,
+          "avg_pnl_pct": 0.6842,
+          "win_rate": 1.0
+        },
+        "trailing_stop": {
+          "count": 3,
+          "total_pnl_pct": -5.0274,
+          "avg_pnl_pct": -1.6758,
+          "win_rate": 0.0
+        },
+        "max_hold_time": {
+          "count": 13,
+          "total_pnl_pct": -8.0313,
+          "avg_pnl_pct": -0.6178,
+          "win_rate": 0.3077
+        }
+      }
     },
     {
       "window_idx": 1,
@@ -674,7 +712,39 @@
           "bars_held": 0,
           "entry_bar": 3027
         }
-      ]
+      ],
+      "exit_attribution": {
+        "take_profit": {
+          "count": 1,
+          "total_pnl_pct": 5.8695,
+          "avg_pnl_pct": 5.8695,
+          "win_rate": 1.0
+        },
+        "max_hold_time": {
+          "count": 15,
+          "total_pnl_pct": 5.4348,
+          "avg_pnl_pct": 0.3623,
+          "win_rate": 0.4667
+        },
+        "short_trailing_stop": {
+          "count": 2,
+          "total_pnl_pct": -0.9668,
+          "avg_pnl_pct": -0.4834,
+          "win_rate": 0.0
+        },
+        "trailing_stop": {
+          "count": 1,
+          "total_pnl_pct": -1.73,
+          "avg_pnl_pct": -1.73,
+          "win_rate": 0.0
+        },
+        "short_max_hold_time": {
+          "count": 9,
+          "total_pnl_pct": -4.8029,
+          "avg_pnl_pct": -0.5337,
+          "win_rate": 0.2222
+        }
+      }
     },
     {
       "window_idx": 2,
@@ -932,7 +1002,33 @@
           "bars_held": 0,
           "entry_bar": 3008
         }
-      ]
+      ],
+      "exit_attribution": {
+        "take_profit": {
+          "count": 1,
+          "total_pnl_pct": 5.8588,
+          "avg_pnl_pct": 5.8588,
+          "win_rate": 1.0
+        },
+        "short_trailing_stop": {
+          "count": 2,
+          "total_pnl_pct": -0.3181,
+          "avg_pnl_pct": -0.1591,
+          "win_rate": 0.5
+        },
+        "short_max_hold_time": {
+          "count": 7,
+          "total_pnl_pct": -3.8145,
+          "avg_pnl_pct": -0.5449,
+          "win_rate": 0.2857
+        },
+        "max_hold_time": {
+          "count": 13,
+          "total_pnl_pct": -8.4422,
+          "avg_pnl_pct": -0.6494,
+          "win_rate": 0.5385
+        }
+      }
     },
     {
       "window_idx": 3,
@@ -1230,7 +1326,27 @@
           "bars_held": 0,
           "entry_bar": 3024
         }
-      ]
+      ],
+      "exit_attribution": {
+        "short_max_hold_time": {
+          "count": 5,
+          "total_pnl_pct": -3.1662,
+          "avg_pnl_pct": -0.6332,
+          "win_rate": 0.4
+        },
+        "trailing_stop": {
+          "count": 3,
+          "total_pnl_pct": -3.4239,
+          "avg_pnl_pct": -1.1413,
+          "win_rate": 0.0
+        },
+        "max_hold_time": {
+          "count": 20,
+          "total_pnl_pct": -5.5744,
+          "avg_pnl_pct": -0.2787,
+          "win_rate": 0.55
+        }
+      }
     },
     {
       "window_idx": 4,
@@ -1616,7 +1732,39 @@
           "bars_held": 0,
           "entry_bar": 2989
         }
-      ]
+      ],
+      "exit_attribution": {
+        "take_profit": {
+          "count": 1,
+          "total_pnl_pct": 6.1435,
+          "avg_pnl_pct": 6.1435,
+          "win_rate": 1.0
+        },
+        "short_max_hold_time": {
+          "count": 20,
+          "total_pnl_pct": 5.5786,
+          "avg_pnl_pct": 0.2789,
+          "win_rate": 0.5
+        },
+        "short_trailing_stop": {
+          "count": 1,
+          "total_pnl_pct": 2.5692,
+          "avg_pnl_pct": 2.5692,
+          "win_rate": 1.0
+        },
+        "trailing_stop": {
+          "count": 3,
+          "total_pnl_pct": -6.7783,
+          "avg_pnl_pct": -2.2594,
+          "win_rate": 0.0
+        },
+        "max_hold_time": {
+          "count": 14,
+          "total_pnl_pct": -10.042,
+          "avg_pnl_pct": -0.7173,
+          "win_rate": 0.5
+        }
+      }
     }
   ]
 }
