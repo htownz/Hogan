@@ -125,6 +125,71 @@ class SignalEvaluator:
         self._trade_outcomes: list[bool] = []
         from hogan_bot.regime import RegimeTransitionTracker
         self._regime_transition = RegimeTransitionTracker(cooldown_bars=3, min_scale=0.40)
+        self._use_policy_core = getattr(config, "use_policy_core", False)
+        if self._use_policy_core:
+            from hogan_bot.policy_core import PolicyState
+            self._policy_states: dict[str, PolicyState] = {}
+            self._conn = conn
+
+    def _policy_core_evaluate(
+        self,
+        symbol: str,
+        candles: pd.DataFrame,
+        equity: float,
+        recent_whipsaw_count: int = 0,
+        *,
+        mtf_candles: dict[str, pd.DataFrame] | None = None,
+    ) -> SignalResult:
+        """Delegate to policy_core.decide() and translate back to SignalResult."""
+        from hogan_bot.policy_core import PolicyState, decide
+
+        if symbol not in self._policy_states:
+            self._policy_states[symbol] = PolicyState()
+        state = self._policy_states[symbol]
+        state.ml_probs = self._ml_probs
+        state.trade_outcomes = self._trade_outcomes
+
+        intent = decide(
+            symbol=symbol,
+            candles=candles,
+            equity_usd=equity,
+            config=self.config,
+            pipeline=self.pipeline,
+            ml_model=self.ml_model,
+            state=state,
+            conn=getattr(self, "_conn", None),
+            mode="live",
+            recent_whipsaw_count=recent_whipsaw_count,
+            mtf_candles=mtf_candles,
+            enable_pullback_gate=True,
+            enable_freshness_check=True,
+        )
+
+        px = float(candles["close"].iloc[-1])
+        size_coins = intent.size_usd / px if px > 0 else 0.0
+
+        return SignalResult(
+            action=intent.action,
+            size=size_coins,
+            up_prob=intent.up_prob,
+            regime=intent.regime,
+            atr_pct=intent.atr_pct,
+            final_confidence=intent.confidence,
+            tech_confidence=intent.tech_confidence,
+            conf_scale=intent.conf_scale * intent.quality_scale,
+            vol_ratio=intent.vol_ratio,
+            explanation=intent.explanation,
+            forecast_ret=intent.forecast_ret,
+            agent_weights=intent.agent_weights,
+            feature_freshness=intent.feature_freshness,
+            block_reasons=intent.block_reasons if intent.block_reasons else None,
+            eff_trailing_stop_pct=intent.eff_trailing_stop_pct,
+            eff_take_profit_pct=intent.eff_take_profit_pct,
+            eff_allow_longs=intent.eff_allow_longs,
+            eff_allow_shorts=intent.eff_allow_shorts,
+            eff_long_size_scale=intent.eff_long_size_scale,
+            eff_short_size_scale=intent.eff_short_size_scale,
+        )
 
     def evaluate(
         self,
@@ -136,6 +201,12 @@ class SignalEvaluator:
         mtf_candles: dict[str, pd.DataFrame] | None = None,
     ) -> SignalResult:
         """Returns a SignalResult with action, sizing, and rich metadata."""
+        if self._use_policy_core:
+            return self._policy_core_evaluate(
+                symbol, candles, equity, recent_whipsaw_count,
+                mtf_candles=mtf_candles,
+            )
+
         cfg = symbol_config(self.config, symbol)
 
         regime_name = None

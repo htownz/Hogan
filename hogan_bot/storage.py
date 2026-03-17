@@ -287,6 +287,78 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         "ON decision_log (final_action)"
     )
 
+    # -------------------------------------------------------------------
+    # Swarm Decision Layer tables
+    # -------------------------------------------------------------------
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS swarm_decisions (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_ms           INTEGER NOT NULL,
+            symbol          TEXT    NOT NULL,
+            timeframe       TEXT    NOT NULL,
+            as_of_ms        INTEGER,
+            mode            TEXT    NOT NULL,
+            final_action    TEXT    NOT NULL,
+            final_conf      REAL    NOT NULL,
+            final_scale     REAL    NOT NULL,
+            agreement       REAL    NOT NULL,
+            entropy         REAL    NOT NULL,
+            vetoed          INTEGER NOT NULL,
+            block_reasons_json TEXT NOT NULL,
+            weights_json    TEXT    NOT NULL,
+            decision_json   TEXT    NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_swarm_decisions_ts "
+        "ON swarm_decisions (symbol, timeframe, ts_ms)"
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS swarm_agent_votes (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_ms           INTEGER NOT NULL,
+            symbol          TEXT    NOT NULL,
+            timeframe       TEXT    NOT NULL,
+            as_of_ms        INTEGER,
+            agent_id        TEXT    NOT NULL,
+            action          TEXT    NOT NULL,
+            confidence      REAL    NOT NULL,
+            expected_edge_bps REAL,
+            size_scale      REAL    NOT NULL,
+            veto            INTEGER NOT NULL,
+            block_reasons_json TEXT NOT NULL,
+            vote_json       TEXT    NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_swarm_votes_ts "
+        "ON swarm_agent_votes (symbol, timeframe, ts_ms)"
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS swarm_weight_snapshots (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_ms           INTEGER NOT NULL,
+            symbol          TEXT    NOT NULL,
+            timeframe       TEXT    NOT NULL,
+            regime          TEXT,
+            weights_json    TEXT    NOT NULL,
+            source          TEXT    NOT NULL,
+            notes           TEXT
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_swarm_weights_ts "
+        "ON swarm_weight_snapshots (symbol, timeframe, ts_ms)"
+    )
+
     # ── Schema migrations for existing databases ──────────────────────
     for _alt in (
         "ALTER TABLE paper_trades ADD COLUMN entry_decision_id INTEGER",

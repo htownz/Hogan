@@ -401,8 +401,8 @@ def _determine_mood(
 # ---------------------------------------------------------------------------
 # Main tab layout
 # ---------------------------------------------------------------------------
-tab_live, tab_os, tab_signals, tab_model, tab_data, tab_backtest = st.tabs([
-    "Live Trading", "Market OS", "Signals & Candles", "ML Models", "Data Coverage", "Backtest"
+tab_live, tab_os, tab_signals, tab_model, tab_data, tab_backtest, tab_swarm = st.tabs([
+    "Live Trading", "Market OS", "Signals & Candles", "ML Models", "Data Coverage", "Backtest", "Swarm"
 ])
 
 # ===========================================================================
@@ -977,6 +977,129 @@ with tab_backtest:
 
             except Exception as exc:
                 st.error(f"Backtest failed: {exc}")
+
+# ===========================================================================
+# TAB 7 — SWARM DECISION LAYER
+# ===========================================================================
+with tab_swarm:
+    st.header("Swarm Decision Layer")
+
+    try:
+        _sw_conn = sqlite3.connect(DB_PATH)
+
+        _sw_has_tables = True
+        try:
+            _sw_conn.execute("SELECT 1 FROM swarm_decisions LIMIT 1")
+        except Exception:
+            _sw_has_tables = False
+
+        if not _sw_has_tables:
+            st.info("Swarm tables not found in this database. Enable swarm mode to start logging decisions.")
+        else:
+            _sw_count = _sw_conn.execute("SELECT COUNT(*) FROM swarm_decisions").fetchone()[0]
+            st.metric("Total Swarm Decisions", _sw_count)
+
+            if _sw_count == 0:
+                st.info("No swarm decisions logged yet. Run the bot with HOGAN_SWARM_ENABLED=true to start.")
+            else:
+                col_a, col_b = st.columns(2)
+
+                with col_a:
+                    st.subheader("Consensus Over Time")
+                    df_agree = pd.read_sql_query(
+                        "SELECT ts_ms, agreement, entropy, final_action "
+                        "FROM swarm_decisions ORDER BY ts_ms DESC LIMIT 200",
+                        _sw_conn,
+                    )
+                    if not df_agree.empty:
+                        df_agree["ts"] = pd.to_datetime(df_agree["ts_ms"], unit="ms")
+                        import plotly.graph_objects as go
+                        fig_sw = go.Figure()
+                        fig_sw.add_trace(go.Scatter(
+                            x=df_agree["ts"], y=df_agree["agreement"],
+                            name="Agreement", line=dict(color="#00cc96"),
+                        ))
+                        fig_sw.add_trace(go.Scatter(
+                            x=df_agree["ts"], y=df_agree["entropy"],
+                            name="Entropy", line=dict(color="#ef553b"),
+                        ))
+                        fig_sw.update_layout(
+                            height=300, margin=dict(l=20, r=20, t=30, b=20),
+                            yaxis_title="Score",
+                        )
+                        st.plotly_chart(fig_sw, use_container_width=True)
+
+                with col_b:
+                    st.subheader("Weight History")
+                    df_wt = pd.read_sql_query(
+                        "SELECT ts_ms, weights_json, source "
+                        "FROM swarm_weight_snapshots ORDER BY ts_ms DESC LIMIT 100",
+                        _sw_conn,
+                    )
+                    if not df_wt.empty:
+                        import json as _json
+                        df_wt["ts"] = pd.to_datetime(df_wt["ts_ms"], unit="ms")
+                        _weight_records = []
+                        for _, row in df_wt.iterrows():
+                            w = _json.loads(row["weights_json"])
+                            for agent, weight in w.items():
+                                _weight_records.append({
+                                    "ts": row["ts"], "agent": agent, "weight": weight,
+                                })
+                        if _weight_records:
+                            df_wr = pd.DataFrame(_weight_records)
+                            import plotly.express as px
+                            fig_wt = px.line(df_wr, x="ts", y="weight", color="agent")
+                            fig_wt.update_layout(
+                                height=300, margin=dict(l=20, r=20, t=30, b=20),
+                            )
+                            st.plotly_chart(fig_wt, use_container_width=True)
+                    else:
+                        st.info("No weight snapshots yet.")
+
+                st.subheader("Top Veto Reasons")
+                df_vetoes = pd.read_sql_query(
+                    "SELECT agent_id, block_reasons_json "
+                    "FROM swarm_agent_votes WHERE veto = 1 "
+                    "ORDER BY ts_ms DESC LIMIT 500",
+                    _sw_conn,
+                )
+                if not df_vetoes.empty:
+                    import json as _json
+                    _reason_counts: dict[str, int] = {}
+                    for _, row in df_vetoes.iterrows():
+                        reasons = _json.loads(row["block_reasons_json"])
+                        for r in reasons:
+                            key = f"{row['agent_id']}: {r}"
+                            _reason_counts[key] = _reason_counts.get(key, 0) + 1
+                    if _reason_counts:
+                        df_rc = pd.DataFrame(
+                            sorted(_reason_counts.items(), key=lambda x: -x[1])[:15],
+                            columns=["Reason", "Count"],
+                        )
+                        st.bar_chart(df_rc.set_index("Reason"))
+                else:
+                    st.info("No veto events logged yet.")
+
+                st.subheader("Shadow vs Baseline Divergence")
+                df_div = pd.read_sql_query(
+                    "SELECT ts_ms, final_action, mode, agreement "
+                    "FROM swarm_decisions WHERE mode = 'shadow' "
+                    "ORDER BY ts_ms DESC LIMIT 100",
+                    _sw_conn,
+                )
+                if not df_div.empty:
+                    df_div["ts"] = pd.to_datetime(df_div["ts_ms"], unit="ms")
+                    st.dataframe(
+                        df_div[["ts", "final_action", "agreement"]].head(20),
+                        use_container_width=True,
+                    )
+                else:
+                    st.info("No shadow decisions logged yet.")
+
+        _sw_conn.close()
+    except Exception as exc:
+        st.error(f"Error loading swarm data: {exc}")
 
 # ---------------------------------------------------------------------------
 # Footer
