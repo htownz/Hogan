@@ -123,6 +123,8 @@ class SignalEvaluator:
         self.pipeline = AgentPipeline(config, conn=conn)
         self._ml_probs: list[float] = []
         self._trade_outcomes: list[bool] = []
+        from hogan_bot.regime import RegimeTransitionTracker
+        self._regime_transition = RegimeTransitionTracker(cooldown_bars=3, min_scale=0.40)
 
     def evaluate(
         self,
@@ -166,6 +168,11 @@ class SignalEvaluator:
         eff_long_size_scale = eff.get("long_size_scale", 1.0)
         eff_short_size_scale = eff.get("short_size_scale", 1.0)
 
+        # Regime transition dampener: reduce sizing at regime boundaries
+        _transition_scale = self._regime_transition.update(regime_name) if regime_name else 1.0
+        eff_long_size_scale *= _transition_scale
+        eff_short_size_scale *= _transition_scale
+
         result = self.pipeline.run(
             candles, symbol=symbol, config_override=cfg,
             regime=regime_name, regime_state=_rstate,
@@ -196,6 +203,8 @@ class SignalEvaluator:
                         logger.debug("MTF extended features computed: %d values", len(_mtf_features))
                 except Exception as exc:
                     logger.debug("MTF features fallback: %s", exc)
+            if hasattr(self.ml_model, "set_regime"):
+                self.ml_model.set_regime(regime_name)
             up_prob = predict_up_probability(candles, self.ml_model)
             self._ml_probs.append(up_prob)
             if cfg.use_ml_as_sizer:
@@ -921,49 +930,75 @@ async def run_event_loop(
                     logger.debug("Macro sitout check error: %s", _mse)
 
             if action == "buy" and px > 0:
-                # Cover existing short first (parity with backtest)
+                # Cover existing short first (with ExitEvaluator confirmation — parity with backtest)
                 if enable_shorts and symbol in portfolio.short_positions:
                     spos = portfolio.short_positions[symbol]
-                    if spos.bars_held >= min_hold_bars:
-                        _consecutive_short_exit_signals[symbol] = 0
-                        cover_qty = spos.qty
-                        s_avg_entry = spos.avg_entry
-                        cover_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
-                        res = executor.close_short(symbol, cover_px, cover_qty, reason="buy_signal")
-                        if res.ok:
-                            _exit_s_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
-                            now_ms = int(time.time() * 1000)
-                            fee = cover_qty * cover_px * config.fee_rate
-                            if not allow_live:
-                                s_bars = getattr(spos, "bars_held", 0)
-                                close_paper_trade(
-                                    conn, symbol, "short", cover_px, fee, now_ms,
-                                    close_reason="buy_signal",
-                                    max_adverse_pct=getattr(spos, "max_adverse_pct", 0.0),
-                                    max_favorable_pct=getattr(spos, "max_favorable_pct", 0.0),
-                                    bars_held=s_bars,
-                                    exit_regime=_exit_s_regime,
-                                    entry_atr_pct=getattr(spos, "entry_atr_pct", None),
-                                )
-                            self._trade_outcomes.append(cover_px < s_avg_entry)
-                            gross_pnl_pct = (s_avg_entry - cover_px) / s_avg_entry if s_avg_entry else 0
-                            net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
-                            _expectancy.record_trade(
-                                symbol=symbol,
-                                regime=_exit_s_regime,
-                                gross_pnl_pct=gross_pnl_pct,
-                                net_pnl_pct=net_pnl_pct,
-                                hold_bars=getattr(spos, "bars_held", 0),
-                                close_reason="buy_signal",
+                    if spos.bars_held < min_hold_bars:
+                        logger.debug(
+                            "HOLD_SHORT %s — min hold not met (%d/%d bars)",
+                            symbol, spos.bars_held, min_hold_bars,
+                        )
+                    elif _consecutive_short_exit_signals[symbol] < exit_confirm_bars:
+                        logger.debug(
+                            "HOLD_SHORT %s — exit confirmation %d/%d",
+                            symbol, _consecutive_short_exit_signals[symbol], exit_confirm_bars,
+                        )
+                    else:
+                        _short_exit_dec = _exit_eval.should_exit(
+                            candles=candles,
+                            entry_price=spos.avg_entry,
+                            current_price=px,
+                            bars_held=spos.bars_held,
+                            side="short",
+                            max_hold_bars=short_max_hold_bars if short_max_hold_bars > 0 else max_hold_bars,
+                            entry_atr=getattr(spos, "entry_atr_pct", None) or None,
+                            vol_ratio=sig.vol_ratio,
+                        )
+                        if not _short_exit_dec.should_exit:
+                            logger.debug(
+                                "EXIT_MODEL_SHORT %s — thesis intact, holding despite buy signal",
+                                symbol,
                             )
-                            is_loss = cover_px > s_avg_entry
-                            if is_loss and loss_cooldown_bars > 0:
-                                _cooldown_remaining = loss_cooldown_bars
-                            if notifier:
-                                notifier.notify("cover", {"symbol": symbol, "price": cover_px,
-                                                          "qty": cover_qty, "reason": "buy_signal"})
-                        logger.info("COVER_SHORT %s px=%.2f qty=%.6f equity=%.2f reason=buy_signal",
-                                    symbol, cover_px, cover_qty, equity)
+                        else:
+                            _consecutive_short_exit_signals[symbol] = 0
+                            cover_qty = spos.qty
+                            s_avg_entry = spos.avg_entry
+                            cover_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
+                            res = executor.close_short(symbol, cover_px, cover_qty, reason="buy_signal")
+                            if res.ok:
+                                _exit_s_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
+                                now_ms = int(time.time() * 1000)
+                                fee = cover_qty * cover_px * config.fee_rate
+                                if not allow_live:
+                                    s_bars = getattr(spos, "bars_held", 0)
+                                    close_paper_trade(
+                                        conn, symbol, "short", cover_px, fee, now_ms,
+                                        close_reason="buy_signal",
+                                        max_adverse_pct=getattr(spos, "max_adverse_pct", 0.0),
+                                        max_favorable_pct=getattr(spos, "max_favorable_pct", 0.0),
+                                        bars_held=s_bars,
+                                        exit_regime=_exit_s_regime,
+                                        entry_atr_pct=getattr(spos, "entry_atr_pct", None),
+                                    )
+                                self._trade_outcomes.append(cover_px < s_avg_entry)
+                                gross_pnl_pct = (s_avg_entry - cover_px) / s_avg_entry if s_avg_entry else 0
+                                net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
+                                _expectancy.record_trade(
+                                    symbol=symbol,
+                                    regime=_exit_s_regime,
+                                    gross_pnl_pct=gross_pnl_pct,
+                                    net_pnl_pct=net_pnl_pct,
+                                    hold_bars=getattr(spos, "bars_held", 0),
+                                    close_reason="buy_signal",
+                                )
+                                is_loss = cover_px > s_avg_entry
+                                if is_loss and loss_cooldown_bars > 0:
+                                    _cooldown_remaining = loss_cooldown_bars
+                                if notifier:
+                                    notifier.notify("cover", {"symbol": symbol, "price": cover_px,
+                                                              "qty": cover_qty, "reason": "buy_signal"})
+                            logger.info("COVER_SHORT %s px=%.2f qty=%.6f equity=%.2f reason=buy_signal",
+                                        symbol, cover_px, cover_qty, equity)
 
                 if not sig.eff_allow_longs:
                     logger.debug("REGIME_BLOCK %s — longs not allowed in %s", symbol, _sym_regime)

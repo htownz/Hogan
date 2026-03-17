@@ -7,6 +7,7 @@ import pytest
 
 from hogan_bot.regime import (
     RegimeState,
+    RegimeTransitionTracker,
     _atr_percentile_rank,
     _wilder_adx,
     detect_regime,
@@ -217,3 +218,62 @@ class TestEffectiveThresholds:
         )
         eff = effective_thresholds(state, cfg, min_confidence=0.50)
         assert eff["ml_buy_threshold"] == cfg.ml_buy_threshold
+
+
+class TestRegimeTransitionTracker:
+    def test_no_transition_returns_full_scale(self):
+        tracker = RegimeTransitionTracker(cooldown_bars=3, min_scale=0.40)
+        scale = tracker.update("trending_up")
+        assert scale == 1.0
+        scale = tracker.update("trending_up")
+        assert scale == 1.0
+
+    def test_transition_dampens_scale(self):
+        tracker = RegimeTransitionTracker(cooldown_bars=3, min_scale=0.40)
+        tracker.update("trending_up")
+        scale = tracker.update("ranging")
+        assert scale == pytest.approx(0.40, abs=0.01)
+
+    def test_scale_ramps_back_to_one(self):
+        tracker = RegimeTransitionTracker(cooldown_bars=3, min_scale=0.40)
+        tracker.update("trending_up")
+        s0 = tracker.update("ranging")  # bars_since_change=0 → 0.40
+        s1 = tracker.update("ranging")  # bars_since_change=1 → 0.60
+        s2 = tracker.update("ranging")  # bars_since_change=2 → 0.80
+        s3 = tracker.update("ranging")  # bars_since_change=3 → 1.00
+        assert s0 < s1 < s2 < s3
+        assert s3 == pytest.approx(1.0, abs=0.01)
+
+    def test_in_transition_property(self):
+        tracker = RegimeTransitionTracker(cooldown_bars=2)
+        tracker.update("trending_up")
+        assert not tracker.in_transition
+        tracker.update("ranging")   # bars_since_change=0
+        assert tracker.in_transition
+        tracker.update("ranging")   # bars_since_change=1
+        assert tracker.in_transition
+        tracker.update("ranging")   # bars_since_change=2 → cooldown complete
+        assert not tracker.in_transition
+
+    def test_last_transition_tracked(self):
+        tracker = RegimeTransitionTracker()
+        tracker.update("trending_up")
+        tracker.update("volatile")
+        assert tracker.last_transition == ("trending_up", "volatile")
+
+    def test_reset_clears_state(self):
+        tracker = RegimeTransitionTracker()
+        tracker.update("trending_up")
+        tracker.update("ranging")
+        assert tracker.in_transition
+        tracker.reset()
+        assert not tracker.in_transition
+        assert tracker.last_transition == (None, None)
+
+    def test_consecutive_transitions_restart_cooldown(self):
+        tracker = RegimeTransitionTracker(cooldown_bars=3, min_scale=0.40)
+        tracker.update("trending_up")
+        tracker.update("ranging")  # transition 1
+        tracker.update("volatile")  # transition 2 immediately
+        assert tracker.in_transition
+        assert tracker.last_transition == ("ranging", "volatile")

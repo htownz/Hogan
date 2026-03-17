@@ -156,6 +156,72 @@ def _mean_reversion_score(close: pd.Series, lookback: int = 24) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Regime transition tracker
+# ---------------------------------------------------------------------------
+
+class RegimeTransitionTracker:
+    """Detects regime transitions and provides a dampening scale factor.
+
+    After a regime change, position sizing is reduced for ``cooldown_bars``
+    bars to avoid whipsaws at regime boundaries.  The scale ramps linearly
+    from ``min_scale`` back to 1.0 over the cooldown window.
+
+    Usage::
+
+        tracker = RegimeTransitionTracker()
+        for bar in candles:
+            regime = detect_regime(...)
+            scale = tracker.update(regime.regime)
+            position_size *= scale
+    """
+
+    def __init__(
+        self,
+        cooldown_bars: int = 3,
+        min_scale: float = 0.40,
+    ):
+        self._cooldown_bars = max(cooldown_bars, 1)
+        self._min_scale = max(0.0, min(1.0, min_scale))
+        self._prev_regime: str | None = None
+        self._bars_since_change: int = self._cooldown_bars + 1
+        self._last_transition: tuple[str | None, str | None] = (None, None)
+
+    def update(self, current_regime: str) -> float:
+        """Record the current regime and return a position scale factor.
+
+        Returns 1.0 when stable; ramps from ``min_scale`` to 1.0 during
+        the cooldown period after a transition.
+        """
+        if self._prev_regime is not None and current_regime != self._prev_regime:
+            self._last_transition = (self._prev_regime, current_regime)
+            self._bars_since_change = 0
+        else:
+            self._bars_since_change += 1
+
+        self._prev_regime = current_regime
+
+        if self._bars_since_change >= self._cooldown_bars:
+            return 1.0
+
+        progress = self._bars_since_change / self._cooldown_bars
+        return self._min_scale + (1.0 - self._min_scale) * progress
+
+    @property
+    def in_transition(self) -> bool:
+        return self._bars_since_change < self._cooldown_bars
+
+    @property
+    def last_transition(self) -> tuple[str | None, str | None]:
+        """Return (from_regime, to_regime) of the most recent transition."""
+        return self._last_transition
+
+    def reset(self) -> None:
+        self._prev_regime = None
+        self._bars_since_change = self._cooldown_bars + 1
+        self._last_transition = (None, None)
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
