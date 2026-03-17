@@ -218,6 +218,88 @@ class BreakoutFamily:
         return StrategySignal(action, stop_distance_pct, confidence, vol_ratio)
 
 
+# ---------------------------------------------------------------------------
+# SqueezeFamily — for volatile / compression-expansion transitions
+# ---------------------------------------------------------------------------
+
+class SqueezeFamily:
+    """Bollinger Band Squeeze strategy for compression-expansion transitions.
+
+    Detects when Bollinger Bands narrow inside the Keltner Channel (classic
+    TTM Squeeze condition), waits for the release (BB expansion), and enters
+    in the direction of momentum.
+    """
+    name: str = "squeeze"
+
+    def generate_signal(self, candles, config, regime_state=None) -> StrategySignal:
+        import numpy as np
+
+        min_bars = max(getattr(config, "long_ma_window", 50), 30)
+        if len(candles) < min_bars:
+            return StrategySignal("hold", 0.01, 0.0, 0.0)
+
+        close = candles["close"].astype(float)
+        volume = candles["volume"].astype(float)
+
+        atr_series = compute_atr(candles, window=14)
+        atr_val = float(atr_series.iloc[-1])
+        px = float(close.iloc[-1])
+        atr_pct = atr_val / max(px, 1e-9)
+
+        avg_vol = float(volume.rolling(20).mean().iloc[-1])
+        vol_ratio = float(volume.iloc[-1] / max(avg_vol, 1e-9))
+
+        bb_period = 20
+        bb_ma = close.rolling(bb_period).mean()
+        bb_std = close.rolling(bb_period).std()
+        bb_upper = bb_ma + 2 * bb_std
+        bb_lower = bb_ma - 2 * bb_std
+        bb_width = (bb_upper - bb_lower) / bb_ma.replace(0, np.nan)
+
+        kc_period = 20
+        kc_ma = close.rolling(kc_period).mean()
+        kc_upper = kc_ma + 1.5 * atr_series
+        kc_lower = kc_ma - 1.5 * atr_series
+        kc_width = (kc_upper - kc_lower) / kc_ma.replace(0, np.nan)
+
+        if bb_width.isna().iloc[-1] or kc_width.isna().iloc[-1]:
+            return StrategySignal("hold", 0.01, 0.0, vol_ratio)
+
+        lookback = 20
+        bb_w_recent = bb_width.iloc[-lookback:]
+        if len(bb_w_recent) < lookback:
+            return StrategySignal("hold", 0.01, 0.0, vol_ratio)
+
+        bb_w_min = float(bb_w_recent.min())
+        bb_w_now = float(bb_width.iloc[-1])
+        kc_w_now = float(kc_width.iloc[-1])
+
+        was_squeezed = False
+        for offset in range(1, min(6, lookback)):
+            _bb = float(bb_width.iloc[-1 - offset])
+            _kc = float(kc_width.iloc[-1 - offset])
+            if _bb < _kc:
+                was_squeezed = True
+                break
+
+        released = bb_w_now > bb_w_min * 1.05
+
+        ema20 = close.ewm(span=20, adjust=False).mean()
+        momentum = float(close.iloc[-1] - ema20.iloc[-1])
+
+        stop_distance_pct = max(0.004, min(0.025, atr_pct * 2.0))
+
+        action = "hold"
+        confidence = 0.0
+
+        if was_squeezed and released and momentum > 0:
+            action = "buy"
+            squeeze_strength = max(0.0, 1.0 - bb_w_min / max(kc_w_now, 1e-9))
+            confidence = min(1.0, 0.4 + squeeze_strength * 0.4 + min(vol_ratio, 2.0) * 0.1)
+
+        return StrategySignal(action, stop_distance_pct, confidence, vol_ratio)
+
+
 def generate_signal(
     candles,
     short_window: int,
