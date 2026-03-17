@@ -217,6 +217,22 @@ class BotConfig:
     rl_reward_type: str = "risk_adjusted"
     rl_timesteps: int = 200_000
 
+    # Unified decision core (policy_core.decide) — set True to use the
+    # canonical decision path in both live and backtest.
+    use_policy_core: bool = False
+
+    # Swarm Decision Layer
+    swarm_enabled: bool = False
+    swarm_mode: str = "shadow"
+    swarm_agents: str = "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1"
+    swarm_min_agreement: float = 0.60
+    swarm_min_vote_margin: float = 0.10
+    swarm_max_entropy: float = 0.95
+    swarm_weight_update_mode: str = "shadow"
+    swarm_weight_min_trades: int = 50
+    swarm_weight_max_daily_shift: float = 0.05
+    swarm_log_full_votes: bool = True
+
     # Account valuation currency for spot equity (USD, USDT, USDC, ...)
     quote_currency: str = "USD"
 
@@ -582,6 +598,17 @@ def load_config() -> BotConfig:
         macro_vix_block=float(os.getenv("HOGAN_MACRO_VIX_BLOCK", "35.0")),
         macro_equity_ma_period=int(os.getenv("HOGAN_MACRO_EQUITY_MA", "20")),
         use_rl_agent=os.getenv("HOGAN_USE_RL_AGENT", "false").lower() == "true",
+        use_policy_core=os.getenv("HOGAN_USE_POLICY_CORE", "false").lower() == "true",
+        swarm_enabled=os.getenv("HOGAN_SWARM_ENABLED", "false").lower() == "true",
+        swarm_mode=os.getenv("HOGAN_SWARM_MODE", "shadow"),
+        swarm_agents=os.getenv("HOGAN_SWARM_AGENTS", "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1"),
+        swarm_min_agreement=float(os.getenv("HOGAN_SWARM_MIN_AGREEMENT", "0.60")),
+        swarm_min_vote_margin=float(os.getenv("HOGAN_SWARM_MIN_VOTE_MARGIN", "0.10")),
+        swarm_max_entropy=float(os.getenv("HOGAN_SWARM_MAX_ENTROPY", "0.95")),
+        swarm_weight_update_mode=os.getenv("HOGAN_SWARM_WEIGHT_UPDATE_MODE", "shadow"),
+        swarm_weight_min_trades=int(os.getenv("HOGAN_SWARM_WEIGHT_MIN_TRADES", "50")),
+        swarm_weight_max_daily_shift=float(os.getenv("HOGAN_SWARM_WEIGHT_MAX_DAILY_SHIFT", "0.05")),
+        swarm_log_full_votes=os.getenv("HOGAN_SWARM_LOG_FULL_VOTES", "true").lower() == "true",
         rl_model_path=os.getenv("HOGAN_RL_MODEL_PATH", "models/hogan_rl_policy.zip"),
         rl_reward_type=os.getenv("HOGAN_RL_REWARD_TYPE", "risk_adjusted"),
         rl_timesteps=int(os.getenv("HOGAN_RL_TIMESTEPS", "200000")),

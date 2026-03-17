@@ -336,6 +336,181 @@ class TestLossStreakScale:
         assert loss_streak_scale(outcomes, streak_threshold=2) == 0.50
 
 
+class TestPolicyCoreEquivalence:
+    """Verify policy_core.decide() produces deterministic, consistent output.
+
+    Given the same synthetic candles and config, the decision must be
+    identical across calls.  This is the critical correctness gate
+    before any swarm work.
+    """
+
+    @pytest.fixture()
+    def core_inputs(self):
+        """Shared fixture: candles + real BotConfig + pipeline."""
+        from dataclasses import replace as dc_replace
+        candles = _synthetic_candles(200, seed=42)
+        cfg = dc_replace(
+            BotConfig(),
+            symbols=["BTC/USD"],
+            timeframe="1h",
+            use_ml_filter=False,
+            use_ml_as_sizer=False,
+            paper_mode=True,
+            starting_balance_usd=10000.0,
+            use_regime_detection=True,
+        )
+        from hogan_bot.agent_pipeline import AgentPipeline
+        pipeline = AgentPipeline(cfg, conn=None)
+        return candles, cfg, pipeline
+
+    def test_decide_deterministic(self, core_inputs):
+        """Two identical calls must return identical DecisionIntents."""
+        from hogan_bot.policy_core import PolicyState, decide
+
+        candles, cfg, pipeline = core_inputs
+        for _ in range(2):
+            state = PolicyState()
+            intent = decide(
+                symbol="BTC/USD",
+                candles=candles,
+                equity_usd=10000.0,
+                config=cfg,
+                pipeline=pipeline,
+                ml_model=None,
+                state=state,
+                mode="backtest",
+            )
+
+            state2 = PolicyState()
+            intent2 = decide(
+                symbol="BTC/USD",
+                candles=candles,
+                equity_usd=10000.0,
+                config=cfg,
+                pipeline=pipeline,
+                ml_model=None,
+                state=state2,
+                mode="backtest",
+            )
+
+            assert intent.action == intent2.action
+            assert intent.confidence == pytest.approx(intent2.confidence)
+            assert intent.size_usd == pytest.approx(intent2.size_usd, rel=1e-6)
+            assert intent.regime == intent2.regime
+            assert intent.eff_trailing_stop_pct == pytest.approx(
+                intent2.eff_trailing_stop_pct or 0, abs=1e-9
+            )
+            assert intent.eff_allow_longs == intent2.eff_allow_longs
+            assert intent.eff_allow_shorts == intent2.eff_allow_shorts
+
+    def test_decide_returns_decision_intent(self, core_inputs):
+        """decide() must return a DecisionIntent dataclass."""
+        from hogan_bot.policy_core import PolicyState, decide
+        from hogan_bot.swarm_decision.types import DecisionIntent
+
+        candles, cfg, pipeline = core_inputs
+        state = PolicyState()
+        intent = decide(
+            symbol="BTC/USD",
+            candles=candles,
+            equity_usd=10000.0,
+            config=cfg,
+            pipeline=pipeline,
+            ml_model=None,
+            state=state,
+            mode="backtest",
+        )
+        assert isinstance(intent, DecisionIntent)
+        assert intent.action in ("buy", "sell", "hold")
+        assert 0.0 <= intent.confidence <= 1.0
+        assert intent.size_usd >= 0.0
+        assert intent.swarm is None
+
+    def test_decide_with_mock_ml_model(self, core_inputs):
+        """decide() with a mock ML model still produces deterministic output."""
+        from hogan_bot.policy_core import PolicyState, decide
+
+        from dataclasses import replace as dc_replace
+        candles, cfg, pipeline = core_inputs
+        cfg_ml = dc_replace(
+            cfg,
+            use_ml_filter=True,
+            ml_confidence_sizing=True,
+            use_ml_as_sizer=False,
+        )
+
+        mock_model = MagicMock()
+        mock_model.predict_proba = MagicMock(return_value=[[0.45, 0.55]])
+        mock_model.set_regime = MagicMock()
+
+        state1 = PolicyState()
+        intent1 = decide(
+            symbol="BTC/USD",
+            candles=candles,
+            equity_usd=10000.0,
+            config=cfg_ml,
+            pipeline=pipeline,
+            ml_model=mock_model,
+            state=state1,
+            mode="backtest",
+        )
+
+        state2 = PolicyState()
+        intent2 = decide(
+            symbol="BTC/USD",
+            candles=candles,
+            equity_usd=10000.0,
+            config=cfg_ml,
+            pipeline=pipeline,
+            ml_model=mock_model,
+            state=state2,
+            mode="backtest",
+        )
+
+        assert intent1.action == intent2.action
+        assert intent1.up_prob == pytest.approx(intent2.up_prob or 0, abs=1e-6)
+        assert intent1.size_usd == pytest.approx(intent2.size_usd, rel=1e-6)
+
+    def test_block_reasons_populated(self, core_inputs):
+        """block_reasons should be a list (possibly empty) on every intent."""
+        from hogan_bot.policy_core import PolicyState, decide
+
+        candles, cfg, pipeline = core_inputs
+        state = PolicyState()
+        intent = decide(
+            symbol="BTC/USD",
+            candles=candles,
+            equity_usd=10000.0,
+            config=cfg,
+            pipeline=pipeline,
+            ml_model=None,
+            state=state,
+            mode="backtest",
+        )
+        assert isinstance(intent.block_reasons, list)
+
+    def test_regime_fields_populated(self, core_inputs):
+        """Regime and effective parameters should be populated."""
+        from hogan_bot.policy_core import PolicyState, decide
+
+        candles, cfg, pipeline = core_inputs
+        state = PolicyState()
+        intent = decide(
+            symbol="BTC/USD",
+            candles=candles,
+            equity_usd=10000.0,
+            config=cfg,
+            pipeline=pipeline,
+            ml_model=None,
+            state=state,
+            mode="backtest",
+        )
+        assert intent.regime in ("trending_up", "trending_down", "ranging", "volatile", None)
+        assert isinstance(intent.eff_allow_longs, bool)
+        assert isinstance(intent.eff_allow_shorts, bool)
+        assert intent.atr_pct >= 0.0
+
+
 class TestEdgeGateAsymmetric:
     """Verify edge gate uses lower ATR threshold for buys."""
 
