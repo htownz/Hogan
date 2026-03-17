@@ -41,7 +41,7 @@ Hogan follows a multi-layer architecture:
 - Multi-exchange support via [CCXT](https://docs.ccxt.com/) (110+ exchanges)
 
 ### ML Pipeline
-- **Champion model**: HistGradientBoosting trained on **15 curated features** (momentum, trend, volatility, volume, range, regime, MACD, macro SPY/VIX)
+- **Champion model**: HistGradientBoosting trained on **8 champion features** (momentum, trend, volatility, regime, MACD, Bollinger)
 - Full feature set: 59 features available for experimentation (on-chain, sentiment, derivatives, intermarket)
 - Enhanced triple-barrier labeling with `meta_quality` sample weighting
 - Walk-forward cross-validation with champion/challenger model promotion

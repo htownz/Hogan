@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 from hogan_bot.strategy import (
     BreakoutFamily,
     MeanRevertFamily,
-    SqueezeFamily,
     StrategySignal,
     TrendFollowFamily,
 )
