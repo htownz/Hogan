@@ -359,6 +359,58 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         "ON swarm_weight_snapshots (symbol, timeframe, ts_ms)"
     )
 
+    # -------------------------------------------------------------------
+    # Swarm outcomes — forward markouts and attribution per decision
+    # -------------------------------------------------------------------
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS swarm_outcomes (
+            decision_id         INTEGER PRIMARY KEY REFERENCES swarm_decisions(id),
+            forward_5m_bps      REAL,
+            forward_15m_bps     REAL,
+            forward_30m_bps     REAL,
+            forward_60m_bps     REAL,
+            mae_bps             REAL,
+            mfe_bps             REAL,
+            realized_slippage_bps REAL,
+            was_trade_taken     INTEGER NOT NULL DEFAULT 0,
+            baseline_would_trade INTEGER,
+            swarm_would_trade   INTEGER,
+            was_veto_correct    INTEGER,
+            was_skip_correct    INTEGER,
+            outcome_label       TEXT,
+            updated_ms          INTEGER NOT NULL
+        )
+        """
+    )
+
+    # -------------------------------------------------------------------
+    # Swarm promotion reports — persisted promotion check results
+    # -------------------------------------------------------------------
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS swarm_promotion_reports (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_ms      INTEGER NOT NULL,
+            candidate_id    TEXT    NOT NULL,
+            baseline_id     TEXT,
+            phase           TEXT    NOT NULL,
+            symbol          TEXT    NOT NULL,
+            timeframe       TEXT    NOT NULL,
+            recommendation  TEXT    NOT NULL,
+            blockers_json   TEXT    NOT NULL,
+            warnings_json   TEXT    NOT NULL,
+            metrics_json    TEXT    NOT NULL,
+            gates_json      TEXT    NOT NULL,
+            summary         TEXT    NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_swarm_promo_ts "
+        "ON swarm_promotion_reports (symbol, timeframe, created_ms)"
+    )
+
     # ── Schema migrations for existing databases ──────────────────────
     for _alt in (
         "ALTER TABLE paper_trades ADD COLUMN entry_decision_id INTEGER",

@@ -1119,11 +1119,38 @@ with tab_swarm:
             st.info("Swarm tables not found in this database. Enable swarm mode to start logging decisions.")
         else:
             _sw_count = _sw_conn.execute("SELECT COUNT(*) FROM swarm_decisions").fetchone()[0]
-            st.metric("Total Swarm Decisions", _sw_count)
 
             if _sw_count == 0:
+                st.metric("Total Swarm Decisions", 0)
                 st.info("No swarm decisions logged yet. Run the bot with HOGAN_SWARM_ENABLED=true to start.")
             else:
+                # ── Section 1: Live Swarm Snapshot ────────────────────
+                st.subheader("Live Swarm Snapshot")
+                try:
+                    from hogan_bot.swarm_observability import load_latest_swarm_decision
+                    _snap = load_latest_swarm_decision(_sw_conn)
+                    if not _snap.empty:
+                        _s = _snap.iloc[0]
+                        snap_cols = st.columns(6)
+                        snap_cols[0].metric("Decisions", _sw_count)
+                        snap_cols[1].metric("Mode", _s.get("mode", "—"))
+                        snap_cols[2].metric("Action", _s.get("final_action", "—"))
+                        snap_cols[3].metric("Confidence", f"{_s.get('final_conf', 0):.0%}")
+                        snap_cols[4].metric("Agreement", f"{_s.get('agreement', 0):.0%}")
+                        _vetoed = "Yes" if _s.get("vetoed") else "No"
+                        snap_cols[5].metric("Vetoed", _vetoed)
+
+                        _snap_ts = pd.to_datetime(_s.get("ts_ms", 0), unit="ms", utc=True)
+                        _age = pd.Timestamp.now("UTC") - _snap_ts
+                        _age_str = f"{_age.total_seconds() / 60:.0f}m ago" if _age.total_seconds() < 3600 else f"{_age.total_seconds() / 3600:.1f}h ago"
+                        st.caption(f"Last update: {_snap_ts.strftime('%Y-%m-%d %H:%M UTC')} ({_age_str}) | Symbol: {_s.get('symbol', '?')} | TF: {_s.get('timeframe', '?')}")
+                    else:
+                        st.metric("Total Swarm Decisions", _sw_count)
+                except Exception:
+                    st.metric("Total Swarm Decisions", _sw_count)
+
+                st.divider()
+
                 col_a, col_b = st.columns(2)
 
                 with col_a:
@@ -1324,6 +1351,28 @@ with tab_swarm:
                         bc3.metric("Regime", b.get("regime", "—"))
                     else:
                         st.info("No matching baseline decision found for this timestamp.")
+
+                    # Decision Story (plain-English)
+                    try:
+                        from hogan_bot.swarm_replay import render_decision_story
+                        if not dec_df.empty:
+                            _bl_row = base_df.iloc[0] if not base_df.empty else None
+                            story = render_decision_story(
+                                dec_df.iloc[0], votes=votes_df, baseline=_bl_row,
+                            )
+                            with st.expander("Decision Story (plain English)", expanded=False):
+                                st.markdown(story)
+                    except Exception:
+                        pass
+
+                    # Raw JSON
+                    if not dec_df.empty:
+                        with st.expander("Raw Decision JSON", expanded=False):
+                            _dj = dec_df.iloc[0].get("decision_json", "{}")
+                            try:
+                                st.json(json.loads(_dj) if isinstance(_dj, str) else _dj)
+                            except Exception:
+                                st.code(_dj)
                 else:
                     st.info("No swarm decisions to replay.")
 
@@ -1352,6 +1401,109 @@ with tab_swarm:
                 else:
                     st.warning("COLLECTING — Shadow sample targets not yet met.")
                 st.metric("Mean Agreement", f"{promo['mean_agreement']:.3f}")
+
+                # ── Section 5: Learning & Drift ──────────────────────
+                st.subheader("Learning & Drift")
+                try:
+                    from hogan_bot.swarm_observability import (
+                        load_swarm_decisions, load_swarm_score_calibration,
+                    )
+                    from hogan_bot.swarm_metrics import (
+                        compute_disagreement_stats, compute_trade_density,
+                        compute_agent_leaderboard,
+                    )
+
+                    _drift_decisions = load_swarm_decisions(_sw_conn, limit=500)
+
+                    if not _drift_decisions.empty:
+                        # Disagreement stats
+                        dis_stats = compute_disagreement_stats(_drift_decisions)
+                        ds1, ds2, ds3 = st.columns(3)
+                        ds1.metric("Mean Agreement", f"{dis_stats['mean_agreement']:.0%}")
+                        ds2.metric("Mean Entropy", f"{dis_stats['mean_entropy']:.3f}")
+                        ds3.metric("High Disagreement %", f"{dis_stats['high_disagreement_pct']:.1%}")
+
+                        # Trade density chart
+                        density = compute_trade_density(_drift_decisions, bucket_hours=24)
+                        if not density.empty:
+                            fig_density = go.Figure()
+                            fig_density.add_trace(go.Bar(
+                                x=density["bucket_start"], y=density["trades"],
+                                name="Trades", marker_color="#2ecc71",
+                            ))
+                            fig_density.add_trace(go.Bar(
+                                x=density["bucket_start"], y=density["holds"],
+                                name="Holds", marker_color="#95a5a6",
+                            ))
+                            fig_density.update_layout(
+                                title="Trade Density (24h buckets)",
+                                barmode="stack", height=250,
+                                margin=dict(l=0, r=0, t=30, b=0),
+                            )
+                            st.plotly_chart(fig_density, use_container_width=True)
+
+                        # Agent leaderboard
+                        _lb_votes = _load_agent_votes(DB_PATH, limit=2000)
+                        if not _lb_votes.empty:
+                            leaderboard = compute_agent_leaderboard(_lb_votes)
+                            if not leaderboard.empty:
+                                st.markdown("**Agent Leaderboard**")
+                                lb_display = leaderboard[[
+                                    c for c in ["agent_id", "vote_count", "veto_count",
+                                                "veto_rate", "mean_confidence",
+                                                "buys", "sells", "holds"]
+                                    if c in leaderboard.columns
+                                ]]
+                                st.dataframe(lb_display, use_container_width=True, hide_index=True)
+
+                        # Score calibration (if outcomes exist)
+                        try:
+                            cal_df = load_swarm_score_calibration(_sw_conn)
+                            if not cal_df.empty and "forward_60m_bps" in cal_df.columns:
+                                _has_outcomes = cal_df["forward_60m_bps"].notna().any()
+                                if _has_outcomes:
+                                    from hogan_bot.swarm_metrics import compute_opportunity_monotonicity
+                                    mono = compute_opportunity_monotonicity(cal_df)
+                                    st.markdown("**Score Calibration**")
+                                    mc1, mc2 = st.columns(2)
+                                    mc1.metric("Score-Return Correlation", f"{mono['correlation']:.3f}")
+                                    mc2.metric("Monotonic", "Yes" if mono['monotonic'] else "No")
+                                    if mono["bins"]:
+                                        bins_df = pd.DataFrame(mono["bins"])
+                                        fig_cal = px.bar(
+                                            bins_df, x="bin", y="mean_return",
+                                            title="Mean Forward Return by Confidence Bin",
+                                            height=200,
+                                        )
+                                        fig_cal.update_layout(margin=dict(l=0, r=0, t=30, b=0))
+                                        st.plotly_chart(fig_cal, use_container_width=True)
+                        except Exception:
+                            pass
+                    else:
+                        st.info("Not enough decisions for drift analysis.")
+                except Exception as _drift_err:
+                    st.info(f"Learning & Drift data unavailable: {_drift_err}")
+
+                # ── Persisted Promotion Reports ──────────────────────
+                try:
+                    from hogan_bot.swarm_observability import load_swarm_promotion_status
+                    _promo_report = load_swarm_promotion_status(_sw_conn)
+                    if not _promo_report.empty:
+                        st.subheader("Latest Promotion Report")
+                        _pr = _promo_report.iloc[0]
+                        pr1, pr2, pr3 = st.columns(3)
+                        pr1.metric("Phase", _pr.get("phase", "—"))
+                        pr2.metric("Recommendation", _pr.get("recommendation", "—"))
+                        _bl_count = len(json.loads(_pr.get("blockers_json", "[]")))
+                        pr3.metric("Blockers", _bl_count)
+                        with st.expander("Full Report"):
+                            st.text(_pr.get("summary", "No summary available."))
+                            try:
+                                st.json(json.loads(_pr.get("gates_json", "[]")))
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
 
         _sw_conn.close()
     except Exception as exc:
