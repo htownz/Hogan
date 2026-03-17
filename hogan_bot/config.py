@@ -67,6 +67,9 @@ class BotConfig:
     # Exit management (0 = disabled)
     trailing_stop_pct: float = 0.025
     take_profit_pct: float = 0.035
+    # Trailing stop activation: only start trailing after MFE reaches this %.
+    # Prevents noise-triggered stops in the first bars after entry.
+    trail_activation_pct: float = 0.005
 
     # ATR stop-distance multiplier (strategy.py line: ATR × multiplier)
     atr_stop_multiplier: float = 2.5
@@ -306,7 +309,7 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         allow_longs=True,
         allow_shorts=True,
         long_size_scale=0.5,
-        short_size_scale=1.0,
+        short_size_scale=1.5,
     ),
     "ranging": RegimeConfig(
         volume_threshold_mult=1.10,
@@ -499,6 +502,7 @@ def load_config() -> BotConfig:
         signal_min_vote_margin=max(1, int(os.getenv("HOGAN_SIGNAL_MIN_VOTE_MARGIN", "1"))),
         trailing_stop_pct=float(os.getenv("HOGAN_TRAILING_STOP_PCT", "0.025")),
         take_profit_pct=float(os.getenv("HOGAN_TAKE_PROFIT_PCT", "0.054")),
+        trail_activation_pct=float(os.getenv("HOGAN_TRAIL_ACTIVATION_PCT", "0.005")),
         atr_stop_multiplier=float(os.getenv("HOGAN_ATR_STOP_MULTIPLIER", "2.5")),
         exit_drawdown_pct=float(os.getenv("HOGAN_EXIT_DRAWDOWN_PCT", "0.03")),
         exit_time_decay=float(os.getenv("HOGAN_EXIT_TIME_DECAY", "0.75")),

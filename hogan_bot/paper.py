@@ -21,6 +21,10 @@ class Position:
     max_favorable_pct: float = 0.0
     # ATR at entry (for volatility expansion check in ExitEvaluator)
     entry_atr_pct: float = 0.0
+    # Trailing stop only activates after price moves this far in your favor.
+    # Prevents noise-triggered stops in the initial bars after entry.
+    trail_activation_pct: float = 0.0
+    trail_active: bool = False
 
 
 @dataclass
@@ -40,6 +44,8 @@ class ShortPosition:
     max_adverse_pct: float = 0.0
     max_favorable_pct: float = 0.0
     entry_atr_pct: float = 0.0
+    trail_activation_pct: float = 0.0
+    trail_active: bool = False
 
 
 @dataclass
@@ -65,6 +71,7 @@ class PaperPortfolio:
         qty: float,
         trailing_stop_pct: float = 0.0,
         take_profit_pct: float = 0.0,
+        trail_activation_pct: float = 0.0,
     ) -> bool:
         if qty <= 0 or price <= 0:
             return False
@@ -80,11 +87,11 @@ class PaperPortfolio:
         pos.avg_entry = 0.0 if new_qty <= 0 else ((pos.qty * pos.avg_entry) + cost) / new_qty
         pos.qty = new_qty
 
-        # Only update exit parameters when opening a fresh position or
-        # adding to an existing one that has no stops yet.
         if trailing_stop_pct > 0:
             pos.trailing_stop_pct = trailing_stop_pct
-            pos.peak_price = max(pos.peak_price, price)
+            pos.trail_activation_pct = trail_activation_pct
+            if trail_activation_pct <= 0:
+                pos.peak_price = max(pos.peak_price, price)
         if take_profit_pct > 0:
             pos.take_profit_pct = take_profit_pct
 
@@ -113,6 +120,7 @@ class PaperPortfolio:
         qty: float,
         trailing_stop_pct: float = 0.0,
         take_profit_pct: float = 0.0,
+        trail_activation_pct: float = 0.0,
     ) -> bool:
         """Open a synthetic short position.
 
@@ -122,10 +130,8 @@ class PaperPortfolio:
         """
         if qty <= 0 or price <= 0:
             return False
-        # Require at least 1× notional in free cash (1:1 margin guardrail)
         if qty * price > self.cash_usd:
             return False
-        # Deduct entry fee only
         fee = qty * price * self.fee_rate
         self.cash_usd -= fee
 
@@ -135,7 +141,9 @@ class PaperPortfolio:
         pos.qty = new_qty
         if trailing_stop_pct > 0:
             pos.trailing_stop_pct = trailing_stop_pct
-            pos.trough_price = min(pos.trough_price, price) if pos.trough_price > 0 else price
+            pos.trail_activation_pct = trail_activation_pct
+            if trail_activation_pct <= 0:
+                pos.trough_price = min(pos.trough_price, price) if pos.trough_price > 0 else price
         if take_profit_pct > 0:
             pos.take_profit_pct = take_profit_pct
         self.short_positions[symbol] = pos
@@ -187,12 +195,19 @@ class PaperPortfolio:
                 exits.append((symbol, "max_hold_time"))
                 continue
             if pos.trailing_stop_pct > 0:
-                if px > pos.peak_price:
-                    pos.peak_price = px
-                stop_level = pos.peak_price * (1.0 - pos.trailing_stop_pct)
-                if px <= stop_level:
-                    exits.append((symbol, "trailing_stop"))
-                    continue
+                if not pos.trail_active and pos.trail_activation_pct > 0:
+                    if pos.avg_entry > 0 and pos.max_favorable_pct >= pos.trail_activation_pct:
+                        pos.trail_active = True
+                        pos.peak_price = px
+                elif pos.trail_activation_pct <= 0:
+                    pos.trail_active = True
+                if pos.trail_active:
+                    if px > pos.peak_price:
+                        pos.peak_price = px
+                    stop_level = pos.peak_price * (1.0 - pos.trailing_stop_pct)
+                    if px <= stop_level:
+                        exits.append((symbol, "trailing_stop"))
+                        continue
             if pos.take_profit_pct > 0 and pos.avg_entry > 0:
                 tp_level = pos.avg_entry * (1.0 + pos.take_profit_pct)
                 if px >= tp_level * (1.0 - 1e-9):
@@ -214,14 +229,20 @@ class PaperPortfolio:
             if _s_max > 0 and pos.bars_held >= _s_max:
                 exits.append((symbol, "short_max_hold_time"))
                 continue
-            # Trailing stop: tracks lowest price, fires when price rebounds up
             if pos.trailing_stop_pct > 0:
-                if pos.trough_price <= 0 or px < pos.trough_price:
-                    pos.trough_price = px
-                stop_level = pos.trough_price * (1.0 + pos.trailing_stop_pct)
-                if px >= stop_level:
-                    exits.append((symbol, "short_trailing_stop"))
-                    continue
+                if not pos.trail_active and pos.trail_activation_pct > 0:
+                    if pos.avg_entry > 0 and pos.max_favorable_pct >= pos.trail_activation_pct:
+                        pos.trail_active = True
+                        pos.trough_price = px
+                elif pos.trail_activation_pct <= 0:
+                    pos.trail_active = True
+                if pos.trail_active:
+                    if pos.trough_price <= 0 or px < pos.trough_price:
+                        pos.trough_price = px
+                    stop_level = pos.trough_price * (1.0 + pos.trailing_stop_pct)
+                    if px >= stop_level:
+                        exits.append((symbol, "short_trailing_stop"))
+                        continue
             # Take profit: fires when price falls to entry × (1 - tp_pct)
             if pos.take_profit_pct > 0 and pos.avg_entry > 0:
                 tp_level = pos.avg_entry * (1.0 - pos.take_profit_pct)

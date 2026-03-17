@@ -885,6 +885,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     min_vote_margin: int = 1,
     trailing_stop_pct: float = 0.0,
     take_profit_pct: float = 0.0,
+    trail_activation_pct: float = 0.0,
     ml_confidence_sizing: bool = False,
     atr_stop_multiplier: float = 1.5,
     use_ict: bool = False,
@@ -1105,7 +1106,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             for sym, size in list(_pending_buys.items()):
                 _pending_buys.pop(sym, None)
                 buy_px = open_px * (1.0 + slip_mult)
-                if portfolio.execute_buy(sym, buy_px, size, trailing_stop_pct=trailing_stop_pct, take_profit_pct=take_profit_pct):
+                if portfolio.execute_buy(sym, buy_px, size, trailing_stop_pct=trailing_stop_pct, take_profit_pct=take_profit_pct, trail_activation_pct=trail_activation_pct):
                     trades += 1
                     _entry_bar[sym] = i - 1
                     _entry_regime[sym] = _current_regime
@@ -1155,7 +1156,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             for sym, size in list(_pending_shorts.items()):
                 _pending_shorts.pop(sym, None)
                 short_px = open_px * (1.0 - slip_mult)
-                if portfolio.execute_short(sym, short_px, size, trailing_stop_pct=trailing_stop_pct, take_profit_pct=take_profit_pct):
+                if portfolio.execute_short(sym, short_px, size, trailing_stop_pct=trailing_stop_pct, take_profit_pct=take_profit_pct, trail_activation_pct=trail_activation_pct):
                     trades += 1
                     _short_entry_bar[sym] = i - 1
                     _short_entry_regime[sym] = _current_regime
@@ -1527,6 +1528,16 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         elif action == "sell":
             _funnel["post_ranging_sell"] += 1
 
+        # ── Long momentum confirmation ───────────────────────────────────
+        _momentum_scale = 1.0
+        if action == "buy" and len(window) >= 8:
+            _ema8 = window["close"].ewm(span=8, min_periods=8).mean().iloc[-1]
+            if px < _ema8:
+                _momentum_scale = 0.3
+                _funnel["long_momentum_reduced"] = _funnel.get("long_momentum_reduced", 0) + 1
+            else:
+                _funnel["long_momentum_confirmed"] = _funnel.get("long_momentum_confirmed", 0) + 1
+
         equity = portfolio.total_equity(mark)
         equity_curve.append(equity)
 
@@ -1539,7 +1550,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             stop_distance_pct=signal.stop_distance_pct,
             max_risk_per_trade=max_risk_per_trade,
             max_allocation_pct=aggressive_allocation,
-            confidence_scale=conf_scale * _quality_scale * _ranging_scale * _pullback_scale * _eff_position_scale,
+            confidence_scale=conf_scale * _quality_scale * _ranging_scale * _pullback_scale * _eff_position_scale * _momentum_scale,
             fee_rate=fee_rate,
         )
 
@@ -1603,6 +1614,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                 symbol, _mtf_px, _mtf_size,
                                 trailing_stop_pct=_eff_ts,
                                 take_profit_pct=_eff_tp,
+                                trail_activation_pct=trail_activation_pct,
                             ):
                                 _pos = portfolio.positions.get(symbol)
                                 if _pos is not None:
@@ -1746,6 +1758,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     symbol, buy_px, _long_size,
                     trailing_stop_pct=_eff_ts,
                     take_profit_pct=_eff_tp,
+                    trail_activation_pct=trail_activation_pct,
                 ):
                     _pos = portfolio.positions.get(symbol)
                     if _pos is not None:
@@ -1877,6 +1890,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         symbol, short_px, _short_size,
                         trailing_stop_pct=_eff_ts,
                         take_profit_pct=_eff_tp,
+                        trail_activation_pct=trail_activation_pct,
                     ):
                         spos = portfolio.short_positions.get(symbol)
                         if spos is not None:
