@@ -173,6 +173,128 @@ def _pnl_color(val):
     return "color: #2ecc71" if val >= 0 else "color: #e74c3c"
 
 
+# ---------------------------------------------------------------------------
+# Swarm helpers
+# ---------------------------------------------------------------------------
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _load_agent_votes(db: str, limit: int = 400) -> pd.DataFrame:
+    try:
+        conn = sqlite3.connect(db)
+        df = pd.read_sql_query(
+            f"""SELECT sd.ts_ms, sav.agent_id, sav.action, sav.confidence,
+                       sav.veto, sav.size_scale
+                FROM swarm_agent_votes sav
+                JOIN swarm_decisions sd ON sav.decision_id = sd.id
+                ORDER BY sd.ts_ms DESC LIMIT {int(limit)}""",
+            conn,
+        )
+        conn.close()
+        if not df.empty:
+            df["ts"] = pd.to_datetime(df["ts_ms"], unit="ms", utc=True)
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _load_veto_ledger(db: str, limit: int = 200) -> pd.DataFrame:
+    try:
+        conn = sqlite3.connect(db)
+        df = pd.read_sql_query(
+            f"""SELECT sav.ts_ms, sav.agent_id, sav.block_reasons_json,
+                       sd.final_action AS swarm_action, sd.agreement
+                FROM swarm_agent_votes sav
+                JOIN swarm_decisions sd ON sav.decision_id = sd.id
+                WHERE sav.veto = 1
+                ORDER BY sav.ts_ms DESC LIMIT {int(limit)}""",
+            conn,
+        )
+        conn.close()
+        if not df.empty:
+            df["ts"] = pd.to_datetime(df["ts_ms"], unit="ms", utc=True)
+            df["reasons"] = df["block_reasons_json"].apply(
+                lambda x: ", ".join(json.loads(x)) if x else ""
+            )
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _load_decision_detail(db: str, decision_id: int) -> dict:
+    """Load full detail for a single swarm decision + its votes + baseline."""
+    try:
+        conn = sqlite3.connect(db)
+        dec = pd.read_sql_query(
+            "SELECT * FROM swarm_decisions WHERE id = ?", conn,
+            params=(decision_id,),
+        )
+        votes = pd.read_sql_query(
+            "SELECT agent_id, action, confidence, size_scale, veto, "
+            "       block_reasons_json, expected_edge_bps "
+            "FROM swarm_agent_votes WHERE decision_id = ?", conn,
+            params=(decision_id,),
+        )
+        baseline = pd.DataFrame()
+        if not dec.empty:
+            ts_ms = int(dec.iloc[0]["ts_ms"])
+            symbol = dec.iloc[0]["symbol"]
+            baseline = pd.read_sql_query(
+                "SELECT final_action, final_confidence, position_size, "
+                "       regime, ml_up_prob, conf_scale, block_reasons_json "
+                "FROM decision_log WHERE ts_ms = ? AND symbol = ? LIMIT 1",
+                conn, params=(ts_ms, symbol),
+            )
+        conn.close()
+        return {"decision": dec, "votes": votes, "baseline": baseline}
+    except Exception:
+        return {"decision": pd.DataFrame(), "votes": pd.DataFrame(), "baseline": pd.DataFrame()}
+
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _load_promotion_stats(db: str) -> dict:
+    """Collect counts needed for the Promotion Readiness Card."""
+    stats = {
+        "shadow_decisions": 0, "would_trade": 0,
+        "veto_events": 0, "distinct_regimes": 0,
+        "mean_agreement": 0.0,
+    }
+    try:
+        conn = sqlite3.connect(db)
+        row = conn.execute(
+            "SELECT COUNT(*) FROM swarm_decisions WHERE mode = 'shadow'"
+        ).fetchone()
+        stats["shadow_decisions"] = row[0] if row else 0
+
+        row = conn.execute(
+            "SELECT COUNT(*) FROM swarm_decisions "
+            "WHERE mode = 'shadow' AND final_action IN ('buy', 'sell')"
+        ).fetchone()
+        stats["would_trade"] = row[0] if row else 0
+
+        row = conn.execute(
+            "SELECT COUNT(*) FROM swarm_decisions WHERE mode = 'shadow' AND vetoed = 1"
+        ).fetchone()
+        stats["veto_events"] = row[0] if row else 0
+
+        row = conn.execute(
+            "SELECT COUNT(DISTINCT json_extract(decision_json, '$.regime')) "
+            "FROM swarm_decisions WHERE mode = 'shadow'"
+        ).fetchone()
+        stats["distinct_regimes"] = row[0] if row else 0
+
+        row = conn.execute(
+            "SELECT AVG(agreement) FROM swarm_decisions WHERE mode = 'shadow'"
+        ).fetchone()
+        stats["mean_agreement"] = round(row[0] or 0.0, 3)
+
+        conn.close()
+    except Exception:
+        pass
+    return stats
+
+
 def _bruno_html(mood: str = "neutral", regime: str = "unknown", quip: str = "") -> str:
     """Return self-contained HTML/JS for the animated Bruno the Bull mascot."""
     return f"""
@@ -1096,6 +1218,140 @@ with tab_swarm:
                     )
                 else:
                     st.info("No shadow decisions logged yet.")
+
+                # ── Panel A: Agent Voting Board ──────────────────────────
+                st.subheader("Agent Voting Board")
+                _vb_bars = st.slider("Recent bars", 10, 100, 25, key="vb_bars")
+                df_vb = _load_agent_votes(DB_PATH, limit=_vb_bars * 10)
+                if not df_vb.empty:
+                    pivot = df_vb.pivot_table(
+                        index="ts", columns="agent_id",
+                        values="action", aggfunc="first",
+                    ).tail(_vb_bars)
+                    action_map = {"buy": 1.0, "sell": -1.0, "hold": 0.0}
+                    pivot_num = pivot.map(lambda x: action_map.get(str(x), 0.0))
+                    fig_vb = px.imshow(
+                        pivot_num.T,
+                        x=[t.strftime("%m-%d %H:%M") for t in pivot_num.index],
+                        y=list(pivot_num.columns),
+                        color_continuous_scale=[[0, "#e74c3c"], [0.5, "#95a5a6"], [1, "#2ecc71"]],
+                        zmin=-1, zmax=1,
+                        labels={"color": "Action (buy=1, sell=-1)"},
+                        aspect="auto",
+                    )
+                    fig_vb.update_layout(
+                        height=250, margin=dict(l=0, r=0, t=10, b=0),
+                    )
+                    st.plotly_chart(fig_vb, use_container_width=True)
+                else:
+                    st.info("No agent votes with decision_id found.")
+
+                # ── Panel B: Veto Ledger ─────────────────────────────────
+                st.subheader("Veto Ledger")
+                df_vl = _load_veto_ledger(DB_PATH)
+                if not df_vl.empty:
+                    vl_m1, vl_m2 = st.columns(2)
+                    vl_m1.metric("Total Vetoes", len(df_vl))
+                    all_reasons: dict[str, int] = {}
+                    for _, r in df_vl.iterrows():
+                        for reason in json.loads(r["block_reasons_json"]):
+                            all_reasons[reason] = all_reasons.get(reason, 0) + 1
+                    if all_reasons:
+                        top3 = sorted(all_reasons.items(), key=lambda x: -x[1])[:3]
+                        vl_m2.metric("Top Reason", top3[0][0] if top3 else "—")
+                        fig_vr = px.bar(
+                            x=[r for r, _ in top3], y=[c for _, c in top3],
+                            labels={"x": "Reason", "y": "Count"},
+                            title="Top 3 Veto Reasons", height=200,
+                        )
+                        fig_vr.update_layout(margin=dict(l=0, r=0, t=30, b=0))
+                        st.plotly_chart(fig_vr, use_container_width=True)
+                    st.dataframe(
+                        df_vl[["ts", "agent_id", "reasons", "swarm_action", "agreement"]].head(50),
+                        use_container_width=True, hide_index=True,
+                    )
+                else:
+                    st.info("No vetoes logged yet.")
+
+                # ── Panel C: Replay by Decision ──────────────────────────
+                st.subheader("Replay by Decision")
+                df_recent = pd.read_sql_query(
+                    "SELECT id, ts_ms, final_action, symbol, agreement, vetoed "
+                    "FROM swarm_decisions ORDER BY ts_ms DESC LIMIT 50",
+                    _sw_conn,
+                )
+                if not df_recent.empty:
+                    df_recent["label"] = (
+                        pd.to_datetime(df_recent["ts_ms"], unit="ms").dt.strftime("%m-%d %H:%M")
+                        + " | " + df_recent["final_action"]
+                    )
+                    chosen = st.selectbox(
+                        "Select decision", df_recent["label"].tolist(), key="replay_sel",
+                    )
+                    chosen_idx = df_recent[df_recent["label"] == chosen].index[0]
+                    chosen_id = int(df_recent.loc[chosen_idx, "id"])
+                    detail = _load_decision_detail(DB_PATH, chosen_id)
+
+                    dec_df = detail["decision"]
+                    votes_df = detail["votes"]
+                    base_df = detail["baseline"]
+
+                    if not dec_df.empty:
+                        d = dec_df.iloc[0]
+                        rc1, rc2, rc3, rc4, rc5 = st.columns(5)
+                        rc1.metric("Action", d.get("final_action", "—"))
+                        rc2.metric("Confidence", f"{d.get('confidence', 0):.2f}")
+                        rc3.metric("Agreement", f"{d.get('agreement', 0):.2f}")
+                        rc4.metric("Entropy", f"{d.get('entropy', 0):.3f}")
+                        rc5.metric("Vetoed", "Yes" if d.get("vetoed") else "No")
+
+                    if not votes_df.empty:
+                        st.markdown("**Per-Agent Votes**")
+                        votes_df["reasons"] = votes_df["block_reasons_json"].apply(
+                            lambda x: ", ".join(json.loads(x)) if x else ""
+                        )
+                        st.dataframe(
+                            votes_df[["agent_id", "action", "confidence", "size_scale", "veto", "reasons"]],
+                            use_container_width=True, hide_index=True,
+                        )
+
+                    if not base_df.empty:
+                        st.markdown("**Baseline Comparison**")
+                        b = base_df.iloc[0]
+                        bc1, bc2, bc3 = st.columns(3)
+                        bc1.metric("Baseline Action", b.get("final_action", "—"))
+                        bc2.metric("Baseline Confidence", f"{b.get('final_confidence', 0):.2f}")
+                        bc3.metric("Regime", b.get("regime", "—"))
+                    else:
+                        st.info("No matching baseline decision found for this timestamp.")
+                else:
+                    st.info("No swarm decisions to replay.")
+
+                # ── Panel D: Promotion Readiness Card ────────────────────
+                st.subheader("Promotion Readiness")
+                promo = _load_promotion_stats(DB_PATH)
+                pr1, pr2, pr3, pr4 = st.columns(4)
+                _targets = {
+                    "shadow_decisions": 300, "would_trade": 100,
+                    "veto_events": 50, "distinct_regimes": 3,
+                }
+                pr1.metric("Shadow Decisions", f"{promo['shadow_decisions']} / {_targets['shadow_decisions']}")
+                pr2.metric("Would-Trade", f"{promo['would_trade']} / {_targets['would_trade']}")
+                pr3.metric("Veto Events", f"{promo['veto_events']} / {_targets['veto_events']}")
+                pr4.metric("Regime Coverage", f"{promo['distinct_regimes']} / {_targets['distinct_regimes']}")
+
+                all_met = all(
+                    promo[k] >= v for k, v in _targets.items()
+                )
+                for key, target in _targets.items():
+                    pct = min(promo[key] / target, 1.0) if target else 0.0
+                    st.progress(pct, text=f"{key}: {promo[key]}/{target}")
+
+                if all_met:
+                    st.success("READY — All shadow sample targets met. Consider running promotion_check.py.")
+                else:
+                    st.warning("COLLECTING — Shadow sample targets not yet met.")
+                st.metric("Mean Agreement", f"{promo['mean_agreement']:.3f}")
 
         _sw_conn.close()
     except Exception as exc:
