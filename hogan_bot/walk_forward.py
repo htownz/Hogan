@@ -61,6 +61,7 @@ class WFConfig:
     ml_sell_threshold: float = 0.49
     model_type: str = "logreg"
     label_mode: str = "fee_threshold"
+    use_regime_models: bool = False
 
     min_sharpe: float = 0.5
     max_drawdown_pct: float = 15.0
@@ -334,11 +335,68 @@ def _train_and_evaluate_window(
             except Exception:
                 pass
 
-            trained = TrainedModel(
+            global_trained = TrainedModel(
                 model=model,
                 feature_columns=feature_cols,
                 scaler=scaler,
             )
+
+            # Regime-specific models: train per-regime when enabled and enough data
+            if cfg.use_regime_models:
+                from hogan_bot.ml import RegimeModelRouter
+                from hogan_bot.regime import detect_regime, reset_regime_history as _rr
+                _rr()
+                _MIN_REGIME_SAMPLES = 50
+                regime_labels: list[str | None] = []
+                for _ri in range(len(train_candles)):
+                    _rw = train_candles.iloc[max(0, _ri - 79):_ri + 1]
+                    if len(_rw) >= 80:
+                        try:
+                            regime_labels.append(detect_regime(_rw).regime)
+                        except Exception:
+                            regime_labels.append(None)
+                    else:
+                        regime_labels.append(None)
+                _rr()
+
+                regime_arr = np.array(regime_labels[:len(X)])
+                regime_models: dict[str, TrainedModel] = {}
+                for regime_name in ("trending_up", "trending_down", "ranging", "volatile"):
+                    mask = regime_arr == regime_name
+                    n_regime = int(mask.sum())
+                    if n_regime < _MIN_REGIME_SAMPLES:
+                        continue
+                    X_r, y_r = X[mask], y[mask]
+                    try:
+                        if cfg.model_type == "logreg":
+                            from sklearn.linear_model import LogisticRegression
+                            from sklearn.preprocessing import StandardScaler
+                            r_scaler = StandardScaler()
+                            X_r_arr = r_scaler.fit_transform(X_r)
+                            r_model = LogisticRegression(
+                                max_iter=1000, C=0.1, class_weight="balanced", solver="lbfgs"
+                            )
+                            r_model.fit(X_r_arr, y_r)
+                        else:
+                            from hogan_bot.ml import _make_cv_model
+                            r_scaler = None
+                            r_model = _make_cv_model(cfg.model_type)
+                            r_model.fit(X_r.values if hasattr(X_r, 'values') else X_r, y_r)
+                        regime_models[regime_name] = TrainedModel(
+                            model=r_model, feature_columns=feature_cols, scaler=r_scaler,
+                        )
+                        logger.info("    [W%d] Regime model %s: %d samples", window_idx, regime_name, n_regime)
+                    except Exception as _re:
+                        logger.warning("    [W%d] Regime model %s failed: %s", window_idx, regime_name, _re)
+
+                if regime_models:
+                    trained = RegimeModelRouter(global_trained, regime_models)
+                    logger.info("    [W%d] RegimeModelRouter: %d regime models + global",
+                                 window_idx, len(regime_models))
+                else:
+                    trained = global_trained
+            else:
+                trained = global_trained
         else:
             logger.info("    [W%d] ML filter disabled — technical pipeline only", window_idx)
             sys.stdout.flush()
@@ -684,6 +742,8 @@ def main() -> None:
     p.add_argument("--label-mode", default="enhanced_triple_barrier",
                    choices=["fee_threshold", "triple_barrier", "enhanced_triple_barrier"],
                    help="Label construction method (default: enhanced_triple_barrier)")
+    p.add_argument("--regime-models", action="store_true",
+                   help="Train per-regime ML models (requires ML enabled)")
     p.add_argument("--output", default="diagnostics/walk_forward_report.json")
     args = p.parse_args()
 
@@ -718,6 +778,7 @@ def main() -> None:
         use_funding_overlay=args.funding,
         model_type=args.model_type,
         label_mode=args.label_mode,
+        use_regime_models=args.regime_models,
     )
 
     sitout = None

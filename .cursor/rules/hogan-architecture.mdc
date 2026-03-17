@@ -110,11 +110,35 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 - Score > 0 = mean-reverting (favorable), score < 0 = trending (unfavorable)
 - Walk-forward tested as position sizer: net negative, kept as diagnostic only
 
+## ExitEvaluator (Short-Aware)
+- `ExitEvaluator` in `exit_model.py` — thesis-based exit logic for both longs and shorts
+- Short-specific parameters: tighter drawdown panic (67% of long threshold), faster time decay (0.60 vs 0.75), shorter stagnation window
+- Volatility contraction exit for shorts: exits when vol drops below 50% of entry ATR (thesis weakening)
+- Used in both backtest and event_loop for signal-based exit confirmation (long sell signals + short buy signals)
+
+## Regime Transition Dampener
+- `RegimeTransitionTracker` in `regime.py` reduces sizing for 3 bars after regime changes
+- Scale ramps linearly from 0.40 (min_scale) to 1.0 over the cooldown window
+- Applied to `_eff_position_scale` in backtest and `eff_long/short_size_scale` in event_loop
+- Prevents whipsaw entries at regime boundaries
+
+## Regime-Specific ML Models
+- `RegimeModelRouter` in `ml.py` holds per-regime ML models + global fallback
+- Walk-forward: `--regime-models` flag trains separate models per regime (min 50 samples each)
+- Duck-types as `TrainedModel` — transparent to `predict_up_probability()`
+- Backtest/event_loop call `set_regime()` before prediction to route to the appropriate model
+
+## Delayed Trailing Stop Activation
+- `trail_activation_pct` in `BotConfig` (default 0.5%) — minimum favorable excursion before trailing stop activates
+- Wired into paper.py (Position + ShortPosition), backtest, execution engines, event_loop, walk_forward
+- Prevents premature stops from exiting during normal market noise
+
 ## Validation
 - Walk-forward: `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5`
 - Walk-forward (no ML): `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --no-ml`
 - Walk-forward (macro sitout): `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --no-ml --macro-sitout`
 - Walk-forward (ML sizer + macro): `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --ml-sizer --macro-sitout`
+- Walk-forward (regime models): `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --regime-models`
 - Exit parameter sweep: `python diagnostics/exit_sweep.py`
 - Short hold sweep: `python diagnostics/short_hold_sweep.py`
 - Feature audit: `python -m hogan_bot.feature_importance --db data/hogan.db`

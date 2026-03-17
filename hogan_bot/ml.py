@@ -26,6 +26,55 @@ class TrainedModel:
     scaler: object | None = field(default=None)
 
 
+class RegimeModelRouter:
+    """Routes ML predictions to regime-specific models.
+
+    Holds a global fallback ``TrainedModel`` and optional per-regime models.
+    When ``predict(candles, regime)`` is called, it uses the regime-specific
+    model if available, otherwise falls back to the global model.
+
+    Quacks like ``TrainedModel`` for backward compatibility: ``model``,
+    ``feature_columns``, and ``scaler`` all delegate to the global model so
+    ``predict_up_probability(candles, router)`` works transparently.
+    """
+
+    def __init__(
+        self,
+        global_model: TrainedModel,
+        regime_models: dict[str, TrainedModel] | None = None,
+    ):
+        self._global = global_model
+        self._regime_models = regime_models or {}
+        self._current_regime: str | None = None
+
+    @property
+    def model(self):
+        m = self._regime_models.get(self._current_regime) if self._current_regime else None
+        return m.model if m else self._global.model
+
+    @property
+    def feature_columns(self) -> list[str]:
+        m = self._regime_models.get(self._current_regime) if self._current_regime else None
+        return m.feature_columns if m else self._global.feature_columns
+
+    @property
+    def scaler(self):
+        m = self._regime_models.get(self._current_regime) if self._current_regime else None
+        return m.scaler if m else self._global.scaler
+
+    def set_regime(self, regime: str | None) -> None:
+        """Set the current regime for subsequent predictions."""
+        self._current_regime = regime
+
+    @property
+    def has_regime_models(self) -> bool:
+        return len(self._regime_models) > 0
+
+    @property
+    def regime_names(self) -> list[str]:
+        return list(self._regime_models.keys())
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------

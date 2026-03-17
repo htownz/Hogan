@@ -39,7 +39,13 @@ class ExitDecision:
 
 
 class ExitEvaluator:
-    """Decides whether to exit an open position based on thesis integrity."""
+    """Decides whether to exit an open position based on thesis integrity.
+
+    Short positions use tighter drawdown thresholds (unlimited upside risk),
+    faster time decay (12h max hold vs 24h for longs), and a volatility
+    *contraction* exit (shorts profit from vol expansion; contraction
+    weakens the thesis).
+    """
 
     def __init__(
         self,
@@ -48,12 +54,24 @@ class ExitEvaluator:
         drawdown_panic_pct: float = 0.03,
         volatility_expansion_threshold: float = 2.0,
         time_decay_threshold: float = 0.75,
+        # Short-specific overrides — applied when side != "long"
+        short_drawdown_panic_pct: float | None = None,
+        short_time_decay_threshold: float | None = None,
+        short_vol_contraction_threshold: float | None = None,
+        short_max_consolidation_bars: int | None = None,
     ):
         self._trend_reversal_threshold = trend_reversal_threshold
         self._max_consolidation_bars = max_consolidation_bars
         self._drawdown_panic_pct = drawdown_panic_pct
         self._vol_expansion_threshold = volatility_expansion_threshold
         self._time_decay_threshold = time_decay_threshold
+
+        # Short defaults: tighter drawdown (2% vs 3%), faster decay (0.60 vs 0.75),
+        # vol contraction at 0.5x entry ATR, shorter stagnation window.
+        self._short_drawdown_panic_pct = short_drawdown_panic_pct or (drawdown_panic_pct * 0.67)
+        self._short_time_decay_threshold = short_time_decay_threshold or 0.60
+        self._short_vol_contraction_threshold = short_vol_contraction_threshold or 0.50
+        self._short_max_consolidation_bars = short_max_consolidation_bars or max(max_consolidation_bars - 4, 6)
 
     def should_exit(
         self,
@@ -74,18 +92,23 @@ class ExitEvaluator:
             logger.debug("EXIT_MODEL: insufficient candles (%d < 20), skipping", len(candles))
             return ExitDecision()
 
+        is_short = side != "long"
         close = candles["close"].astype(float)
 
-        # Unrealized P/L
-        if side == "long":
-            upnl_pct = (current_price - entry_price) / entry_price
-        else:
+        if is_short:
             upnl_pct = (entry_price - current_price) / entry_price
+        else:
+            upnl_pct = (current_price - entry_price) / entry_price
+
+        # Select side-appropriate thresholds
+        dd_panic = self._short_drawdown_panic_pct if is_short else self._drawdown_panic_pct
+        td_threshold = self._short_time_decay_threshold if is_short else self._time_decay_threshold
+        stag_bars = self._short_max_consolidation_bars if is_short else self._max_consolidation_bars
 
         # 1. Trend persistence check: has the trend actually reversed?
         trend_score = self._trend_persistence(close, side)
         if trend_score < -self._trend_reversal_threshold:
-            logger.debug("EXIT_MODEL: trend reversed (score=%.2f)", trend_score)
+            logger.debug("EXIT_MODEL: trend reversed (score=%.2f, side=%s)", trend_score, side)
             return ExitDecision(
                 should_exit=True,
                 reason="trend_reversal",
@@ -93,41 +116,55 @@ class ExitEvaluator:
             )
 
         # 2. Drawdown panic: significant unrealized loss
-        if upnl_pct < -self._drawdown_panic_pct:
+        if upnl_pct < -dd_panic:
             atr_pct = self._current_atr_pct(candles)
-            if abs(upnl_pct) > atr_pct * 1.5:
-                logger.debug("EXIT_MODEL: drawdown panic (upnl=%.3f)", upnl_pct)
+            atr_mult = 1.2 if is_short else 1.5
+            if abs(upnl_pct) > atr_pct * atr_mult:
+                logger.debug("EXIT_MODEL: drawdown panic (upnl=%.3f, side=%s)", upnl_pct, side)
                 return ExitDecision(
                     should_exit=True,
                     reason="drawdown_exceeded",
-                    urgency=min(1.0, abs(upnl_pct) / self._drawdown_panic_pct),
+                    urgency=min(1.0, abs(upnl_pct) / dd_panic),
                 )
 
         # 3. Time decay: position has aged past expected hold window
         hold_ratio = bars_held / max(max_hold_bars, 1)
-        if hold_ratio > self._time_decay_threshold and upnl_pct < 0.005:
-            logger.debug("EXIT_MODEL: time decay (held %.0f%%, upnl=%.3f)", hold_ratio * 100, upnl_pct)
+        if hold_ratio > td_threshold and upnl_pct < 0.005:
+            logger.debug("EXIT_MODEL: time decay (held %.0f%%, upnl=%.3f, side=%s)",
+                         hold_ratio * 100, upnl_pct, side)
             return ExitDecision(
                 should_exit=True,
                 reason="time_decay",
                 urgency=hold_ratio,
             )
 
-        # 4. Volatility expansion: regime changed dramatically
+        # 4a. Volatility expansion (longs): regime changed dramatically
+        # 4b. Volatility contraction (shorts): vol is dying, thesis weakening
         if entry_atr is not None:
             current_atr = self._current_atr_pct(candles)
-            atr_expansion = current_atr / max(entry_atr, 1e-9)
-            if atr_expansion > self._vol_expansion_threshold:
-                logger.debug("EXIT_MODEL: vol expansion (ratio=%.1f)", atr_expansion)
-                return ExitDecision(
-                    should_exit=True,
-                    reason="volatility_expansion",
-                    urgency=min(1.0, atr_expansion / self._vol_expansion_threshold - 0.5),
-                )
+            if is_short:
+                atr_ratio = current_atr / max(entry_atr, 1e-9)
+                if atr_ratio < self._short_vol_contraction_threshold:
+                    logger.debug("EXIT_MODEL: vol contraction (ratio=%.2f, side=short)", atr_ratio)
+                    return ExitDecision(
+                        should_exit=True,
+                        reason="volatility_contraction",
+                        urgency=min(1.0, (self._short_vol_contraction_threshold - atr_ratio) / 0.3),
+                    )
+            else:
+                atr_expansion = current_atr / max(entry_atr, 1e-9)
+                if atr_expansion > self._vol_expansion_threshold:
+                    logger.debug("EXIT_MODEL: vol expansion (ratio=%.1f)", atr_expansion)
+                    return ExitDecision(
+                        should_exit=True,
+                        reason="volatility_expansion",
+                        urgency=min(1.0, atr_expansion / self._vol_expansion_threshold - 0.5),
+                    )
 
         # 5. Stagnation: position is flat for too long
-        if bars_held > self._max_consolidation_bars and abs(upnl_pct) < 0.002:
-            logger.debug("EXIT_MODEL: stagnation (bars=%d, upnl=%.4f)", bars_held, upnl_pct)
+        if bars_held > stag_bars and abs(upnl_pct) < 0.002:
+            logger.debug("EXIT_MODEL: stagnation (bars=%d, upnl=%.4f, side=%s)",
+                         bars_held, upnl_pct, side)
             return ExitDecision(
                 should_exit=True,
                 reason="stagnation",

@@ -19,7 +19,7 @@ from hogan_bot.expectancy import ExpectancyTracker
 from hogan_bot.indicators import compute_atr
 from hogan_bot.ml import TrainedModel, predict_up_probability
 from hogan_bot.paper import PaperPortfolio
-from hogan_bot.regime import detect_regime, reset_regime_history
+from hogan_bot.regime import detect_regime, reset_regime_history, RegimeTransitionTracker
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
 from hogan_bot.timeframe_utils import bars_per_year as tf_bars_per_year
 from hogan_bot.timeframe_utils import infer_timeframe_from_candles
@@ -1084,6 +1084,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     _whipsaw_count: int = 0
     _last_signal: str = "hold"
     _regime_per_bar: list[str | None] = []
+    _regime_transition = RegimeTransitionTracker(cooldown_bars=3, min_scale=0.40)
 
     # Next-open execution: pending buys/sells to fill at next bar's open
     _pending_buys: dict[str, float] = {}
@@ -1359,6 +1360,11 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 pass
         _regime_per_bar.append(_current_regime)
 
+        # Regime transition dampener: reduce sizing at regime boundaries
+        _transition_scale = _regime_transition.update(_current_regime) if _current_regime else 1.0
+        if _transition_scale < 1.0:
+            _funnel["regime_transition_bars"] = _funnel.get("regime_transition_bars", 0) + 1
+
         # Regime-adjusted thresholds (parity with event_loop)
         _eff: dict[str, float] = {}
         if _rstate is not None:
@@ -1371,7 +1377,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         _eff_ml_sell = _eff.get("ml_sell_threshold", ml_sell_threshold)
         _eff_tp = _eff.get("take_profit_pct", take_profit_pct)
         _eff_ts = _eff.get("trailing_stop_pct", trailing_stop_pct)
-        _eff_position_scale = _eff.get("position_scale", 1.0)
+        _eff_position_scale = _eff.get("position_scale", 1.0) * _transition_scale
         _eff_allow_longs = _eff.get("allow_longs", True)
         _eff_allow_shorts = _eff.get("allow_shorts", True)
         _eff_long_size_scale = _eff.get("long_size_scale", 1.0)
@@ -1401,6 +1407,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
 
         up_prob = None
         if ml_model is not None:
+            if hasattr(ml_model, "set_regime"):
+                ml_model.set_regime(_current_regime)
             up_prob = predict_up_probability(window, ml_model)
             _ml_probs.append(up_prob)
             if use_ml_as_sizer:
@@ -1680,61 +1688,78 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         if action == "buy":
             _consecutive_exit_signals = 0
 
-            # Cover any existing short first
+            # Cover any existing short first (with ExitEvaluator confirmation)
             if enable_shorts and symbol in portfolio.short_positions:
                 _consecutive_short_exit_signals += 1
                 spos = portfolio.short_positions[symbol]
-                if spos.bars_held >= _min_hold_bars:
-                    _consecutive_short_exit_signals = 0
-                    cover_qty = spos.qty
-                    s_avg_entry = spos.avg_entry
-                    s_entry_bar = _short_entry_bar.get(symbol)
-                    if use_next_open and i < len(candles):
-                        _pending_covers[symbol] = (cover_qty, s_avg_entry, s_entry_bar, "buy_signal")
-                        _short_entry_bar.pop(symbol, None)
+                if spos.bars_held < _min_hold_bars:
+                    pass
+                elif _consecutive_short_exit_signals < _exit_confirm_bars:
+                    pass
+                else:
+                    _short_exit_dec = _exit_eval.should_exit(
+                        candles=window,
+                        entry_price=spos.avg_entry,
+                        current_price=px,
+                        bars_held=spos.bars_held,
+                        side="short",
+                        max_hold_bars=_short_max if _short_max > 0 else max_hold_bars,
+                        entry_atr=getattr(spos, "entry_atr_pct", None) or None,
+                        vol_ratio=signal.volume_ratio,
+                    )
+                    if not _short_exit_dec.should_exit:
+                        pass
                     else:
-                        cover_px = px * (1.0 + slip_mult)
-                        _short_entry_bar.pop(symbol, None)
-                        if portfolio.execute_cover(symbol, cover_px, cover_qty):
-                            trades += 1
-                            short_closed += 1
-                            _funnel["short_covered_signal"] += 1
-                            is_win = cover_px < s_avg_entry
-                            _trade_outcomes.append(is_win)
-                            if is_win:
-                                short_wins += 1
-                            elif loss_cooldown_bars > 0:
-                                _cooldown_remaining = loss_cooldown_bars
-                            trade_log.append(
-                                {"bar": bar_ts, "action": "cover", "reason": "buy_signal", "price": cover_px, "qty": cover_qty}
-                            )
-                            gross_pct = (s_avg_entry - cover_px) / s_avg_entry if s_avg_entry else 0
-                            _expectancy.record_trade(
-                                symbol=symbol, regime=_current_regime or "backtest",
-                                gross_pnl_pct=gross_pct, net_pnl_pct=gross_pct - 2 * fee_rate,
-                                hold_bars=(i - 1 - s_entry_bar) if s_entry_bar is not None else 0,
-                                close_reason="buy_signal",
-                            )
-                            if s_entry_bar is not None:
-                                exit_bar_idx = min(i - 1, len(candles) - 1)
-                                fee = cover_qty * (s_avg_entry + cover_px) * fee_rate
-                                pnl_usd = (s_avg_entry - cover_px) * cover_qty - fee
-                                pnl_pct = (s_avg_entry - cover_px) / s_avg_entry * 100 if s_avg_entry else 0
-                                closed_trades.append({
-                                    "entry_bar_idx": s_entry_bar,
-                                    "exit_bar_idx": exit_bar_idx,
-                                    "entry_ts_ms": _bar_ts_ms(candles, s_entry_bar),
-                                    "exit_ts_ms": _bar_ts_ms(candles, exit_bar_idx),
-                                    "side": "short",
-                                    "entry_price": s_avg_entry,
-                                    "exit_price": cover_px,
-                                    "qty": cover_qty,
-                                    "pnl_usd": pnl_usd,
-                                    "pnl_pct": pnl_pct,
-                                    "entry_regime": _short_entry_regime.pop(symbol, _current_regime),
-                                    "regime_confidence": _short_entry_regime_conf.pop(symbol, _regime_conf),
-                                    "close_reason": "buy_signal",
-                                })
+                        _consecutive_short_exit_signals = 0
+                        cover_qty = spos.qty
+                        s_avg_entry = spos.avg_entry
+                        s_entry_bar = _short_entry_bar.get(symbol)
+                        if use_next_open and i < len(candles):
+                            _pending_covers[symbol] = (cover_qty, s_avg_entry, s_entry_bar, "buy_signal")
+                            _short_entry_bar.pop(symbol, None)
+                        else:
+                            cover_px = px * (1.0 + slip_mult)
+                            _short_entry_bar.pop(symbol, None)
+                            if portfolio.execute_cover(symbol, cover_px, cover_qty):
+                                trades += 1
+                                short_closed += 1
+                                _funnel["short_covered_signal"] += 1
+                                is_win = cover_px < s_avg_entry
+                                _trade_outcomes.append(is_win)
+                                if is_win:
+                                    short_wins += 1
+                                elif loss_cooldown_bars > 0:
+                                    _cooldown_remaining = loss_cooldown_bars
+                                trade_log.append(
+                                    {"bar": bar_ts, "action": "cover", "reason": "buy_signal", "price": cover_px, "qty": cover_qty}
+                                )
+                                gross_pct = (s_avg_entry - cover_px) / s_avg_entry if s_avg_entry else 0
+                                _expectancy.record_trade(
+                                    symbol=symbol, regime=_current_regime or "backtest",
+                                    gross_pnl_pct=gross_pct, net_pnl_pct=gross_pct - 2 * fee_rate,
+                                    hold_bars=(i - 1 - s_entry_bar) if s_entry_bar is not None else 0,
+                                    close_reason="buy_signal",
+                                )
+                                if s_entry_bar is not None:
+                                    exit_bar_idx = min(i - 1, len(candles) - 1)
+                                    fee = cover_qty * (s_avg_entry + cover_px) * fee_rate
+                                    pnl_usd = (s_avg_entry - cover_px) * cover_qty - fee
+                                    pnl_pct = (s_avg_entry - cover_px) / s_avg_entry * 100 if s_avg_entry else 0
+                                    closed_trades.append({
+                                        "entry_bar_idx": s_entry_bar,
+                                        "exit_bar_idx": exit_bar_idx,
+                                        "entry_ts_ms": _bar_ts_ms(candles, s_entry_bar),
+                                        "exit_ts_ms": _bar_ts_ms(candles, exit_bar_idx),
+                                        "side": "short",
+                                        "entry_price": s_avg_entry,
+                                        "exit_price": cover_px,
+                                        "qty": cover_qty,
+                                        "pnl_usd": pnl_usd,
+                                        "pnl_pct": pnl_pct,
+                                        "entry_regime": _short_entry_regime.pop(symbol, _current_regime),
+                                        "regime_confidence": _short_entry_regime_conf.pop(symbol, _regime_conf),
+                                        "close_reason": "buy_signal",
+                                    })
 
             _long_size = size * _eff_long_size_scale
             if funding_overlay is not None:
