@@ -53,6 +53,7 @@ class WFConfig:
     max_hold_hours: float = 24.0
     loss_cooldown_hours: float = 2.0
 
+    use_policy_core: bool = True
     use_ml_filter: bool = True
     use_ml_as_sizer: bool = False
     use_macro_sitout: bool = False
@@ -446,6 +447,7 @@ def _train_and_evaluate_window(
             macro_sitout=macro_sitout,
             use_ml_as_sizer=cfg.use_ml_as_sizer,
             funding_overlay=funding_overlay,
+            use_policy_core=cfg.use_policy_core,
         )
 
         t_bt = _time.perf_counter() - t1
