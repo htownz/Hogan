@@ -48,9 +48,9 @@ class ChampionLocks:
     use_regime_detection: bool = True
     ml_confidence_sizing: bool = True
 
-    # Regime-routed strategy families (trend/mean-revert/squeeze)
+    # Regime-routed strategy families (trend/mean-revert/breakout)
     use_strategy_router: bool = True
-    volatile_policy: str = "squeeze"
+    volatile_policy: str = "breakout"
 
     min_hold_bars: int = 3
     exit_confirmation_bars: int = 2

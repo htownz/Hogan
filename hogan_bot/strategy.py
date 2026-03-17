@@ -61,22 +61,15 @@ class StrategyFamily(Protocol):
 # ---------------------------------------------------------------------------
 
 class TrendFollowFamily:
-    """MA crossover + trend continuation with momentum confirmation.
+    """MA crossover + trend continuation strategy.
 
-    Active during trending regimes.  Wraps the base ``generate_signal()``
-    vote engine with three refinements:
-
-    1. **Momentum confirmation**: 2 of the last 3 closes must move in the
-       signal direction (filters whipsaws in marginal trends).
-    2. **Daily-proxy trend bias**: a 24-bar MA vs 72-bar MA determines
-       bullish / bearish bias; longs require bullish bias.
-    3. **ATR-adaptive stop**: stop distance is ``1.5 * ATR(14)`` as a
-       percentage, so stops breathe with volatility.
+    Active during trending regimes.  Uses the existing generate_signal()
+    logic with MA crossover and pullback entries.
     """
     name: str = "trend_follow"
 
     def generate_signal(self, candles, config, regime_state=None) -> StrategySignal:
-        base = generate_signal(
+        return generate_signal(
             candles,
             short_window=config.short_ma_window,
             long_window=config.long_ma_window,
@@ -95,60 +88,17 @@ class TrendFollowFamily:
             min_vote_margin=getattr(config, "signal_min_vote_margin", 1),
         )
 
-        if base.action == "hold":
-            return base
-
-        if len(candles) < 72:
-            return base
-
-        close = candles["close"].astype(float)
-
-        # --- Momentum confirmation: 2 of last 3 closes in signal direction ---
-        deltas = close.diff().iloc[-3:]
-        if base.action == "buy":
-            confirming = int((deltas > 0).sum())
-        else:
-            confirming = int((deltas < 0).sum())
-        if confirming < 2:
-            return StrategySignal("hold", base.stop_distance_pct, 0.0, base.volume_ratio)
-
-        # --- Daily-proxy trend bias (24-bar fast vs 72-bar slow on 1h) ---
-        fast_ma = float(close.rolling(24).mean().iloc[-1])
-        slow_ma = float(close.rolling(72).mean().iloc[-1])
-        bullish_bias = fast_ma > slow_ma
-
-        if base.action == "buy" and not bullish_bias:
-            return StrategySignal("hold", base.stop_distance_pct, 0.0, base.volume_ratio)
-        if base.action == "sell" and bullish_bias:
-            return StrategySignal("hold", base.stop_distance_pct, 0.0, base.volume_ratio)
-
-        # --- ATR-adaptive stop distance ---
-        atr_series = compute_atr(candles, window=14)
-        atr_val = float(atr_series.iloc[-1])
-        px = float(close.iloc[-1])
-        atr_stop = 1.5 * atr_val / max(px, 1e-9)
-        atr_stop = max(0.003, min(0.03, atr_stop))
-
-        # --- Confidence floor: require at least 0.20 ---
-        if base.confidence < 0.20:
-            return StrategySignal("hold", atr_stop, 0.0, base.volume_ratio)
-
-        return StrategySignal(base.action, atr_stop, base.confidence, base.volume_ratio)
-
 
 # ---------------------------------------------------------------------------
 # MeanRevertFamily — for ranging regime
 # ---------------------------------------------------------------------------
 
 class MeanRevertFamily:
-    """Long-only mean-reversion for ranging markets.
+    """RSI extremes + Bollinger Band confirmation for ranging markets.
 
-    Buys when RSI is depressed and price is near the lower Bollinger Band
-    in quiet (below-average volume) conditions.  Uses tight ATR-based
-    stops and take-profit targets for quick round-trips.
-
-    Long-only because walk-forward data shows ranging shorts have zero
-    take-profit exits — they bleed via stop-out or max-hold timeout.
+    Buys when RSI < 30 and price is near the lower BB.
+    Sells when RSI > 70 and price is near the upper BB.
+    Uses tighter stops and targets than trend-following.
     """
     name: str = "mean_revert"
 
@@ -160,6 +110,8 @@ class MeanRevertFamily:
             return StrategySignal("hold", 0.01, 0.0, 0.0)
 
         close = candles["close"].astype(float)
+        high = candles["high"].astype(float)
+        low = candles["low"].astype(float)
         volume = candles["volume"].astype(float)
 
         atr_series = compute_atr(candles, window=14)
@@ -188,6 +140,7 @@ class MeanRevertFamily:
         bb_pct_b = (close - bb_lower) / bb_range.replace(0, np.nan)
         bb_val = float(bb_pct_b.iloc[-1]) if not np.isnan(float(bb_pct_b.iloc[-1])) else 0.5
 
+        # Safety: don't trade if ADX suggests trending
         adx_check = True
         if regime_state is not None and hasattr(regime_state, "adx"):
             adx_check = regime_state.adx < 25
@@ -195,10 +148,13 @@ class MeanRevertFamily:
         action = "hold"
         confidence = 0.0
 
-        if adx_check and vol_ratio < 1.2:
-            if rsi_val < 40 and bb_val < 0.30:
+        if adx_check:
+            if rsi_val < 30 and bb_val < 0.15:
                 action = "buy"
-                confidence = min(1.0, (40 - rsi_val) / 30.0 + (0.30 - bb_val) * 0.5)
+                confidence = min(1.0, (30 - rsi_val) / 20.0 + (0.15 - bb_val))
+            elif rsi_val > 70 and bb_val > 0.85:
+                action = "sell"
+                confidence = min(1.0, (rsi_val - 70) / 20.0 + (bb_val - 0.85))
 
         return StrategySignal(action, stop_distance_pct, confidence, vol_ratio)
 
@@ -258,90 +214,6 @@ class BreakoutFamily:
             elif px < kc_lower_val:
                 action = "sell"
                 confidence = min(1.0, (vol_ratio - 2.0) / 2.0 + 0.5)
-
-        return StrategySignal(action, stop_distance_pct, confidence, vol_ratio)
-
-
-# ---------------------------------------------------------------------------
-# SqueezeFamily — for volatile / compression-expansion transitions
-# ---------------------------------------------------------------------------
-
-class SqueezeFamily:
-    """Bollinger Band Squeeze strategy for compression-expansion transitions.
-
-    Detects when Bollinger Bands narrow inside the Keltner Channel (classic
-    TTM Squeeze condition), waits for the release (BB expansion), and enters
-    in the direction of momentum.  Long-only because walk-forward data shows
-    shorts consistently fail.
-    """
-    name: str = "squeeze"
-
-    def generate_signal(self, candles, config, regime_state=None) -> StrategySignal:
-        import numpy as np
-
-        min_bars = max(getattr(config, "long_ma_window", 50), 30)
-        if len(candles) < min_bars:
-            return StrategySignal("hold", 0.01, 0.0, 0.0)
-
-        close = candles["close"].astype(float)
-        volume = candles["volume"].astype(float)
-
-        atr_series = compute_atr(candles, window=14)
-        atr_val = float(atr_series.iloc[-1])
-        px = float(close.iloc[-1])
-        atr_pct = atr_val / max(px, 1e-9)
-
-        avg_vol = float(volume.rolling(20).mean().iloc[-1])
-        vol_ratio = float(volume.iloc[-1] / max(avg_vol, 1e-9))
-
-        bb_period = 20
-        bb_ma = close.rolling(bb_period).mean()
-        bb_std = close.rolling(bb_period).std()
-        bb_upper = bb_ma + 2 * bb_std
-        bb_lower = bb_ma - 2 * bb_std
-        bb_width = (bb_upper - bb_lower) / bb_ma.replace(0, np.nan)
-
-        kc_period = 20
-        kc_ma = close.rolling(kc_period).mean()
-        kc_upper = kc_ma + 1.5 * atr_series
-        kc_lower = kc_ma - 1.5 * atr_series
-        kc_width = (kc_upper - kc_lower) / kc_ma.replace(0, np.nan)
-
-        if bb_width.isna().iloc[-1] or kc_width.isna().iloc[-1]:
-            return StrategySignal("hold", 0.01, 0.0, vol_ratio)
-
-        lookback = 20
-        bb_w_recent = bb_width.iloc[-lookback:]
-        if len(bb_w_recent) < lookback:
-            return StrategySignal("hold", 0.01, 0.0, vol_ratio)
-
-        bb_w_min = float(bb_w_recent.min())
-        bb_w_now = float(bb_width.iloc[-1])
-        kc_w_now = float(kc_width.iloc[-1])
-
-        was_squeezed = False
-        for offset in range(1, min(6, lookback)):
-            _bb = float(bb_width.iloc[-1 - offset])
-            _kc = float(kc_width.iloc[-1 - offset])
-            if _bb < _kc:
-                was_squeezed = True
-                break
-
-        released = bb_w_now > bb_w_min * 1.05
-
-        ema20 = close.ewm(span=20, adjust=False).mean()
-        momentum = float(close.iloc[-1] - ema20.iloc[-1])
-
-        stop_distance_pct = max(0.004, min(0.025, atr_pct * 2.0))
-
-        action = "hold"
-        confidence = 0.0
-
-        if was_squeezed and released:
-            if momentum > 0:
-                action = "buy"
-                squeeze_strength = max(0.0, 1.0 - bb_w_min / max(kc_w_now, 1e-9))
-                confidence = min(1.0, 0.4 + squeeze_strength * 0.4 + min(vol_ratio, 2.0) * 0.1)
 
         return StrategySignal(action, stop_distance_pct, confidence, vol_ratio)
 
