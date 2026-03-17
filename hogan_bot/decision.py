@@ -390,11 +390,17 @@ def ranging_gate(
     ml_separation_min: float = 0.06,
     whipsaw_block_threshold: int = 2,
     soft_mode: bool = True,
+    buy_ml_separation_min: float = 0.03,
+    buy_whipsaw_block_threshold: int = 3,
 ) -> GateDecision:
     """Extra protections for ranging markets.
 
     Only active when regime == "ranging". When ``soft_mode=True`` (default),
     near-miss checks shrink size to 0.5x instead of always blocking.
+
+    Asymmetric: buys get relaxed thresholds (lower ML separation, higher
+    whipsaw threshold, always soft) because the long side has historically
+    been over-filtered in ranging regimes. Sells keep strict thresholds.
 
     Checks:
     1. Tech action must agree with final action (sentiment/macro alone cannot carry)
@@ -404,11 +410,17 @@ def ranging_gate(
     if action == "hold" or regime != "ranging":
         return GateDecision(action=action)
 
+    _is_buy = action == "buy"
+    _eff_ml_sep = buy_ml_separation_min if _is_buy else ml_separation_min
+    _eff_whip = buy_whipsaw_block_threshold if _is_buy else whipsaw_block_threshold
+    _eff_soft = True if _is_buy else soft_mode
+
     if tech_action is not None and tech_action != action:
-        if soft_mode:
-            logger.debug("RANGING_GATE: tech=%s != action=%s -> size 0.5x", tech_action, action)
+        if _eff_soft:
+            _scale = 0.70 if _is_buy else 0.50
+            logger.debug("RANGING_GATE: tech=%s != action=%s -> size %.1fx", tech_action, action, _scale)
             return GateDecision(
-                action=action, size_scale=0.5,
+                action=action, size_scale=_scale,
                 blocked_by=None,
                 detail={"tech_action": tech_action, "final_action": action, "soft": True},
             )
@@ -420,30 +432,31 @@ def ranging_gate(
 
     if up_prob is not None:
         separation = abs(up_prob - 0.5)
-        if separation < ml_separation_min:
-            if soft_mode and separation >= ml_separation_min * 0.6:
-                logger.debug("RANGING_GATE: ML separation %.3f marginal -> size 0.5x", separation)
+        if separation < _eff_ml_sep:
+            if _eff_soft and separation >= _eff_ml_sep * 0.6:
+                _scale = 0.70 if _is_buy else 0.50
+                logger.debug("RANGING_GATE: ML separation %.3f marginal -> size %.1fx", separation, _scale)
                 return GateDecision(
-                    action=action, size_scale=0.5,
-                    detail={"separation": separation, "required": ml_separation_min, "soft": True},
+                    action=action, size_scale=_scale,
+                    detail={"separation": separation, "required": _eff_ml_sep, "soft": True},
                 )
             logger.debug(
                 "RANGING_GATE: ML separation %.3f < %.3f -> hold",
-                separation, ml_separation_min,
+                separation, _eff_ml_sep,
             )
             return GateDecision(
                 action="hold", blocked_by="ranging_gate_ml_indifference",
-                detail={"separation": separation, "required": ml_separation_min},
+                detail={"separation": separation, "required": _eff_ml_sep},
             )
 
-    if recent_whipsaw_count >= whipsaw_block_threshold:
+    if recent_whipsaw_count >= _eff_whip:
         logger.debug(
             "RANGING_GATE: whipsaws %d >= %d in ranging -> hold",
-            recent_whipsaw_count, whipsaw_block_threshold,
+            recent_whipsaw_count, _eff_whip,
         )
         return GateDecision(
             action="hold", blocked_by="ranging_gate_whipsaw",
-            detail={"whipsaws": recent_whipsaw_count, "threshold": whipsaw_block_threshold},
+            detail={"whipsaws": recent_whipsaw_count, "threshold": _eff_whip},
         )
 
     return GateDecision(action=action)
@@ -575,6 +588,35 @@ def ml_probability_sizer(
     else:
         return 1.0
     return max(floor, min(ceiling, scale))
+
+
+def ml_blind_scale(
+    recent_probs: list[float] | np.ndarray,
+    *,
+    window: int = 24,
+    std_threshold: float = 0.02,
+    floor_scale: float = 0.50,
+) -> float:
+    """Detect when the ML model is 'blind' and scale down accordingly.
+
+    When the model's recent output probabilities cluster tightly around 0.50
+    (low standard deviation), it has no conviction.  In that state we reduce
+    position sizing rather than trusting a coinflip.
+
+    Returns a scale factor in [floor_scale, 1.0].  Below *std_threshold*
+    the scale drops linearly from 1.0 toward *floor_scale*.
+    """
+    if recent_probs is None or len(recent_probs) < max(4, window // 4):
+        return 1.0
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+    tail = tail[~np.isnan(tail)]
+    if len(tail) < 4:
+        return 1.0
+    std = float(np.std(tail))
+    if std >= std_threshold:
+        return 1.0
+    ratio = std / std_threshold
+    return floor_scale + (1.0 - floor_scale) * ratio
 
 
 class AdaptiveConfidence:

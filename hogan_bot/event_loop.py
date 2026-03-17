@@ -36,9 +36,10 @@ from hogan_bot.agent_pipeline import AgentPipeline
 from hogan_bot.config import BotConfig, load_config, symbol_config, effective_hold_cooldown_bars, effective_short_max_hold_bars
 from hogan_bot.data_engine import CandleEvent, LiveDataEngine, CandleRingBuffer
 from hogan_bot.decision import (
-    apply_ml_filter, edge_gate, entry_quality_gate, ml_confidence,
-    ml_probability_sizer, estimate_spread_from_candles, pullback_gate,
-    ranging_gate, compute_quality_components, QualityComponents, GateDecision,
+    apply_ml_filter, edge_gate, entry_quality_gate, ml_blind_scale,
+    ml_confidence, ml_probability_sizer, estimate_spread_from_candles,
+    pullback_gate, ranging_gate, compute_quality_components,
+    QualityComponents, GateDecision,
 )
 from hogan_bot.execution import (
     PaperExecution, LiveExecution, SmartExecution, SmartExecConfig,
@@ -119,6 +120,7 @@ class SignalEvaluator:
         self.config = config
         self.ml_model = ml_model
         self.pipeline = AgentPipeline(config, conn=conn)
+        self._ml_probs: list[float] = []
 
     def evaluate(
         self,
@@ -193,6 +195,7 @@ class SignalEvaluator:
                 except Exception as exc:
                     logger.debug("MTF features fallback: %s", exc)
             up_prob = predict_up_probability(candles, self.ml_model)
+            self._ml_probs.append(up_prob)
             if cfg.use_ml_as_sizer:
                 conf_scale = ml_probability_sizer(action, up_prob) * (result.confidence or 1.0)
             else:
@@ -202,6 +205,10 @@ class SignalEvaluator:
                     block_reasons.append(ml_gate.blocked_by)
                 if cfg.ml_confidence_sizing:
                     conf_scale = ml_confidence(up_prob) * (result.confidence or 1.0)
+            _blind = ml_blind_scale(self._ml_probs)
+            if _blind < 1.0:
+                conf_scale *= _blind
+                logger.info("ML_BLIND: prob std low -> scale %.2f", _blind)
 
         forecast_ret = None
         if result.forecast is not None and result.forecast.confidence > 0.2:

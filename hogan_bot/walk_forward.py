@@ -472,7 +472,8 @@ def _print_funnel_comparison(report: WalkForwardReport) -> None:
         print(f"  Bars evaluated:     {bars}")
         print(f"  Pipeline signals:   buy={pipe_buy}  sell={pipe_sell}")
 
-        if post_ml_buy or post_ml_sell:
+        _ml_active = "post_ml_buy" in f or "post_ml_sell" in f
+        if _ml_active:
             ml_kill_buy = pipe_buy - post_ml_buy if pipe_buy else 0
             ml_kill_pct = (ml_kill_buy / pipe_buy * 100) if pipe_buy else 0
             print(f"  Post-ML filter:     buy={post_ml_buy}  sell={post_ml_sell}  "
@@ -480,7 +481,8 @@ def _print_funnel_comparison(report: WalkForwardReport) -> None:
         else:
             print(f"  Post-ML filter:     (ML disabled)")
 
-        edge_kill = (post_ml_buy or pipe_buy) - post_edge_buy
+        _pre_edge_buy = post_ml_buy if _ml_active else pipe_buy
+        edge_kill = _pre_edge_buy - post_edge_buy
         print(f"  Post-edge gate:     buy={post_edge_buy}  sell={post_edge_sell}  "
               f"(edge killed {edge_kill})")
 

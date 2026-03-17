@@ -15,8 +15,8 @@ import pytest
 
 from hogan_bot.config import BotConfig, load_config
 from hogan_bot.decision import (
-    apply_ml_filter, edge_gate, entry_quality_gate, ranging_gate,
-    compute_quality_components, GateDecision,
+    apply_ml_filter, edge_gate, entry_quality_gate, ml_blind_scale,
+    ranging_gate, compute_quality_components, GateDecision,
 )
 from hogan_bot.regime import detect_regime, effective_thresholds
 
@@ -215,3 +215,65 @@ class TestSignalPathParity:
         assert qc1.overall == pytest.approx(qc2.overall)
         assert qc1.ml_separation == pytest.approx(qc2.ml_separation)
         assert qc1.spread_penalty == pytest.approx(qc2.spread_penalty)
+
+
+class TestMlBlindScale:
+    """Verify ml_blind_scale detects low-conviction model output."""
+
+    def test_diverse_probs_return_one(self):
+        probs = [0.3, 0.7, 0.4, 0.6, 0.55, 0.35, 0.65, 0.45, 0.5, 0.72]
+        assert ml_blind_scale(probs) == pytest.approx(1.0)
+
+    def test_tight_cluster_scales_down(self):
+        probs = [0.50, 0.505, 0.498, 0.502, 0.501, 0.499, 0.503, 0.497]
+        scale = ml_blind_scale(probs)
+        assert scale < 1.0
+        assert scale >= 0.50
+
+    def test_empty_returns_one(self):
+        assert ml_blind_scale([]) == 1.0
+
+    def test_none_returns_one(self):
+        assert ml_blind_scale(None) == 1.0
+
+    def test_short_list_returns_one(self):
+        assert ml_blind_scale([0.5, 0.5]) == 1.0
+
+    def test_floor_respected(self):
+        probs = [0.50] * 30
+        scale = ml_blind_scale(probs, floor_scale=0.40)
+        assert scale >= 0.40
+
+
+class TestRangingGateAsymmetric:
+    """Verify ranging gate is more lenient on buys than sells."""
+
+    def test_buy_passes_with_low_ml_separation(self):
+        gd = ranging_gate("buy", regime="ranging", tech_action="buy",
+                          up_prob=0.52, recent_whipsaw_count=0)
+        assert gd.action == "buy"
+
+    def test_sell_blocked_with_low_ml_separation(self):
+        gd = ranging_gate("sell", regime="ranging", tech_action="sell",
+                          up_prob=0.48, recent_whipsaw_count=0)
+        assert gd.action == "hold"
+
+    def test_buy_survives_whipsaws_that_block_sell(self):
+        gd_buy = ranging_gate("buy", regime="ranging", tech_action="buy",
+                              up_prob=0.75, recent_whipsaw_count=2)
+        gd_sell = ranging_gate("sell", regime="ranging", tech_action="sell",
+                               up_prob=0.25, recent_whipsaw_count=2)
+        assert gd_buy.action == "buy"
+        assert gd_sell.action == "hold"
+
+    def test_buy_tech_disagree_scales_not_blocks(self):
+        gd = ranging_gate("buy", regime="ranging", tech_action="sell",
+                          up_prob=0.75, recent_whipsaw_count=0)
+        assert gd.action == "buy"
+        assert gd.size_scale == pytest.approx(0.70)
+
+    def test_sell_tech_disagree_scales_half(self):
+        gd = ranging_gate("sell", regime="ranging", tech_action="buy",
+                          up_prob=0.25, recent_whipsaw_count=0)
+        assert gd.action == "sell"
+        assert gd.size_scale == pytest.approx(0.50)
