@@ -218,10 +218,15 @@ def edge_gate(
     forecast_expected_return: float | None = None,
     estimated_spread: float = 0.0,
     atr_friction_multiple: float = 0.8,
+    buy_atr_friction_multiple: float = 0.5,
 ) -> GateDecision:
     """Block entries where the expected move is insufficient relative to friction.
 
     Total friction = round-trip fees + round-trip spread.
+
+    Asymmetric: buys use a lower ATR friction multiple (0.5x) than sells (0.8x)
+    because the long side benefits from mean-reversion in low-vol periods, while
+    the short side does not.
 
     Checks four conditions (any failure -> hold):
     1. ATR must exceed atr_friction_multiple * total friction (enough volatility)
@@ -236,15 +241,16 @@ def edge_gate(
     round_trip_spread = 2.0 * estimated_spread
     total_friction = round_trip_fees + round_trip_spread
 
-    if atr_pct < total_friction * atr_friction_multiple:
+    _eff_atr_mult = buy_atr_friction_multiple if action == "buy" else atr_friction_multiple
+    if atr_pct < total_friction * _eff_atr_mult:
         logger.debug(
             "EDGE_GATE: ATR %.4f < %.4f (%.1fx friction: fees=%.4f spread=%.4f) -> hold",
-            atr_pct, total_friction * atr_friction_multiple,
-            atr_friction_multiple, round_trip_fees, round_trip_spread,
+            atr_pct, total_friction * _eff_atr_mult,
+            _eff_atr_mult, round_trip_fees, round_trip_spread,
         )
         return GateDecision(
             action="hold", blocked_by="edge_gate_atr_low",
-            detail={"atr_pct": atr_pct, "required": total_friction * atr_friction_multiple},
+            detail={"atr_pct": atr_pct, "required": total_friction * _eff_atr_mult},
         )
 
     if take_profit_pct > 0 and take_profit_pct < total_friction * min_edge_multiple:
@@ -617,6 +623,53 @@ def ml_blind_scale(
         return 1.0
     ratio = std / std_threshold
     return floor_scale + (1.0 - floor_scale) * ratio
+
+
+def ml_blind_blocks_shorts(
+    recent_probs: list[float] | np.ndarray,
+    *,
+    window: int = 24,
+    block_threshold: float = 0.015,
+) -> bool:
+    """Return True when the ML model is so indecisive that shorts should be blocked.
+
+    Shorts with zero model conviction are pure noise — they never hit TP and
+    bleed via stop-out or max-hold timeout.  This gate blocks short entries
+    when the rolling probability std drops below *block_threshold* (stricter
+    than the sizing scale's 0.02).
+    """
+    if recent_probs is None or len(recent_probs) < max(4, window // 4):
+        return False
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+    tail = tail[~np.isnan(tail)]
+    if len(tail) < 4:
+        return False
+    return float(np.std(tail)) < block_threshold
+
+
+def loss_streak_scale(
+    recent_outcomes: list[bool],
+    *,
+    streak_threshold: int = 3,
+    dampened_scale: float = 0.50,
+) -> float:
+    """Reduce sizing after consecutive losses.
+
+    Counts consecutive losses from the end of *recent_outcomes* (True=win,
+    False=loss).  When the streak reaches *streak_threshold*, returns
+    *dampened_scale*.  Otherwise returns 1.0.
+    """
+    if not recent_outcomes:
+        return 1.0
+    streak = 0
+    for outcome in reversed(recent_outcomes):
+        if not outcome:
+            streak += 1
+        else:
+            break
+    if streak >= streak_threshold:
+        return dampened_scale
+    return 1.0
 
 
 class AdaptiveConfidence:

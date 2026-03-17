@@ -15,7 +15,8 @@ import pytest
 
 from hogan_bot.config import BotConfig, load_config
 from hogan_bot.decision import (
-    apply_ml_filter, edge_gate, entry_quality_gate, ml_blind_scale,
+    apply_ml_filter, edge_gate, entry_quality_gate,
+    loss_streak_scale, ml_blind_blocks_shorts, ml_blind_scale,
     ranging_gate, compute_quality_components, GateDecision,
 )
 from hogan_bot.regime import detect_regime, effective_thresholds
@@ -277,3 +278,89 @@ class TestRangingGateAsymmetric:
                           up_prob=0.25, recent_whipsaw_count=0)
         assert gd.action == "sell"
         assert gd.size_scale == pytest.approx(0.50)
+
+
+class TestMlBlindBlocksShorts:
+    """Verify shorts are blocked when ML conviction is extremely low."""
+
+    def test_diverse_probs_no_block(self):
+        probs = list(np.linspace(0.30, 0.70, 30))
+        assert ml_blind_blocks_shorts(probs) is False
+
+    def test_tight_cluster_blocks(self):
+        probs = [0.50] * 30
+        assert ml_blind_blocks_shorts(probs) is True
+
+    def test_empty_no_block(self):
+        assert ml_blind_blocks_shorts([]) is False
+
+    def test_none_no_block(self):
+        assert ml_blind_blocks_shorts(None) is False
+
+    def test_moderate_spread_no_block(self):
+        probs = list(np.linspace(0.47, 0.55, 30))
+        assert ml_blind_blocks_shorts(probs) is False
+
+    def test_just_below_threshold_blocks(self):
+        probs = [0.50 + x * 0.001 for x in range(30)]
+        assert ml_blind_blocks_shorts(probs) is True
+
+
+class TestLossStreakScale:
+    """Verify sizing dampens after consecutive losses."""
+
+    def test_no_outcomes_returns_one(self):
+        assert loss_streak_scale([]) == 1.0
+
+    def test_all_wins_returns_one(self):
+        assert loss_streak_scale([True, True, True, True]) == 1.0
+
+    def test_three_losses_dampens(self):
+        outcomes = [True, True, False, False, False]
+        assert loss_streak_scale(outcomes) == 0.50
+
+    def test_two_losses_no_dampen(self):
+        outcomes = [True, True, False, False]
+        assert loss_streak_scale(outcomes) == 1.0
+
+    def test_win_resets_streak(self):
+        outcomes = [False, False, False, True]
+        assert loss_streak_scale(outcomes) == 1.0
+
+    def test_long_loss_streak(self):
+        outcomes = [False] * 10
+        assert loss_streak_scale(outcomes) == 0.50
+
+    def test_custom_threshold(self):
+        outcomes = [False, False]
+        assert loss_streak_scale(outcomes, streak_threshold=2) == 0.50
+
+
+class TestEdgeGateAsymmetric:
+    """Verify edge gate uses lower ATR threshold for buys."""
+
+    def test_buy_passes_at_lower_atr(self):
+        gd = edge_gate("buy", atr_pct=0.0015, take_profit_pct=0.054,
+                        fee_rate=0.001)
+        assert gd.action == "buy"
+
+    def test_sell_blocked_at_same_atr(self):
+        gd = edge_gate("sell", atr_pct=0.0015, take_profit_pct=0.054,
+                        fee_rate=0.001)
+        assert gd.action == "hold"
+
+    def test_both_pass_at_high_atr(self):
+        gd_buy = edge_gate("buy", atr_pct=0.005, take_profit_pct=0.054,
+                           fee_rate=0.001)
+        gd_sell = edge_gate("sell", atr_pct=0.005, take_profit_pct=0.054,
+                            fee_rate=0.001)
+        assert gd_buy.action == "buy"
+        assert gd_sell.action == "sell"
+
+    def test_both_blocked_at_zero_atr(self):
+        gd_buy = edge_gate("buy", atr_pct=0.0, take_profit_pct=0.054,
+                           fee_rate=0.001)
+        gd_sell = edge_gate("sell", atr_pct=0.0, take_profit_pct=0.054,
+                            fee_rate=0.001)
+        assert gd_buy.action == "hold"
+        assert gd_sell.action == "hold"

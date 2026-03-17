@@ -10,7 +10,8 @@ from hogan_bot.agent_pipeline import AgentPipeline
 from hogan_bot.champion import apply_champion_mode, is_champion_mode
 from hogan_bot.decision import (
     GateDecision, apply_ml_filter, edge_gate, entry_quality_gate,
-    ml_blind_scale, ml_confidence, ml_probability_sizer,
+    loss_streak_scale, ml_blind_blocks_shorts, ml_blind_scale,
+    ml_confidence, ml_probability_sizer,
     estimate_spread_from_candles, pullback_gate, ranging_gate,
 )
 from hogan_bot.exit_model import ExitEvaluator
@@ -1061,9 +1062,12 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         "ranging_blocked_whipsaw": 0,
         "mtf_thesis_created": 0, "mtf_thesis_executed": 0,
         "mtf_thesis_expired": 0, "mtf_15m_entry_used": 0,
+        "blocked_short_ml_blind": 0, "loss_streak_scaled": 0,
     }
     # ML probability histogram (to understand model output distribution)
     _ml_probs: list[float] = []
+    # Trade outcome history for loss-streak dampener (True=win, False=loss)
+    _trade_outcomes: list[bool] = []
 
     # ExitEvaluator (parity with event_loop — configurable thresholds)
     _exit_eval = ExitEvaluator(
@@ -1115,6 +1119,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     trades += 1
                     closed += 1
                     is_win = sell_px > avg_entry
+                    _trade_outcomes.append(is_win)
                     if is_win:
                         wins += 1
                     elif loss_cooldown_bars > 0:
@@ -1164,6 +1169,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     trades += 1
                     short_closed += 1
                     is_win = cover_px < avg_entry
+                    _trade_outcomes.append(is_win)
                     if is_win:
                         short_wins += 1
                     elif loss_cooldown_bars > 0:
@@ -1231,6 +1237,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         trades += 1
                         short_closed += 1
                         is_win = cover_px < avg_entry
+                        _trade_outcomes.append(is_win)
                         if is_win:
                             short_wins += 1
                         elif loss_cooldown_bars > 0:
@@ -1292,6 +1299,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     trades += 1
                     closed += 1
                     is_win = sell_px > avg_entry
+                    _trade_outcomes.append(is_win)
                     if is_win:
                         wins += 1
                     elif loss_cooldown_bars > 0:
@@ -1404,6 +1412,11 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             if _blind < 1.0:
                 conf_scale *= _blind
                 _funnel["ml_blind_scaled"] = _funnel.get("ml_blind_scaled", 0) + 1
+
+        _ls_scale = loss_streak_scale(_trade_outcomes)
+        if _ls_scale < 1.0:
+            conf_scale *= _ls_scale
+            _funnel["loss_streak_scaled"] = _funnel.get("loss_streak_scaled", 0) + 1
 
         if action == "buy":
             _funnel["post_ml_buy"] += 1
@@ -1674,6 +1687,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             short_closed += 1
                             _funnel["short_covered_signal"] += 1
                             is_win = cover_px < s_avg_entry
+                            _trade_outcomes.append(is_win)
                             if is_win:
                                 short_wins += 1
                             elif loss_cooldown_bars > 0:
@@ -1790,6 +1804,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                 trades += 1
                                 closed += 1
                                 is_win = sell_px_sig > avg_entry
+                                _trade_outcomes.append(is_win)
                                 if is_win:
                                     wins += 1
                                 elif loss_cooldown_bars > 0:
@@ -1847,6 +1862,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     _short_size *= funding_overlay.position_scale("sell", _bar_ts_val)
                 if not _eff_allow_shorts:
                     _funnel["blocked_regime_no_shorts"] += 1
+                elif ml_blind_blocks_shorts(_ml_probs):
+                    _funnel["blocked_short_ml_blind"] += 1
                 elif _cooldown_remaining > 0:
                     _funnel["blocked_cooldown"] += 1
                 elif _short_size <= 0:

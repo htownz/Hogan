@@ -36,7 +36,8 @@ from hogan_bot.agent_pipeline import AgentPipeline
 from hogan_bot.config import BotConfig, load_config, symbol_config, effective_hold_cooldown_bars, effective_short_max_hold_bars
 from hogan_bot.data_engine import CandleEvent, LiveDataEngine, CandleRingBuffer
 from hogan_bot.decision import (
-    apply_ml_filter, edge_gate, entry_quality_gate, ml_blind_scale,
+    apply_ml_filter, edge_gate, entry_quality_gate,
+    loss_streak_scale, ml_blind_blocks_shorts, ml_blind_scale,
     ml_confidence, ml_probability_sizer, estimate_spread_from_candles,
     pullback_gate, ranging_gate, compute_quality_components,
     QualityComponents, GateDecision,
@@ -121,6 +122,7 @@ class SignalEvaluator:
         self.ml_model = ml_model
         self.pipeline = AgentPipeline(config, conn=conn)
         self._ml_probs: list[float] = []
+        self._trade_outcomes: list[bool] = []
 
     def evaluate(
         self,
@@ -209,6 +211,12 @@ class SignalEvaluator:
             if _blind < 1.0:
                 conf_scale *= _blind
                 logger.info("ML_BLIND: prob std low -> scale %.2f", _blind)
+
+        _ls = loss_streak_scale(self._trade_outcomes)
+        if _ls < 1.0:
+            conf_scale *= _ls
+            logger.info("LOSS_STREAK: %d consecutive losses -> scale %.2f",
+                        sum(1 for o in reversed(self._trade_outcomes) if not o), _ls)
 
         forecast_ret = None
         if result.forecast is not None and result.forecast.confidence > 0.2:
@@ -680,6 +688,7 @@ async def run_event_loop(
                                 exit_regime=_exit_entry_regime,
                                 entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                             )
+                        self._trade_outcomes.append(sell_px > avg_entry)
                         gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
                         net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                         _expectancy.record_trade(
@@ -736,6 +745,7 @@ async def run_event_loop(
                                 exit_regime=_exit_s_entry_regime,
                                 entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                             )
+                        self._trade_outcomes.append(cover_px < avg_entry)
                         gross_pnl_pct = (avg_entry - cover_px) / avg_entry if avg_entry else 0
                         net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                         _expectancy.record_trade(
@@ -925,6 +935,7 @@ async def run_event_loop(
                                     exit_regime=_exit_s_regime,
                                     entry_atr_pct=getattr(spos, "entry_atr_pct", None),
                                 )
+                            self._trade_outcomes.append(cover_px < s_avg_entry)
                             gross_pnl_pct = (s_avg_entry - cover_px) / s_avg_entry if s_avg_entry else 0
                             net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                             _expectancy.record_trade(
@@ -1040,6 +1051,7 @@ async def run_event_loop(
                                     exit_regime=_sig_entry_regime,
                                     entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                                 )
+                            self._trade_outcomes.append(sell_px > avg_entry)
                             gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
                             net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                             bars_held = getattr(pos, "bars_held", 0)
@@ -1091,6 +1103,8 @@ async def run_event_loop(
                     _short_size = size * sig.eff_short_size_scale * _macro_scale
                     if not sig.eff_allow_shorts:
                         logger.debug("REGIME_BLOCK %s — shorts not allowed in %s", symbol, _sym_regime)
+                    elif ml_blind_blocks_shorts(self._ml_probs):
+                        logger.debug("ML_BLIND_BLOCK %s — model too indecisive for shorts", symbol)
                     elif _cooldown_remaining > 0:
                         logger.debug("COOLDOWN %s — %d bars remaining (short)", symbol, _cooldown_remaining)
                     elif _short_size <= 0:
