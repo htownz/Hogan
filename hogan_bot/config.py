@@ -468,11 +468,22 @@ def symbol_config(base: BotConfig, symbol: str) -> BotConfig:
     Reads ``models/opt_{SYMBOL}_{TIMEFRAME}.json`` and overlays the
     ``best_config`` values onto a copy of *base*.  If no Optuna file
     exists for the symbol, returns *base* unchanged (no copy needed).
+
+    Handles both real ``BotConfig`` dataclasses and
+    ``types.SimpleNamespace`` configs used by the backtest engine.
     """
     overrides = load_symbol_overrides(symbol, base.timeframe)
     if not overrides:
         return base
-    return replace(base, **overrides)
+    import dataclasses as _dc
+    if _dc.is_dataclass(base):
+        return replace(base, **overrides)
+    import copy
+    ns = copy.copy(base)
+    for k, v in overrides.items():
+        if hasattr(ns, k):
+            setattr(ns, k, v)
+    return ns
 
 
 def reload_symbol_configs() -> None:

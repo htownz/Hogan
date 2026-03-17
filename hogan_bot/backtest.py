@@ -990,6 +990,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         ict_ote_enabled=ict_ote_enabled, ict_ote_low=ict_ote_low,
         ict_ote_high=ict_ote_high, use_rl_agent=use_rl_agent,
         rl_policy=rl_policy, symbols=[symbol],
+        timeframe=_tf,
         # Fields required by effective_thresholds()
         ml_buy_threshold=ml_buy_threshold,
         ml_sell_threshold=ml_sell_threshold,
