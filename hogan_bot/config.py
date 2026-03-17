@@ -231,10 +231,12 @@ class BotConfig:
     swarm_min_agreement: float = 0.60
     swarm_min_vote_margin: float = 0.10
     swarm_max_entropy: float = 0.95
+    swarm_weights: str = ""  # "pipeline_v1:0.4,risk_steward_v1:0.25,..." or empty for uniform
     swarm_weight_update_mode: str = "shadow"
     swarm_weight_min_trades: int = 50
     swarm_weight_max_daily_shift: float = 0.05
     swarm_log_full_votes: bool = True
+    swarm_use_regime_weights: bool = False
 
     # Account valuation currency for spot equity (USD, USDT, USDC, ...)
     quote_currency: str = "USD"
@@ -620,10 +622,12 @@ def load_config() -> BotConfig:
         swarm_min_agreement=float(os.getenv("HOGAN_SWARM_MIN_AGREEMENT", "0.60")),
         swarm_min_vote_margin=float(os.getenv("HOGAN_SWARM_MIN_VOTE_MARGIN", "0.10")),
         swarm_max_entropy=float(os.getenv("HOGAN_SWARM_MAX_ENTROPY", "0.95")),
+        swarm_weights=os.getenv("HOGAN_SWARM_WEIGHTS", ""),
         swarm_weight_update_mode=os.getenv("HOGAN_SWARM_WEIGHT_UPDATE_MODE", "shadow"),
         swarm_weight_min_trades=int(os.getenv("HOGAN_SWARM_WEIGHT_MIN_TRADES", "50")),
         swarm_weight_max_daily_shift=float(os.getenv("HOGAN_SWARM_WEIGHT_MAX_DAILY_SHIFT", "0.05")),
         swarm_log_full_votes=os.getenv("HOGAN_SWARM_LOG_FULL_VOTES", "true").lower() == "true",
+        swarm_use_regime_weights=os.getenv("HOGAN_SWARM_USE_REGIME_WEIGHTS", "false").lower() == "true",
         rl_model_path=os.getenv("HOGAN_RL_MODEL_PATH", "models/hogan_rl_policy.zip"),
         rl_reward_type=os.getenv("HOGAN_RL_REWARD_TYPE", "risk_adjusted"),
         rl_timesteps=int(os.getenv("HOGAN_RL_TIMESTEPS", "200000")),

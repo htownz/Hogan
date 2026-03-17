@@ -91,6 +91,63 @@ class PolicyState:
 
 
 # ---------------------------------------------------------------------------
+# Swarm weight resolution
+# ---------------------------------------------------------------------------
+
+def _parse_weight_string(weight_str: str) -> dict[str, float]:
+    """Parse ``"agent_a:0.4,agent_b:0.3"`` into a dict."""
+    weights: dict[str, float] = {}
+    for pair in weight_str.split(","):
+        pair = pair.strip()
+        if ":" not in pair:
+            continue
+        agent_id, val = pair.split(":", 1)
+        try:
+            weights[agent_id.strip()] = float(val.strip())
+        except ValueError:
+            continue
+    return weights
+
+
+def _resolve_swarm_weights(
+    config,
+    conn,
+    symbol: str,
+    regime: str | None,
+) -> dict[str, float] | None:
+    """Resolve swarm weights in priority order.
+
+    1. Regime-aware promoted weights from DB (if ``swarm_use_regime_weights``)
+    2. Explicit config string (``HOGAN_SWARM_WEIGHTS``)
+    3. None (uniform weights — SwarmController default)
+    """
+    # 1. Regime-aware lookup
+    if getattr(config, "swarm_use_regime_weights", False) and conn is not None and regime:
+        try:
+            row = conn.execute(
+                """SELECT weights_json FROM swarm_weight_snapshots
+                   WHERE symbol = ? AND regime = ? AND source = 'promoted'
+                   ORDER BY ts_ms DESC LIMIT 1""",
+                (symbol, regime),
+            ).fetchone()
+            if row:
+                import json
+                return json.loads(row[0])
+        except Exception:
+            pass
+
+    # 2. Explicit config string
+    _w_str = getattr(config, "swarm_weights", "")
+    if _w_str:
+        parsed = _parse_weight_string(_w_str)
+        if parsed:
+            return parsed
+
+    # 3. Uniform (let controller default)
+    return None
+
+
+# ---------------------------------------------------------------------------
 # decide()
 # ---------------------------------------------------------------------------
 
@@ -411,6 +468,7 @@ def decide(
     # Swarm Decision Layer (shadow / active)
     # ------------------------------------------------------------------
     swarm_decision = None
+    _swarm_decision_id = None
 
     if getattr(config, "swarm_enabled", False):
         try:
@@ -448,10 +506,15 @@ def decide(
                     "hist_vol_20": _hist_vol,
                     "take_profit_pct": eff_tp,
                     "pipeline_signal": signal,
+                    "up_prob": up_prob,
                 }
+
+                # Resolve weights: config string → regime DB lookup → uniform
+                _sw_weights = _resolve_swarm_weights(config, conn, symbol, regime_name)
 
                 controller = SwarmController(
                     agents=agents,
+                    weights=_sw_weights,
                     config=config,
                 )
 
@@ -489,7 +552,7 @@ def decide(
                             log_swarm_decision,
                             log_agent_votes,
                         )
-                        _sw_decision_id = log_swarm_decision(
+                        _swarm_decision_id = log_swarm_decision(
                             conn, _bar_ts_ms, symbol,
                             getattr(config, "timeframe", "1h"),
                             swarm_decision, _swarm_mode,
@@ -501,8 +564,14 @@ def decide(
                                 getattr(config, "timeframe", "1h"),
                                 swarm_decision.votes,
                                 as_of_ms=as_of_ms,
-                                decision_id=_sw_decision_id,
+                                decision_id=_swarm_decision_id,
                             )
+                        # Backfill outcomes for prior decisions
+                        try:
+                            from hogan_bot.swarm_decision.outcome_writer import backfill_outcomes
+                            backfill_outcomes(conn, symbol=symbol, lookback_hours=72)
+                        except Exception:
+                            pass
                     except Exception:
                         pass
         except Exception as exc:
@@ -541,4 +610,5 @@ def decide(
         tech_confidence=_tech_conf,
         block_reasons=block_reasons,
         swarm=swarm_decision,
+        swarm_decision_id=_swarm_decision_id,
     )

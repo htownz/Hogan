@@ -158,6 +158,7 @@ class DecisionIntent:
 
     # Swarm layer (None when swarm is off)
     swarm: SwarmDecision | None = None
+    swarm_decision_id: int | None = None
 
     # Funnel counters for diagnostics (backtest populates these)
     funnel: dict[str, int] = field(default_factory=dict)
