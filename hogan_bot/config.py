@@ -237,6 +237,14 @@ class BotConfig:
     swarm_weight_max_daily_shift: float = 0.05
     swarm_log_full_votes: bool = True
     swarm_use_regime_weights: bool = False
+    swarm_replay_forward_window_bars: int = 12
+    swarm_replay_bars_before: int = 60
+    swarm_replay_bars_after: int = 60
+    swarm_replay_positive_bps: float = 10.0
+    swarm_replay_negative_bps: float = -10.0
+    swarm_replay_strong_positive_bps: float = 20.0
+    swarm_replay_strong_negative_bps: float = -20.0
+    swarm_replay_enable_similar_events: bool = True
 
     # Account valuation currency for spot equity (USD, USDT, USDC, ...)
     quote_currency: str = "USD"
