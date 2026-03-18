@@ -450,13 +450,14 @@ def decide(
             logger.debug("Macro filter error: %s", _mf_exc)
 
     # ------------------------------------------------------------------
-    # 7. Momentum confirmation (long-only)
+    # 7. Momentum confirmation (long-only, graduated)
     # ------------------------------------------------------------------
     momentum_scale = 1.0
-    if action == "buy" and len(candles) >= 8:
+    if action == "buy" and len(candles) >= 8 and regime_name != "ranging":
         _ema8 = candles["close"].ewm(span=8, min_periods=8).mean().iloc[-1]
-        if px < _ema8:
-            momentum_scale = 0.3
+        if _ema8 > 0 and px < _ema8:
+            _pct_below = (_ema8 - px) / _ema8
+            momentum_scale = max(0.40, 1.0 - _pct_below * 20.0)
 
     # ------------------------------------------------------------------
     # 8. Position sizing
