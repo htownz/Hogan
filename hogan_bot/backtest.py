@@ -1807,6 +1807,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         max_hold_bars=_short_max if _short_max > 0 else max_hold_bars,
                         entry_atr=getattr(spos, "entry_atr_pct", None) or None,
                         vol_ratio=signal.volume_ratio,
+                        regime=regime_name,
                     )
                     if not _short_exit_dec.should_exit:
                         pass
@@ -1915,6 +1916,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         max_hold_bars=max_hold_bars,
                         entry_atr=getattr(pos, "entry_atr_pct", None) or None,
                         vol_ratio=signal.volume_ratio,
+                        regime=regime_name,
                     )
                     _consecutive_exit_signals += 1
                     _rev_thresh = min_final_confidence * reversal_confidence_mult

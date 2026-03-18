@@ -223,6 +223,7 @@ def decide(
         ml_confidence,
         ml_probability_sizer,
         ml_blind_scale,
+        ml_blind_blocks_shorts,
         loss_streak_scale,
         estimate_spread_from_candles,
         compute_quality_components,
@@ -316,6 +317,10 @@ def decide(
         _blind = ml_blind_scale(state.ml_probs)
         if _blind < 1.0:
             conf_scale *= _blind
+
+        if action == "sell" and ml_blind_blocks_shorts(state.ml_probs):
+            action = "hold"
+            block_reasons.append("ml_blind_blocks_shorts")
 
     # ------------------------------------------------------------------
     # 4. Loss-streak dampener
@@ -424,6 +429,27 @@ def decide(
             pass
 
     # ------------------------------------------------------------------
+    # 6b. Macro correlation filter (SPY/QQQ/DXY/VIX/GLD)
+    # ------------------------------------------------------------------
+    macro_filter_scale = 1.0
+    if getattr(cfg, "use_macro_filter", False) and conn is not None and action != "hold":
+        try:
+            from hogan_bot.macro_filter import evaluate_macro
+            _mf = evaluate_macro(
+                conn,
+                action=action,
+                vix_caution=getattr(cfg, "macro_vix_caution", 25.0),
+                vix_block=getattr(cfg, "macro_vix_block", 35.0),
+            )
+            if _mf.block_longs and action == "buy":
+                action = "hold"
+                block_reasons.append("macro_filter_block_longs")
+            elif _mf.confidence_mult < 1.0:
+                macro_filter_scale = _mf.confidence_mult
+        except Exception as _mf_exc:
+            logger.debug("Macro filter error: %s", _mf_exc)
+
+    # ------------------------------------------------------------------
     # 7. Momentum confirmation (long-only)
     # ------------------------------------------------------------------
     momentum_scale = 1.0
@@ -443,6 +469,7 @@ def decide(
         * eff_position_scale
         * freshness_scale
         * momentum_scale
+        * macro_filter_scale
     )
 
     size = calculate_position_size(
