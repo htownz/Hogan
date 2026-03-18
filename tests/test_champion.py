@@ -79,6 +79,7 @@ class TestApplyChampionMode:
             signal_min_vote_margin: int = 2
             use_regime_detection: bool = True
             ml_confidence_sizing: bool = True
+            use_ml_as_sizer: bool = False
             use_strategy_router: bool = True
             volatile_policy: str = "breakout"
             min_hold_bars: int = 3
@@ -101,6 +102,8 @@ class TestApplyChampionMode:
         assert result.use_fvg is False
         assert result.use_rl_agent is False
         assert result.use_ict is False
+        assert result.ml_confidence_sizing is False
+        assert result.use_ml_as_sizer is True
         assert result.ml_model_path == "models/hogan_champion.pkl"
 
 
