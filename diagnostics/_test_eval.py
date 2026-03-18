@@ -40,29 +40,32 @@ from hogan_bot.event_loop import SignalEvaluator
 from hogan_bot.storage import get_connection
 
 conn = get_connection()
-evaluator = SignalEvaluator(cfg, ml_model, conn=conn)
-
-px = float(candles["close"].iloc[-1])
-equity = 10000.0
-
 try:
-    sig = evaluator.evaluate(
-        "BTC/USD", candles, equity,
-        recent_whipsaw_count=0,
-        mtf_candles=None,
-        peak_equity=equity,
-    )
-    print(f"\nSignal evaluation SUCCESS:")
-    print(f"  action={sig.action}")
-    print(f"  tech_action={sig.raw_tech_action}")
-    print(f"  pipeline_action={sig.pipeline_action}")
-    print(f"  size={sig.size:.6f}")
-    print(f"  final_confidence={sig.final_confidence:.4f}")
-    print(f"  ml_up_prob={sig.up_prob}")
-    print(f"  regime={sig.regime}")
-    print(f"  block_reasons={sig.block_reasons}")
-    print(f"  eff_allow_shorts={sig.eff_allow_shorts}")
-except Exception as e:
-    import traceback
-    print(f"\nSignal evaluation FAILED:")
-    traceback.print_exc()
+    evaluator = SignalEvaluator(cfg, ml_model, conn=conn)
+
+    px = float(candles["close"].iloc[-1])
+    equity = 10000.0
+
+    try:
+        sig = evaluator.evaluate(
+            "BTC/USD", candles, equity,
+            recent_whipsaw_count=0,
+            mtf_candles=None,
+            peak_equity=equity,
+        )
+        print(f"\nSignal evaluation SUCCESS:")
+        print(f"  action={sig.action}")
+        print(f"  tech_action={sig.raw_tech_action}")
+        print(f"  pipeline_action={sig.pipeline_action}")
+        print(f"  size={sig.size:.6f}")
+        print(f"  final_confidence={sig.final_confidence:.4f}")
+        print(f"  ml_up_prob={sig.up_prob}")
+        print(f"  regime={sig.regime}")
+        print(f"  block_reasons={sig.block_reasons}")
+        print(f"  eff_allow_shorts={sig.eff_allow_shorts}")
+    except Exception:
+        import traceback
+        print(f"\nSignal evaluation FAILED:")
+        traceback.print_exc()
+finally:
+    conn.close()
