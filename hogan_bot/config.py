@@ -228,15 +228,26 @@ class BotConfig:
     swarm_mode: str = "shadow"
     swarm_phase: str = "certification"
     swarm_agents: str = "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1"
-    swarm_min_agreement: float = 0.60
-    swarm_min_vote_margin: float = 0.10
-    swarm_max_entropy: float = 0.95
-    swarm_weights: str = ""  # "pipeline_v1:0.4,risk_steward_v1:0.25,..." or empty for uniform
+    swarm_min_agreement: float = 0.35
+    swarm_min_vote_margin: float = 0.05
+    swarm_max_entropy: float = 1.20
+    swarm_weights: str = "pipeline_v1:0.40,risk_steward_v1:0.20,data_guardian_v1:0.20,execution_cost_v1:0.20"
     swarm_weight_update_mode: str = "shadow"
     swarm_weight_min_trades: int = 50
     swarm_weight_max_daily_shift: float = 0.05
     swarm_log_full_votes: bool = True
     swarm_use_regime_weights: bool = False
+
+    # Swarm agent thresholds (configurable via env)
+    swarm_risk_max_drawdown_pct: float = 0.10
+    swarm_risk_vol_scale_threshold: float = 2.5
+    swarm_risk_vol_veto_threshold: float = 4.0
+    swarm_data_min_bars: int = 50
+    swarm_data_max_gap_bars: int = 3
+    swarm_data_max_stale_hours: float = 2.0
+    swarm_exec_fee_rate: float = 0.0026
+    swarm_exec_min_edge_ratio: float = 1.5
+
     swarm_replay_forward_window_bars: int = 12
     swarm_replay_bars_before: int = 60
     swarm_replay_bars_after: int = 60
@@ -245,6 +256,20 @@ class BotConfig:
     swarm_replay_strong_positive_bps: float = 20.0
     swarm_replay_strong_negative_bps: float = -20.0
     swarm_replay_enable_similar_events: bool = True
+
+    # Swarm Daily Digest
+    swarm_daily_digest_enabled: bool = True
+    swarm_daily_digest_report_dir: str = "reports/digests"
+    swarm_daily_digest_default_window_hours: int = 24
+    swarm_daily_digest_notify: bool = False
+    swarm_daily_digest_max_replay_candidates: int = 12
+    swarm_daily_digest_stall_decision_min: int = 50
+    swarm_daily_digest_stall_would_trade_max: int = 0
+    swarm_daily_digest_critical_veto_ratio: float = 0.80
+    swarm_daily_digest_warning_veto_ratio: float = 0.60
+    swarm_daily_digest_min_regime_coverage: int = 3
+    swarm_daily_digest_max_baseline_miss_ratio: float = 0.10
+    swarm_daily_digest_max_import_error_count: int = 0
 
     # Account valuation currency for spot equity (USD, USDT, USDC, ...)
     quote_currency: str = "USD"

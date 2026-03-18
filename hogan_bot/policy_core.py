@@ -486,17 +486,29 @@ def decide(
                 if aid == "pipeline_v1":
                     agents.append(PipelineAgent(pipeline))
                 elif aid == "risk_steward_v1":
-                    agents.append(RiskStewardAgent())
+                    agents.append(RiskStewardAgent(
+                        max_drawdown_pct=getattr(config, "swarm_risk_max_drawdown_pct", 0.10),
+                        vol_scale_threshold=getattr(config, "swarm_risk_vol_scale_threshold", 2.5),
+                        vol_veto_threshold=getattr(config, "swarm_risk_vol_veto_threshold", 4.0),
+                    ))
                 elif aid == "data_guardian_v1":
-                    agents.append(DataGuardianAgent())
+                    agents.append(DataGuardianAgent(
+                        max_gap_bars=getattr(config, "swarm_data_max_gap_bars", 3),
+                        max_stale_hours=getattr(config, "swarm_data_max_stale_hours", 2.0),
+                        min_bars_required=getattr(config, "swarm_data_min_bars", 50),
+                    ))
                 elif aid == "execution_cost_v1":
                     agents.append(ExecutionCostAgent(
-                        fee_rate=cfg.fee_rate,
+                        fee_rate=getattr(config, "swarm_exec_fee_rate", cfg.fee_rate),
+                        min_edge_over_cost=getattr(config, "swarm_exec_min_edge_ratio", 1.5),
                     ))
 
             if agents:
+                import math as _math_sw
                 from hogan_bot.indicators import compute_atr as _sw_atr
                 _hist_vol = float(candles["close"].pct_change().rolling(20).std().iloc[-1]) if len(candles) >= 21 else 0.0
+                if _math_sw.isnan(_hist_vol) or _math_sw.isinf(_hist_vol):
+                    _hist_vol = 0.0
                 _shared_ctx = {
                     "regime": regime_name,
                     "regime_state": _rstate,
