@@ -23,6 +23,8 @@ from urllib.request import Request, urlopen
 
 import pandas as pd
 
+from hogan_bot.retry import retry, URLLIB_TRANSIENT
+
 logger = logging.getLogger(__name__)
 
 _TIMEOUT = 15
@@ -84,24 +86,33 @@ class OandaClient:
     # ------------------------------------------------------------------
 
     def _request(self, method: str, path: str, body: dict | None = None) -> dict:
-        url = f"{self.base_url}{path}"
-        headers = {
-            "Authorization": f"Bearer {self.token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-        data = json.dumps(body).encode() if body else None
-        req = Request(url, data=data, headers=headers, method=method)
-        try:
-            with urlopen(req, timeout=_TIMEOUT) as resp:
-                return json.loads(resp.read().decode())
-        except HTTPError as exc:
-            err_body = ""
+        def _do_request() -> dict:
+            url = f"{self.base_url}{path}"
+            headers = {
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+            data = json.dumps(body).encode() if body else None
+            req = Request(url, data=data, headers=headers, method=method)
             try:
-                err_body = exc.read().decode()[:500]
-            except Exception:
-                pass
-            raise URLError(f"HTTP {exc.code} {exc.reason}: {err_body}") from exc
+                with urlopen(req, timeout=_TIMEOUT) as resp:
+                    return json.loads(resp.read().decode())
+            except HTTPError as exc:
+                err_body = ""
+                try:
+                    err_body = exc.read().decode()[:500]
+                except Exception:
+                    pass
+                raise URLError(f"HTTP {exc.code} {exc.reason}: {err_body}") from exc
+
+        if method == "POST":
+            return _do_request()
+        return retry(
+            _do_request,
+            retryable=URLLIB_TRANSIENT,
+            label=f"Oanda {method} {path}",
+        )
 
     def _get(self, path: str) -> dict:
         return self._request("GET", path)
