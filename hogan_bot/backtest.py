@@ -1094,12 +1094,11 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     # Trade outcome history for loss-streak dampener (True=win, False=loss)
     _trade_outcomes: list[bool] = []
 
-    # ExitEvaluator (parity with event_loop — configurable thresholds)
     _exit_eval = ExitEvaluator(
-        drawdown_panic_pct=0.03,
-        time_decay_threshold=0.75,
-        volatility_expansion_threshold=2.0,
-        max_consolidation_bars=12,
+        drawdown_panic_pct=getattr(config, "exit_drawdown_pct", 0.03),
+        time_decay_threshold=getattr(config, "exit_time_decay", 0.75),
+        volatility_expansion_threshold=getattr(config, "exit_vol_expansion", 2.0),
+        max_consolidation_bars=getattr(config, "exit_stagnation_bars", 12),
     )
 
     # Regime tracking (parity with event_loop)
@@ -1639,10 +1638,11 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
 
             # ── Long momentum confirmation ───────────────────────────────────
             _momentum_scale = 1.0
-            if action == "buy" and len(window) >= 8:
+            if action == "buy" and len(window) >= 8 and regime_name != "ranging":
                 _ema8 = window["close"].ewm(span=8, min_periods=8).mean().iloc[-1]
-                if px < _ema8:
-                    _momentum_scale = 0.3
+                if _ema8 > 0 and px < _ema8:
+                    _pct_below = (_ema8 - px) / _ema8
+                    _momentum_scale = max(0.40, 1.0 - _pct_below * 20.0)
                     _funnel["long_momentum_reduced"] = _funnel.get("long_momentum_reduced", 0) + 1
                 else:
                     _funnel["long_momentum_confirmed"] = _funnel.get("long_momentum_confirmed", 0) + 1
@@ -1659,7 +1659,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 stop_distance_pct=signal.stop_distance_pct,
                 max_risk_per_trade=max_risk_per_trade,
                 max_allocation_pct=aggressive_allocation,
-                confidence_scale=conf_scale * _quality_scale * _ranging_scale * _pullback_scale * _eff_position_scale * _momentum_scale,
+                confidence_scale=max(0.15, conf_scale * _quality_scale * _ranging_scale * _pullback_scale * _eff_position_scale * _momentum_scale),
                 fee_rate=fee_rate,
             )
 

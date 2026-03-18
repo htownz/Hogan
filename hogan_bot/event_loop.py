@@ -1129,10 +1129,11 @@ async def run_event_loop(
                     logger.debug("FX_SESSION_BLOCK %s — outside allowed trading hours", symbol)
                 else:
                     _momentum_scale = 1.0
-                    if len(candles) >= 8:
+                    if len(candles) >= 8 and _sym_regime != "ranging":
                         _ema8 = candles["close"].ewm(span=8, min_periods=8).mean().iloc[-1]
-                        if px < _ema8:
-                            _momentum_scale = 0.3
+                        if _ema8 > 0 and px < _ema8:
+                            _pct_below = (_ema8 - px) / _ema8
+                            _momentum_scale = max(0.40, 1.0 - _pct_below * 20.0)
                     _funding_scale = 1.0
                     if _funding_overlay is not None:
                         _funding_scale = _funding_overlay.position_scale("buy", datetime.now(tz=timezone.utc))
