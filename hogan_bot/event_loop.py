@@ -444,13 +444,18 @@ class SignalEvaluator:
             quality_gate_scale=quality_scale,
         )
 
+        _MIN_COMPOSITE_SCALE = 0.15
+        _composite = max(
+            _MIN_COMPOSITE_SCALE,
+            conf_scale * quality_scale * ranging_scale * pullback_scale * eff_position_scale * _freshness_scale * _mtf_conf_mult,
+        )
         size = calculate_position_size(
             equity_usd=equity,
             price=px,
             stop_distance_pct=result.stop_distance_pct,
             max_risk_per_trade=cfg.max_risk_per_trade,
             max_allocation_pct=cfg.aggressive_allocation,
-            confidence_scale=conf_scale * quality_scale * ranging_scale * pullback_scale * eff_position_scale * _freshness_scale * _mtf_conf_mult,
+            confidence_scale=_composite,
             fee_rate=cfg.fee_rate,
         )
 
