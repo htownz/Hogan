@@ -294,7 +294,7 @@ def decide(
     # ------------------------------------------------------------------
     up_prob: float | None = None
 
-    if cfg.use_ml_filter and ml_model is not None:
+    if (cfg.use_ml_filter or cfg.use_ml_as_sizer) and ml_model is not None:
         if hasattr(ml_model, "set_regime"):
             ml_model.set_regime(regime_name)
         up_prob = predict_up_probability(candles, ml_model)

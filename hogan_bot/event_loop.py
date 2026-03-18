@@ -264,7 +264,7 @@ class SignalEvaluator:
 
         block_reasons: list[str] = []
 
-        if cfg.use_ml_filter and self.ml_model is not None:
+        if (cfg.use_ml_filter or cfg.use_ml_as_sizer) and self.ml_model is not None:
             if cfg.use_mtf_extended and mtf_candles:
                 try:
                     from hogan_bot.ml import build_feature_row_extended
@@ -559,7 +559,7 @@ async def run_event_loop(
             executor = PaperExecution(portfolio=portfolio, conn=conn, exchange_id="paper")
 
     ml_model: TrainedModel | None = None
-    if config.use_ml_filter:
+    if config.use_ml_filter or config.use_ml_as_sizer:
         try:
             ml_model = load_model(config.ml_model_path)
             logger.info("Loaded ML model from %s", config.ml_model_path)
