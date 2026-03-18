@@ -132,10 +132,10 @@ class BotConfig:
     ict_ote_high: float = 0.79
 
     # ML confidence-based position sizing: scales size by |prob−0.5|×2
-    ml_confidence_sizing: bool = True
+    ml_confidence_sizing: bool = False
     # ML probability sizer: use ML probability as continuous position scale
     # instead of binary filter. Replaces both ml_filter and ml_confidence_sizing.
-    use_ml_as_sizer: bool = False
+    use_ml_as_sizer: bool = True
 
     # Short selling in paper mode: open a synthetic short when a SELL signal fires
     # with no existing long position.  Flip from short to long and back on signal change.
@@ -626,8 +626,8 @@ def load_config() -> BotConfig:
         ict_ote_enabled=os.getenv("HOGAN_ICT_OTE_ENABLED", "false").lower() == "true",
         ict_ote_low=float(os.getenv("HOGAN_ICT_OTE_LOW", "0.62")),
         ict_ote_high=float(os.getenv("HOGAN_ICT_OTE_HIGH", "0.79")),
-        ml_confidence_sizing=os.getenv("HOGAN_ML_CONFIDENCE_SIZING", "true").lower() == "true",
-        use_ml_as_sizer=os.getenv("HOGAN_ML_AS_SIZER", "false").lower() == "true",
+        ml_confidence_sizing=os.getenv("HOGAN_ML_CONFIDENCE_SIZING", "false").lower() == "true",
+        use_ml_as_sizer=os.getenv("HOGAN_ML_AS_SIZER", "true").lower() == "true",
         allow_shorts=os.getenv("HOGAN_ALLOW_SHORTS", "false").lower() == "true",
         meta_weight_technical=float(os.getenv("HOGAN_META_WEIGHT_TECH", "0.55")),
         meta_weight_sentiment=float(os.getenv("HOGAN_META_WEIGHT_SENT", "0.25")),
