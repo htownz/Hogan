@@ -83,6 +83,11 @@ _EVENT_COLORS = {
     "info":     0x2196F3,   # blue
     "stale":    0xFFC107,   # amber
     "retrain":  0x9C27B0,   # purple
+    "swarm_stall_alert":               0xFF6D00,
+    "swarm_agent_quarantined":         0xD50000,
+    "swarm_threshold_bundle_activated": 0x2196F3,
+    "swarm_dominant_veto_agent":       0xFFC107,
+    "swarm_weekly_review":             0x9C27B0,
 }
 
 

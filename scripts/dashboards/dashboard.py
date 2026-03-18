@@ -1620,6 +1620,121 @@ with tab_swarm:
             except Exception as _wr_err:
                 st.info(f"Weekly Review unavailable: {_wr_err}")
 
+            # ── Section: Thresholds & Quarantine ─────────────────
+            try:
+                st.subheader("Thresholds & Quarantine")
+                from hogan_bot.storage import _create_schema as _tq_schema
+                _tq_schema(_sw_conn)
+
+                # Panel 1 — Stall Status
+                from hogan_bot.stall_detection import get_latest_stall_alerts, compute_stall_summary
+                _stall_status = compute_stall_summary(_sw_conn)
+                _stall_colors = {"healthy": "green", "info": "blue", "warning": "orange", "critical": "red"}
+                st.markdown(f"**Stall Status:** :{_stall_colors.get(_stall_status, 'gray')}[{_stall_status.upper()}]")
+
+                _stall_alerts = get_latest_stall_alerts(_sw_conn, limit=5)
+                if _stall_alerts:
+                    for _sa in _stall_alerts:
+                        _sa_icon = {"critical": "🔴", "warn": "🟡", "info": "🔵"}.get(_sa["severity"], "⚪")
+                        st.markdown(f"{_sa_icon} **{_sa['code']}** — {_sa['notes']}")
+
+                # Panel 2 — Agent Mode Control
+                from hogan_bot.agent_quarantine import get_all_agent_modes
+                _all_modes = get_all_agent_modes(_sw_conn)
+                if _all_modes:
+                    with st.expander("Agent Modes", expanded=True):
+                        import pandas as _tq_pd
+                        _mode_data = [
+                            {"Agent": s.agent_id, "Mode": s.mode, "Reason": s.reason,
+                             "Operator": s.operator, "Changed": s.changed_at[:19] if s.changed_at else "—"}
+                            for s in _all_modes.values()
+                        ]
+                        st.dataframe(_tq_pd.DataFrame(_mode_data), use_container_width=True)
+                else:
+                    st.info("No agent mode overrides set. All agents running in `active` mode.")
+
+                # Panel 3 — Pre-veto vs Post-veto
+                try:
+                    _pv_row = _sw_conn.execute(
+                        """SELECT
+                            SUM(CASE WHEN pre_veto_action IN ('buy','sell') THEN 1 ELSE 0 END),
+                            SUM(CASE WHEN final_action IN ('buy','sell') AND vetoed=0 THEN 1 ELSE 0 END),
+                            AVG(pre_veto_agreement), AVG(agreement),
+                            AVG(pre_veto_confidence), AVG(final_conf),
+                            COUNT(*)
+                           FROM swarm_decisions WHERE pre_veto_action IS NOT NULL""",
+                    ).fetchone()
+                    if _pv_row and _pv_row[6] and _pv_row[6] > 0:
+                        with st.expander("Pre-Veto vs Post-Veto"):
+                            pv_cols = st.columns(3)
+                            pv_cols[0].metric("Pre-Veto Trades", _pv_row[0] or 0)
+                            pv_cols[0].metric("Post-Veto Trades", _pv_row[1] or 0)
+                            pv_cols[1].metric("Pre-Veto Agreement", f"{_pv_row[2]:.3f}" if _pv_row[2] else "—")
+                            pv_cols[1].metric("Post-Veto Agreement", f"{_pv_row[3]:.3f}" if _pv_row[3] else "—")
+                            pv_cols[2].metric("Pre-Veto Confidence", f"{_pv_row[4]:.3f}" if _pv_row[4] else "—")
+                            pv_cols[2].metric("Post-Veto Confidence", f"{_pv_row[5]:.3f}" if _pv_row[5] else "—")
+                except Exception:
+                    pass
+
+                # Panel 4 — Dominant Veto Agents
+                try:
+                    _dom_rows = _sw_conn.execute(
+                        """SELECT sav.agent_id, COUNT(*) as cnt
+                           FROM swarm_agent_votes sav WHERE sav.veto = 1
+                           GROUP BY sav.agent_id ORDER BY cnt DESC LIMIT 5""",
+                    ).fetchall()
+                    if _dom_rows:
+                        _total_vetoes = sum(r[1] for r in _dom_rows)
+                        with st.expander("Dominant Veto Agents"):
+                            import pandas as _tq_pd2
+                            _dom_data = [
+                                {"Agent": r[0], "Vetoes": r[1],
+                                 "Share": f"{r[1]/_total_vetoes:.0%}" if _total_vetoes else "—"}
+                                for r in _dom_rows
+                            ]
+                            st.dataframe(_tq_pd2.DataFrame(_dom_data), use_container_width=True)
+                except Exception:
+                    pass
+
+                # Panel 5 — Threshold Bundle History
+                try:
+                    from hogan_bot.threshold_registry import list_bundles, get_change_history
+                    _tb_agents = _sw_conn.execute(
+                        "SELECT DISTINCT agent_id FROM swarm_threshold_bundles ORDER BY agent_id",
+                    ).fetchall()
+                    if _tb_agents:
+                        with st.expander("Threshold Bundles"):
+                            for (_tb_aid,) in _tb_agents:
+                                st.markdown(f"**{_tb_aid}**")
+                                _bundles = list_bundles(_tb_aid, _sw_conn)
+                                for _b in _bundles[:5]:
+                                    _status = "ACTIVE" if _b.active else "inactive"
+                                    st.markdown(f"- `{_b.bundle_id}` v{_b.version} ({_status}) — {_b.notes or 'no notes'}")
+                except Exception:
+                    pass
+
+                # Panel 6 — Suggested Actions
+                _suggest: list[str] = []
+                if _stall_status == "critical":
+                    _suggest.append("Review and relax dominant veto agent thresholds in shadow mode.")
+                if _all_modes:
+                    for _am_s in _all_modes.values():
+                        if _am_s.mode == "active":
+                            pass
+                if any(a.get("code") == "DOMINANT_VETO_AGENT" for a in _stall_alerts):
+                    _da = next((a for a in _stall_alerts if a["code"] == "DOMINANT_VETO_AGENT"), None)
+                    if _da:
+                        _suggest.append(f"Consider setting dominant agent to `no_veto` mode: {_da['notes']}")
+                if any(a.get("code") == "REGIME_BLINDNESS" for a in _stall_alerts):
+                    _suggest.append("Fix regime logging before trusting promotion readiness.")
+                if _suggest:
+                    with st.expander("Suggested Actions"):
+                        for _si, _sa_txt in enumerate(_suggest, 1):
+                            st.markdown(f"{_si}. {_sa_txt}")
+
+            except Exception as _tq_err:
+                st.info(f"Thresholds & Quarantine unavailable: {_tq_err}")
+
         _sw_conn.close()
     except Exception as exc:
         st.error(f"Error loading swarm data: {exc}")

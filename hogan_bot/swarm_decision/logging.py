@@ -21,6 +21,8 @@ def log_swarm_decision(
     decision: SwarmDecision,
     mode: str,
     as_of_ms: int | None = None,
+    regime: str | None = None,
+    stall_state: str | None = None,
 ) -> int:
     """Persist one SwarmDecision row.  Returns the new row id."""
     cur = conn.execute(
@@ -29,8 +31,10 @@ def log_swarm_decision(
             ts_ms, symbol, timeframe, as_of_ms, mode,
             final_action, final_conf, final_scale,
             agreement, entropy, vetoed,
-            block_reasons_json, weights_json, decision_json
-        ) VALUES (?,?,?,?,?, ?,?,?, ?,?,?, ?,?,?)
+            block_reasons_json, weights_json, decision_json,
+            pre_veto_action, pre_veto_confidence, pre_veto_agreement, pre_veto_entropy,
+            dominant_veto_agent, veto_count, veto_agents_json, regime, stall_state
+        ) VALUES (?,?,?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?,?, ?,?,?,?,?)
         """,
         (
             int(ts_ms),
@@ -47,6 +51,15 @@ def log_swarm_decision(
             json.dumps(decision.block_reasons),
             json.dumps({k: round(v, 6) for k, v in decision.weights_used.items()}),
             json.dumps(decision.to_dict()),
+            decision.pre_veto_action,
+            round(decision.pre_veto_confidence, 6) if decision.pre_veto_confidence is not None else None,
+            round(decision.pre_veto_agreement, 6) if decision.pre_veto_agreement is not None else None,
+            round(decision.pre_veto_entropy, 6) if decision.pre_veto_entropy is not None else None,
+            decision.dominant_veto_agent,
+            decision.veto_count,
+            json.dumps(decision.veto_agents) if decision.veto_agents else None,
+            regime,
+            stall_state,
         ),
     )
     conn.commit()

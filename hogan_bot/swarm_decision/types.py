@@ -90,6 +90,15 @@ class SwarmDecision:
     vetoed: bool = False
     block_reasons: list[str] = field(default_factory=list)
 
+    # Pre-veto analytics (populated by controller before veto application)
+    pre_veto_action: str | None = None
+    pre_veto_confidence: float | None = None
+    pre_veto_agreement: float | None = None
+    pre_veto_entropy: float | None = None
+    dominant_veto_agent: str | None = None
+    veto_count: int = 0
+    veto_agents: list[str] = field(default_factory=list)
+
     @property
     def n_agents(self) -> int:
         return len(self.votes)
@@ -99,7 +108,7 @@ class SwarmDecision:
         return sum(1 for v in self.votes if v.veto)
 
     def to_dict(self) -> dict:
-        return {
+        d: dict = {
             "final_action": self.final_action,
             "final_confidence": round(self.final_confidence, 4),
             "final_size_scale": round(self.final_size_scale, 4),
@@ -110,6 +119,17 @@ class SwarmDecision:
             "vetoed": self.vetoed,
             "block_reasons": self.block_reasons,
         }
+        if self.pre_veto_action is not None:
+            d["pre_veto_action"] = self.pre_veto_action
+            d["pre_veto_confidence"] = round(self.pre_veto_confidence, 4) if self.pre_veto_confidence is not None else None
+            d["pre_veto_agreement"] = round(self.pre_veto_agreement, 4) if self.pre_veto_agreement is not None else None
+            d["pre_veto_entropy"] = round(self.pre_veto_entropy, 4) if self.pre_veto_entropy is not None else None
+        if self.dominant_veto_agent:
+            d["dominant_veto_agent"] = self.dominant_veto_agent
+        if self.veto_count:
+            d["veto_count"] = self.veto_count
+            d["veto_agents"] = self.veto_agents
+        return d
 
 
 @dataclass

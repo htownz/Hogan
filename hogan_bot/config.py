@@ -288,6 +288,17 @@ class BotConfig:
     swarm_weekly_review_baseline_miss_ratio_warn: float = 0.10
     swarm_weekly_review_recommend_tuning_on_no_trade_ratio: float = 0.30
 
+    # Swarm Threshold Tuning & Agent Quarantine
+    swarm_stall_decision_min: int = 50
+    swarm_stall_zero_trade_decision_min: int = 50
+    swarm_stall_low_trade_decision_min: int = 100
+    swarm_stall_low_trade_ratio: float = 0.05
+    swarm_over_veto_ratio_warn: float = 0.70
+    swarm_single_agent_veto_share_warn: float = 0.60
+    swarm_threshold_require_manual_ack: bool = True
+    swarm_threshold_ack_phrase: str = "I_APPROVE_THRESHOLD_CHANGE"
+    swarm_default_operator: str = "local_operator"
+
     # Account valuation currency for spot equity (USD, USDT, USDC, ...)
     quote_currency: str = "USD"
 

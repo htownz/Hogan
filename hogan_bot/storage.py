@@ -432,6 +432,76 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         """
     )
 
+    # -------------------------------------------------------------------
+    # Threshold tuning and agent quarantine tables
+    # -------------------------------------------------------------------
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS swarm_threshold_bundles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_ms INTEGER NOT NULL,
+            agent_id TEXT NOT NULL,
+            bundle_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            values_json TEXT NOT NULL,
+            notes TEXT,
+            active INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_swarm_threshold_bundles_agent
+          ON swarm_threshold_bundles(agent_id, bundle_id, version)
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS swarm_threshold_changes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_ms INTEGER NOT NULL,
+            agent_id TEXT NOT NULL,
+            bundle_id TEXT NOT NULL,
+            field_name TEXT NOT NULL,
+            old_value_json TEXT,
+            new_value_json TEXT,
+            reason TEXT NOT NULL,
+            operator TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_swarm_threshold_changes_agent
+          ON swarm_threshold_changes(agent_id, ts_ms)
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS swarm_agent_modes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_ms INTEGER NOT NULL,
+            agent_id TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            operator TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_swarm_agent_modes_agent
+          ON swarm_agent_modes(agent_id, ts_ms)
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS swarm_stall_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_ms INTEGER NOT NULL,
+            code TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            metric_name TEXT NOT NULL,
+            actual REAL NOT NULL,
+            threshold REAL NOT NULL,
+            notes TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_swarm_stall_alerts_ts
+          ON swarm_stall_alerts(ts_ms)
+    """)
+
     # ── Schema migrations for existing databases ──────────────────────
     for _alt in (
         "ALTER TABLE paper_trades ADD COLUMN entry_decision_id INTEGER",
@@ -448,6 +518,15 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         "ALTER TABLE paper_trades ADD COLUMN entry_atr_pct REAL",
         "ALTER TABLE swarm_agent_votes ADD COLUMN decision_id INTEGER REFERENCES swarm_decisions(id)",
         "ALTER TABLE decision_log ADD COLUMN swarm_decision_id INTEGER",
+        "ALTER TABLE swarm_decisions ADD COLUMN pre_veto_action TEXT",
+        "ALTER TABLE swarm_decisions ADD COLUMN pre_veto_confidence REAL",
+        "ALTER TABLE swarm_decisions ADD COLUMN pre_veto_agreement REAL",
+        "ALTER TABLE swarm_decisions ADD COLUMN pre_veto_entropy REAL",
+        "ALTER TABLE swarm_decisions ADD COLUMN dominant_veto_agent TEXT",
+        "ALTER TABLE swarm_decisions ADD COLUMN veto_count INTEGER",
+        "ALTER TABLE swarm_decisions ADD COLUMN veto_agents_json TEXT",
+        "ALTER TABLE swarm_decisions ADD COLUMN stall_state TEXT",
+        "ALTER TABLE swarm_decisions ADD COLUMN regime TEXT",
     ):
         try:
             conn.execute(_alt)
