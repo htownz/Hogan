@@ -266,7 +266,7 @@ class SignalEvaluator:
         _pipeline_action = result.action
 
         up_prob = None
-        conf_scale = result.confidence or 1.0
+        conf_scale = 1.0
         action = result.action
 
         block_reasons: list[str] = []
@@ -294,14 +294,14 @@ class SignalEvaluator:
             up_prob = predict_up_probability(candles, self.ml_model)
             self._ml_probs.append(up_prob)
             if cfg.use_ml_as_sizer:
-                conf_scale = ml_probability_sizer(action, up_prob) * (result.confidence or 1.0)
+                conf_scale = ml_probability_sizer(action, up_prob)
             else:
                 ml_gate = apply_ml_filter(action, up_prob, eff_ml_buy, eff_ml_sell)
                 action = ml_gate.action
                 if ml_gate.blocked_by:
                     block_reasons.append(ml_gate.blocked_by)
                 if cfg.ml_confidence_sizing:
-                    conf_scale = ml_confidence(up_prob) * (result.confidence or 1.0)
+                    conf_scale = ml_confidence(up_prob)
             _blind = ml_blind_scale(self._ml_probs)
             if _blind < 1.0:
                 conf_scale *= _blind

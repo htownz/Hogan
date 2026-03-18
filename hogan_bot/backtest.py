@@ -1501,7 +1501,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
 
             _funnel["bars_evaluated"] += 1
             action = signal.action
-            conf_scale = signal.confidence or 1.0
+            conf_scale = 1.0
 
             # Track pipeline output before any filtering
             if action == "buy":

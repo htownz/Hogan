@@ -291,7 +291,7 @@ def decide(
     _pipeline_action = signal.action
 
     action = signal.action
-    conf_scale = signal.confidence or 1.0
+    conf_scale = 1.0
 
     # ------------------------------------------------------------------
     # 3. ML processing
