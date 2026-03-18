@@ -545,11 +545,22 @@ def decide(
                     except Exception:
                         pass
 
+                # Load agent modes from DB for quarantine/advisory enforcement
+                _agent_modes: dict[str, str] = {}
+                if conn is not None:
+                    try:
+                        from hogan_bot.agent_quarantine import get_all_agent_modes
+                        _am = get_all_agent_modes(conn)
+                        _agent_modes = {aid: st.mode for aid, st in _am.items()}
+                    except Exception:
+                        pass
+
                 swarm_decision = controller.decide(
                     symbol=symbol,
                     candles=candles,
                     as_of_ms=as_of_ms,
                     shared_context=_shared_ctx,
+                    agent_modes=_agent_modes,
                 )
 
                 _swarm_mode = getattr(config, "swarm_mode", "shadow")
@@ -569,6 +580,7 @@ def decide(
                             getattr(config, "timeframe", "1h"),
                             swarm_decision, _swarm_mode,
                             as_of_ms=as_of_ms,
+                            regime=regime_name,
                         )
                         if getattr(config, "swarm_log_full_votes", True):
                             log_agent_votes(
