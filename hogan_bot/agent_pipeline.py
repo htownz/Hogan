@@ -125,7 +125,7 @@ class TechnicalAgent:
                 raw = self._router.route(candles, cfg, regime_state)
                 conf = float(raw.confidence)
                 if raw.action != "hold" and conf <= 0.0:
-                    conf = 1.0
+                    conf = 0.10
                 family_name = self._router.families.get(
                     regime_state.regime, self._router.families.get("trending_up")
                 )
@@ -178,7 +178,7 @@ class TechnicalAgent:
             raw = generate_signal(candles, **kwargs)
             conf = float(raw.confidence)
             if raw.action != "hold" and conf <= 0.0:
-                conf = 1.0
+                conf = 0.10
             return TechSignal(
                 action=raw.action,
                 confidence=conf,

@@ -619,6 +619,7 @@ def make_paper_trade_labels(
     candles: pd.DataFrame,
     symbol: str,
     min_trades: int = 5,
+    use_champion_features: bool | None = None,
 ) -> tuple[pd.DataFrame, pd.Series] | tuple[None, None]:
     """Extract feature-label pairs from closed paper trades stored in the DB.
 
@@ -631,7 +632,7 @@ def make_paper_trade_labels(
     * ``short`` + ``realized_pnl > 0``  → label = 0  (price fell, correct for short)
     * ``short`` + ``realized_pnl ≤ 0``  → label = 1
 
-    Returns ``(X_extra, y_extra)`` aligned with ``_FEATURE_COLUMNS``, or
+    Returns ``(X_extra, y_extra)`` aligned with the active feature columns, or
     ``(None, None)`` when fewer than *min_trades* are available.
     """
     import sqlite3 as _sqlite3
@@ -654,7 +655,9 @@ def make_paper_trade_labels(
     if len(trades_df) < min_trades:
         return None, None
 
-    # Compute full feature matrix once (no look-ahead — safe to use)
+    from hogan_bot.feature_registry import get_feature_columns
+    _cols = get_feature_columns(use_champion_features)
+
     frame = _feature_frame(candles)
     candle_ts = candles["ts_ms"].values
 
@@ -666,7 +669,7 @@ def make_paper_trade_labels(
         idx = int(np.searchsorted(candle_ts, ts, side="right")) - 1
         if idx < 1 or idx >= len(frame):
             continue
-        row = frame[_FEATURE_COLUMNS].iloc[idx]
+        row = frame[_cols].iloc[idx]
         if row.isna().any():
             continue
 
@@ -684,7 +687,7 @@ def make_paper_trade_labels(
     if len(X_rows) < min_trades:
         return None, None
 
-    X_extra = pd.DataFrame(X_rows, columns=_FEATURE_COLUMNS)
+    X_extra = pd.DataFrame(X_rows, columns=_cols)
     y_extra = pd.Series(y_values, name="target", dtype=int)
     return X_extra, y_extra
 
@@ -695,6 +698,7 @@ def make_backtest_labels(
     symbol: str,
     min_trades: int = 5,
     db_conn=None,
+    use_champion_features: bool | None = None,
 ) -> tuple[pd.DataFrame, pd.Series] | tuple[None, None]:
     """Extract feature-label pairs from backtest closed trades.
 
@@ -704,12 +708,15 @@ def make_backtest_labels(
 
     When *db_conn* is provided, macro features are joined; otherwise zeros.
 
-    Returns ``(X_extra, y_extra)`` aligned with ``_FEATURE_COLUMNS``, or
+    Returns ``(X_extra, y_extra)`` aligned with the active feature columns, or
     ``(None, None)`` when fewer than *min_trades* are available.
     """
     closed = getattr(result, "closed_trades", None)
     if not closed or len(closed) < min_trades:
         return None, None
+
+    from hogan_bot.feature_registry import get_feature_columns
+    _cols = get_feature_columns(use_champion_features)
 
     frame = _feature_frame(candles)
     if db_conn is not None:
@@ -732,7 +739,7 @@ def make_backtest_labels(
         idx = int(trade.get("entry_bar_idx", -1))
         if idx < 1 or idx >= len(frame):
             continue
-        row = frame[_FEATURE_COLUMNS].iloc[idx]
+        row = frame[_cols].iloc[idx]
         if row.isna().any():
             continue
 
@@ -750,7 +757,7 @@ def make_backtest_labels(
     if len(X_rows) < min_trades:
         return None, None
 
-    X_extra = pd.DataFrame(X_rows, columns=_FEATURE_COLUMNS)
+    X_extra = pd.DataFrame(X_rows, columns=_cols)
     y_extra = pd.Series(y_values, name="target", dtype=int)
     return X_extra, y_extra
 
@@ -1424,17 +1431,16 @@ def predict_up_probability(
             for col in macro_cols_needed:
                 frame[col] = 0.0
 
-    latest = frame[feature_cols].dropna().tail(1)
-    if latest.empty:
+    latest = frame[feature_cols].tail(1)
+    if latest.empty or latest.isna().any(axis=1).iloc[0]:
         return 0.5
-    # Use getattr for backward compatibility with pre-scaler pickled artifacts.
     scaler = getattr(trained_model, "scaler", None)
     if scaler is not None:
         latest_arr = scaler.transform(latest)
         proba = trained_model.model.predict_proba(latest_arr)[0][1]
     else:
         proba = trained_model.model.predict_proba(latest)[0][1]
-    return float(proba)
+    return float(min(max(proba, 0.0), 1.0))
 
 
 

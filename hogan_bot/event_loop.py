@@ -1194,8 +1194,11 @@ async def _run_event_loop_inner(
                             if notifier:
                                 notifier.notify("buy", {"symbol": symbol, "price": buy_px,
                                                         "qty": _long_size, "ml_up_prob": up_prob})
-                        logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s long_scale=%.2f",
-                                    symbol, buy_px, _long_size, up_prob or -1, equity, _sym_regime, sig.eff_long_size_scale)
+                            logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s long_scale=%.2f",
+                                        symbol, buy_px, _long_size, up_prob or -1, equity, _sym_regime, sig.eff_long_size_scale)
+                        else:
+                            logger.warning("BUY_FAILED %s px=%.2f qty=%.6f — execution returned ok=False",
+                                           symbol, buy_px, _long_size)
 
             elif action == "sell" and px > 0:
                 _closed_long_this_bar = False
@@ -1347,8 +1350,11 @@ async def _run_event_loop_inner(
                             if notifier:
                                 notifier.notify("short", {"symbol": symbol, "price": short_px,
                                                           "qty": _short_size, "ml_up_prob": up_prob})
-                        logger.info("SHORT %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s short_scale=%.2f",
-                                    symbol, short_px, _short_size, up_prob or -1, equity, _sym_regime, sig.eff_short_size_scale)
+                            logger.info("SHORT %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s short_scale=%.2f",
+                                        symbol, short_px, _short_size, up_prob or -1, equity, _sym_regime, sig.eff_short_size_scale)
+                        else:
+                            logger.warning("SHORT_FAILED %s px=%.2f qty=%.6f — execution returned ok=False",
+                                           symbol, short_px, _short_size)
                 elif not _allow_short_entry:
                     logger.info("SHORT_SKIP %s — entry preconditions not met (shorts=%s in_long=%s in_short=%s fx_ok=%s close_rev=%s)",
                                 symbol, enable_shorts, symbol in portfolio.positions,
