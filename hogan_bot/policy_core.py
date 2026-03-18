@@ -461,7 +461,9 @@ def decide(
     # ------------------------------------------------------------------
     # 8. Position sizing
     # ------------------------------------------------------------------
-    composite_scale = (
+    _MIN_COMPOSITE_SCALE = 0.15
+    composite_scale = max(
+        _MIN_COMPOSITE_SCALE,
         conf_scale
         * quality_scale
         * ranging_scale
@@ -469,7 +471,7 @@ def decide(
         * eff_position_scale
         * freshness_scale
         * momentum_scale
-        * macro_filter_scale
+        * macro_filter_scale,
     )
 
     size = calculate_position_size(
