@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import deque
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -53,8 +54,8 @@ def _compute_data_ages(conn) -> dict[str, float]:
             if row and row[0]:
                 age_h = (now_s - row[0] / 1000.0) / 3600.0
                 ages[source_key] = max(0.0, age_h)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("_compute_data_ages %s: %s", table, exc)
     return ages
 
 
@@ -70,8 +71,8 @@ class PolicyState:
     The pipeline updates it in-place (ML prob history, trade outcomes, …).
     """
 
-    ml_probs: list[float] = field(default_factory=list)
-    trade_outcomes: list[bool] = field(default_factory=list)
+    ml_probs: deque[float] = field(default_factory=lambda: deque(maxlen=50))
+    trade_outcomes: deque[bool] = field(default_factory=lambda: deque(maxlen=50))
     swarm_weights_logged: bool = False
 
     # Regime transition tracker (created lazily)
@@ -133,8 +134,8 @@ def _resolve_swarm_weights(
             if row:
                 import json
                 return json.loads(row[0])
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Swarm weight DB lookup failed: %s", exc)
 
     # 2. Explicit config string
     _w_str = getattr(config, "swarm_weights", "")
@@ -247,16 +248,16 @@ def decide(
             _rstate = detect_regime(candles)
             regime_name = _rstate.regime
             regime_conf = _rstate.confidence
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Regime detection failed: %s", exc)
 
     eff: dict[str, float] = {}
     if _rstate is not None:
         try:
             from hogan_bot.regime import effective_thresholds
             eff = effective_thresholds(_rstate, cfg)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("effective_thresholds failed: %s", exc)
 
     eff_ml_buy = eff.get("ml_buy_threshold", cfg.ml_buy_threshold)
     eff_ml_sell = eff.get("ml_sell_threshold", cfg.ml_sell_threshold)
@@ -425,8 +426,8 @@ def decide(
                     block_reasons.append("freshness_critical_block")
                 elif crit_stale >= 1 or all_stale >= 4:
                     freshness_scale = 0.75
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Feature freshness check failed: %s", exc)
 
     # ------------------------------------------------------------------
     # 6b. Macro correlation filter (SPY/QQQ/DXY/VIX/GLD)
@@ -577,8 +578,8 @@ def decide(
                             source="static_init",
                         )
                         state.swarm_weights_logged = True
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Swarm weight snapshot log error: %s", exc)
 
                 # Load agent modes from DB for quarantine/advisory enforcement
                 _agent_modes: dict[str, str] = {}
@@ -587,8 +588,8 @@ def decide(
                         from hogan_bot.agent_quarantine import get_all_agent_modes
                         _am = get_all_agent_modes(conn)
                         _agent_modes = {aid: st.mode for aid, st in _am.items()}
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Agent modes load error: %s", exc)
 
                 swarm_decision = controller.decide(
                     symbol=symbol,
@@ -629,10 +630,10 @@ def decide(
                         try:
                             from hogan_bot.swarm_decision.outcome_writer import backfill_outcomes
                             backfill_outcomes(conn, symbol=symbol, lookback_hours=72)
-                        except Exception:
-                            pass
-                    except Exception:
-                        pass
+                        except Exception as exc:
+                            logger.debug("Swarm outcome backfill error: %s", exc)
+                    except Exception as exc:
+                        logger.debug("Swarm decision logging error: %s", exc)
         except Exception as exc:
             logger.warning("Swarm layer error: %s", exc)
 

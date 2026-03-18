@@ -17,6 +17,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import sys
+
+logger = logging.getLogger(__name__)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -28,7 +31,13 @@ def run(max_loops: int | None = None) -> None:
     parser.add_argument("--max-events", type=int, default=None, help="Stop after N candle events")
     args, _ = parser.parse_known_args()
     max_events = args.max_events if args.max_events is not None else max_loops
-    asyncio.run(run_event_loop(max_events=max_events))
+    try:
+        asyncio.run(run_event_loop(max_events=max_events))
+    except KeyboardInterrupt:
+        logger.info("Shutdown requested (KeyboardInterrupt).")
+    except Exception:
+        logger.critical("Fatal error in event loop — process exiting.", exc_info=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

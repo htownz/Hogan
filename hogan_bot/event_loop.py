@@ -65,10 +65,10 @@ class _FailedResult:
         self.error = error
 
 
-def _safe_exec(fn, *args, **kwargs):
-    """Call *fn* and return its result; on exception return a failed sentinel."""
+async def _safe_exec(fn, *args, **kwargs):
+    """Run *fn* in a thread so blocking I/O doesn't stall the event loop."""
     try:
-        return fn(*args, **kwargs)
+        return await asyncio.to_thread(fn, *args, **kwargs)
     except Exception as exc:
         logger.error("Executor call %s raised: %s", getattr(fn, "__name__", fn), exc)
         return _FailedResult(str(exc))
@@ -94,8 +94,8 @@ def _compute_data_ages(conn) -> dict[str, float]:
             if row and row[0]:
                 age_h = (now_s - row[0] / 1000.0) / 3600.0
                 ages[source_key] = max(0.0, age_h)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("_compute_data_ages %s: %s", table, exc)
     return ages
 
 
@@ -141,8 +141,8 @@ class SignalEvaluator:
         self.config = config
         self.ml_model = ml_model
         self.pipeline = AgentPipeline(config, conn=conn)
-        self._ml_probs: list[float] = []
-        self._trade_outcomes: list[bool] = []
+        self._ml_probs: deque[float] = deque(maxlen=50)
+        self._trade_outcomes: deque[bool] = deque(maxlen=50)
         from hogan_bot.regime import RegimeTransitionTracker
         self._regime_transition = RegimeTransitionTracker(cooldown_bars=3, min_scale=0.40)
         self._use_policy_core = getattr(config, "use_policy_core", True)
@@ -247,8 +247,8 @@ class SignalEvaluator:
                 _rstate = detect_regime(candles)
                 regime_name = _rstate.regime
                 regime_conf = _rstate.confidence
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Regime detection failed: %s", exc)
 
         # Regime-adjusted thresholds (ML gates, stop/TP, position scale)
         eff: dict[str, float] = {}
@@ -256,8 +256,8 @@ class SignalEvaluator:
             try:
                 from hogan_bot.regime import effective_thresholds
                 eff = effective_thresholds(_rstate, cfg)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("effective_thresholds failed: %s", exc)
         eff_ml_buy = eff.get("ml_buy_threshold", cfg.ml_buy_threshold)
         eff_ml_sell = eff.get("ml_sell_threshold", cfg.ml_sell_threshold)
         eff_tp = eff.get("take_profit_pct", cfg.take_profit_pct)
@@ -327,8 +327,13 @@ class SignalEvaluator:
         _ls = loss_streak_scale(self._trade_outcomes)
         if _ls < 1.0:
             conf_scale *= _ls
-            logger.info("LOSS_STREAK: %d consecutive losses -> scale %.2f",
-                        sum(1 for o in reversed(self._trade_outcomes) if not o), _ls)
+            _streak = 0
+            for _o in reversed(self._trade_outcomes):
+                if not _o:
+                    _streak += 1
+                else:
+                    break
+            logger.info("LOSS_STREAK: %d consecutive losses -> scale %.2f", _streak, _ls)
 
         forecast_ret = None
         if result.forecast is not None and result.forecast.confidence > 0.2:
@@ -404,8 +409,8 @@ class SignalEvaluator:
                             "SELECT * FROM candles WHERE symbol=? AND timeframe='1d' ORDER BY ts_ms",
                             self.pipeline.conn, params=(symbol,),
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("MTF daily candle query failed: %s", exc)
                 _m30_df = mtf_candles.get(cfg.mtf_m30_timeframe)
                 _mtf_bias = evaluate_mtf(
                     daily_candles=_daily_df,
@@ -444,8 +449,8 @@ class SignalEvaluator:
                     logger.info("FRESHNESS_PENALTY %s: scale=0.75 (crit=%d all=%d)", symbol, crit_stale, all_stale)
                 if feat_result.has_stale:
                     logger.warning("STALE_FEATURES %s: %s", symbol, feat_result.stale_features)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Feature freshness check failed: %s", exc)
 
         _qc = compute_quality_components(
             final_confidence=result.confidence,
@@ -832,7 +837,7 @@ async def _run_event_loop_inner(
                     bars_held = getattr(pos, "bars_held", 0)
                     mae_pct = getattr(pos, "max_adverse_pct", 0.0)
                     mfe_pct = getattr(pos, "max_favorable_pct", 0.0)
-                    res = _safe_exec(executor.close_long, exit_symbol, ep, qty, reason=reason)
+                    res = await _safe_exec(executor.close_long, exit_symbol, ep, qty, reason=reason)
                     executed = bool(res.ok)
                     sell_px = ep
                     _exit_entry_regime = _entry_regime.pop(exit_symbol, _current_regime.get(exit_symbol, "unknown"))
@@ -871,8 +876,8 @@ async def _run_event_loop_inner(
                                     realized_pnl=gross_pnl_pct,
                                 )
                                 _perf_trade_count += 1
-                            except Exception:
-                                pass
+                            except Exception as exc:
+                                logger.debug("PerfTracker record error: %s", exc)
                         is_loss = sell_px < avg_entry
                         if is_loss and loss_cooldown_bars > 0:
                             _cooldown_remaining = loss_cooldown_bars
@@ -891,7 +896,7 @@ async def _run_event_loop_inner(
                     mae_pct = getattr(pos, "max_adverse_pct", 0.0)
                     mfe_pct = getattr(pos, "max_favorable_pct", 0.0)
                     cover_px = ep
-                    res = _safe_exec(executor.close_short, exit_symbol, cover_px, qty, reason=reason)
+                    res = await _safe_exec(executor.close_short, exit_symbol, cover_px, qty, reason=reason)
                     executed = bool(res.ok)
                     _exit_s_entry_regime = _entry_regime.pop(exit_symbol, _current_regime.get(exit_symbol, "unknown"))
                     if executed:
@@ -929,8 +934,8 @@ async def _run_event_loop_inner(
                                     realized_pnl=gross_pnl_pct,
                                 )
                                 _perf_trade_count += 1
-                            except Exception:
-                                pass
+                            except Exception as exc:
+                                logger.debug("PerfTracker record error: %s", exc)
                     if notifier and executed:
                         notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason,
                                                       "price": cover_px, "qty": qty})
@@ -946,8 +951,8 @@ async def _run_event_loop_inner(
                 try:
                     from hogan_bot.metrics import DEAD_MAN_ALERTS
                     DEAD_MAN_ALERTS.inc()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("DEAD_MAN_ALERTS metric error: %s", exc)
 
             # FX session filter: block trading during off-hours/weekends
             if _fx_session_filter is not None:
@@ -1041,8 +1046,8 @@ async def _run_event_loop_inner(
                 if _iprofile.use_pip_based_risk:
                     _eff_stop = _iprofile.default_stop_pct
                     _eff_tp = _iprofile.default_tp_pct
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Instrument profile lookup failed for %s: %s", symbol, exc)
 
             # FX session filter: block new entries during off-hours
             _fx_session_ok = True
@@ -1054,8 +1059,8 @@ async def _run_event_loop_inner(
                         _fx_session_ok = False
                     elif not session_filter():
                         _fx_session_ok = False
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("FX session check error for %s: %s", symbol, exc)
 
             # ── Macro sitout filter (parity with backtest) ────────────
             _macro_scale = 1.0
@@ -1109,7 +1114,7 @@ async def _run_event_loop_inner(
                             cover_qty = spos.qty
                             s_avg_entry = spos.avg_entry
                             cover_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
-                            res = _safe_exec(executor.close_short, symbol, cover_px, cover_qty, reason="buy_signal")
+                            res = await _safe_exec(executor.close_short, symbol, cover_px, cover_qty, reason="buy_signal")
                             if res.ok:
                                 _exit_s_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
                                 now_ms = int(time.time() * 1000)
@@ -1172,10 +1177,10 @@ async def _run_event_loop_inner(
                                     symbol, size, sig.eff_long_size_scale, _macro_scale, _momentum_scale, _funding_scale)
                     else:
                         buy_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
-                        res = _safe_exec(executor.open_long, symbol, buy_px, _long_size,
-                                         trailing_stop_pct=_eff_stop,
-                                         take_profit_pct=_eff_tp,
-                                         trail_activation_pct=config.trail_activation_pct)
+                        res = await _safe_exec(executor.open_long, symbol, buy_px, _long_size,
+                                               trailing_stop_pct=_eff_stop,
+                                               take_profit_pct=_eff_tp,
+                                               trail_activation_pct=config.trail_activation_pct)
                         executed = bool(res.ok)
                         if executed:
                             _entry_regime[symbol] = _sym_regime or "unknown"
@@ -1244,7 +1249,7 @@ async def _run_event_loop_inner(
                         sell_qty = pos.qty if size <= 0 else min(pos.qty, size)
                         sell_px = px if _executor_owns_fill else px * (1.0 - slip_mult)
                         avg_entry = pos.avg_entry
-                        res = _safe_exec(executor.close_long, symbol, sell_px, sell_qty, reason="signal")
+                        res = await _safe_exec(executor.close_long, symbol, sell_px, sell_qty, reason="signal")
                         executed = bool(res.ok)
                         _sig_entry_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
                         if executed:
@@ -1287,8 +1292,8 @@ async def _run_event_loop_inner(
                                         realized_pnl=gross_pnl_pct,
                                     )
                                     _perf_trade_count += 1
-                                except Exception:
-                                    pass
+                                except Exception as exc:
+                                    logger.debug("PerfTracker record error: %s", exc)
                             _consecutive_exit_signals[symbol] = 0
                             is_loss = sell_px < avg_entry
                             if is_loss and loss_cooldown_bars > 0:
@@ -1326,7 +1331,7 @@ async def _run_event_loop_inner(
                                     symbol, size, sig.eff_short_size_scale, _macro_scale)
                     else:
                         short_px = px if _executor_owns_fill else px * (1.0 - slip_mult)
-                        res = _safe_exec(
+                        res = await _safe_exec(
                             executor.open_short,
                             symbol, short_px, _short_size,
                             trailing_stop_pct=_eff_stop,
@@ -1371,8 +1376,8 @@ async def _run_event_loop_inner(
                 total = sum(counts.values())
                 non_hold = counts.get("buy", 0) + counts.get("sell", 0)
                 SIGNAL_QUALITY.labels(symbol=symbol).set(non_hold / max(total, 1))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("SIGNAL_QUALITY metric error: %s", exc)
 
             # Periodic expectancy summary
             if (
