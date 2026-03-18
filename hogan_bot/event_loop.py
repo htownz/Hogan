@@ -1138,31 +1138,35 @@ async def run_event_loop(
                     if _funding_overlay is not None:
                         _funding_scale = _funding_overlay.position_scale("buy", datetime.now(tz=timezone.utc))
                     _long_size = size * sig.eff_long_size_scale * _macro_scale * _momentum_scale * _funding_scale
-                    buy_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
-                    res = executor.open_long(symbol, buy_px, _long_size,
-                                            trailing_stop_pct=_eff_stop,
-                                            take_profit_pct=_eff_tp,
-                                            trail_activation_pct=config.trail_activation_pct)
-                    executed = bool(res.ok)
-                    if executed:
-                        _entry_regime[symbol] = _sym_regime or "unknown"
-                        _entry_regime_conf[symbol] = getattr(sig, "final_confidence", 0.0)
-                        _entry_up_prob[symbol] = up_prob
-                        pos = portfolio.positions.get(symbol)
-                        if pos is not None:
-                            pos.entry_atr_pct = _sym_atr_pct
-                        now_ms = int(time.time() * 1000)
-                        fee = _long_size * buy_px * config.fee_rate
-                        if not allow_live:
-                            open_paper_trade(conn, symbol, "long", buy_px, _long_size, fee, now_ms,
-                                             ml_up_prob=up_prob,
-                                             strategy_conf=sig.final_confidence,
-                                             vol_ratio=sig.vol_ratio)
-                        if notifier:
-                            notifier.notify("buy", {"symbol": symbol, "price": buy_px,
-                                                    "qty": _long_size, "ml_up_prob": up_prob})
-                    logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s long_scale=%.2f",
-                                symbol, buy_px, _long_size, up_prob or -1, equity, _sym_regime, sig.eff_long_size_scale)
+                    if _long_size <= 0:
+                        logger.info("BUY_BLOCK %s — size scaled to zero (base=%.6f eff_scale=%.2f macro=%.2f mom=%.2f fund=%.2f)",
+                                    symbol, size, sig.eff_long_size_scale, _macro_scale, _momentum_scale, _funding_scale)
+                    else:
+                        buy_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
+                        res = executor.open_long(symbol, buy_px, _long_size,
+                                                 trailing_stop_pct=_eff_stop,
+                                                 take_profit_pct=_eff_tp,
+                                                 trail_activation_pct=config.trail_activation_pct)
+                        executed = bool(res.ok)
+                        if executed:
+                            _entry_regime[symbol] = _sym_regime or "unknown"
+                            _entry_regime_conf[symbol] = getattr(sig, "final_confidence", 0.0)
+                            _entry_up_prob[symbol] = up_prob
+                            pos = portfolio.positions.get(symbol)
+                            if pos is not None:
+                                pos.entry_atr_pct = _sym_atr_pct
+                            now_ms = int(time.time() * 1000)
+                            fee = _long_size * buy_px * config.fee_rate
+                            if not allow_live:
+                                open_paper_trade(conn, symbol, "long", buy_px, _long_size, fee, now_ms,
+                                                 ml_up_prob=up_prob,
+                                                 strategy_conf=sig.final_confidence,
+                                                 vol_ratio=sig.vol_ratio)
+                            if notifier:
+                                notifier.notify("buy", {"symbol": symbol, "price": buy_px,
+                                                        "qty": _long_size, "ml_up_prob": up_prob})
+                        logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s long_scale=%.2f",
+                                    symbol, buy_px, _long_size, up_prob or -1, equity, _sym_regime, sig.eff_long_size_scale)
 
             elif action == "sell" and px > 0:
                 _closed_long_this_bar = False
