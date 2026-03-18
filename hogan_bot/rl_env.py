@@ -358,11 +358,14 @@ class TradingEnv(_GymBase):
                     arr = np.pad(arr, (0, N_ML_FEATURES_EXTENDED - len(arr)))
                 ml_part = np.clip(arr, -10.0, 10.0)
         else:
-            features = build_feature_row(window_5m)
+            features = build_feature_row(window_5m, use_champion_features=False)
             if features is None:
                 ml_part = np.zeros(N_ML_FEATURES, dtype=np.float32)
             else:
-                ml_part = np.clip(np.array(features, dtype=np.float32), -10.0, 10.0)
+                arr = np.array(features[:N_ML_FEATURES], dtype=np.float32)
+                if len(arr) < N_ML_FEATURES:
+                    arr = np.pad(arr, (0, N_ML_FEATURES - len(arr)))
+                ml_part = np.clip(arr, -10.0, 10.0)
 
         price = float(self.candles["close"].iloc[self._cursor])
         in_pos = 1.0 if self._position_qty > 0.0 else 0.0

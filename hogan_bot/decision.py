@@ -505,7 +505,7 @@ def pullback_gate(
     range_pos = (close - local_low) / local_range
 
     close_lookback = float(candles["close"].iloc[-(lookback + 1)])
-    run_up_pct = (close - close_lookback) / close_lookback * 100
+    run_up_pct = (close - close_lookback) / max(close_lookback, 1e-9) * 100
 
     _strict_regimes = ("ranging", "trending_up")
     _strict_thresh = 0.40 if regime in _strict_regimes else max_range_position
