@@ -286,6 +286,9 @@ def decide(
         as_of_ms=as_of_ms,
     )
 
+    _raw_tech_action = signal.tech.action if signal.tech else None
+    _pipeline_action = signal.action
+
     action = signal.action
     conf_scale = signal.confidence or 1.0
 
@@ -635,4 +638,6 @@ def decide(
         block_reasons=block_reasons,
         swarm=swarm_decision,
         swarm_decision_id=_swarm_decision_id,
+        raw_tech_action=_raw_tech_action,
+        pipeline_action=_pipeline_action,
     )

@@ -247,6 +247,7 @@ def _create_schema(conn: sqlite3.Connection) -> None:
             regime            TEXT,
             tech_action       TEXT,
             tech_confidence   REAL,
+            pipeline_action   TEXT,
             sent_bias         REAL,
             sent_strength     REAL,
             macro_regime      TEXT,
@@ -518,6 +519,7 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         "ALTER TABLE paper_trades ADD COLUMN entry_atr_pct REAL",
         "ALTER TABLE swarm_agent_votes ADD COLUMN decision_id INTEGER REFERENCES swarm_decisions(id)",
         "ALTER TABLE decision_log ADD COLUMN swarm_decision_id INTEGER",
+        "ALTER TABLE decision_log ADD COLUMN pipeline_action TEXT",
         "ALTER TABLE swarm_decisions ADD COLUMN pre_veto_action TEXT",
         "ALTER TABLE swarm_decisions ADD COLUMN pre_veto_confidence REAL",
         "ALTER TABLE swarm_decisions ADD COLUMN pre_veto_agreement REAL",
@@ -1041,6 +1043,7 @@ def log_decision(
     regime: str | None = None,
     tech_action: str | None = None,
     tech_confidence: float | None = None,
+    pipeline_action: str | None = None,
     sent_bias: float | None = None,
     sent_strength: float | None = None,
     macro_regime: str | None = None,
@@ -1075,7 +1078,7 @@ def log_decision(
         """
         INSERT INTO decision_log (
             ts_ms, symbol, regime,
-            tech_action, tech_confidence,
+            tech_action, tech_confidence, pipeline_action,
             sent_bias, sent_strength,
             macro_regime, macro_risk_on,
             meta_weights_json,
@@ -1088,11 +1091,11 @@ def log_decision(
             direction_score, quality_score, size_score,
             quality_components_json, block_reasons_json,
             swarm_decision_id
-        ) VALUES (?,?,?, ?,?, ?,?, ?,?, ?, ?,?,?,?, ?,?,?,?,?, ?, ?,?,?, ?,?,?, ?, ?,?,?, ?,?, ?)
+        ) VALUES (?,?,?, ?,?,?, ?,?, ?,?, ?, ?,?,?,?, ?,?,?,?,?, ?, ?,?,?, ?,?,?, ?, ?,?,?, ?,?, ?)
         """,
         (
             int(ts_ms), symbol, regime,
-            tech_action, tech_confidence,
+            tech_action, tech_confidence, pipeline_action,
             sent_bias, sent_strength,
             macro_regime,
             (1 if macro_risk_on else 0) if macro_risk_on is not None else None,

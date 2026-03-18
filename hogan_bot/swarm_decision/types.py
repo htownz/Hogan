@@ -176,6 +176,10 @@ class DecisionIntent:
     tech_confidence: float | None = None
     block_reasons: list[str] = field(default_factory=list)
 
+    # Raw signal tracking (for decision log diagnostics)
+    raw_tech_action: str | None = None      # TechnicalAgent output before MetaWeigher
+    pipeline_action: str | None = None      # MetaWeigher output before ML/gates
+
     # Swarm layer (None when swarm is off)
     swarm: SwarmDecision | None = None
     swarm_decision_id: int | None = None
@@ -191,6 +195,8 @@ class DecisionIntent:
             "stop_distance_pct": round(self.stop_distance_pct, 6),
             "regime": self.regime,
             "block_reasons": self.block_reasons,
+            "raw_tech_action": self.raw_tech_action,
+            "pipeline_action": self.pipeline_action,
         }
         if self.up_prob is not None:
             d["up_prob"] = round(self.up_prob, 4)
