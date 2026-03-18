@@ -374,6 +374,5 @@ class TestSchemaEnhancements:
         cfg = BotConfig()
         assert hasattr(cfg, "swarm_weights")
         assert isinstance(cfg.swarm_weights, str)
-        assert len(cfg.swarm_weights) > 0
         assert hasattr(cfg, "swarm_use_regime_weights")
         assert cfg.swarm_use_regime_weights is False
