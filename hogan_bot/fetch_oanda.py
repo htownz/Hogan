@@ -43,6 +43,8 @@ from datetime import datetime, timezone
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
+from hogan_bot.retry import retry, URLLIB_TRANSIENT
+
 logger = logging.getLogger(__name__)
 
 _TIMEOUT = 15
@@ -90,20 +92,28 @@ def _get_config() -> tuple[str, str, str]:
 
 
 def _get(path: str, token: str, base_url: str) -> dict:
-    """GET from Oanda REST v20 with Bearer auth."""
+    """GET from Oanda REST v20 with Bearer auth (retries on transient errors)."""
     from urllib.error import HTTPError
-    url = f"{base_url}{path}"
-    req = Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
-    try:
-        with urlopen(req, timeout=_TIMEOUT) as resp:
-            return json.loads(resp.read().decode())
-    except HTTPError as exc:
-        body = ""
+
+    def _do_get() -> dict:
+        url = f"{base_url}{path}"
+        req = Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
         try:
-            body = exc.read().decode()[:300]
-        except Exception:
-            pass
-        raise URLError(f"HTTP {exc.code} {exc.reason} — {body}") from exc
+            with urlopen(req, timeout=_TIMEOUT) as resp:
+                return json.loads(resp.read().decode())
+        except HTTPError as exc:
+            body = ""
+            try:
+                body = exc.read().decode()[:300]
+            except Exception:
+                pass
+            raise URLError(f"HTTP {exc.code} {exc.reason} — {body}") from exc
+
+    return retry(
+        _do_get,
+        retryable=URLLIB_TRANSIENT,
+        label=f"fetch_oanda GET {path}",
+    )
 
 
 # ---------------------------------------------------------------------------
