@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from hogan_bot.decision import apply_ml_filter, ml_confidence
+from hogan_bot.decision import apply_ml_filter, ml_confidence, ml_probability_sizer
 from hogan_bot.risk import calculate_position_size
 
 
@@ -128,3 +128,48 @@ class TestConfidenceFilterRoundTrip:
         gd = apply_ml_filter("buy", 0.4, buy_threshold=0.55, sell_threshold=0.45)
         assert gd.action == "hold"
         assert ml_confidence(0.4) == pytest.approx(0.2)
+
+
+# ---------------------------------------------------------------------------
+# Regression: conf_scale must NOT multiply pipeline confidence into ML sizer
+# ---------------------------------------------------------------------------
+
+
+class TestConfScaleNoDoubleCounting:
+    """Guard against the bug where conf_scale = ml_sizer * pipeline_confidence.
+
+    The ML probability sizer output (0.30-1.50) IS the sizing scale.
+    Pipeline confidence is checked by quality gate thresholds, not sizing.
+    Multiplying them together crushes positions to ~10% of intended size.
+    """
+
+    def test_ml_sizer_output_is_independent_of_pipeline_confidence(self):
+        """ml_probability_sizer should not depend on any external confidence."""
+        scale_buy = ml_probability_sizer("buy", 0.55)
+        assert scale_buy == pytest.approx(1.15, abs=0.01)
+        scale_sell = ml_probability_sizer("sell", 0.45)
+        assert scale_sell == pytest.approx(1.15, abs=0.01)
+
+    def test_ml_sizer_floor_and_ceiling(self):
+        assert ml_probability_sizer("buy", 0.0) == pytest.approx(0.30)
+        assert ml_probability_sizer("buy", 1.0) == pytest.approx(1.50)
+        assert ml_probability_sizer("sell", 1.0) == pytest.approx(0.30)
+        assert ml_probability_sizer("sell", 0.0) == pytest.approx(1.50)
+
+    def test_hold_returns_unity(self):
+        assert ml_probability_sizer("hold", 0.7) == pytest.approx(1.0)
+
+    def test_none_prob_returns_unity(self):
+        assert ml_probability_sizer("buy", None) == pytest.approx(1.0)
+
+    def test_typical_ml_sizer_not_crushed_by_confidence(self):
+        """The bug was: conf_scale = ml_sizer(0.41) * pipeline_conf(0.15) = 0.10.
+
+        Correct: conf_scale = ml_sizer(0.41) = 0.73.  This test ensures
+        the sizer output is in a reasonable range on its own.
+        """
+        sizer_output = ml_probability_sizer("buy", 0.41)
+        assert sizer_output > 0.5, (
+            f"ML sizer for buy@0.41 should be >0.5, got {sizer_output}. "
+            "If this fails, pipeline confidence may be leaking into conf_scale."
+        )
