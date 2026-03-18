@@ -66,7 +66,7 @@ class BotConfig:
 
     # Exit management (0 = disabled)
     trailing_stop_pct: float = 0.025
-    take_profit_pct: float = 0.035
+    take_profit_pct: float = 0.054
     # Trailing stop activation: only start trailing after MFE reaches this %.
     # Prevents noise-triggered stops in the first bars after entry.
     trail_activation_pct: float = 0.005
@@ -82,7 +82,8 @@ class BotConfig:
 
     # Hour-based overrides (preferred): convert to bars using timeframe at runtime.
     # Ensures parity between backtest and live/paper across different timeframes.
-    max_hold_hours: float = 24.0     # 24h max hold (canonical)
+    # Default 0 = disabled (falls back to max_hold_bars); canonical profile sets 24.0.
+    max_hold_hours: float = 0
     short_max_hold_hours: float = 12.0  # 12h from short-hold sweep (best Sharpe/return)
     loss_cooldown_hours: float = 2.0 # 2h cooldown (canonical)
 
@@ -110,7 +111,7 @@ class BotConfig:
     sell_atr_friction_multiple: float = 0.8
 
     # Entry quality gate thresholds (hard pre-trade filter)
-    min_final_confidence: float = 0.08
+    min_final_confidence: float = 0.25
     min_tech_confidence: float = 0.15
     min_regime_confidence: float = 0.30
     max_whipsaws: int = 3
@@ -234,10 +235,10 @@ class BotConfig:
     swarm_mode: str = "shadow"
     swarm_phase: str = "certification"
     swarm_agents: str = "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1"
-    swarm_min_agreement: float = 0.35
-    swarm_min_vote_margin: float = 0.05
-    swarm_max_entropy: float = 1.20
-    swarm_weights: str = "pipeline_v1:0.40,risk_steward_v1:0.20,data_guardian_v1:0.20,execution_cost_v1:0.20"
+    swarm_min_agreement: float = 0.60
+    swarm_min_vote_margin: float = 0.10
+    swarm_max_entropy: float = 0.95
+    swarm_weights: str = ""
     swarm_weight_update_mode: str = "shadow"
     swarm_weight_min_trades: int = 50
     swarm_weight_max_daily_shift: float = 0.05
