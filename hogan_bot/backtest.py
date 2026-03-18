@@ -1186,10 +1186,17 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "regime_confidence": _entry_regime_conf.pop(sym, _regime_conf),
                             "close_reason": reason,
                         })
-            for sym, size in list(_pending_shorts.items()):
+            for sym, _ps_val in list(_pending_shorts.items()):
                 _pending_shorts.pop(sym, None)
+                if isinstance(_ps_val, tuple):
+                    size, _ps_atr = _ps_val
+                else:
+                    size, _ps_atr = _ps_val, None
                 short_px = open_px * (1.0 - slip_mult)
                 if portfolio.execute_short(sym, short_px, size, trailing_stop_pct=trailing_stop_pct, take_profit_pct=take_profit_pct, trail_activation_pct=trail_activation_pct):
+                    spos = portfolio.short_positions.get(sym)
+                    if spos is not None and _ps_atr is not None:
+                        spos.entry_atr_pct = _ps_atr
                     trades += 1
                     _short_entry_bar[sym] = i - 1
                     _short_entry_regime[sym] = _current_regime
@@ -2015,7 +2022,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 elif _short_size <= 0:
                     _funnel["blocked_regime_no_shorts"] += 1
                 elif use_next_open and i < len(candles):
-                    _pending_shorts[symbol] = _short_size
+                    _pending_shorts[symbol] = (_short_size, _atr_pct)
                 else:
                     short_px = px * (1.0 - slip_mult)
                     if portfolio.execute_short(

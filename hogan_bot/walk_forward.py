@@ -199,6 +199,8 @@ def _compute_windows(
             f"min_train={cfg.min_train_bars}, min_test={cfg.min_test_bars}"
         )
 
+    if cfg.n_splits <= 0:
+        raise ValueError("n_splits must be >= 1")
     test_size = test_total // cfg.n_splits
     if test_size < cfg.min_test_bars:
         test_size = cfg.min_test_bars
@@ -360,7 +362,7 @@ def _train_and_evaluate_window(
                         regime_labels.append(None)
                 _rr()
 
-                regime_arr = np.array(regime_labels[:len(X)])
+                regime_arr = np.array([regime_labels[idx] for idx in X.index])
                 regime_models: dict[str, TrainedModel] = {}
                 for regime_name in ("trending_up", "trending_down", "ranging", "volatile"):
                     mask = regime_arr == regime_name

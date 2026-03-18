@@ -57,6 +57,23 @@ from hogan_bot.storage import get_connection, record_equity, upsert_position, op
 logger = logging.getLogger(__name__)
 
 
+class _FailedResult:
+    """Sentinel returned by _safe_exec when an executor call throws."""
+    ok = False
+    error: str = ""
+    def __init__(self, error: str = ""):
+        self.error = error
+
+
+def _safe_exec(fn, *args, **kwargs):
+    """Call *fn* and return its result; on exception return a failed sentinel."""
+    try:
+        return fn(*args, **kwargs)
+    except Exception as exc:
+        logger.error("Executor call %s raised: %s", getattr(fn, "__name__", fn), exc)
+        return _FailedResult(str(exc))
+
+
 def _compute_data_ages(conn) -> dict[str, float]:
     """Compute hours since last update for each data source in the DB."""
     if conn is None:
@@ -514,6 +531,18 @@ async def run_event_loop(
     config = apply_champion_mode(config)
 
     conn = get_connection(config.db_path)
+    try:
+        await _run_event_loop_inner(config, conn, max_events)
+    finally:
+        conn.close()
+        logger.info("Database connection closed.")
+
+
+async def _run_event_loop_inner(
+    config: BotConfig,
+    conn,
+    max_events: int | None,
+) -> None:
     notifier = make_notifier(config.webhook_url or None)
 
     live_ack = (os.getenv("HOGAN_LIVE_ACK", "") or "").strip()
@@ -803,7 +832,7 @@ async def run_event_loop(
                     bars_held = getattr(pos, "bars_held", 0)
                     mae_pct = getattr(pos, "max_adverse_pct", 0.0)
                     mfe_pct = getattr(pos, "max_favorable_pct", 0.0)
-                    res = executor.close_long(exit_symbol, ep, qty, reason=reason)
+                    res = _safe_exec(executor.close_long, exit_symbol, ep, qty, reason=reason)
                     executed = bool(res.ok)
                     sell_px = ep
                     _exit_entry_regime = _entry_regime.pop(exit_symbol, _current_regime.get(exit_symbol, "unknown"))
@@ -862,7 +891,7 @@ async def run_event_loop(
                     mae_pct = getattr(pos, "max_adverse_pct", 0.0)
                     mfe_pct = getattr(pos, "max_favorable_pct", 0.0)
                     cover_px = ep
-                    res = executor.close_short(exit_symbol, cover_px, qty, reason=reason)
+                    res = _safe_exec(executor.close_short, exit_symbol, cover_px, qty, reason=reason)
                     executed = bool(res.ok)
                     _exit_s_entry_regime = _entry_regime.pop(exit_symbol, _current_regime.get(exit_symbol, "unknown"))
                     if executed:
@@ -1080,7 +1109,7 @@ async def run_event_loop(
                             cover_qty = spos.qty
                             s_avg_entry = spos.avg_entry
                             cover_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
-                            res = executor.close_short(symbol, cover_px, cover_qty, reason="buy_signal")
+                            res = _safe_exec(executor.close_short, symbol, cover_px, cover_qty, reason="buy_signal")
                             if res.ok:
                                 _exit_s_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
                                 now_ms = int(time.time() * 1000)
@@ -1143,10 +1172,10 @@ async def run_event_loop(
                                     symbol, size, sig.eff_long_size_scale, _macro_scale, _momentum_scale, _funding_scale)
                     else:
                         buy_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
-                        res = executor.open_long(symbol, buy_px, _long_size,
-                                                 trailing_stop_pct=_eff_stop,
-                                                 take_profit_pct=_eff_tp,
-                                                 trail_activation_pct=config.trail_activation_pct)
+                        res = _safe_exec(executor.open_long, symbol, buy_px, _long_size,
+                                         trailing_stop_pct=_eff_stop,
+                                         take_profit_pct=_eff_tp,
+                                         trail_activation_pct=config.trail_activation_pct)
                         executed = bool(res.ok)
                         if executed:
                             _entry_regime[symbol] = _sym_regime or "unknown"
@@ -1209,10 +1238,10 @@ async def run_event_loop(
                             )
                             event_count += 1
                             continue
-                        sell_qty = min(pos.qty, size)
+                        sell_qty = pos.qty if size <= 0 else min(pos.qty, size)
                         sell_px = px if _executor_owns_fill else px * (1.0 - slip_mult)
                         avg_entry = pos.avg_entry
-                        res = executor.close_long(symbol, sell_px, sell_qty, reason="signal")
+                        res = _safe_exec(executor.close_long, symbol, sell_px, sell_qty, reason="signal")
                         executed = bool(res.ok)
                         _sig_entry_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
                         if executed:
@@ -1294,7 +1323,8 @@ async def run_event_loop(
                                     symbol, size, sig.eff_short_size_scale, _macro_scale)
                     else:
                         short_px = px if _executor_owns_fill else px * (1.0 - slip_mult)
-                        res = executor.open_short(
+                        res = _safe_exec(
+                            executor.open_short,
                             symbol, short_px, _short_size,
                             trailing_stop_pct=_eff_stop,
                             take_profit_pct=_eff_tp,
@@ -1386,7 +1416,6 @@ async def run_event_loop(
         logger.info("FINAL EXPECTANCY REPORT: %s", report)
 
     logger.info("Event loop terminated after %d events.", event_count)
-    conn.close()
 
 
 # ---------------------------------------------------------------------------
