@@ -46,7 +46,8 @@ class ChampionLocks:
     signal_min_vote_margin: int = 1
 
     use_regime_detection: bool = True
-    ml_confidence_sizing: bool = True
+    ml_confidence_sizing: bool = False
+    use_ml_as_sizer: bool = True
 
     # Regime-routed strategy families (trend/mean-revert/breakout)
     use_strategy_router: bool = True
