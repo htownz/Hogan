@@ -14,7 +14,7 @@ if (-not (Test-Path $PS_EXE)) {
 
 # ── Task 1: Daily data refresh at 7:00 AM ────────────────────────────────────
 $task1_name   = "Hogan_DailyRefresh"
-$task1_script = "$HOGAN_ROOT\scripts\daily_refresh.ps1"
+$task1_script = "$HOGAN_ROOT\scripts\windows\daily_refresh.ps1"
 $task1_action = New-ScheduledTaskAction `
     -Execute $PS_EXE `
     -Argument "-NonInteractive -File `"$task1_script`"" `
@@ -41,7 +41,7 @@ Write-Host "✓ Registered: $task1_name  (daily 7:00 AM)" -ForegroundColor Green
 
 # ── Task 2: Weekly retrain every Sunday at 3:00 AM ───────────────────────────
 $task2_name   = "Hogan_WeeklyRetrain"
-$task2_script = "$HOGAN_ROOT\scripts\weekly_retrain.ps1"
+$task2_script = "$HOGAN_ROOT\scripts\windows\weekly_retrain.ps1"
 $task2_action = New-ScheduledTaskAction `
     -Execute $PS_EXE `
     -Argument "-NonInteractive -File `"$task2_script`"" `

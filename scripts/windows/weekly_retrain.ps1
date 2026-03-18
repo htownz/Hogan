@@ -36,7 +36,7 @@ Add-Content $LOG_FILE "[1/3] Backfilling Alpaca 5m candles (30 days)..."
 # ── Step 2: daily data refresh (ensure latest macro signals) ─────────────────
 Add-Content $LOG_FILE ""
 Add-Content $LOG_FILE "[2/3] Running daily data refresh..."
-& $VENV_PYTHON refresh_daily.py 2>&1 | Tee-Object -Append -FilePath $LOG_FILE
+& $VENV_PYTHON scripts\data\refresh_daily.py 2>&1 | Tee-Object -Append -FilePath $LOG_FILE
 
 # ── Step 3: retrain XGBoost on full history ───────────────────────────────────
 # Multi-symbol + paper labels (when 5+ closed trades exist)
