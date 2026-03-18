@@ -525,9 +525,13 @@ class MetaWeigher:
         # When the technical agent returns "hold" with high confidence, it
         # means the price action does NOT support any trade.  This should
         # dampen how much sentiment/macro alone can drive a trade.
+        # Raise the floor when sentiment+macro agree directionally so that
+        # strong non-tech consensus can still produce entries.
         if tech.action == "hold" and tech.confidence > 0.3:
             hold_dampen = 1.0 - (tech.confidence * w["technical"] * 2.0)
-            hold_dampen = max(0.2, hold_dampen)
+            _non_tech_agree = (sent_score > 0 and macro_score > 0) or (sent_score < 0 and macro_score < 0)
+            _dampen_floor = 0.4 if _non_tech_agree else 0.2
+            hold_dampen = max(_dampen_floor, hold_dampen)
             raw_score *= hold_dampen
 
         combined_score = raw_score

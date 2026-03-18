@@ -110,6 +110,8 @@ class SignalResult:
     eff_long_size_scale: float = 1.0
     eff_short_size_scale: float = 1.0
     swarm_decision_id: int | None = None
+    raw_tech_action: str | None = None
+    pipeline_action: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +197,8 @@ class SignalEvaluator:
             eff_long_size_scale=intent.eff_long_size_scale,
             eff_short_size_scale=intent.eff_short_size_scale,
             swarm_decision_id=intent.swarm_decision_id,
+            raw_tech_action=intent.raw_tech_action,
+            pipeline_action=intent.pipeline_action,
         )
 
     def evaluate(
@@ -257,6 +261,9 @@ class SignalEvaluator:
             regime=regime_name, regime_state=_rstate,
         )
         px = float(candles["close"].iloc[-1])
+
+        _raw_tech_action = result.tech.action if result.tech else None
+        _pipeline_action = result.action
 
         up_prob = None
         conf_scale = result.confidence or 1.0
@@ -481,6 +488,8 @@ class SignalEvaluator:
             eff_allow_shorts=eff_allow_shorts,
             eff_long_size_scale=eff_long_size_scale,
             eff_short_size_scale=eff_short_size_scale,
+            raw_tech_action=_raw_tech_action,
+            pipeline_action=_pipeline_action,
         )
 
 
@@ -938,8 +947,9 @@ async def run_event_loop(
                     ts_ms=int(time.time() * 1000),
                     symbol=symbol,
                     regime=_sym_regime,
-                    tech_action=action,
+                    tech_action=sig.raw_tech_action or action,
                     tech_confidence=sig.tech_confidence,
+                    pipeline_action=sig.pipeline_action or action,
                     final_action=action,
                     final_confidence=sig.final_confidence,
                     position_size=size,
