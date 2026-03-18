@@ -3,6 +3,9 @@
 Uses a Corwin-Schultz-inspired spread estimator from high/low prices
 combined with the configured fee rate to estimate round-trip cost.
 Vetoes when predicted edge after costs is negative.
+
+When edge is sufficient, endorses the pipeline's direction
+instead of defaulting to hold.
 """
 from __future__ import annotations
 
@@ -11,6 +14,7 @@ import math
 import numpy as np
 import pandas as pd
 
+from hogan_bot.swarm_decision.agents._utils import get_baseline_action
 from hogan_bot.swarm_decision.types import AgentVote
 
 
@@ -85,9 +89,10 @@ class ExecutionCostAgent:
         edge_bps = edge_est * 10_000
 
         if edge_bps <= 0 or cost_bps <= 0:
+            baseline = get_baseline_action(shared_context)
             return AgentVote(
                 agent_id=self.agent_id,
-                action="hold",
+                action=baseline,
                 confidence=0.5,
                 expected_edge_bps=-cost_bps,
                 size_scale=0.8,
@@ -104,12 +109,25 @@ class ExecutionCostAgent:
             size_scale = ratio / self._min_ratio
             reasons.append(f"marginal_edge:ratio={ratio:.2f}")
 
+        if veto:
+            return AgentVote(
+                agent_id=self.agent_id,
+                action="hold",
+                confidence=0.0,
+                expected_edge_bps=edge_bps - cost_bps,
+                size_scale=0.0,
+                veto=True,
+                block_reasons=reasons,
+            )
+
+        baseline = get_baseline_action(shared_context)
+        confidence = min(1.0, max(0.5, ratio / self._min_ratio))
         return AgentVote(
             agent_id=self.agent_id,
-            action="hold",
-            confidence=0.5,
+            action=baseline,
+            confidence=confidence,
             expected_edge_bps=edge_bps - cost_bps,
             size_scale=max(0.0, min(1.0, size_scale)),
-            veto=veto,
+            veto=False,
             block_reasons=reasons,
         )

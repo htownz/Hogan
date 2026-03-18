@@ -151,6 +151,7 @@ class SignalEvaluator:
         state.ml_probs = self._ml_probs
         state.trade_outcomes = self._trade_outcomes
 
+        import time as _time_mod
         intent = decide(
             symbol=symbol,
             candles=candles,
@@ -166,6 +167,7 @@ class SignalEvaluator:
             enable_pullback_gate=True,
             enable_freshness_check=True,
             peak_equity_usd=peak_equity,
+            as_of_ms=int(_time_mod.time() * 1000),
         )
 
         px = float(candles["close"].iloc[-1])

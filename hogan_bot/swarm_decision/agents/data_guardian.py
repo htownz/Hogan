@@ -2,11 +2,15 @@
 
 Checks candle freshness, gap detection, and monotonic timestamps.
 Forces hold when data quality is too low to make reliable decisions.
+
+When data quality is acceptable, endorses the pipeline's direction
+instead of defaulting to hold.
 """
 from __future__ import annotations
 
 import pandas as pd
 
+from hogan_bot.swarm_decision.agents._utils import get_baseline_action
 from hogan_bot.swarm_decision.types import AgentVote, FreshnessInfo
 
 
@@ -39,15 +43,13 @@ class DataGuardianAgent:
         freshness: FreshnessInfo | None = None
 
         if len(candles) < self._min_bars:
-            veto = True
-            reasons.append(f"insufficient_bars:{len(candles)}")
             return AgentVote(
                 agent_id=self.agent_id,
                 action="hold",
                 confidence=0.0,
                 size_scale=0.0,
                 veto=True,
-                block_reasons=reasons,
+                block_reasons=[f"insufficient_bars:{len(candles)}"],
             )
 
         if "ts_ms" in candles.columns:
@@ -89,14 +91,24 @@ class DataGuardianAgent:
             size_scale *= 0.5
 
         if veto:
-            size_scale = 0.0
+            return AgentVote(
+                agent_id=self.agent_id,
+                action="hold",
+                confidence=0.0,
+                size_scale=0.0,
+                veto=True,
+                block_reasons=reasons,
+                freshness=freshness,
+            )
 
+        baseline = get_baseline_action(shared_context)
+        confidence = 0.5 + 0.5 * size_scale
         return AgentVote(
             agent_id=self.agent_id,
-            action="hold",
-            confidence=0.5,
+            action=baseline,
+            confidence=max(0.0, min(1.0, confidence)),
             size_scale=max(0.0, min(1.0, size_scale)),
-            veto=veto,
+            veto=False,
             block_reasons=reasons,
             freshness=freshness,
         )

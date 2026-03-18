@@ -2,11 +2,16 @@
 
 Prevents the system from taking large positions during drawdowns or
 extreme volatility, acting as a conservative safety net.
+
+When conditions are acceptable, endorses the pipeline's direction
+instead of defaulting to hold — making this a true safety gate
+rather than a trade suppressor.
 """
 from __future__ import annotations
 
 import pandas as pd
 
+from hogan_bot.swarm_decision.agents._utils import get_baseline_action
 from hogan_bot.swarm_decision.types import AgentVote
 
 
@@ -61,11 +66,23 @@ class RiskStewardAgent:
                 size_scale *= max(0.3, 1.0 - (vol_ratio - self._vol_scale) * 0.2)
                 reasons.append(f"high_vol_{vol_ratio:.1f}x")
 
+        if veto:
+            return AgentVote(
+                agent_id=self.agent_id,
+                action="hold",
+                confidence=0.0,
+                size_scale=0.0,
+                veto=True,
+                block_reasons=reasons,
+            )
+
+        baseline = get_baseline_action(shared_context)
+        confidence = 0.5 + 0.5 * size_scale
         return AgentVote(
             agent_id=self.agent_id,
-            action="hold",
-            confidence=0.5,
+            action=baseline,
+            confidence=max(0.0, min(1.0, confidence)),
             size_scale=max(0.0, min(1.0, size_scale)),
-            veto=veto,
+            veto=False,
             block_reasons=reasons,
         )

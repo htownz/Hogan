@@ -1512,6 +1512,44 @@ with tab_swarm:
                 except Exception:
                     pass
 
+            # ── Section: Daily Digest ────────────────────────
+            try:
+                st.subheader("Daily Digest")
+                from hogan_bot.swarm_daily_digest import build_digest
+                _digest = build_digest(_sw_conn)
+                _sev_colors = {"healthy": "green", "watch": "blue", "warning": "orange", "critical": "red"}
+                _sev_color = _sev_colors.get(_digest.severity, "gray")
+                st.markdown(f"**Severity:** :{_sev_color}[{_digest.severity.upper()}]")
+                st.markdown(f"> {_digest.headline}")
+
+                dig_cols = st.columns(4)
+                dig_cols[0].metric("Decisions", _digest.metrics.get("decision_count", 0))
+                dig_cols[1].metric("Would-Trades", _digest.metrics.get("would_trade_count", 0))
+                _vr_pct = f"{_digest.metrics.get('veto_ratio', 0):.0%}"
+                dig_cols[2].metric("Veto Ratio", _vr_pct)
+                dig_cols[3].metric("Regimes", _digest.metrics.get("distinct_regimes", 0))
+
+                if _digest.flags:
+                    with st.expander(f"Flags ({len(_digest.flags)})", expanded=True):
+                        for _f in _digest.flags:
+                            _icon = {"critical": "🔴", "warning": "🟡", "watch": "🔵"}.get(_f.level, "⚪")
+                            st.markdown(f"{_icon} **[{_f.level.upper()}]** {_f.message}")
+
+                if _digest.operator_actions:
+                    with st.expander("Operator Actions Today", expanded=True):
+                        for _i, _a in enumerate(_digest.operator_actions, 1):
+                            st.markdown(f"{_i}. {_a}")
+
+                if _digest.replay_candidates:
+                    with st.expander(f"Replay Shortlist ({len(_digest.replay_candidates)})"):
+                        for _rc in _digest.replay_candidates[:8]:
+                            st.markdown(f"- **#{_rc.decision_id}** {_rc.symbol} {_rc.ts_iso} — {_rc.reason}")
+
+                with st.expander("Full Markdown Digest"):
+                    st.markdown(_digest.summary_md)
+            except Exception as _dig_err:
+                st.info(f"Daily Digest unavailable: {_dig_err}")
+
         _sw_conn.close()
     except Exception as exc:
         st.error(f"Error loading swarm data: {exc}")
