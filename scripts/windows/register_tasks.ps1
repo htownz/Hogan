@@ -37,7 +37,7 @@ Register-ScheduledTask `
     -RunLevel   Limited `
     -Force
 
-Write-Host "✓ Registered: $task1_name  (daily 7:00 AM)" -ForegroundColor Green
+Write-Host "OK Registered: $task1_name (daily 7:00 AM)" -ForegroundColor Green
 
 # ── Task 2: Weekly retrain every Sunday at 3:00 AM ───────────────────────────
 $task2_name   = "Hogan_WeeklyRetrain"
@@ -64,7 +64,7 @@ Register-ScheduledTask `
     -RunLevel   Limited `
     -Force
 
-Write-Host "✓ Registered: $task2_name  (weekly Sunday 3:00 AM)" -ForegroundColor Green
+Write-Host "OK Registered: $task2_name (weekly Sunday 3:00 AM)" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "All tasks registered. Verify in Task Scheduler (taskschd.msc)." -ForegroundColor Cyan
