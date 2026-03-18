@@ -127,6 +127,7 @@ class CandleRingBuffer:
             return pd.DataFrame()
         df = pd.DataFrame(list(buf))
         if "ts_ms" in df.columns:
+            df = df.drop_duplicates(subset=["ts_ms"], keep="last")
             df = df.sort_values("ts_ms").reset_index(drop=True)
         return df
 
@@ -306,6 +307,58 @@ class LiveDataEngine(DataEngineBase):
             "REST polling active: %s %s every %.0fs",
             self.exchange_id, self.symbols, self.rest_fallback_interval,
         )
+
+        # Warmup: fetch enough historical candles for indicator computation
+        _warmup_limit = 200
+        for symbol in self.symbols:
+            for tf in self.timeframes:
+                try:
+                    raw = exchange.fetch_ohlcv(symbol, tf, limit=_warmup_limit)
+                    _seen: set[int] = set()
+                    for ohlcv in raw:
+                        ts_ms, o, h, l, c, v = ohlcv
+                        if ts_ms in _seen:
+                            continue
+                        _seen.add(ts_ms)
+                        row = {"ts_ms": ts_ms, "open": o, "high": h,
+                               "low": l, "close": c, "volume": v}
+                        self.buffer.push(symbol, tf, row)
+                    logger.info(
+                        "REST warmup: %s/%s loaded %d candles",
+                        symbol, tf, len(_seen),
+                    )
+                    self._last_candle_ts[symbol] = time.time()
+                except Exception as exc:
+                    logger.warning("REST warmup error %s/%s: %s", symbol, tf, exc)
+
+        # Emit a single event for the latest candle of the primary timeframe
+        # so the event loop can begin evaluating immediately.
+        for symbol in self.symbols:
+            _primary_tf = self.timeframes[0] if self.timeframes else "1h"
+            df = self.buffer.to_df(symbol, _primary_tf)
+            if not df.empty:
+                _last = df.iloc[-1].to_dict()
+                event = CandleEvent(
+                    symbol=symbol,
+                    timeframe=_primary_tf,
+                    candle=pd.Series(_last),
+                )
+                try:
+                    self._queue.put_nowait(event)
+                except asyncio.QueueFull:
+                    pass
+
+        # Steady-state polling: fetch latest 2 candles per interval, with
+        # timestamp de-duplication so the buffer stays clean.
+        _known_ts: dict[tuple[str, str], set[int]] = {}
+        for symbol in self.symbols:
+            for tf in self.timeframes:
+                df = self.buffer.to_df(symbol, tf)
+                if not df.empty and "ts_ms" in df.columns:
+                    _known_ts[(symbol, tf)] = set(df["ts_ms"].astype(int).tolist())
+                else:
+                    _known_ts[(symbol, tf)] = set()
+
         while self._running:
             for symbol in self.symbols:
                 for tf in self.timeframes:
@@ -313,6 +366,10 @@ class LiveDataEngine(DataEngineBase):
                         raw = exchange.fetch_ohlcv(symbol, tf, limit=2)
                         for ohlcv in raw:
                             ts_ms, o, h, l, c, v = ohlcv
+                            ts_key = int(ts_ms)
+                            if ts_key in _known_ts.get((symbol, tf), set()):
+                                continue
+                            _known_ts.setdefault((symbol, tf), set()).add(ts_key)
                             row = {"ts_ms": ts_ms, "open": o, "high": h,
                                    "low": l, "close": c, "volume": v}
                             self.buffer.push(symbol, tf, row)

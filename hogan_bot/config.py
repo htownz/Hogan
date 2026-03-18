@@ -102,6 +102,12 @@ class BotConfig:
     # Fee-aware entry gate: minimum multiple of round-trip fees (2 * fee_rate)
     # that the expected move (ATR or take_profit) must exceed before entry.
     min_edge_multiple: float = 1.5
+    # ATR-friction multiples for edge gate: ATR must exceed friction * multiple.
+    # Buys use a lower multiple because longs benefit from mean-reversion in
+    # low-vol periods.  Lowered from 0.5 after observing 100% buy-signal block
+    # rate at 26 bps fee tier.
+    buy_atr_friction_multiple: float = 0.25
+    sell_atr_friction_multiple: float = 0.8
 
     # Entry quality gate thresholds (hard pre-trade filter)
     min_final_confidence: float = 0.08
@@ -609,6 +615,8 @@ def load_config() -> BotConfig:
         min_hold_bars=int(os.getenv("HOGAN_MIN_HOLD_BARS", "3")),
         exit_confirmation_bars=int(os.getenv("HOGAN_EXIT_CONFIRM_BARS", "2")),
         min_edge_multiple=float(os.getenv("HOGAN_MIN_EDGE_MULTIPLE", "1.5")),
+        buy_atr_friction_multiple=float(os.getenv("HOGAN_BUY_ATR_FRICTION_MULT", "0.25")),
+        sell_atr_friction_multiple=float(os.getenv("HOGAN_SELL_ATR_FRICTION_MULT", "0.8")),
         min_final_confidence=float(os.getenv("HOGAN_MIN_FINAL_CONFIDENCE", "0.25")),
         min_tech_confidence=float(os.getenv("HOGAN_MIN_TECH_CONFIDENCE", "0.15")),
         min_regime_confidence=float(os.getenv("HOGAN_MIN_REGIME_CONFIDENCE", "0.30")),
