@@ -1550,6 +1550,76 @@ with tab_swarm:
             except Exception as _dig_err:
                 st.info(f"Daily Digest unavailable: {_dig_err}")
 
+            # ── Section: Weekly Review ────────────────────────
+            try:
+                st.subheader("Weekly Review")
+                from hogan_bot.swarm_weekly_review import build_weekly_review
+                _wreview = build_weekly_review(_sw_conn)
+                _wr_colors = {"healthy": "green", "watch": "blue", "warning": "orange", "critical": "red"}
+                _wr_color = _wr_colors.get(_wreview.severity, "gray")
+                st.markdown(f"**Severity:** :{_wr_color}[{_wreview.severity.upper()}]  **Recommendation:** {_wreview.recommendation}")
+                st.markdown(f"> {_wreview.headline}")
+
+                wr_cols = st.columns(5)
+                wr_cols[0].metric("Decisions", _wreview.metrics.get("decision_count", 0))
+                wr_cols[1].metric("Would-Trades", _wreview.metrics.get("would_trade_count", 0))
+                wr_cols[2].metric("Vetoes", _wreview.metrics.get("veto_count", 0))
+                _wvr = f"{_wreview.metrics.get('veto_ratio', 0):.0%}"
+                wr_cols[3].metric("Veto Ratio", _wvr)
+                wr_cols[4].metric("Regimes", _wreview.metrics.get("distinct_regimes", 0))
+
+                _dom = _wreview.metrics.get("dominant_veto_agent")
+                if _dom:
+                    _dom_share = _wreview.metrics.get("dominant_veto_agent_share", 0)
+                    st.warning(f"Dominant veto agent: **{_dom}** ({_dom_share:.0%} of vetoes)")
+
+                if _wreview.flags:
+                    with st.expander(f"Flags ({len(_wreview.flags)})", expanded=True):
+                        for _wf in _wreview.flags:
+                            _wicon = {"critical": "🔴", "warning": "🟡", "watch": "🔵"}.get(_wf.level, "⚪")
+                            st.markdown(f"{_wicon} **[{_wf.level.upper()}]** {_wf.message}")
+
+                if _wreview.agent_scores:
+                    with st.expander("Agent Leaderboard"):
+                        import pandas as _wr_pd
+                        _al_data = [{
+                            "Agent": a.agent_id, "Decisions": a.decisions, "Vetoes": a.vetoes,
+                            "Hold Rate": f"{a.hold_rate:.0%}",
+                            "Confidence": f"{a.mean_confidence:.2f}" if a.mean_confidence else "—",
+                        } for a in _wreview.agent_scores]
+                        st.dataframe(_wr_pd.DataFrame(_al_data), use_container_width=True)
+
+                _wow_avail = _wreview.metrics.get("prior_week_available", False)
+                if _wow_avail:
+                    with st.expander("Week-over-Week Deltas"):
+                        wow_cols = st.columns(3)
+                        _d_delta = _wreview.metrics.get("decision_count_wow_delta", 0)
+                        _wt_delta = _wreview.metrics.get("would_trade_wow_delta", 0)
+                        _vr_delta = _wreview.metrics.get("veto_ratio_wow_delta", 0)
+                        wow_cols[0].metric("Decisions", _wreview.metrics.get("decision_count", 0), delta=_d_delta)
+                        wow_cols[1].metric("Would-Trades", _wreview.metrics.get("would_trade_count", 0), delta=_wt_delta)
+                        wow_cols[2].metric("Veto Ratio", f"{_wreview.metrics.get('veto_ratio', 0):.1%}", delta=f"{_vr_delta:+.1%}", delta_color="inverse")
+
+                if _wreview.operator_actions:
+                    with st.expander("Operator Actions This Week", expanded=True):
+                        for _wi, _wa in enumerate(_wreview.operator_actions, 1):
+                            st.markdown(f"{_wi}. {_wa}")
+
+                if _wreview.cursor_actions:
+                    with st.expander("Cursor Actions This Week"):
+                        for _wi, _wa in enumerate(_wreview.cursor_actions, 1):
+                            st.markdown(f"{_wi}. {_wa}")
+
+                if _wreview.replay_candidates:
+                    with st.expander(f"Weekly Replay Shortlist ({len(_wreview.replay_candidates)})"):
+                        for _wrc in _wreview.replay_candidates[:10]:
+                            st.markdown(f"- **#{_wrc.decision_id}** [{_wrc.category}] {_wrc.symbol} {_wrc.ts_iso} — {_wrc.reason}")
+
+                with st.expander("Full Markdown Review"):
+                    st.markdown(_wreview.summary_md)
+            except Exception as _wr_err:
+                st.info(f"Weekly Review unavailable: {_wr_err}")
+
         _sw_conn.close()
     except Exception as exc:
         st.error(f"Error loading swarm data: {exc}")

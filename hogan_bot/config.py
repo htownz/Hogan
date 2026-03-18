@@ -271,6 +271,23 @@ class BotConfig:
     swarm_daily_digest_max_baseline_miss_ratio: float = 0.10
     swarm_daily_digest_max_import_error_count: int = 0
 
+    # Swarm Weekly Review
+    swarm_weekly_review_enabled: bool = True
+    swarm_weekly_review_report_dir: str = "reports/weekly"
+    swarm_weekly_review_default_window_days: int = 7
+    swarm_weekly_review_notify: bool = False
+    swarm_weekly_review_max_replay_candidates: int = 20
+    swarm_weekly_review_min_decisions: int = 300
+    swarm_weekly_review_min_would_trade: int = 100
+    swarm_weekly_review_min_veto_events: int = 50
+    swarm_weekly_review_min_regime_coverage: int = 3
+    swarm_weekly_review_critical_veto_ratio: float = 0.80
+    swarm_weekly_review_warning_veto_ratio: float = 0.60
+    swarm_weekly_review_stall_zero_trade_decision_min: int = 50
+    swarm_weekly_review_agent_dominance_ratio_warn: float = 0.70
+    swarm_weekly_review_baseline_miss_ratio_warn: float = 0.10
+    swarm_weekly_review_recommend_tuning_on_no_trade_ratio: float = 0.30
+
     # Account valuation currency for spot equity (USD, USDT, USDC, ...)
     quote_currency: str = "USD"
 
