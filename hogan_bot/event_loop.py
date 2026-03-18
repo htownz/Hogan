@@ -128,7 +128,7 @@ class SignalEvaluator:
         self._trade_outcomes: list[bool] = []
         from hogan_bot.regime import RegimeTransitionTracker
         self._regime_transition = RegimeTransitionTracker(cooldown_bars=3, min_scale=0.40)
-        self._use_policy_core = getattr(config, "use_policy_core", False)
+        self._use_policy_core = getattr(config, "use_policy_core", True)
         if self._use_policy_core:
             from hogan_bot.policy_core import PolicyState
             self._policy_states: dict[str, PolicyState] = {}
@@ -678,6 +678,19 @@ async def run_event_loop(
     _entry_regime: dict[str, str] = {}
     _entry_regime_conf: dict[str, float] = {}
     _EXPECTANCY_LOG_INTERVAL = 50
+    _entry_up_prob: dict[str, float | None] = {}
+
+    def _record_outcome(sym: str, regime: str, pnl: float, up_prob: float | None = None) -> None:
+        """Feed closed-trade results back to AgentPipeline for learned weights."""
+        last_sig = evaluator.pipeline._last_signal.get(sym)
+        if last_sig is not None:
+            evaluator.pipeline.record_trade_outcome(
+                symbol=sym,
+                regime=regime,
+                signal=last_sig,
+                realized_pnl=pnl,
+                ml_up_prob=up_prob,
+            )
 
     # FX session filter (active when any symbol looks like an FX pair)
     _fx_session_filter = None
@@ -799,7 +812,7 @@ async def run_event_loop(
                                 exit_regime=_exit_entry_regime,
                                 entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                             )
-                        self._trade_outcomes.append(sell_px > avg_entry)
+                        evaluator._trade_outcomes.append(sell_px > avg_entry)
                         gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
                         net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                         _expectancy.record_trade(
@@ -812,6 +825,7 @@ async def run_event_loop(
                             hold_bars=bars_held,
                             close_reason=reason,
                         )
+                        _record_outcome(exit_symbol, _exit_entry_regime, gross_pnl_pct, _entry_up_prob.pop(exit_symbol, None))
                         if _perf_tracker:
                             try:
                                 _perf_tracker.record_trade_outcome(
@@ -856,7 +870,7 @@ async def run_event_loop(
                                 exit_regime=_exit_s_entry_regime,
                                 entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                             )
-                        self._trade_outcomes.append(cover_px < avg_entry)
+                        evaluator._trade_outcomes.append(cover_px < avg_entry)
                         gross_pnl_pct = (avg_entry - cover_px) / avg_entry if avg_entry else 0
                         net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                         _expectancy.record_trade(
@@ -869,6 +883,7 @@ async def run_event_loop(
                             hold_bars=bars_held,
                             close_reason=reason,
                         )
+                        _record_outcome(exit_symbol, _exit_s_entry_regime, gross_pnl_pct, _entry_up_prob.pop(exit_symbol, None))
                         if _perf_tracker:
                             try:
                                 _perf_tracker.record_trade_outcome(
@@ -1048,6 +1063,7 @@ async def run_event_loop(
                             max_hold_bars=short_max_hold_bars if short_max_hold_bars > 0 else max_hold_bars,
                             entry_atr=getattr(spos, "entry_atr_pct", None) or None,
                             vol_ratio=sig.vol_ratio,
+                            regime=_sym_regime,
                         )
                         if not _short_exit_dec.should_exit:
                             logger.debug(
@@ -1075,7 +1091,7 @@ async def run_event_loop(
                                         exit_regime=_exit_s_regime,
                                         entry_atr_pct=getattr(spos, "entry_atr_pct", None),
                                     )
-                                self._trade_outcomes.append(cover_px < s_avg_entry)
+                                evaluator._trade_outcomes.append(cover_px < s_avg_entry)
                                 gross_pnl_pct = (s_avg_entry - cover_px) / s_avg_entry if s_avg_entry else 0
                                 net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                                 _expectancy.record_trade(
@@ -1086,6 +1102,7 @@ async def run_event_loop(
                                     hold_bars=getattr(spos, "bars_held", 0),
                                     close_reason="buy_signal",
                                 )
+                                _record_outcome(symbol, _exit_s_regime, gross_pnl_pct, _entry_up_prob.pop(symbol, None))
                                 is_loss = cover_px > s_avg_entry
                                 if is_loss and loss_cooldown_bars > 0:
                                     _cooldown_remaining = loss_cooldown_bars
@@ -1124,6 +1141,7 @@ async def run_event_loop(
                     if executed:
                         _entry_regime[symbol] = _sym_regime or "unknown"
                         _entry_regime_conf[symbol] = getattr(sig, "final_confidence", 0.0)
+                        _entry_up_prob[symbol] = up_prob
                         pos = portfolio.positions.get(symbol)
                         if pos is not None:
                             pos.entry_atr_pct = _sym_atr_pct
@@ -1172,6 +1190,7 @@ async def run_event_loop(
                             max_hold_bars=max_hold_bars,
                             entry_atr=getattr(pos, "entry_atr_pct", None) or None,
                             vol_ratio=sig.vol_ratio,
+                            regime=_sym_regime,
                         )
                         if not exit_decision.should_exit:
                             logger.debug(
@@ -1200,7 +1219,7 @@ async def run_event_loop(
                                     exit_regime=_sig_entry_regime,
                                     entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                                 )
-                            self._trade_outcomes.append(sell_px > avg_entry)
+                            evaluator._trade_outcomes.append(sell_px > avg_entry)
                             gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
                             net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                             bars_held = getattr(pos, "bars_held", 0)
@@ -1214,6 +1233,7 @@ async def run_event_loop(
                                 hold_bars=bars_held,
                                 close_reason="signal",
                             )
+                            _record_outcome(symbol, _sig_entry_regime, gross_pnl_pct, _entry_up_prob.pop(symbol, None))
                             if _perf_tracker:
                                 try:
                                     _perf_tracker.record_trade_outcome(
@@ -1255,7 +1275,7 @@ async def run_event_loop(
                     _short_size = size * sig.eff_short_size_scale * _macro_scale * _funding_short_scale
                     if not sig.eff_allow_shorts:
                         logger.info("SHORT_BLOCK %s — regime %s disallows shorts (eff_allow_shorts=False)", symbol, _sym_regime)
-                    elif ml_blind_blocks_shorts(self._ml_probs):
+                    elif ml_blind_blocks_shorts(evaluator._ml_probs):
                         logger.info("SHORT_BLOCK %s — ML blind (prob std too low for shorts)", symbol)
                     elif _cooldown_remaining > 0:
                         logger.info("SHORT_BLOCK %s — cooldown %d bars remaining", symbol, _cooldown_remaining)
@@ -1273,6 +1293,7 @@ async def run_event_loop(
                         if res.ok:
                             _entry_regime[symbol] = _sym_regime or "unknown"
                             _entry_regime_conf[symbol] = getattr(sig, "final_confidence", 0.0)
+                            _entry_up_prob[symbol] = up_prob
                             spos = portfolio.short_positions.get(symbol)
                             if spos is not None:
                                 spos.entry_atr_pct = _sym_atr_pct

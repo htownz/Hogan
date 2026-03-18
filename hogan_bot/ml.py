@@ -387,72 +387,8 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
-# Core feature columns — 59 features (36 base + 10 macro + 4 onchain + 4 sentiment + 2 derivatives + 3 intermarket).
-# ICT structural features are quarantined to _EXPERIMENTAL_FEATURES.
-_FEATURE_COLUMNS: list[str] = [
-    # momentum (4)
-    "ret_1", "ret_3", "ret_6", "ret_12",
-    # trend (1)
-    "ma_spread",
-    # volatility / oscillators (3)
-    "volatility_20", "rsi_14", "atr_pct",
-    # MACD (1)
-    "macd_hist_pct",
-    # Bollinger (1)
-    "bb_pct_b",
-    # regime (1)
-    "vol_regime",
-    # candle microstructure (4)
-    "range_pct", "candle_body_pct", "upper_wick_pct", "lower_wick_pct",
-    # volume (2)
-    "vol_ratio", "vol_spike",
-    # EMA cloud (3)
-    "cloud_bull", "cloud_bear", "cloud_width_pct",
-    # FVG (4)
-    "fvg_bull_active", "fvg_bear_active", "in_bull_fvg", "in_bear_fvg",
-    # ADX (3)
-    "adx_14", "plus_di", "minus_di",
-    # Stochastic RSI (2)
-    "stoch_rsi_k", "stoch_rsi_d",
-    # OBV z-score (1)
-    "obv_norm",
-    # VWAP distance (1)
-    "vwap_dist",
-    # Keltner channel position (1)
-    "keltner_pos",
-    # CCI, MFI, CMF, ROC (4)
-    "cci_20", "mfi_14", "cmf_20", "roc_10",
-    # Macro-asset context (10)
-    "macro_spy_trend",
-    "macro_spy_ret",
-    "macro_vix_norm",
-    "macro_vix_high",
-    "macro_gld_trend",
-    "macro_tlt_ret",
-    "macro_uup_trend",
-    "macro_tnx_norm",
-    "macro_risk_off",
-    "macro_qqq_spy_rel",
-    # On-chain features (4)
-    "onchain_hashrate_trend",
-    "onchain_addr_trend",
-    "onchain_mempool_norm",
-    "onchain_fee_norm",
-    # Sentiment features (4)
-    "sent_fear_greed_norm",
-    "sent_btc_dominance",
-    "sent_defi_tvl_change",
-    "sent_stablecoin_norm",
-    # Derivatives features (2)
-    "deriv_funding_rate",
-    "deriv_oi_change",
-    # Inter-market features (3)
-    "intermarket_dxy_trend",
-    "intermarket_spy_btc_corr",
-    "intermarket_gold_btc_rel",
-]
-
-assert len(_FEATURE_COLUMNS) == 59, f"Expected 59 features, got {len(_FEATURE_COLUMNS)}"
+# Single source of truth: feature_registry owns the canonical 59-column list.
+from hogan_bot.feature_registry import _FULL_FEATURE_COLUMNS as _FEATURE_COLUMNS  # noqa: E402
 
 # EXPERIMENTAL: ICT structural features — quarantined from champion path.
 # Still computed in _feature_frame() but not included in default training/inference.

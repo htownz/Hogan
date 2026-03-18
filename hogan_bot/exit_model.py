@@ -73,6 +73,14 @@ class ExitEvaluator:
         self._short_vol_contraction_threshold = short_vol_contraction_threshold or 0.50
         self._short_max_consolidation_bars = short_max_consolidation_bars or max(max_consolidation_bars - 4, 6)
 
+    # Regime multipliers: (drawdown_mult, time_decay_mult, stagnation_mult, trend_reversal_mult)
+    _REGIME_EXIT_ADJUSTMENTS: dict[str, tuple[float, float, float, float]] = {
+        "volatile":       (1.40, 0.85, 0.75, 0.80),
+        "trending_up":    (1.20, 1.00, 1.00, 1.00),
+        "trending_down":  (1.00, 0.90, 0.85, 0.90),
+        "ranging":        (0.85, 0.80, 0.70, 1.10),
+    }
+
     def should_exit(
         self,
         candles: pd.DataFrame,
@@ -83,6 +91,7 @@ class ExitEvaluator:
         max_hold_bars: int = 24,
         entry_atr: float | None = None,
         vol_ratio: float | None = None,
+        regime: str | None = None,
     ) -> ExitDecision:
         """Evaluate whether the current position should be exited.
 
@@ -104,10 +113,19 @@ class ExitEvaluator:
         dd_panic = self._short_drawdown_panic_pct if is_short else self._drawdown_panic_pct
         td_threshold = self._short_time_decay_threshold if is_short else self._time_decay_threshold
         stag_bars = self._short_max_consolidation_bars if is_short else self._max_consolidation_bars
+        trend_rev_thresh = self._trend_reversal_threshold
+
+        # Apply regime-specific adjustments
+        if regime and regime in self._REGIME_EXIT_ADJUSTMENTS:
+            dd_m, td_m, st_m, tr_m = self._REGIME_EXIT_ADJUSTMENTS[regime]
+            dd_panic *= dd_m
+            td_threshold *= td_m
+            stag_bars = max(4, int(stag_bars * st_m))
+            trend_rev_thresh *= tr_m
 
         # 1. Trend persistence check: has the trend actually reversed?
         trend_score = self._trend_persistence(close, side)
-        if trend_score < -self._trend_reversal_threshold:
+        if trend_score < -trend_rev_thresh:
             logger.debug("EXIT_MODEL: trend reversed (score=%.2f, side=%s)", trend_score, side)
             return ExitDecision(
                 should_exit=True,

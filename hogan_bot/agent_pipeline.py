@@ -660,6 +660,7 @@ class AgentPipeline:
         self.rag_retriever = rag_retriever
         self.perf_tracker = performance_tracker
         self.adaptive_conf = adaptive_confidence
+        self._last_signal: dict[str, AgentSignal] = {}
 
     def run(
         self,
@@ -792,6 +793,7 @@ class AgentPipeline:
             symbol, tech.action, sent.bias, macro.regime, signal.confidence,
             forecast.summary(), risk_est.summary(),
         )
+        self._last_signal[symbol] = signal
         return signal
 
     def record_trade_outcome(
