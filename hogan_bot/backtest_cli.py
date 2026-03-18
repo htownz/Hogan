@@ -174,6 +174,11 @@ def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, ov
         enable_close_and_reverse=enable_close_and_reverse,
         short_max_hold_hours=short_max_hold_hours if short_max_hold_hours is not None else cfg.short_max_hold_hours,
         use_policy_core=use_policy_core,
+        use_ml_as_sizer=cfg.use_ml_as_sizer,
+        exit_drawdown_pct=cfg.exit_drawdown_pct,
+        exit_time_decay=cfg.exit_time_decay,
+        exit_vol_expansion=cfg.exit_vol_expansion,
+        exit_stagnation_bars=cfg.exit_stagnation_bars,
     )
 
 

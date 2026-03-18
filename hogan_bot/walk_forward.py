@@ -431,7 +431,7 @@ def _train_and_evaluate_window(
             trailing_stop_pct=bot_cfg.trailing_stop_pct,
             take_profit_pct=bot_cfg.take_profit_pct,
             trail_activation_pct=bot_cfg.trail_activation_pct,
-            ml_confidence_sizing=True,
+            ml_confidence_sizing=not cfg.use_ml_as_sizer,
             max_hold_hours=cfg.max_hold_hours,
             loss_cooldown_hours=cfg.loss_cooldown_hours,
             slippage_bps=cfg.slippage_bps,
