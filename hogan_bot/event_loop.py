@@ -331,6 +331,8 @@ class SignalEvaluator:
             min_edge_multiple=getattr(cfg, "min_edge_multiple", 1.5),
             forecast_expected_return=forecast_ret,
             estimated_spread=spread_est,
+            atr_friction_multiple=getattr(cfg, "sell_atr_friction_multiple", 0.8),
+            buy_atr_friction_multiple=getattr(cfg, "buy_atr_friction_multiple", 0.25),
         )
         action = edge_gd.action
         if edge_gd.blocked_by:
@@ -607,7 +609,6 @@ async def run_event_loop(
         max_consolidation_bars=config.exit_stagnation_bars,
     )
     _expectancy = ExpectancyTracker()
-    buffer = CandleRingBuffer(maxlen=config.ohlcv_limit)
 
     _perf_tracker = None
     try:
@@ -666,6 +667,8 @@ async def run_event_loop(
             timeframes=_all_timeframes,
             ring_buffer_len=config.ohlcv_limit,
         )
+    buffer = engine.buffer
+
     if _mtf_timeframes:
         logger.info("MTF candle subscriptions: %s (primary=%s)", _all_timeframes, config.timeframe)
 
@@ -710,8 +713,9 @@ async def run_event_loop(
 
             buffer.push(symbol, tf, event.candle.to_dict())
             candles = buffer.to_df(symbol, tf)
+            _min_candles = max(config.long_ma_window, 20)
 
-            if candles.empty or len(candles) < max(config.long_ma_window, 20):
+            if candles.empty or len(candles) < _min_candles:
                 event_count += 1
                 continue
 
@@ -1092,7 +1096,7 @@ async def run_event_loop(
                                         symbol, cover_px, cover_qty, equity)
 
                 if not sig.eff_allow_longs:
-                    logger.debug("REGIME_BLOCK %s — longs not allowed in %s", symbol, _sym_regime)
+                    logger.info("BUY_BLOCK %s — regime %s disallows longs (eff_allow_longs=False)", symbol, _sym_regime)
                 elif symbol in portfolio.positions:
                     pass  # already long
                 elif symbol in portfolio.short_positions:
@@ -1250,13 +1254,14 @@ async def run_event_loop(
                         _funding_short_scale = _funding_overlay.position_scale("sell", datetime.now(tz=timezone.utc))
                     _short_size = size * sig.eff_short_size_scale * _macro_scale * _funding_short_scale
                     if not sig.eff_allow_shorts:
-                        logger.debug("REGIME_BLOCK %s — shorts not allowed in %s", symbol, _sym_regime)
+                        logger.info("SHORT_BLOCK %s — regime %s disallows shorts (eff_allow_shorts=False)", symbol, _sym_regime)
                     elif ml_blind_blocks_shorts(self._ml_probs):
-                        logger.debug("ML_BLIND_BLOCK %s — model too indecisive for shorts", symbol)
+                        logger.info("SHORT_BLOCK %s — ML blind (prob std too low for shorts)", symbol)
                     elif _cooldown_remaining > 0:
-                        logger.debug("COOLDOWN %s — %d bars remaining (short)", symbol, _cooldown_remaining)
+                        logger.info("SHORT_BLOCK %s — cooldown %d bars remaining", symbol, _cooldown_remaining)
                     elif _short_size <= 0:
-                        logger.debug("REGIME_BLOCK %s — short size scaled to zero", symbol)
+                        logger.info("SHORT_BLOCK %s — size scaled to zero (base=%.6f eff_scale=%.2f macro=%.2f)",
+                                    symbol, size, sig.eff_short_size_scale, _macro_scale)
                     else:
                         short_px = px if _executor_owns_fill else px * (1.0 - slip_mult)
                         res = executor.open_short(
@@ -1283,9 +1288,11 @@ async def run_event_loop(
                                                           "qty": _short_size, "ml_up_prob": up_prob})
                         logger.info("SHORT %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s short_scale=%.2f",
                                     symbol, short_px, _short_size, up_prob or -1, equity, _sym_regime, sig.eff_short_size_scale)
-                elif not enable_shorts and symbol not in portfolio.positions:
-                    logger.debug("HOLD %s px=%.2f ml=%.3f equity=%.2f",
-                                 symbol, px, up_prob or -1, equity)
+                elif not _allow_short_entry:
+                    logger.info("SHORT_SKIP %s — entry preconditions not met (shorts=%s in_long=%s in_short=%s fx_ok=%s close_rev=%s)",
+                                symbol, enable_shorts, symbol in portfolio.positions,
+                                symbol in portfolio.short_positions, _fx_session_ok,
+                                _closed_long_this_bar and not enable_close_and_reverse)
             else:
                 logger.debug("HOLD %s px=%.2f ml=%.3f equity=%.2f",
                              symbol, px, up_prob or -1, equity)

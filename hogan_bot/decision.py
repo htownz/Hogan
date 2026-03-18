@@ -218,7 +218,7 @@ def edge_gate(
     forecast_expected_return: float | None = None,
     estimated_spread: float = 0.0,
     atr_friction_multiple: float = 0.8,
-    buy_atr_friction_multiple: float = 0.5,
+    buy_atr_friction_multiple: float = 0.25,
 ) -> GateDecision:
     """Block entries where the expected move is insufficient relative to friction.
 

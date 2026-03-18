@@ -348,6 +348,8 @@ def decide(
         min_edge_multiple=getattr(cfg, "min_edge_multiple", 1.5),
         forecast_expected_return=forecast_ret,
         estimated_spread=spread_est,
+        atr_friction_multiple=getattr(cfg, "sell_atr_friction_multiple", 0.8),
+        buy_atr_friction_multiple=getattr(cfg, "buy_atr_friction_multiple", 0.25),
     )
     action = _edge_gd.action
     if _edge_gd.blocked_by:

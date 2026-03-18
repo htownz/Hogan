@@ -819,9 +819,9 @@ with tab_os:
                 conn_fresh.close()
 
                 if not freshness.empty:
-                    st.dataframe(freshness, use_container_width=True, hide_index=True)
+                    st.dataframe(freshness, width='stretch', hide_index=True)
                 if not deriv_fresh.empty:
-                    st.dataframe(deriv_fresh, use_container_width=True, hide_index=True)
+                    st.dataframe(deriv_fresh, width='stretch', hide_index=True)
             except Exception:
                 st.info("No feature freshness data available.")
 
@@ -1183,7 +1183,7 @@ with tab_swarm:
                             height=300, margin=dict(l=20, r=20, t=30, b=20),
                             yaxis_title="Score",
                         )
-                        st.plotly_chart(fig_sw, use_container_width=True)
+                        st.plotly_chart(fig_sw, width='stretch')
 
                 with col_b:
                     st.subheader("Weight History")
@@ -1209,7 +1209,7 @@ with tab_swarm:
                             fig_wt.update_layout(
                                 height=300, margin=dict(l=20, r=20, t=30, b=20),
                             )
-                            st.plotly_chart(fig_wt, use_container_width=True)
+                            st.plotly_chart(fig_wt, width='stretch')
                     else:
                         st.info("No weight snapshots yet.")
 
@@ -1248,7 +1248,7 @@ with tab_swarm:
                     df_div["ts"] = pd.to_datetime(df_div["ts_ms"], unit="ms")
                     st.dataframe(
                         df_div[["ts", "final_action", "agreement"]].head(20),
-                        use_container_width=True,
+                        width='stretch',
                     )
                 else:
                     st.info("No shadow decisions logged yet.")
@@ -1276,7 +1276,7 @@ with tab_swarm:
                     fig_vb.update_layout(
                         height=250, margin=dict(l=0, r=0, t=10, b=0),
                     )
-                    st.plotly_chart(fig_vb, use_container_width=True)
+                    st.plotly_chart(fig_vb, width='stretch')
                 else:
                     st.info("No agent votes with decision_id found.")
 
@@ -1299,10 +1299,10 @@ with tab_swarm:
                             title="Top 3 Veto Reasons", height=200,
                         )
                         fig_vr.update_layout(margin=dict(l=0, r=0, t=30, b=0))
-                        st.plotly_chart(fig_vr, use_container_width=True)
+                        st.plotly_chart(fig_vr, width='stretch')
                     st.dataframe(
                         df_vl[["ts", "agent_id", "reasons", "swarm_action", "agreement"]].head(50),
-                        use_container_width=True, hide_index=True,
+                        width='stretch', hide_index=True,
                     )
                 else:
                     st.info("No vetoes logged yet.")
@@ -1346,7 +1346,7 @@ with tab_swarm:
                         )
                         st.dataframe(
                             votes_df[["agent_id", "action", "confidence", "size_scale", "veto", "reasons"]],
-                            use_container_width=True, hide_index=True,
+                            width='stretch', hide_index=True,
                         )
 
                     if not base_df.empty:
@@ -1447,7 +1447,7 @@ with tab_swarm:
                                 barmode="stack", height=250,
                                 margin=dict(l=0, r=0, t=30, b=0),
                             )
-                            st.plotly_chart(fig_density, use_container_width=True)
+                            st.plotly_chart(fig_density, width='stretch')
 
                         # Agent leaderboard
                         _lb_votes = _load_agent_votes(DB_PATH, limit=2000)
@@ -1461,7 +1461,7 @@ with tab_swarm:
                                                 "buys", "sells", "holds"]
                                     if c in leaderboard.columns
                                 ]]
-                                st.dataframe(lb_display, use_container_width=True, hide_index=True)
+                                st.dataframe(lb_display, width='stretch', hide_index=True)
 
                         # Score calibration (if outcomes exist)
                         try:
@@ -1483,7 +1483,7 @@ with tab_swarm:
                                             height=200,
                                         )
                                         fig_cal.update_layout(margin=dict(l=0, r=0, t=30, b=0))
-                                        st.plotly_chart(fig_cal, use_container_width=True)
+                                        st.plotly_chart(fig_cal, width='stretch')
                         except Exception:
                             pass
                     else:
@@ -1587,7 +1587,7 @@ with tab_swarm:
                             "Hold Rate": f"{a.hold_rate:.0%}",
                             "Confidence": f"{a.mean_confidence:.2f}" if a.mean_confidence else "—",
                         } for a in _wreview.agent_scores]
-                        st.dataframe(_wr_pd.DataFrame(_al_data), use_container_width=True)
+                        st.dataframe(_wr_pd.DataFrame(_al_data), width='stretch')
 
                 _wow_avail = _wreview.metrics.get("prior_week_available", False)
                 if _wow_avail:
@@ -1649,7 +1649,7 @@ with tab_swarm:
                              "Operator": s.operator, "Changed": s.changed_at[:19] if s.changed_at else "—"}
                             for s in _all_modes.values()
                         ]
-                        st.dataframe(_tq_pd.DataFrame(_mode_data), use_container_width=True)
+                        st.dataframe(_tq_pd.DataFrame(_mode_data), width='stretch')
                 else:
                     st.info("No agent mode overrides set. All agents running in `active` mode.")
 
@@ -1692,7 +1692,7 @@ with tab_swarm:
                                  "Share": f"{r[1]/_total_vetoes:.0%}" if _total_vetoes else "—"}
                                 for r in _dom_rows
                             ]
-                            st.dataframe(_tq_pd2.DataFrame(_dom_data), use_container_width=True)
+                            st.dataframe(_tq_pd2.DataFrame(_dom_data), width='stretch')
                 except Exception:
                     pass
 
@@ -1880,7 +1880,7 @@ with tab_replay:
                             height=350, margin=dict(l=0, r=0, t=10, b=0),
                             xaxis_rangeslider_visible=False,
                         )
-                        st.plotly_chart(fig_rp, use_container_width=True)
+                        st.plotly_chart(fig_rp, width='stretch')
                     else:
                         st.info("No candle data available around this decision.")
 
