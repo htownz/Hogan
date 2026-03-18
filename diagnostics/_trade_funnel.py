@@ -4,11 +4,11 @@ import json
 from datetime import datetime, timezone
 
 DB = "data/hogan.db"
-conn = sqlite3.connect(DB)
-conn.row_factory = sqlite3.Row
 
 
 def main():
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
     # 1. Paper trades
     print("=" * 60)
     print("PAPER TRADES (last 20)")
@@ -195,4 +195,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        import traceback
+        traceback.print_exc()
