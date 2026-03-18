@@ -942,6 +942,10 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     swarm_enabled: bool = False,
     swarm_mode: str = "shadow",
     swarm_agents: str = "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1",
+    exit_drawdown_pct: float = 0.03,
+    exit_time_decay: float = 0.75,
+    exit_vol_expansion: float = 2.0,
+    exit_stagnation_bars: int = 12,
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
@@ -1095,10 +1099,10 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     _trade_outcomes: list[bool] = []
 
     _exit_eval = ExitEvaluator(
-        drawdown_panic_pct=getattr(config, "exit_drawdown_pct", 0.03),
-        time_decay_threshold=getattr(config, "exit_time_decay", 0.75),
-        volatility_expansion_threshold=getattr(config, "exit_vol_expansion", 2.0),
-        max_consolidation_bars=getattr(config, "exit_stagnation_bars", 12),
+        drawdown_panic_pct=exit_drawdown_pct,
+        time_decay_threshold=exit_time_decay,
+        volatility_expansion_threshold=exit_vol_expansion,
+        max_consolidation_bars=exit_stagnation_bars,
     )
 
     # Regime tracking (parity with event_loop)
@@ -1638,7 +1642,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
 
             # ── Long momentum confirmation ───────────────────────────────────
             _momentum_scale = 1.0
-            if action == "buy" and len(window) >= 8 and regime_name != "ranging":
+            if action == "buy" and len(window) >= 8 and _current_regime != "ranging":
                 _ema8 = window["close"].ewm(span=8, min_periods=8).mean().iloc[-1]
                 if _ema8 > 0 and px < _ema8:
                     _pct_below = (_ema8 - px) / _ema8
@@ -1807,7 +1811,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         max_hold_bars=_short_max if _short_max > 0 else max_hold_bars,
                         entry_atr=getattr(spos, "entry_atr_pct", None) or None,
                         vol_ratio=signal.volume_ratio,
-                        regime=regime_name,
+                        regime=_current_regime,
                     )
                     if not _short_exit_dec.should_exit:
                         pass
@@ -1916,7 +1920,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         max_hold_bars=max_hold_bars,
                         entry_atr=getattr(pos, "entry_atr_pct", None) or None,
                         vol_ratio=signal.volume_ratio,
-                        regime=regime_name,
+                        regime=_current_regime,
                     )
                     _consecutive_exit_signals += 1
                     _rev_thresh = min_final_confidence * reversal_confidence_mult
