@@ -1443,7 +1443,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 mode="backtest",
                 recent_whipsaw_count=_whipsaw_count,
                 macro_sitout=macro_sitout,
-                funding_overlay=None,
+                funding_overlay=funding_overlay,
                 enable_pullback_gate=enable_pullback_gate,
                 enable_freshness_check=False,
                 peak_equity_usd=guard.peak_equity,

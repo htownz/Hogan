@@ -294,7 +294,16 @@ def detect_regime(
     elif minus_di.iloc[-1] > plus_di.iloc[-1]:
         trend_dir = -1
     else:
-        trend_dir = 0
+        # DI lines equal — use MA spread as tie-breaker.  A meaningful
+        # spread (> 0.1%) implies directional bias; otherwise treat as
+        # directionless which will fall through to ranging when ADX is
+        # also borderline.
+        if ma_spread > 0.001:
+            trend_dir = 1
+        elif ma_spread < -0.001:
+            trend_dir = -1
+        else:
+            trend_dir = 0
 
     # --- ATR percentile rank ---
     atr_rank = _atr_percentile_rank(candles, lookback=atr_lookback)
@@ -308,9 +317,14 @@ def detect_regime(
         regime = "volatile"
         confidence = 0.5 + 0.5 * (atr_rank - atr_volatile_pct) / (1.0 - atr_volatile_pct + 1e-9)
     elif adx_val >= adx_trending_threshold:
-        regime = "trending_up" if trend_dir >= 0 else "trending_down"
-        # Confidence scales with how far ADX is above the threshold
-        confidence = 0.5 + min(0.5, (adx_val - adx_trending_threshold) / 50.0)
+        if trend_dir == 0:
+            # ADX says trending but no directional signal — classify as
+            # ranging with reduced confidence to avoid false trending_up.
+            regime = "ranging"
+            confidence = 0.40
+        else:
+            regime = "trending_up" if trend_dir > 0 else "trending_down"
+            confidence = 0.5 + min(0.5, (adx_val - adx_trending_threshold) / 50.0)
     else:
         regime = "ranging"
         # Confidence scales with how far ADX is below the threshold
