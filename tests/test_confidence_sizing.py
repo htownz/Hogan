@@ -89,7 +89,7 @@ class TestPositionSizeConfidenceScale:
         )
         assert size == pytest.approx(0.0)
 
-    def test_scale_clamped_above_one(self):
+    def test_scale_clamped_above_ceiling(self):
         base = self._base_size()
         above = calculate_position_size(
             equity_usd=10_000,
@@ -99,7 +99,19 @@ class TestPositionSizeConfidenceScale:
             max_allocation_pct=0.75,
             confidence_scale=2.0,
         )
-        assert above == pytest.approx(base)
+        assert above == pytest.approx(base * 1.5)
+
+    def test_scale_above_one_scales_up(self):
+        base = self._base_size()
+        boosted = calculate_position_size(
+            equity_usd=10_000,
+            price=50_000,
+            stop_distance_pct=0.02,
+            max_risk_per_trade=0.03,
+            max_allocation_pct=0.75,
+            confidence_scale=1.3,
+        )
+        assert boosted == pytest.approx(base * 1.3)
 
     def test_scale_clamped_below_zero(self):
         size = calculate_position_size(

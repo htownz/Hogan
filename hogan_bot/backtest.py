@@ -1563,6 +1563,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 min_edge_multiple=min_edge_multiple,
                 forecast_expected_return=_forecast_ret,
                 estimated_spread=_spread_est,
+                atr_friction_multiple=getattr(_bt_config, "sell_atr_friction_multiple", 0.8),
+                buy_atr_friction_multiple=getattr(_bt_config, "buy_atr_friction_multiple", 0.25),
             )
             action = _edge_gd.action
 
@@ -1932,13 +1934,17 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     )
                     _consecutive_exit_signals += 1
                     _rev_thresh = min_final_confidence * reversal_confidence_mult
-                    if pos.bars_held < _min_hold_bars:
+                    _short_reversal = (
+                        enable_shorts and _eff_allow_shorts
+                        and symbol not in portfolio.short_positions
+                    )
+                    if pos.bars_held < _min_hold_bars and not _short_reversal:
                         pass
-                    elif signal.confidence < _rev_thresh:
+                    elif signal.confidence < _rev_thresh and not _short_reversal:
                         pass
-                    elif _consecutive_exit_signals < _exit_confirm_bars:
+                    elif _consecutive_exit_signals < _exit_confirm_bars and not _short_reversal:
                         pass
-                    elif not _exit_dec.should_exit:
+                    elif not _exit_dec.should_exit and not _short_reversal:
                         pass
                     else:
                         _consecutive_exit_signals = 0

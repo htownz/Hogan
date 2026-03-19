@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import logging
+import math
 
 logger = logging.getLogger(__name__)
+
+_MAX_CONFIDENCE_SCALE = 1.50
 
 
 def calculate_position_size(
@@ -16,14 +19,26 @@ def calculate_position_size(
 ) -> float:
     """Return coin amount based on risk and allocation constraints.
 
-    *confidence_scale* (0.0–1.0) multiplies the raw position size to allow
-    ML-confidence-based dynamic sizing.  Default ``1.0`` preserves the
-    original behaviour.
+    *confidence_scale* (0.0–``_MAX_CONFIDENCE_SCALE``) multiplies the raw
+    position size to allow ML-confidence-based dynamic sizing.  Values > 1.0
+    increase size for high-conviction signals (e.g. ``ml_probability_sizer``
+    returns up to 1.50).  Default ``1.0`` preserves the original behaviour.
 
     *fee_rate* — when provided, reduces size proportionally when the stop
     distance is tight relative to fees. When stop_distance_pct < 3 * fee_rate,
     fees eat a large share of the expected move so we scale down to limit damage.
     """
+    if any(math.isnan(v) or math.isinf(v) for v in
+           (equity_usd, price, stop_distance_pct, max_risk_per_trade,
+            max_allocation_pct, confidence_scale)):
+        logger.error(
+            "NaN/Inf in position sizing inputs: equity=%.2f price=%.2f "
+            "stop=%.4f risk=%.4f alloc=%.4f conf=%.4f",
+            equity_usd, price, stop_distance_pct,
+            max_risk_per_trade, max_allocation_pct, confidence_scale,
+        )
+        return 0.0
+
     if equity_usd <= 0 or price <= 0:
         return 0.0
     if stop_distance_pct <= 0 or max_risk_per_trade <= 0 or max_allocation_pct <= 0:
@@ -37,14 +52,13 @@ def calculate_position_size(
 
     raw = max(0.0, min(size_from_risk, size_from_allocation))
 
-    # Fee-aware scaling: when stop is tight relative to fees, reduce size
     if fee_rate > 0:
         fee_floor = 3.0 * fee_rate
         if stop_distance_pct < fee_floor:
             fee_scale = stop_distance_pct / fee_floor
             raw *= max(0.1, fee_scale)
 
-    return raw * max(0.0, min(1.0, confidence_scale))
+    return raw * max(0.0, min(_MAX_CONFIDENCE_SCALE, confidence_scale))
 
 
 class DrawdownGuard:

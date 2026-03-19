@@ -40,6 +40,7 @@ class WFConfig:
     train_ratio: float = 0.70
     min_train_bars: int = 2000
     min_test_bars: int = 200
+    warmup_bars: int = 250
 
     symbol: str = "BTC/USD"
     timeframe: str = "1h"
@@ -252,7 +253,9 @@ def _train_and_evaluate_window(
 
     try:
         train_candles = candles.iloc[train_start:train_end].copy()
-        test_candles = candles.iloc[test_start:test_end].copy()
+        warmup = min(cfg.warmup_bars, train_end - train_start)
+        warmup_start = max(train_start, test_start - warmup)
+        test_candles = candles.iloc[warmup_start:test_end].copy().reset_index(drop=True)
 
         t0 = _time.perf_counter()
         trained = None

@@ -28,10 +28,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_STALE_HOURS = 6.0
 
 
 @dataclass
@@ -51,6 +54,34 @@ class MacroFilterResult:
 # ---------------------------------------------------------------------------
 # Sub-signal helpers
 # ---------------------------------------------------------------------------
+
+def _is_stale(candles: pd.DataFrame | None, stale_hours: float = _DEFAULT_STALE_HOURS) -> bool:
+    """Return True if the latest candle is older than *stale_hours*.
+
+    Returns False (assume fresh) when no timestamp column is present — this
+    avoids false positives in tests and backtest contexts.
+    """
+    if candles is None or candles.empty:
+        return False
+    ts_col = None
+    if "timestamp" in candles.columns:
+        ts_col = "timestamp"
+    elif "ts_ms" in candles.columns:
+        ts_col = "ts_ms"
+    else:
+        return False
+    latest = candles[ts_col].iloc[-1]
+    if ts_col == "ts_ms":
+        latest_dt = datetime.fromtimestamp(float(latest) / 1000.0, tz=timezone.utc)
+    elif hasattr(latest, "timestamp"):
+        latest_dt = latest.to_pydatetime() if hasattr(latest, "to_pydatetime") else latest
+        if latest_dt.tzinfo is None:
+            latest_dt = latest_dt.replace(tzinfo=timezone.utc)
+    else:
+        return False
+    age_hours = (datetime.now(timezone.utc) - latest_dt).total_seconds() / 3600.0
+    return age_hours > stale_hours
+
 
 def _is_bullish(candles: pd.DataFrame | None, ma_period: int = 20) -> bool | None:
     """True if latest close is above the MA, False if below, None if no data."""
@@ -128,6 +159,25 @@ def evaluate_macro(
                 gld_candles = load_candles(conn, "GLD/USD", "1h", limit=50)
             except Exception:
                 pass
+
+    stale_feeds: list[str] = []
+    for _name, _df in [("SPY", spy_candles), ("QQQ", qqq_candles),
+                        ("UUP", uup_candles), ("VIX", vix_candles),
+                        ("GLD", gld_candles)]:
+        if _is_stale(_df):
+            stale_feeds.append(_name)
+    if stale_feeds:
+        logger.warning(
+            "MACRO stale feeds: %s — returning neutral to avoid stale signals",
+            ", ".join(stale_feeds),
+        )
+        if len(stale_feeds) >= 3:
+            return MacroFilterResult(
+                macro_environment="neutral",
+                confidence_mult=1.0,
+                block_longs=False,
+                details={"reasons": [f"stale feeds: {', '.join(stale_feeds)}"]},
+            )
 
     # Sub-signals
     spy_bull = _is_bullish(spy_candles, ma_period)
