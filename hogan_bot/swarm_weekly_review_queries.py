@@ -319,7 +319,7 @@ def fetch_weekly_divergence_stats(
         return out
     extra, params = _opt_where(symbol, timeframe, prefix="sd")
     rows = conn.execute(
-        f"""SELECT sd.id, sd.final_action, dl.action
+        f"""SELECT sd.id, sd.final_action, dl.final_action
             FROM swarm_decisions sd
             LEFT JOIN decision_log dl ON dl.swarm_decision_id = sd.id
             WHERE sd.ts_ms BETWEEN ? AND ?{extra}""",
