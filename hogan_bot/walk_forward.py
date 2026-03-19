@@ -843,7 +843,7 @@ def main() -> None:
         ],
     }
 
-    out_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
+    out_path.write_text(json.dumps(output, indent=2, default=str), encoding="utf-8")
     logger.info("Report saved to %s", out_path)
 
     gate = "PASS" if report.passes_gate else "FAIL"

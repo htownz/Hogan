@@ -1026,7 +1026,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         import sqlite3
         _bt_conn = sqlite3.connect(db_path, check_same_thread=False)
         _bt_conn.execute("PRAGMA journal_mode=WAL")
-        _bt_conn.execute("PRAGMA query_only=ON")
+        if not (swarm_enabled and use_policy_core):
+            _bt_conn.execute("PRAGMA query_only=ON")
     _pipeline = AgentPipeline(_bt_config, conn=_bt_conn)
 
     wins = 0
