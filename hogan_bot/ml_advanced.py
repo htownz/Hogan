@@ -1,7 +1,6 @@
 
 from __future__ import annotations
 
-import math
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,7 +14,6 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import roc_auc_score
 
 from hogan_bot.ml import build_feature_frame
-
 
 # ----------------------------
 # Triple-barrier labeling

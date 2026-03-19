@@ -392,9 +392,6 @@ class ExchangeClient:
         """Fetch your historical trades (fills). 'since' is ms timestamp."""
         return self._exchange.fetch_my_trades(symbol=symbol, since=since, limit=limit)
 
-    def fetch_ticker(self, symbol: str) -> dict:
-        return self._exchange.fetch_ticker(symbol)
-
     # ------------------------------------------------------------------
     # Dunder helpers
     # ------------------------------------------------------------------
@@ -553,8 +550,8 @@ class AlpacaClient:
         *amount_usd* is the dollar notional to spend.
         Returns the Alpaca order object as a dict.
         """
-        from alpaca.trading.requests import MarketOrderRequest
         from alpaca.trading.enums import OrderSide, TimeInForce
+        from alpaca.trading.requests import MarketOrderRequest
         alpaca_sym = symbol.replace("/", "")
         req = MarketOrderRequest(
             symbol=alpaca_sym,
@@ -572,8 +569,8 @@ class AlpacaClient:
         *qty* is the number of coins/tokens to sell.
         Returns the Alpaca order object as a dict.
         """
-        from alpaca.trading.requests import MarketOrderRequest
         from alpaca.trading.enums import OrderSide, TimeInForce
+        from alpaca.trading.requests import MarketOrderRequest
         alpaca_sym = symbol.replace("/", "")
         req = MarketOrderRequest(
             symbol=alpaca_sym,
@@ -597,9 +594,10 @@ class AlpacaClient:
         ``1h``, ``4h``, ``1d``.  Returns a DataFrame with columns
         [timestamp, open, high, low, close, volume].
         """
+        from datetime import datetime, timedelta, timezone
+
         from alpaca.data.requests import CryptoBarsRequest
         from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
-        from datetime import datetime, timezone, timedelta
 
         _TF: dict[str, object] = {
             "1m":  TimeFrame(1, TimeFrameUnit.Minute),

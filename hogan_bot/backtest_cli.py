@@ -4,11 +4,14 @@ import argparse
 import json
 
 from hogan_bot.backtest import (
-    diagnose_exits, diagnose_long_entries,
-    diagnose_longs_by_confidence, diagnose_shorts_by_confidence,
+    diagnose_exits,
+    diagnose_long_entries,
+    diagnose_longs_by_confidence,
+    diagnose_shorts_by_confidence,
     evaluate_market_regimes,
-    evaluate_regimes, evaluate_regimes_by_market,
-    evaluate_trades_by_regime_side, run_backtest_on_candles,
+    evaluate_regimes_by_market,
+    evaluate_trades_by_regime_side,
+    run_backtest_on_candles,
 )
 from hogan_bot.config import load_config
 from hogan_bot.exchange import ExchangeClient
@@ -188,7 +191,8 @@ def main() -> None:
     limit = args.limit or cfg.ohlcv_limit
 
     if args.from_db:
-        from hogan_bot.storage import get_connection, load_candles as _load_candles
+        from hogan_bot.storage import get_connection
+        from hogan_bot.storage import load_candles as _load_candles
         conn = get_connection(args.db)
         candles = _load_candles(conn, args.symbol, timeframe, limit=limit)
         conn.close()
@@ -214,7 +218,8 @@ def main() -> None:
 
     _candles_15m = None
     if args.mtf_exec and args.from_db:
-        from hogan_bot.storage import get_connection, load_candles as _load_candles
+        from hogan_bot.storage import get_connection
+        from hogan_bot.storage import load_candles as _load_candles
         conn = get_connection(args.db)
         _candles_15m = _load_candles(conn, args.symbol, "15m")
         conn.close()
@@ -452,14 +457,12 @@ def _print_signal_funnel(funnel: dict) -> None:
         ("After ranging gate", "post_ranging_buy", "post_ranging_sell"),
     ]
 
-    prev_buy, prev_sell = bars, bars
     for label, buy_key, sell_key in stages:
         b = funnel.get(buy_key, 0)
         s = funnel.get(sell_key, 0)
         buy_pct = b / bars * 100 if bars else 0
         sell_pct = s / bars * 100 if bars else 0
         print(f"  {label:<22s}  buy={b:>5d} ({buy_pct:>5.1f}%)  sell={s:>5d} ({sell_pct:>5.1f}%)")
-        prev_buy, prev_sell = b, s
 
     executed = funnel.get("executed_buy", 0)
     exec_short = funnel.get("executed_short_entry", 0)
@@ -490,7 +493,7 @@ def _print_signal_funnel(funnel: dict) -> None:
     pullback_blocked_resistance = funnel.get("pullback_blocked_resistance", 0)
     pullback_halved = funnel.get("pullback_halved", 0)
     if pullback_blocked or pullback_halved:
-        print(f"\n  Pullback gate:")
+        print("\n  Pullback gate:")
         if pullback_blocked:
             print(f"    Blocked total:       {pullback_blocked:>5d}")
             if pullback_blocked_resistance:
@@ -506,7 +509,7 @@ def _print_signal_funnel(funnel: dict) -> None:
     mtf_expired = funnel.get("mtf_thesis_expired", 0)
     mtf_15m = funnel.get("mtf_15m_entry_used", 0)
     if mtf_created:
-        print(f"\n  MTF thesis/execution:")
+        print("\n  MTF thesis/execution:")
         print(f"    Theses created:      {mtf_created:>5d}")
         print(f"    Theses executed:     {mtf_executed:>5d}")
         print(f"    Theses expired:      {mtf_expired:>5d}")
@@ -517,7 +520,7 @@ def _print_signal_funnel(funnel: dict) -> None:
     s_tp = funnel.get("short_covered_tp", 0)
     s_hold = funnel.get("short_covered_max_hold", 0)
     if any([s_sig, s_stop, s_tp, s_hold]):
-        print(f"\n  Short exits breakdown:")
+        print("\n  Short exits breakdown:")
         if s_sig:
             print(f"    Buy signal cover:    {s_sig:>5d}")
         if s_stop:
@@ -532,7 +535,7 @@ def _print_signal_funnel(funnel: dict) -> None:
     edge_fc = funnel.get("edge_blocked_forecast", 0)
     edge_sp = funnel.get("edge_blocked_spread", 0)
     if any([edge_atr, edge_tp, edge_fc, edge_sp]):
-        print(f"\n  Edge gate breakdown:")
+        print("\n  Edge gate breakdown:")
         if edge_atr:
             print(f"    ATR too low:         {edge_atr:>5d}")
         if edge_tp:
@@ -546,7 +549,7 @@ def _print_signal_funnel(funnel: dict) -> None:
     rg_ml = funnel.get("ranging_blocked_ml", 0)
     rg_whip = funnel.get("ranging_blocked_whipsaw", 0)
     if any([rg_tech, rg_ml, rg_whip]):
-        print(f"\n  Ranging gate breakdown:")
+        print("\n  Ranging gate breakdown:")
         if rg_tech:
             print(f"    Tech disagree:       {rg_tech:>5d}")
         if rg_ml:
@@ -556,7 +559,7 @@ def _print_signal_funnel(funnel: dict) -> None:
 
     ml_stats = funnel.get("ml_prob_stats")
     if ml_stats:
-        print(f"\n  ML probability distribution:")
+        print("\n  ML probability distribution:")
         print(f"    mean={ml_stats['mean']:.4f}  std={ml_stats['std']:.4f}  "
               f"median={ml_stats['median']:.4f}")
         print(f"    [min={ml_stats['min']:.4f}  p10={ml_stats['p10']:.4f}  "
@@ -568,7 +571,7 @@ def _print_signal_funnel(funnel: dict) -> None:
     regime_dist = funnel.get("regime_distribution")
     if regime_dist:
         total_r = sum(regime_dist.values())
-        print(f"\n  Market regime distribution (detect_regime):")
+        print("\n  Market regime distribution (detect_regime):")
         for regime, count in sorted(regime_dist.items(), key=lambda x: -x[1]):
             pct = count / total_r * 100 if total_r else 0
             print(f"    {regime:<14s}  {count:>5d} bars ({pct:>5.1f}%)")

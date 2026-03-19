@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import pickle
 import time
 from pathlib import Path
@@ -307,7 +306,6 @@ class OnlineLearner:
     def _partial_fit_sgd(self, X: np.ndarray, y: np.ndarray) -> bool:
         try:
             from sklearn.linear_model import SGDClassifier
-            from sklearn.preprocessing import StandardScaler
 
             if self._sgd is None:
                 self._sgd = SGDClassifier(

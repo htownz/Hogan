@@ -7,16 +7,19 @@ This catches drift between event_loop.py and backtest.py decision logic.
 from __future__ import annotations
 
 import types
-from unittest.mock import patch, MagicMock
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from hogan_bot.config import BotConfig, load_config
+from hogan_bot.config import BotConfig
 from hogan_bot.decision import (
-    apply_ml_filter, edge_gate, entry_quality_gate, ranging_gate,
-    compute_quality_components, GateDecision,
+    GateDecision,
+    apply_ml_filter,
+    compute_quality_components,
+    edge_gate,
+    entry_quality_gate,
+    ranging_gate,
 )
 from hogan_bot.regime import detect_regime, effective_thresholds
 
@@ -124,7 +127,6 @@ class TestSignalPathParity:
         rs = detect_regime(candles)
         eff = effective_thresholds(rs, cfg)
         eff_ml_buy = eff.get("ml_buy_threshold", cfg.ml_buy_threshold)
-        eff_ml_sell = eff.get("ml_sell_threshold", cfg.ml_sell_threshold)
         eff_tp = eff.get("take_profit_pct", cfg.take_profit_pct)
         eff_position_scale = eff.get("position_scale", 1.0)
 

@@ -14,8 +14,8 @@ try:
 except ImportError:
     _HAS_LIGHTGBM = False
 
+from hogan_bot.feature_registry import get_feature_columns
 from hogan_bot.ml import (
-    TrainedModel,
     _FEATURE_COLUMNS,
     _feature_frame,
     build_feature_frame,
@@ -96,7 +96,7 @@ class BuildTrainingSetTests(unittest.TestCase):
     def test_feature_columns_match_constant(self):
         df = _synthetic_candles(n=300)
         _, _, cols, _mq = build_training_set(df, horizon_bars=3, fee_rate=0.0)
-        self.assertEqual(cols, _FEATURE_COLUMNS)
+        self.assertEqual(cols, get_feature_columns())
 
     def test_no_nan_in_output(self):
         df = _synthetic_candles(n=300)
@@ -109,7 +109,7 @@ class BuildTrainingSetTests(unittest.TestCase):
 class LogRegTrainingTests(unittest.TestCase):
     def setUp(self):
         self.df = _synthetic_candles(n=800)
-        import tempfile, os
+        import tempfile
         self.tmp = tempfile.mktemp(suffix=".pkl")
 
     def tearDown(self):
@@ -157,7 +157,7 @@ class LogRegTrainingTests(unittest.TestCase):
 
     def test_feature_count_in_metrics(self):
         metrics = train_logistic_regression(self.df, model_path=self.tmp)
-        self.assertEqual(metrics["features"], len(_FEATURE_COLUMNS))
+        self.assertEqual(metrics["features"], len(get_feature_columns()))
 
 
 @unittest.skipUnless(pd is not None, "pandas not installed")
@@ -247,7 +247,8 @@ class WalkForwardCVTests(unittest.TestCase):
 class TestTrainLightGBM(unittest.TestCase):
     def test_returns_expected_keys(self):
         df = _synthetic_candles(n=2000)
-        import tempfile, os
+        import os
+        import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "lgbm.pkl")
@@ -258,7 +259,8 @@ class TestTrainLightGBM(unittest.TestCase):
 
     def test_model_type_label(self):
         df = _synthetic_candles(n=2000)
-        import tempfile, os
+        import os
+        import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "lgbm.pkl")
@@ -267,13 +269,14 @@ class TestTrainLightGBM(unittest.TestCase):
 
     def test_feature_importances_all_features_present(self):
         df = _synthetic_candles(n=2000)
-        import tempfile, os
+        import os
+        import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "lgbm.pkl")
             metrics = train_lightgbm(df, model_path=path)
         imps = metrics["feature_importances"]
-        self.assertEqual(set(imps.keys()), set(_FEATURE_COLUMNS))
+        self.assertEqual(set(imps.keys()), set(get_feature_columns()))
 
 
 class TestTrainLightGBMMissingPackage(unittest.TestCase):
@@ -282,7 +285,8 @@ class TestTrainLightGBMMissingPackage(unittest.TestCase):
         if _HAS_LIGHTGBM:
             self.skipTest("lightgbm is installed; skip missing-package test")
         df = _synthetic_candles(n=300)
-        import tempfile, os
+        import os
+        import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(RuntimeError):

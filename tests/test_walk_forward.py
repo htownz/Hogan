@@ -2,7 +2,13 @@
 from __future__ import annotations
 
 import pytest
-from hogan_bot.walk_forward import WFConfig, WalkForwardReport, WindowResult, _compute_windows
+
+from hogan_bot.walk_forward import (
+    WalkForwardReport,
+    WFConfig,
+    WindowResult,
+    _compute_windows,
+)
 
 
 class TestComputeWindows:

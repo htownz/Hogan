@@ -36,10 +36,7 @@ import logging
 import math
 from dataclasses import dataclass
 
-import numpy as np
 import pandas as pd
-
-from hogan_bot.indicators import compute_atr
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +86,6 @@ def compute_risk(
         return RiskEstimate()
 
     close = candles["close"].astype(float)
-    high = candles["high"].astype(float)
     low = candles["low"].astype(float)
 
     ret_1 = close.pct_change(1).dropna()

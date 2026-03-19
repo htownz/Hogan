@@ -9,7 +9,6 @@ import pytest
 
 from hogan_bot.notifier import NullNotifier, WebhookNotifier, make_notifier
 
-
 # ---------------------------------------------------------------------------
 # NullNotifier
 # ---------------------------------------------------------------------------

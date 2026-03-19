@@ -13,7 +13,6 @@ import pytest
 from hogan_bot.ml import TrainedModel
 from hogan_bot.retrain import _get_current_best_score, retrain_once
 
-
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------

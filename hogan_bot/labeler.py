@@ -25,7 +25,6 @@ import json
 import logging
 import sqlite3
 import time
-from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 

@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from pathlib import Path
 from typing import Any
@@ -135,10 +134,10 @@ class RAGKnowledgeBase:
         news_path = self.persist_dir / "news.jsonl"
         if trades_path.exists():
             with open(trades_path) as f:
-                self._fallback_trades = [json.loads(l) for l in f if l.strip()]
+                self._fallback_trades = [json.loads(line) for line in f if line.strip()]
         if news_path.exists():
             with open(news_path) as f:
-                self._fallback_news = [json.loads(l) for l in f if l.strip()]
+                self._fallback_news = [json.loads(line) for line in f if line.strip()]
 
     def _save_fallback_trade(self, record: dict) -> None:
         path = self.persist_dir / "trades.jsonl"

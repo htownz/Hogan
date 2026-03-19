@@ -15,8 +15,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import time
-from datetime import datetime, timezone, timedelta
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen

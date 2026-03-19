@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import uuid as _uuid
 from pathlib import Path
 
 import pandas as pd
@@ -659,8 +660,6 @@ def load_position_state(conn: sqlite3.Connection, symbol: str) -> tuple[float, f
 # ---------------------------------------------------------------------------
 # Paper trade journal helpers
 # ---------------------------------------------------------------------------
-
-import uuid as _uuid
 
 _SIDE_MAP = {"buy": "long", "sell": "short", "long": "long", "short": "short"}
 

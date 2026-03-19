@@ -6,7 +6,6 @@ import pytest
 from hogan_bot.decision import apply_ml_filter, ml_confidence
 from hogan_bot.risk import calculate_position_size
 
-
 # ---------------------------------------------------------------------------
 # ml_confidence()
 # ---------------------------------------------------------------------------

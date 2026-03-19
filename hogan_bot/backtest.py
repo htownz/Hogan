@@ -7,10 +7,14 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from hogan_bot.agent_pipeline import AgentPipeline
-from hogan_bot.champion import apply_champion_mode, is_champion_mode
 from hogan_bot.decision import (
-    GateDecision, apply_ml_filter, edge_gate, entry_quality_gate,
-    ml_confidence, estimate_spread_from_candles, pullback_gate, ranging_gate,
+    apply_ml_filter,
+    edge_gate,
+    entry_quality_gate,
+    estimate_spread_from_candles,
+    ml_confidence,
+    pullback_gate,
+    ranging_gate,
 )
 from hogan_bot.exit_model import ExitEvaluator
 from hogan_bot.expectancy import ExpectancyTracker
@@ -812,8 +816,8 @@ def diagnose_long_entries(closed_trades: list[dict]) -> dict:
 
     return {
         "total_longs": len(longs),
-        "winners": len(winners),
-        "losers": len(losers),
+        "winner_count": len(winners),
+        "loser_count": len(losers),
         "all": {
             "avg_range_position": _avg(longs, "local_range_position"),
             "avg_pct_from_high": _avg(longs, "pct_from_local_high"),
@@ -1034,7 +1038,9 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     _mtf_map: dict[int, list[int]] = {}
     if _use_mtf:
         from hogan_bot.thesis_executor import (
-            Thesis, align_15m_to_1h, find_15m_entry_in_window,
+            Thesis,
+            align_15m_to_1h,
+            find_15m_entry_in_window,
         )
         _mtf_map = align_15m_to_1h(candles, candles_15m)
 
