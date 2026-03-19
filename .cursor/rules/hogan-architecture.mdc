@@ -24,7 +24,7 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 | `data_engine.py` | LiveDataEngine (WebSocket/REST), BacktestDataEngine |
 | `config.py` | BotConfig, load_config, symbol_config, RegimeConfig, DEFAULT_REGIME_CONFIGS |
 | `champion.py` | Champion mode locks; apply_champion_mode overrides config |
-| `feature_registry.py` | CHAMPION_FEATURE_COLUMNS (15), get_feature_columns |
+| `feature_registry.py` | CHAMPION_FEATURE_COLUMNS (8), get_feature_columns |
 | `ml.py` | build_feature_row, build_training_set, predict_up_probability |
 | `exchange.py` | ExchangeClient, fetch_ohlcv_df (CCXT) |
 | `agent_pipeline.py` | Decision brain (Technical + Sentiment + Macro) |
@@ -32,10 +32,15 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 | `walk_forward.py` | Rolling walk-forward validation harness with promotion gate |
 | `feature_importance.py` | Permutation importance audit for champion features |
 | `oos_eval.py` | Single-window OOS evaluation for retrain pipeline |
+| `macro_sitout.py` | Macro event sit-out filter (FOMC/CPI/NFP calendar + Fear&Greed + VIX) |
+| `macro_filter.py` | SPY/QQQ/DXY/VIX/GLD macro correlation filter |
+| `fetch_feargreed.py` | Crypto Fear & Greed Index fetcher (alternative.me, stored in DB) |
+| `funding_overlay.py` | BTC funding rate crowded-positioning overlay (derivatives_metrics) |
+| `decision.py` | Gate functions: ml_filter, edge_gate, quality_gate, ml_probability_sizer |
 
 ## Champion Mode
 - `HOGAN_CHAMPION_MODE=true` → locks experimental features off
-- Uses 15-feature champion subset; model path → `champion_ml_model_path`
+- Uses 8-feature champion subset; model path → `champion_ml_model_path`
 - Train champion: `python -m hogan_bot.train --champion`
 
 ## Data & Exchanges
@@ -58,8 +63,84 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 - Short max hold: 12h, long max hold: 24h
 - Backtest CLI: `--profile canonical`
 
+## Macro Sitout Filter
+- `HOGAN_MACRO_SITOUT=true` enables the macro event sit-out filter
+- Blocks trades on FOMC/CPI/NFP event days (deterministic calendar)
+- Scales down position size during extreme greed (Fear & Greed > 80)
+- Asymmetric: does NOT penalize extreme fear (strategy thrives in fear-driven volatility)
+- VIX > 35 = full sitout, VIX > 25 = 50% size reduction
+- Walk-forward validated: halves losses during FOMO rallies, enhances fear-recovery windows
+
+## ML Probability Sizer
+- `HOGAN_ML_AS_SIZER=true` replaces binary ML filter with continuous position sizing
+- Walk-forward validated: +0.11% mean return (vs -0.01% without), Sharpe -0.24 (vs -0.60)
+- Key insight: AUC ~0.52 is too weak for binary decisions but adds value as continuous sizer
+- `ml_probability_sizer(action, up_prob)` maps probability to [0.30, 1.50] position scale
+- When enabled, replaces both `apply_ml_filter` and `ml_confidence` sizing
+
+## ML Blind Detection
+- `ml_blind_scale(recent_probs)` detects when model output clusters near 0.50 (low std)
+- Returns scale factor in [0.50, 1.0]; below std_threshold=0.02, sizing shrinks linearly
+- Applied in both backtest and event_loop after ML sizer/filter, before position sizing
+- Prevents the system from trading full size when the model has no conviction
+
+## Asymmetric Ranging Gate
+- `ranging_gate()` now applies different thresholds for buys vs sells in ranging markets
+- Buys: lower ML separation (0.03 vs 0.06), higher whipsaw tolerance (3 vs 2), always soft mode
+- Sells: unchanged strict thresholds
+- Rationale: long side was over-filtered in ranging regimes, losing profitable mean-reversion entries
+
+## Asymmetric Edge Gate
+- `edge_gate()` uses lower ATR friction multiple for buys (0.5x) vs sells (0.8x)
+- Longs benefit from mean-reversion in low-vol periods; shorts do not
+- Walk-forward validated: ATR blocks dropped ~40%, more longs get through
+
+## ML Blind Short Block
+- `ml_blind_blocks_shorts(recent_probs)` blocks short entries when model conviction is near zero
+- Uses stricter threshold (0.015) than the sizing scale (0.02) — only blocks shorts, not longs
+- Walk-forward: W3 blocked 8 shorts, W4 blocked 18 in low-conviction stretches
+
+## Loss Streak Dampener
+- `loss_streak_scale(recent_outcomes)` reduces sizing by 50% after 3 consecutive losses
+- Resets on next win; most active in losing windows (W1: 514 bars, W3: 552)
+- Limits drawdown compounding without reducing trade count
+
+## Regime Mean-Reversion Score
+- `RegimeState.mean_reversion_score` computed from return autocorrelation (24-bar window)
+- Score > 0 = mean-reverting (favorable), score < 0 = trending (unfavorable)
+- Walk-forward tested as position sizer: net negative, kept as diagnostic only
+
+## ExitEvaluator (Short-Aware)
+- `ExitEvaluator` in `exit_model.py` — thesis-based exit logic for both longs and shorts
+- Short-specific parameters: tighter drawdown panic (67% of long threshold), faster time decay (0.60 vs 0.75), shorter stagnation window
+- Volatility contraction exit for shorts: exits when vol drops below 50% of entry ATR (thesis weakening)
+- Used in both backtest and event_loop for signal-based exit confirmation (long sell signals + short buy signals)
+
+## Regime Transition Dampener
+- `RegimeTransitionTracker` in `regime.py` reduces sizing for 3 bars after regime changes
+- Scale ramps linearly from 0.40 (min_scale) to 1.0 over the cooldown window
+- Applied to `_eff_position_scale` in backtest and `eff_long/short_size_scale` in event_loop
+- Prevents whipsaw entries at regime boundaries
+
+## Regime-Specific ML Models
+- `RegimeModelRouter` in `ml.py` holds per-regime ML models + global fallback
+- Walk-forward: `--regime-models` flag trains separate models per regime (min 50 samples each)
+- Duck-types as `TrainedModel` — transparent to `predict_up_probability()`
+- Backtest/event_loop call `set_regime()` before prediction to route to the appropriate model
+
+## Delayed Trailing Stop Activation
+- `trail_activation_pct` in `BotConfig` (default 0.5%) — minimum favorable excursion before trailing stop activates
+- Wired into paper.py (Position + ShortPosition), backtest, execution engines, event_loop, walk_forward
+- Prevents premature stops from exiting during normal market noise
+
 ## Validation
 - Walk-forward: `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5`
+- Walk-forward (no ML): `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --no-ml`
+- Walk-forward (macro sitout): `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --no-ml --macro-sitout`
+- Walk-forward (ML sizer + macro): `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --ml-sizer --macro-sitout`
+- Walk-forward (regime models): `python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --regime-models`
+- Exit parameter sweep: `python diagnostics/exit_sweep.py`
+- Short hold sweep: `python diagnostics/short_hold_sweep.py`
 - Feature audit: `python -m hogan_bot.feature_importance --db data/hogan.db`
 - CI: `.github/workflows/ci.yml` runs all tests on push/PR
 

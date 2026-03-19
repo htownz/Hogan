@@ -32,10 +32,14 @@ Usage
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # Data structure
@@ -50,6 +54,7 @@ class RegimeState:
     trend_direction: int  # +1 up, -1 down, 0 flat
     ma_spread: float      # (fast_ma − slow_ma) / slow_ma — positive = uptrend
     confidence: float     # 0.0–1.0 composite confidence in the regime label
+    mean_reversion_score: float = 0.0  # −1 (strong trend) to +1 (strong mean-reversion)
     btc_dominance: float | None = None  # latest BTC dominance % from DB (if available)
     fear_greed: float | None = None     # Fear & Greed index value (0–100, if available)
 
@@ -127,11 +132,103 @@ def _atr_percentile_rank(candles: pd.DataFrame, lookback: int = 100) -> float:
     return rank
 
 
+def _mean_reversion_score(close: pd.Series, lookback: int = 24) -> float:
+    """Compute mean-reversion score from return autocorrelation.
+
+    Uses lag-1 autocorrelation of log-returns over a rolling window.
+    Negative autocorrelation = mean-reverting (price tends to reverse).
+    Positive autocorrelation = trending (price tends to continue).
+
+    Returns a value in [-1, +1]:
+      < -0.1  strong mean-reversion (favorable for our strategy)
+        ~0    random walk
+      > +0.1  trending (unfavorable — reduces position quality)
+    """
+    if len(close) < lookback + 2:
+        return 0.0
+    returns = close.pct_change().dropna()
+    if len(returns) < lookback:
+        return 0.0
+    window = returns.iloc[-lookback:]
+    shifted = window.shift(1).iloc[1:]
+    current = window.iloc[1:]
+    if shifted.std() < 1e-9 or current.std() < 1e-9:
+        return 0.0
+    autocorr = float(current.corr(shifted))
+    return max(-1.0, min(1.0, -autocorr))
+
+
+# ---------------------------------------------------------------------------
+# Regime transition tracker
+# ---------------------------------------------------------------------------
+
+class RegimeTransitionTracker:
+    """Detects regime transitions and provides a dampening scale factor.
+
+    After a regime change, position sizing is reduced for ``cooldown_bars``
+    bars to avoid whipsaws at regime boundaries.  The scale ramps linearly
+    from ``min_scale`` back to 1.0 over the cooldown window.
+
+    Usage::
+
+        tracker = RegimeTransitionTracker()
+        for bar in candles:
+            regime = detect_regime(...)
+            scale = tracker.update(regime.regime)
+            position_size *= scale
+    """
+
+    def __init__(
+        self,
+        cooldown_bars: int = 3,
+        min_scale: float = 0.40,
+    ):
+        self._cooldown_bars = max(cooldown_bars, 1)
+        self._min_scale = max(0.0, min(1.0, min_scale))
+        self._prev_regime: str | None = None
+        self._bars_since_change: int = self._cooldown_bars + 1
+        self._last_transition: tuple[str | None, str | None] = (None, None)
+
+    def update(self, current_regime: str) -> float:
+        """Record the current regime and return a position scale factor.
+
+        Returns 1.0 when stable; ramps from ``min_scale`` to 1.0 during
+        the cooldown period after a transition.
+        """
+        if self._prev_regime is not None and current_regime != self._prev_regime:
+            self._last_transition = (self._prev_regime, current_regime)
+            self._bars_since_change = 0
+        else:
+            self._bars_since_change += 1
+
+        self._prev_regime = current_regime
+
+        if self._bars_since_change >= self._cooldown_bars:
+            return 1.0
+
+        progress = self._bars_since_change / self._cooldown_bars
+        return self._min_scale + (1.0 - self._min_scale) * progress
+
+    @property
+    def in_transition(self) -> bool:
+        return self._bars_since_change < self._cooldown_bars
+
+    @property
+    def last_transition(self) -> tuple[str | None, str | None]:
+        """Return (from_regime, to_regime) of the most recent transition."""
+        return self._last_transition
+
+    def reset(self) -> None:
+        self._prev_regime = None
+        self._bars_since_change = self._cooldown_bars + 1
+        self._last_transition = (None, None)
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
-_REGIME_HISTORY: list[str] = []
+_REGIME_HISTORY: dict[str, list[str]] = {}
 _REGIME_HYSTERESIS_BARS: int = 3
 
 
@@ -152,6 +249,7 @@ def detect_regime(
     btc_dominance: float | None = None,
     fear_greed: float | None = None,
     hysteresis_bars: int = _REGIME_HYSTERESIS_BARS,
+    symbol: str = "_default",
 ) -> RegimeState:
     """Classify the current market regime from OHLCV candles.
 
@@ -196,10 +294,22 @@ def detect_regime(
     elif minus_di.iloc[-1] > plus_di.iloc[-1]:
         trend_dir = -1
     else:
-        trend_dir = 0
+        # DI lines equal — use MA spread as tie-breaker.  A meaningful
+        # spread (> 0.1%) implies directional bias; otherwise treat as
+        # directionless which will fall through to ranging when ADX is
+        # also borderline.
+        if ma_spread > 0.001:
+            trend_dir = 1
+        elif ma_spread < -0.001:
+            trend_dir = -1
+        else:
+            trend_dir = 0
 
     # --- ATR percentile rank ---
     atr_rank = _atr_percentile_rank(candles, lookback=atr_lookback)
+
+    # --- Mean-reversion score ---
+    mr_score = _mean_reversion_score(close, lookback=24)
 
     # --- Regime classification ---
     # Volatile overrides everything when ATR is in the top *atr_volatile_pct* tier
@@ -207,9 +317,14 @@ def detect_regime(
         regime = "volatile"
         confidence = 0.5 + 0.5 * (atr_rank - atr_volatile_pct) / (1.0 - atr_volatile_pct + 1e-9)
     elif adx_val >= adx_trending_threshold:
-        regime = "trending_up" if trend_dir >= 0 else "trending_down"
-        # Confidence scales with how far ADX is above the threshold
-        confidence = 0.5 + min(0.5, (adx_val - adx_trending_threshold) / 50.0)
+        if trend_dir == 0:
+            # ADX says trending but no directional signal — classify as
+            # ranging with reduced confidence to avoid false trending_up.
+            regime = "ranging"
+            confidence = 0.40
+        else:
+            regime = "trending_up" if trend_dir > 0 else "trending_down"
+            confidence = 0.5 + min(0.5, (adx_val - adx_trending_threshold) / 50.0)
     else:
         regime = "ranging"
         # Confidence scales with how far ADX is below the threshold
@@ -235,13 +350,15 @@ def detect_regime(
             confidence = min(1.0, confidence + 0.05)
 
     # Hysteresis: require N consecutive bars of the new regime before switching
-    _REGIME_HISTORY.append(regime)
-    if len(_REGIME_HISTORY) > hysteresis_bars * 3:
-        del _REGIME_HISTORY[:-hysteresis_bars * 3]
+    # Per-symbol history prevents multi-symbol bots from mixing regimes
+    _sym_hist = _REGIME_HISTORY.setdefault(symbol, [])
+    _sym_hist.append(regime)
+    if len(_sym_hist) > hysteresis_bars * 3:
+        del _sym_hist[:-hysteresis_bars * 3]
 
-    if len(_REGIME_HISTORY) >= hysteresis_bars + 1:
-        prev_regime = _REGIME_HISTORY[-(hysteresis_bars + 1)]
-        recent = _REGIME_HISTORY[-hysteresis_bars:]
+    if len(_sym_hist) >= hysteresis_bars + 1:
+        prev_regime = _sym_hist[-(hysteresis_bars + 1)]
+        recent = _sym_hist[-hysteresis_bars:]
         if regime != prev_regime and not all(r == regime for r in recent):
             regime = prev_regime
             confidence *= 0.8
@@ -253,6 +370,7 @@ def detect_regime(
         trend_direction=trend_dir,
         ma_spread=ma_spread,
         confidence=float(confidence),
+        mean_reversion_score=mr_score,
         btc_dominance=btc_dominance,
         fear_greed=fear_greed,
     )
@@ -360,6 +478,16 @@ def effective_thresholds(
     for key in ("ml_buy_threshold", "ml_sell_threshold", "position_scale"):
         if key in overrides:
             result[key] = overrides[key]
+
+    # Mean-reversion score is available in RegimeState for diagnostics
+    # and future use, but walk-forward testing showed that applying it
+    # as a position scaling factor is net negative (hurts trend-following
+    # entries in W1-type rally conditions more than it helps W4-type
+    # mean-reverting conditions).
+    mr_scale = 1.0
+    result["position_scale"] = result["position_scale"] * mr_scale
+    result["mean_reversion_scale"] = mr_scale
+
     return result
 
 
@@ -394,6 +522,6 @@ def load_regime_signals(conn) -> dict[str, float | None]:
         row = cur.fetchone()
         if row:
             signals["fear_greed"] = float(row[0])
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.warning("load_regime_signals failed (BTC dominance/Fear&Greed unavailable): %s", exc)
     return signals

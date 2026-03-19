@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -21,6 +24,10 @@ class Position:
     max_favorable_pct: float = 0.0
     # ATR at entry (for volatility expansion check in ExitEvaluator)
     entry_atr_pct: float = 0.0
+    # Trailing stop only activates after price moves this far in your favor.
+    # Prevents noise-triggered stops in the initial bars after entry.
+    trail_activation_pct: float = 0.0
+    trail_active: bool = False
 
 
 @dataclass
@@ -40,6 +47,8 @@ class ShortPosition:
     max_adverse_pct: float = 0.0
     max_favorable_pct: float = 0.0
     entry_atr_pct: float = 0.0
+    trail_activation_pct: float = 0.0
+    trail_active: bool = False
 
 
 @dataclass
@@ -51,9 +60,8 @@ class PaperPortfolio:
 
     def total_equity(self, mark_prices: dict[str, float]) -> float:
         long_value = sum(pos.qty * mark_prices.get(symbol, 0.0) for symbol, pos in self.positions.items())
-        # Short P&L: positive when price has fallen below our entry (profitable)
         short_pnl = sum(
-            (pos.avg_entry - mark_prices.get(symbol, 0.0)) * pos.qty
+            (pos.avg_entry - mark_prices.get(symbol, pos.avg_entry)) * pos.qty
             for symbol, pos in self.short_positions.items()
         )
         return self.cash_usd + long_value + short_pnl
@@ -65,13 +73,16 @@ class PaperPortfolio:
         qty: float,
         trailing_stop_pct: float = 0.0,
         take_profit_pct: float = 0.0,
+        trail_activation_pct: float = 0.0,
     ) -> bool:
         if qty <= 0 or price <= 0:
+            logger.warning("execute_buy rejected %s: invalid qty=%.6f or price=%.2f", symbol, qty, price)
             return False
         cost = qty * price
         fee = cost * self.fee_rate
         total = cost + fee
         if total > self.cash_usd:
+            logger.warning("execute_buy rejected %s: insufficient cash (need %.2f, have %.2f)", symbol, total, self.cash_usd)
             return False
 
         self.cash_usd -= total
@@ -80,11 +91,11 @@ class PaperPortfolio:
         pos.avg_entry = 0.0 if new_qty <= 0 else ((pos.qty * pos.avg_entry) + cost) / new_qty
         pos.qty = new_qty
 
-        # Only update exit parameters when opening a fresh position or
-        # adding to an existing one that has no stops yet.
         if trailing_stop_pct > 0:
             pos.trailing_stop_pct = trailing_stop_pct
-            pos.peak_price = max(pos.peak_price, price)
+            pos.trail_activation_pct = trail_activation_pct
+            if trail_activation_pct <= 0:
+                pos.peak_price = max(pos.peak_price, price)
         if take_profit_pct > 0:
             pos.take_profit_pct = take_profit_pct
 
@@ -92,8 +103,12 @@ class PaperPortfolio:
         return True
 
     def execute_sell(self, symbol: str, price: float, qty: float) -> bool:
-        pos = self.positions.get(symbol, Position())
+        pos = self.positions.get(symbol)
+        if pos is None:
+            logger.warning("execute_sell rejected %s: no open long position", symbol)
+            return False
         if qty <= 0 or price <= 0 or qty > pos.qty:
+            logger.warning("execute_sell rejected %s: invalid params (qty=%.6f, price=%.2f, held=%.6f)", symbol, qty, price, pos.qty)
             return False
 
         proceeds = qty * price
@@ -113,6 +128,7 @@ class PaperPortfolio:
         qty: float,
         trailing_stop_pct: float = 0.0,
         take_profit_pct: float = 0.0,
+        trail_activation_pct: float = 0.0,
     ) -> bool:
         """Open a synthetic short position.
 
@@ -121,11 +137,11 @@ class PaperPortfolio:
         limited to available cash as a safety guardrail.
         """
         if qty <= 0 or price <= 0:
+            logger.warning("execute_short rejected %s: invalid qty=%.6f or price=%.2f", symbol, qty, price)
             return False
-        # Require at least 1× notional in free cash (1:1 margin guardrail)
         if qty * price > self.cash_usd:
+            logger.warning("execute_short rejected %s: insufficient cash (need %.2f, have %.2f)", symbol, qty * price, self.cash_usd)
             return False
-        # Deduct entry fee only
         fee = qty * price * self.fee_rate
         self.cash_usd -= fee
 
@@ -135,20 +151,36 @@ class PaperPortfolio:
         pos.qty = new_qty
         if trailing_stop_pct > 0:
             pos.trailing_stop_pct = trailing_stop_pct
-            pos.trough_price = min(pos.trough_price, price) if pos.trough_price > 0 else price
+            pos.trail_activation_pct = trail_activation_pct
+            if trail_activation_pct <= 0:
+                pos.trough_price = min(pos.trough_price, price) if pos.trough_price > 0 else price
         if take_profit_pct > 0:
             pos.take_profit_pct = take_profit_pct
         self.short_positions[symbol] = pos
         return True
 
     def execute_cover(self, symbol: str, price: float, qty: float) -> bool:
-        """Close (cover) a short position and realise P&L."""
+        """Close (cover) a short position and realise P&L.
+
+        Covers always succeed when the position exists — refusing to close a
+        short with unlimited upside risk is worse than temporary negative cash.
+        """
         pos = self.short_positions.get(symbol)
-        if pos is None or qty <= 0 or price <= 0 or qty > pos.qty:
+        if pos is None:
+            logger.warning("execute_cover rejected %s: no open short position", symbol)
+            return False
+        if qty <= 0 or price <= 0 or qty > pos.qty:
+            logger.warning("execute_cover rejected %s: invalid params (qty=%.6f, price=%.2f, held=%.6f)", symbol, qty, price, pos.qty)
             return False
         pnl = (pos.avg_entry - price) * qty
         fee = qty * price * self.fee_rate
         self.cash_usd += pnl - fee
+        if self.cash_usd < 0:
+            logger.warning(
+                "execute_cover %s: cash negative after cover (cash=%.2f, pnl=%.2f, fee=%.2f) "
+                "— short loss exceeded available cash",
+                symbol, self.cash_usd, pnl, fee,
+            )
         pos.qty -= qty
         if pos.qty <= 1e-12:
             self.short_positions.pop(symbol, None)
@@ -175,6 +207,7 @@ class PaperPortfolio:
         for symbol, pos in list(self.positions.items()):
             px = mark_prices.get(symbol, 0.0)
             if px <= 0:
+                logger.debug("check_exits: skipping long %s — no valid price", symbol)
                 continue
             pos.bars_held += 1
             if pos.avg_entry > 0:
@@ -187,12 +220,19 @@ class PaperPortfolio:
                 exits.append((symbol, "max_hold_time"))
                 continue
             if pos.trailing_stop_pct > 0:
-                if px > pos.peak_price:
-                    pos.peak_price = px
-                stop_level = pos.peak_price * (1.0 - pos.trailing_stop_pct)
-                if px <= stop_level:
-                    exits.append((symbol, "trailing_stop"))
-                    continue
+                if not pos.trail_active and pos.trail_activation_pct > 0:
+                    if pos.avg_entry > 0 and pos.max_favorable_pct >= pos.trail_activation_pct:
+                        pos.trail_active = True
+                        pos.peak_price = pos.avg_entry * (1.0 + pos.max_favorable_pct)
+                elif pos.trail_activation_pct <= 0:
+                    pos.trail_active = True
+                if pos.trail_active:
+                    if px > pos.peak_price:
+                        pos.peak_price = px
+                    stop_level = pos.peak_price * (1.0 - pos.trailing_stop_pct)
+                    if px <= stop_level:
+                        exits.append((symbol, "trailing_stop"))
+                        continue
             if pos.take_profit_pct > 0 and pos.avg_entry > 0:
                 tp_level = pos.avg_entry * (1.0 + pos.take_profit_pct)
                 if px >= tp_level * (1.0 - 1e-9):
@@ -202,6 +242,7 @@ class PaperPortfolio:
         for symbol, pos in list(self.short_positions.items()):
             px = mark_prices.get(symbol, 0.0)
             if px <= 0:
+                logger.debug("check_exits: skipping short %s — no valid price", symbol)
                 continue
             pos.bars_held += 1
             if pos.avg_entry > 0:
@@ -214,14 +255,20 @@ class PaperPortfolio:
             if _s_max > 0 and pos.bars_held >= _s_max:
                 exits.append((symbol, "short_max_hold_time"))
                 continue
-            # Trailing stop: tracks lowest price, fires when price rebounds up
             if pos.trailing_stop_pct > 0:
-                if pos.trough_price <= 0 or px < pos.trough_price:
-                    pos.trough_price = px
-                stop_level = pos.trough_price * (1.0 + pos.trailing_stop_pct)
-                if px >= stop_level:
-                    exits.append((symbol, "short_trailing_stop"))
-                    continue
+                if not pos.trail_active and pos.trail_activation_pct > 0:
+                    if pos.avg_entry > 0 and pos.max_favorable_pct >= pos.trail_activation_pct:
+                        pos.trail_active = True
+                        pos.trough_price = pos.avg_entry * (1.0 - pos.max_favorable_pct)
+                elif pos.trail_activation_pct <= 0:
+                    pos.trail_active = True
+                if pos.trail_active:
+                    if pos.trough_price <= 0 or px < pos.trough_price:
+                        pos.trough_price = px
+                    stop_level = pos.trough_price * (1.0 + pos.trailing_stop_pct)
+                    if px >= stop_level:
+                        exits.append((symbol, "short_trailing_stop"))
+                        continue
             # Take profit: fires when price falls to entry × (1 - tp_pct)
             if pos.take_profit_pct > 0 and pos.avg_entry > 0:
                 tp_level = pos.avg_entry * (1.0 - pos.take_profit_pct)

@@ -23,7 +23,7 @@ python -m hogan_bot.main
 
 ## Champion Path
 - `HOGAN_CHAMPION_MODE=true` locks experimental features
-- 15-feature subset in `feature_registry.CHAMPION_FEATURE_COLUMNS`
+- 8-feature subset in `feature_registry.CHAMPION_FEATURE_COLUMNS`
 - Train: `python -m hogan_bot.train --champion`
 
 ## Data & Exchanges
@@ -51,6 +51,12 @@ Each regime-aware component has a clearly defined role. Avoid double-counting.
 - Short max hold: 12h (from sweep optimization)
 - Use via backtest CLI: `--profile canonical`
 
+## Macro Sitout Filter
+- `HOGAN_MACRO_SITOUT=true` in `.env` enables the macro event sit-out filter
+- Blocks trades on FOMC/CPI/NFP event days, scales down during extreme greed
+- Asymmetric: does NOT penalize extreme fear (strategy thrives in volatile crash-recovery)
+- Walk-forward validated: mean return improved from -0.14% to -0.01%
+
 ## Validation & Testing
 ```bash
 # Unit tests (CI runs these on push/PR)
@@ -58,6 +64,12 @@ pytest tests/ -v
 
 # Walk-forward validation (rolling OOS with promotion gate)
 python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5
+
+# Walk-forward without ML (technical pipeline baseline)
+python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --no-ml
+
+# Walk-forward with macro sitout (recommended diagnostic)
+python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --no-ml --macro-sitout
 
 # Feature importance audit (permutation importance on champion features)
 python -m hogan_bot.feature_importance --db data/hogan.db

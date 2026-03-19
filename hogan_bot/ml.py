@@ -1,12 +1,15 @@
 """Machine-learning pipeline for Hogan: feature engineering, training, and inference."""
 from __future__ import annotations
 
+import logging
 import pickle
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from hogan_bot.indicators import (
     cloud_signal,
@@ -24,6 +27,55 @@ class TrainedModel:
     # Use getattr(m, "scaler", None) when reading pickled artifacts that
     # pre-date this field to stay backward-compatible.
     scaler: object | None = field(default=None)
+
+
+class RegimeModelRouter:
+    """Routes ML predictions to regime-specific models.
+
+    Holds a global fallback ``TrainedModel`` and optional per-regime models.
+    When ``predict(candles, regime)`` is called, it uses the regime-specific
+    model if available, otherwise falls back to the global model.
+
+    Quacks like ``TrainedModel`` for backward compatibility: ``model``,
+    ``feature_columns``, and ``scaler`` all delegate to the global model so
+    ``predict_up_probability(candles, router)`` works transparently.
+    """
+
+    def __init__(
+        self,
+        global_model: TrainedModel,
+        regime_models: dict[str, TrainedModel] | None = None,
+    ):
+        self._global = global_model
+        self._regime_models = regime_models or {}
+        self._current_regime: str | None = None
+
+    @property
+    def model(self):
+        m = self._regime_models.get(self._current_regime) if self._current_regime else None
+        return m.model if m else self._global.model
+
+    @property
+    def feature_columns(self) -> list[str]:
+        m = self._regime_models.get(self._current_regime) if self._current_regime else None
+        return m.feature_columns if m else self._global.feature_columns
+
+    @property
+    def scaler(self):
+        m = self._regime_models.get(self._current_regime) if self._current_regime else None
+        return m.scaler if m else self._global.scaler
+
+    def set_regime(self, regime: str | None) -> None:
+        """Set the current regime for subsequent predictions."""
+        self._current_regime = regime
+
+    @property
+    def has_regime_models(self) -> bool:
+        return len(self._regime_models) > 0
+
+    @property
+    def regime_names(self) -> list[str]:
+        return list(self._regime_models.keys())
 
 
 # ---------------------------------------------------------------------------
@@ -338,72 +390,8 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
-# Core feature columns — 59 features (36 base + 10 macro + 4 onchain + 4 sentiment + 2 derivatives + 3 intermarket).
-# ICT structural features are quarantined to _EXPERIMENTAL_FEATURES.
-_FEATURE_COLUMNS: list[str] = [
-    # momentum (4)
-    "ret_1", "ret_3", "ret_6", "ret_12",
-    # trend (1)
-    "ma_spread",
-    # volatility / oscillators (3)
-    "volatility_20", "rsi_14", "atr_pct",
-    # MACD (1)
-    "macd_hist_pct",
-    # Bollinger (1)
-    "bb_pct_b",
-    # regime (1)
-    "vol_regime",
-    # candle microstructure (4)
-    "range_pct", "candle_body_pct", "upper_wick_pct", "lower_wick_pct",
-    # volume (2)
-    "vol_ratio", "vol_spike",
-    # EMA cloud (3)
-    "cloud_bull", "cloud_bear", "cloud_width_pct",
-    # FVG (4)
-    "fvg_bull_active", "fvg_bear_active", "in_bull_fvg", "in_bear_fvg",
-    # ADX (3)
-    "adx_14", "plus_di", "minus_di",
-    # Stochastic RSI (2)
-    "stoch_rsi_k", "stoch_rsi_d",
-    # OBV z-score (1)
-    "obv_norm",
-    # VWAP distance (1)
-    "vwap_dist",
-    # Keltner channel position (1)
-    "keltner_pos",
-    # CCI, MFI, CMF, ROC (4)
-    "cci_20", "mfi_14", "cmf_20", "roc_10",
-    # Macro-asset context (10)
-    "macro_spy_trend",
-    "macro_spy_ret",
-    "macro_vix_norm",
-    "macro_vix_high",
-    "macro_gld_trend",
-    "macro_tlt_ret",
-    "macro_uup_trend",
-    "macro_tnx_norm",
-    "macro_risk_off",
-    "macro_qqq_spy_rel",
-    # On-chain features (4)
-    "onchain_hashrate_trend",
-    "onchain_addr_trend",
-    "onchain_mempool_norm",
-    "onchain_fee_norm",
-    # Sentiment features (4)
-    "sent_fear_greed_norm",
-    "sent_btc_dominance",
-    "sent_defi_tvl_change",
-    "sent_stablecoin_norm",
-    # Derivatives features (2)
-    "deriv_funding_rate",
-    "deriv_oi_change",
-    # Inter-market features (3)
-    "intermarket_dxy_trend",
-    "intermarket_spy_btc_corr",
-    "intermarket_gold_btc_rel",
-]
-
-assert len(_FEATURE_COLUMNS) == 59, f"Expected 59 features, got {len(_FEATURE_COLUMNS)}"
+# Single source of truth: feature_registry owns the canonical 59-column list.
+from hogan_bot.feature_registry import _FULL_FEATURE_COLUMNS as _FEATURE_COLUMNS  # noqa: E402
 
 # EXPERIMENTAL: ICT structural features — quarantined from champion path.
 # Still computed in _feature_frame() but not included in default training/inference.
@@ -466,7 +454,7 @@ def build_feature_row(
     from the DB (SPY/VIX/GLD etc.); otherwise they default to 0.
 
     When *use_champion_features* is True (or HOGAN_CHAMPION_MODE is set),
-    returns only the 15-feature champion subset. Otherwise returns the full 59.
+    returns only the 8-feature champion subset. Otherwise returns the full 59.
 
     Returns ``None`` when there is insufficient history (< 60 bars).
     """
@@ -498,7 +486,8 @@ def build_feature_row(
         if last.isna().any():
             return None
         return [float(v) for v in last.values]
-    except Exception:  # noqa: BLE001
+    except Exception as exc:
+        logger.warning("build_feature_row failed (ML will be skipped this bar): %s", exc)
         return None
 
 
@@ -637,6 +626,7 @@ def make_paper_trade_labels(
     candles: pd.DataFrame,
     symbol: str,
     min_trades: int = 5,
+    use_champion_features: bool | None = None,
 ) -> tuple[pd.DataFrame, pd.Series] | tuple[None, None]:
     """Extract feature-label pairs from closed paper trades stored in the DB.
 
@@ -649,30 +639,35 @@ def make_paper_trade_labels(
     * ``short`` + ``realized_pnl > 0``  → label = 0  (price fell, correct for short)
     * ``short`` + ``realized_pnl ≤ 0``  → label = 1
 
-    Returns ``(X_extra, y_extra)`` aligned with ``_FEATURE_COLUMNS``, or
+    Returns ``(X_extra, y_extra)`` aligned with the active feature columns, or
     ``(None, None)`` when fewer than *min_trades* are available.
     """
     import sqlite3 as _sqlite3
 
     try:
         conn = _sqlite3.connect(db_path)
-        import pandas as _pd
-        trades_df = _pd.read_sql_query(
-            """SELECT trade_id, symbol, side, realized_pnl, open_ts_ms
-               FROM paper_trades
-               WHERE exit_price IS NOT NULL AND symbol = ?
-               ORDER BY open_ts_ms""",
-            conn,
-            params=(symbol,),
-        )
-        conn.close()
-    except Exception:  # noqa: BLE001
+        try:
+            import pandas as _pd
+            trades_df = _pd.read_sql_query(
+                """SELECT trade_id, symbol, side, realized_pnl, open_ts_ms
+                   FROM paper_trades
+                   WHERE exit_price IS NOT NULL AND symbol = ?
+                   ORDER BY open_ts_ms""",
+                conn,
+                params=(symbol,),
+            )
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.warning("make_paper_trade_labels failed for %s: %s", symbol, exc)
         return None, None
 
     if len(trades_df) < min_trades:
         return None, None
 
-    # Compute full feature matrix once (no look-ahead — safe to use)
+    from hogan_bot.feature_registry import get_feature_columns
+    _cols = get_feature_columns(use_champion_features)
+
     frame = _feature_frame(candles)
     candle_ts = candles["ts_ms"].values
 
@@ -684,7 +679,7 @@ def make_paper_trade_labels(
         idx = int(np.searchsorted(candle_ts, ts, side="right")) - 1
         if idx < 1 or idx >= len(frame):
             continue
-        row = frame[_FEATURE_COLUMNS].iloc[idx]
+        row = frame[_cols].iloc[idx]
         if row.isna().any():
             continue
 
@@ -702,7 +697,7 @@ def make_paper_trade_labels(
     if len(X_rows) < min_trades:
         return None, None
 
-    X_extra = pd.DataFrame(X_rows, columns=_FEATURE_COLUMNS)
+    X_extra = pd.DataFrame(X_rows, columns=_cols)
     y_extra = pd.Series(y_values, name="target", dtype=int)
     return X_extra, y_extra
 
@@ -713,6 +708,7 @@ def make_backtest_labels(
     symbol: str,
     min_trades: int = 5,
     db_conn=None,
+    use_champion_features: bool | None = None,
 ) -> tuple[pd.DataFrame, pd.Series] | tuple[None, None]:
     """Extract feature-label pairs from backtest closed trades.
 
@@ -722,19 +718,23 @@ def make_backtest_labels(
 
     When *db_conn* is provided, macro features are joined; otherwise zeros.
 
-    Returns ``(X_extra, y_extra)`` aligned with ``_FEATURE_COLUMNS``, or
+    Returns ``(X_extra, y_extra)`` aligned with the active feature columns, or
     ``(None, None)`` when fewer than *min_trades* are available.
     """
     closed = getattr(result, "closed_trades", None)
     if not closed or len(closed) < min_trades:
         return None, None
 
+    from hogan_bot.feature_registry import get_feature_columns
+    _cols = get_feature_columns(use_champion_features)
+
     frame = _feature_frame(candles)
     if db_conn is not None:
         try:
             from hogan_bot.macro_features import MACRO_FEATURE_NAMES, add_macro_features
             frame = add_macro_features(frame, db_conn)
-        except Exception:
+        except Exception as exc:
+            logger.warning("make_backtest_labels: macro feature join failed — using zeros: %s", exc)
             from hogan_bot.macro_features import MACRO_FEATURE_NAMES
             for col in MACRO_FEATURE_NAMES:
                 if col not in frame.columns:
@@ -750,7 +750,7 @@ def make_backtest_labels(
         idx = int(trade.get("entry_bar_idx", -1))
         if idx < 1 or idx >= len(frame):
             continue
-        row = frame[_FEATURE_COLUMNS].iloc[idx]
+        row = frame[_cols].iloc[idx]
         if row.isna().any():
             continue
 
@@ -768,7 +768,7 @@ def make_backtest_labels(
     if len(X_rows) < min_trades:
         return None, None
 
-    X_extra = pd.DataFrame(X_rows, columns=_FEATURE_COLUMNS)
+    X_extra = pd.DataFrame(X_rows, columns=_cols)
     y_extra = pd.Series(y_values, name="target", dtype=int)
     return X_extra, y_extra
 
@@ -809,9 +809,11 @@ def select_features(
 ) -> list[str]:
     """Return the top features ranked by tree-based importance.
 
-    Uses a quick Random Forest fit on the full dataset to rank features,
-    then keeps up to *max_features* that exceed *min_importance*.  Also
-    drops features with >50% NaN rate or near-zero variance.
+    Uses a quick Random Forest fit to rank features, then keeps up to
+    *max_features* that exceed *min_importance*.  Also drops features
+    with >50% NaN rate or near-zero variance.
+
+    IMPORTANT: Callers must pass only training data to avoid data leakage.
     """
     try:
         from sklearn.ensemble import RandomForestClassifier
@@ -883,18 +885,19 @@ def train_logistic_regression(
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
-    from hogan_bot.champion import is_champion_mode as _is_champ
-    if prune_features and len(x) >= 500 and not _is_champ():
-        selected = select_features(x, y, max_features=max_features)
-        x = x[selected]
-        feature_columns = selected
-
     x, y, sample_weight = _blend_paper_labels(x, y, paper_labels, paper_labels_weight)
 
     split = int(len(x) * 0.8)
     x_train, x_test = x.iloc[:split], x.iloc[split:]
     y_train, y_test = y.iloc[:split], y.iloc[split:]
     w_train = sample_weight[:split] if sample_weight is not None else None
+
+    from hogan_bot.champion import is_champion_mode as _is_champ
+    if prune_features and len(x_train) >= 500 and not _is_champ():
+        selected = select_features(x_train, y_train, max_features=max_features)
+        x_train = x_train[selected]
+        x_test = x_test[selected]
+        feature_columns = selected
 
     scaler = StandardScaler()
     x_train_sc = scaler.fit_transform(x_train)
@@ -973,18 +976,19 @@ def train_random_forest(
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
-    from hogan_bot.champion import is_champion_mode as _is_champ
-    if prune_features and len(x) >= 500 and not _is_champ():
-        selected = select_features(x, y, max_features=max_features)
-        x = x[selected]
-        feature_columns = selected
-
     x, y, sample_weight = _blend_paper_labels(x, y, paper_labels, paper_labels_weight)
 
     split = int(len(x) * 0.8)
     x_train, x_test = x.iloc[:split], x.iloc[split:]
     y_train, y_test = y.iloc[:split], y.iloc[split:]
     w_train = sample_weight[:split] if sample_weight is not None else None
+
+    from hogan_bot.champion import is_champion_mode as _is_champ
+    if prune_features and len(x_train) >= 500 and not _is_champ():
+        selected = select_features(x_train, y_train, max_features=max_features)
+        x_train = x_train[selected]
+        x_test = x_test[selected]
+        feature_columns = selected
 
     model = RandomForestClassifier(
         n_estimators=200,
@@ -1061,18 +1065,19 @@ def train_xgboost(
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
-    from hogan_bot.champion import is_champion_mode as _is_champ
-    if prune_features and len(x) >= 500 and not _is_champ():
-        selected = select_features(x, y, max_features=max_features)
-        x = x[selected]
-        feature_columns = selected
-
     x, y, sample_weight = _blend_paper_labels(x, y, paper_labels, paper_labels_weight)
 
     split = int(len(x) * 0.8)
     x_train, x_test = x.iloc[:split], x.iloc[split:]
     y_train, y_test = y.iloc[:split], y.iloc[split:]
     w_train = sample_weight[:split] if sample_weight is not None else None
+
+    from hogan_bot.champion import is_champion_mode as _is_champ
+    if prune_features and len(x_train) >= 500 and not _is_champ():
+        selected = select_features(x_train, y_train, max_features=max_features)
+        x_train = x_train[selected]
+        x_test = x_test[selected]
+        feature_columns = selected
 
     model = XGBClassifier(
         n_estimators=300,
@@ -1212,7 +1217,7 @@ def calibrate_model(
     calibration_fraction:
         Fraction of labelled rows reserved for calibration (default 20 %).
     use_champion_features:
-        When True, build only the champion 15-feature subset. When None,
+        When True, build only the champion 8-feature subset. When None,
         follows HOGAN_CHAMPION_MODE environment variable.
     """
     try:
@@ -1442,17 +1447,16 @@ def predict_up_probability(
             for col in macro_cols_needed:
                 frame[col] = 0.0
 
-    latest = frame[feature_cols].dropna().tail(1)
-    if latest.empty:
+    latest = frame[feature_cols].tail(1)
+    if latest.empty or latest.isna().any(axis=1).iloc[0]:
         return 0.5
-    # Use getattr for backward compatibility with pre-scaler pickled artifacts.
     scaler = getattr(trained_model, "scaler", None)
     if scaler is not None:
         latest_arr = scaler.transform(latest)
         proba = trained_model.model.predict_proba(latest_arr)[0][1]
     else:
         proba = trained_model.model.predict_proba(latest)[0][1]
-    return float(proba)
+    return float(min(max(proba, 0.0), 1.0))
 
 
 
@@ -1539,8 +1543,8 @@ def build_feature_frame(candles: pd.DataFrame, db_conn=None) -> pd.DataFrame:
         try:
             from hogan_bot.macro_features import add_macro_features
             frame = add_macro_features(frame, db_conn)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("build_feature_frame: macro feature join failed — using zeros: %s", exc)
     for col in _FEATURE_COLUMNS:
         if col not in frame.columns:
             frame[col] = 0.0

@@ -127,6 +127,7 @@ class CandleRingBuffer:
             return pd.DataFrame()
         df = pd.DataFrame(list(buf))
         if "ts_ms" in df.columns:
+            df = df.drop_duplicates(subset=["ts_ms"], keep="last")
             df = df.sort_values("ts_ms").reset_index(drop=True)
         return df
 
@@ -235,15 +236,15 @@ class LiveDataEngine(DataEngineBase):
                     from hogan_bot.metrics import WS_RECONNECTS
                     for sym in self.symbols:
                         WS_RECONNECTS.labels(symbol=sym).inc()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("WS_RECONNECTS metric update failed: %s", exc)
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, _RECONNECT_MAX)
             finally:
                 try:
                     await exchange.close()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Exchange close error during teardown: %s", exc)
             backoff = _RECONNECT_BASE  # reset after clean reconnect
 
     async def _watch_symbol(self, exchange, symbol: str, timeframe: str) -> None:
@@ -266,15 +267,15 @@ class LiveDataEngine(DataEngineBase):
                     try:
                         self._queue.put_nowait(event)
                     except asyncio.QueueFull:
-                        pass  # drop oldest if queue saturated
+                        logger.warning("Candle queue full — dropping %s/%s event (consumer too slow)", symbol, timeframe)
 
                     self._last_candle_ts[symbol] = time.time()
                     try:
                         from hogan_bot.metrics import CANDLES_RECEIVED, DATA_LAG_SECONDS
                         CANDLES_RECEIVED.labels(symbol=symbol, timeframe=timeframe).inc()
                         DATA_LAG_SECONDS.labels(symbol=symbol).set(0)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Candle metrics update failed: %s", exc)
             except Exception as exc:
                 logger.warning("watchOHLCV error for %s/%s: %s", symbol, timeframe, exc)
                 raise  # bubble up to trigger reconnect
@@ -306,6 +307,58 @@ class LiveDataEngine(DataEngineBase):
             "REST polling active: %s %s every %.0fs",
             self.exchange_id, self.symbols, self.rest_fallback_interval,
         )
+
+        # Warmup: fetch enough historical candles for indicator computation
+        _warmup_limit = 200
+        for symbol in self.symbols:
+            for tf in self.timeframes:
+                try:
+                    raw = exchange.fetch_ohlcv(symbol, tf, limit=_warmup_limit)
+                    _seen: set[int] = set()
+                    for ohlcv in raw:
+                        ts_ms, o, h, l, c, v = ohlcv
+                        if ts_ms in _seen:
+                            continue
+                        _seen.add(ts_ms)
+                        row = {"ts_ms": ts_ms, "open": o, "high": h,
+                               "low": l, "close": c, "volume": v}
+                        self.buffer.push(symbol, tf, row)
+                    logger.info(
+                        "REST warmup: %s/%s loaded %d candles",
+                        symbol, tf, len(_seen),
+                    )
+                    self._last_candle_ts[symbol] = time.time()
+                except Exception as exc:
+                    logger.warning("REST warmup error %s/%s: %s", symbol, tf, exc)
+
+        # Emit a single event for the latest candle of the primary timeframe
+        # so the event loop can begin evaluating immediately.
+        for symbol in self.symbols:
+            _primary_tf = self.timeframes[0] if self.timeframes else "1h"
+            df = self.buffer.to_df(symbol, _primary_tf)
+            if not df.empty:
+                _last = df.iloc[-1].to_dict()
+                event = CandleEvent(
+                    symbol=symbol,
+                    timeframe=_primary_tf,
+                    candle=pd.Series(_last),
+                )
+                try:
+                    self._queue.put_nowait(event)
+                except asyncio.QueueFull:
+                    logger.debug("Queue full during REST warmup for %s — dropping initial event", symbol)
+
+        # Steady-state polling: fetch latest 2 candles per interval, with
+        # timestamp de-duplication so the buffer stays clean.
+        _known_ts: dict[tuple[str, str], set[int]] = {}
+        for symbol in self.symbols:
+            for tf in self.timeframes:
+                df = self.buffer.to_df(symbol, tf)
+                if not df.empty and "ts_ms" in df.columns:
+                    _known_ts[(symbol, tf)] = set(df["ts_ms"].astype(int).tolist())
+                else:
+                    _known_ts[(symbol, tf)] = set()
+
         while self._running:
             for symbol in self.symbols:
                 for tf in self.timeframes:
@@ -313,6 +366,10 @@ class LiveDataEngine(DataEngineBase):
                         raw = exchange.fetch_ohlcv(symbol, tf, limit=2)
                         for ohlcv in raw:
                             ts_ms, o, h, lo, c, v = ohlcv
+                            ts_key = int(ts_ms)
+                            if ts_key in _known_ts.get((symbol, tf), set()):
+                                continue
+                            _known_ts.setdefault((symbol, tf), set()).add(ts_key)
                             row = {"ts_ms": ts_ms, "open": o, "high": h,
                                    "low": lo, "close": c, "volume": v}
                             self.buffer.push(symbol, tf, row)
@@ -324,7 +381,7 @@ class LiveDataEngine(DataEngineBase):
                             try:
                                 self._queue.put_nowait(event)
                             except asyncio.QueueFull:
-                                pass
+                                logger.warning("Candle queue full — dropping %s/%s REST event (consumer too slow)", symbol, tf)
                         self._last_candle_ts[symbol] = time.time()
                     except Exception as exc:
                         logger.warning("REST poll error %s/%s: %s", symbol, tf, exc)
@@ -342,8 +399,8 @@ class LiveDataEngine(DataEngineBase):
                 try:
                     from hogan_bot.metrics import DATA_LAG_SECONDS
                     DATA_LAG_SECONDS.labels(symbol=sym).set(now - last)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("DATA_LAG_SECONDS metric update failed: %s", exc)
         return stale
 
 
@@ -425,7 +482,7 @@ class OandaDataEngine(DataEngineBase):
                             try:
                                 self._queue.put_nowait(event)
                             except asyncio.QueueFull:
-                                pass
+                                logger.warning("Candle queue full — dropping %s/%s Oanda event (consumer too slow)", symbol, tf)
                         self._last_candle_ts[symbol] = time.time()
                     except Exception as exc:
                         logger.warning("Oanda poll error %s/%s: %s", symbol, tf, exc)

@@ -293,5 +293,36 @@ class TestTrainLightGBMMissingPackage(unittest.TestCase):
                 train_lightgbm(df, model_path=os.path.join(tmp, "m.pkl"))
 
 
+class TestRegimeModelRouter(unittest.TestCase):
+    """Tests for RegimeModelRouter routing logic."""
+
+    def test_delegates_to_global_by_default(self):
+        from hogan_bot.ml import RegimeModelRouter
+        global_model = TrainedModel(model="global", feature_columns=["a", "b"], scaler=None)
+        router = RegimeModelRouter(global_model)
+        assert router.model == "global"
+        assert router.feature_columns == ["a", "b"]
+        assert router.scaler is None
+        assert not router.has_regime_models
+
+    def test_routes_to_regime_model(self):
+        from hogan_bot.ml import RegimeModelRouter
+        global_model = TrainedModel(model="global", feature_columns=["a", "b"], scaler=None)
+        regime_model = TrainedModel(model="trending_up_model", feature_columns=["a", "b"], scaler="s1")
+        router = RegimeModelRouter(global_model, {"trending_up": regime_model})
+        assert router.has_regime_models
+        assert router.regime_names == ["trending_up"]
+
+        router.set_regime("trending_up")
+        assert router.model == "trending_up_model"
+        assert router.scaler == "s1"
+
+        router.set_regime("ranging")
+        assert router.model == "global"
+
+        router.set_regime(None)
+        assert router.model == "global"
+
+
 if __name__ == "__main__":
     unittest.main()

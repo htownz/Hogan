@@ -1,0 +1,75 @@
+{
+  "model_info": {
+    "train_auc": 0.5429,
+    "test_auc": 0.5272,
+    "train_samples": 6386,
+    "test_samples": 2738,
+    "positive_rate": 0.5151
+  },
+  "features": [
+    {
+      "rank": 1,
+      "name": "macd_hist_pct",
+      "importance_mean": 0.020076,
+      "importance_std": 0.005606,
+      "decision_relevance": "entry_edge",
+      "recommendation": "KEEP \u2014 strong signal"
+    },
+    {
+      "rank": 2,
+      "name": "ma_spread",
+      "importance_mean": 0.01682,
+      "importance_std": 0.011147,
+      "decision_relevance": "entry_edge",
+      "recommendation": "KEEP \u2014 strong signal"
+    },
+    {
+      "rank": 3,
+      "name": "atr_pct",
+      "importance_mean": 0.004434,
+      "importance_std": 0.006082,
+      "decision_relevance": "stop",
+      "recommendation": "KEEP \u2014 moderate signal"
+    },
+    {
+      "rank": 4,
+      "name": "ret_3",
+      "importance_mean": 0.003239,
+      "importance_std": 0.002648,
+      "decision_relevance": "entry_edge",
+      "recommendation": "KEEP \u2014 moderate signal"
+    },
+    {
+      "rank": 5,
+      "name": "volatility_20",
+      "importance_mean": 0.002141,
+      "importance_std": 0.001144,
+      "decision_relevance": "stop",
+      "recommendation": "KEEP \u2014 moderate signal"
+    },
+    {
+      "rank": 6,
+      "name": "adx_14",
+      "importance_mean": 0.002139,
+      "importance_std": 0.001442,
+      "decision_relevance": "regime",
+      "recommendation": "KEEP \u2014 moderate signal"
+    },
+    {
+      "rank": 7,
+      "name": "bb_pct_b",
+      "importance_mean": 0.001032,
+      "importance_std": 0.004168,
+      "decision_relevance": "entry_edge",
+      "recommendation": "KEEP \u2014 moderate signal"
+    },
+    {
+      "rank": 8,
+      "name": "ret_6",
+      "importance_mean": -0.000248,
+      "importance_std": 0.000126,
+      "decision_relevance": "entry_edge",
+      "recommendation": "REVIEW \u2014 marginal"
+    }
+  ]
+}

@@ -12,6 +12,15 @@ from hogan_bot.storage import record_fill, record_order, upsert_position
 logger = logging.getLogger(__name__)
 
 
+def _safe_upsert(conn, symbol: str, qty: float, avg_entry: float, ts_ms: int) -> None:
+    """Persist position state to DB; log on failure but don't crash the trade."""
+    try:
+        upsert_position(conn, symbol, qty, avg_entry, ts_ms)
+    except Exception as exc:
+        logger.error("upsert_position failed for %s (qty=%.6f): %s — in-memory and DB may diverge",
+                      symbol, qty, exc)
+
+
 @dataclass
 class ExecResult:
     ok: bool
@@ -43,7 +52,8 @@ class ExecutionEngine:
 
     def open_long(self, symbol: str, price: float, qty: float,
                   trailing_stop_pct: float = 0.0,
-                  take_profit_pct: float = 0.0) -> ExecResult:  # pragma: no cover
+                  take_profit_pct: float = 0.0,
+                  trail_activation_pct: float = 0.0) -> ExecResult:  # pragma: no cover
         raise NotImplementedError
 
     def close_long(self, symbol: str, price: float, qty: float,
@@ -52,7 +62,8 @@ class ExecutionEngine:
 
     def open_short(self, symbol: str, price: float, qty: float,
                    trailing_stop_pct: float = 0.0,
-                   take_profit_pct: float = 0.0) -> ExecResult:
+                   take_profit_pct: float = 0.0,
+                   trail_activation_pct: float = 0.0) -> ExecResult:
         """Open a short position. Override in subclasses that support shorts."""
         return ExecResult(ok=False, error="shorts_not_supported")
 
@@ -103,17 +114,19 @@ class PaperExecution(ExecutionEngine):
         qty: float,
         trailing_stop_pct: float = 0.0,
         take_profit_pct: float = 0.0,
+        trail_activation_pct: float = 0.0,
     ) -> ExecResult:
         ok = self.portfolio.execute_buy(
             symbol, price, qty,
             trailing_stop_pct=trailing_stop_pct,
             take_profit_pct=take_profit_pct,
+            trail_activation_pct=trail_activation_pct,
         )
         if ok and self.conn is not None:
             ts_ms = int(time.time() * 1000)
             pos = self.portfolio.positions.get(symbol)
             if pos is not None:
-                upsert_position(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
+                _safe_upsert(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
         return ExecResult(ok=ok)
 
     def close_long(self, symbol: str, price: float, qty: float,
@@ -123,24 +136,26 @@ class PaperExecution(ExecutionEngine):
             ts_ms = int(time.time() * 1000)
             pos = self.portfolio.positions.get(symbol)
             if pos is None:
-                upsert_position(self.conn, symbol, 0.0, 0.0, ts_ms)
+                _safe_upsert(self.conn, symbol, 0.0, 0.0, ts_ms)
             else:
-                upsert_position(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
+                _safe_upsert(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
         return ExecResult(ok=ok)
 
     def open_short(self, symbol: str, price: float, qty: float,
                    trailing_stop_pct: float = 0.0,
-                   take_profit_pct: float = 0.0) -> ExecResult:
+                   take_profit_pct: float = 0.0,
+                   trail_activation_pct: float = 0.0) -> ExecResult:
         ok = self.portfolio.execute_short(
             symbol, price, qty,
             trailing_stop_pct=trailing_stop_pct,
             take_profit_pct=take_profit_pct,
+            trail_activation_pct=trail_activation_pct,
         )
         if ok and self.conn is not None:
             ts_ms = int(time.time() * 1000)
             pos = self.portfolio.short_positions.get(symbol)
             if pos is not None:
-                upsert_position(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
+                _safe_upsert(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
         return ExecResult(ok=ok)
 
     def close_short(self, symbol: str, price: float, qty: float,
@@ -150,9 +165,9 @@ class PaperExecution(ExecutionEngine):
             ts_ms = int(time.time() * 1000)
             pos = self.portfolio.short_positions.get(symbol)
             if pos is None:
-                upsert_position(self.conn, symbol, 0.0, 0.0, ts_ms)
+                _safe_upsert(self.conn, symbol, 0.0, 0.0, ts_ms)
             else:
-                upsert_position(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
+                _safe_upsert(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
         return ExecResult(ok=ok)
 
     def emergency_flatten(self, symbol: str, price: float) -> ExecResult:
@@ -181,20 +196,38 @@ class LiveExecution(ExecutionEngine):
         self.conn = conn
         self.exchange_id = exchange_id
         self.portfolio = portfolio
+        if portfolio is None:
+            logger.warning("LiveExecution created without portfolio — emergency_flatten will attempt exchange-level close")
+
+    @staticmethod
+    def _extract_fill_price(order: dict, fallback: float) -> float:
+        """Best-effort extraction of actual fill price from CCXT order response."""
+        avg = order.get("average")
+        if avg is not None and avg > 0:
+            return float(avg)
+        cost = order.get("cost", 0)
+        filled = order.get("filled", 0)
+        if cost and filled and filled > 0:
+            return float(cost) / float(filled)
+        return fallback
 
     def open_long(self, symbol: str, price: float, qty: float,
                   trailing_stop_pct: float = 0.0,
-                  take_profit_pct: float = 0.0) -> ExecResult:
+                  take_profit_pct: float = 0.0,
+                  trail_activation_pct: float = 0.0) -> ExecResult:
         try:
             order = self.client.create_market_order(symbol=symbol, side="buy", amount=qty)
             order["exchange"] = self.exchange_id
             record_order(self.conn, order)
             self._sync_fills(symbol)
+            fill_price = self._extract_fill_price(order, price)
+            fill_qty = float(order.get("filled", qty))
             if self.portfolio is not None:
                 self.portfolio.execute_buy(
-                    symbol, price, qty,
+                    symbol, fill_price, fill_qty,
                     trailing_stop_pct=trailing_stop_pct,
                     take_profit_pct=take_profit_pct,
+                    trail_activation_pct=trail_activation_pct,
                 )
             return ExecResult(ok=True, order_id=str(order.get("id")))
         except Exception as exc:  # pragma: no cover
@@ -208,8 +241,10 @@ class LiveExecution(ExecutionEngine):
             order["exchange"] = self.exchange_id
             record_order(self.conn, order)
             self._sync_fills(symbol)
+            fill_price = self._extract_fill_price(order, price)
+            fill_qty = float(order.get("filled", qty))
             if self.portfolio is not None:
-                self.portfolio.execute_sell(symbol, price, qty)
+                self.portfolio.execute_sell(symbol, fill_price, fill_qty)
             return ExecResult(ok=True, order_id=str(order.get("id")))
         except Exception as exc:  # pragma: no cover
             logger.exception("Live close_long failed: %s", exc)
@@ -224,6 +259,29 @@ class LiveExecution(ExecutionEngine):
             spos = self.portfolio.short_positions.get(symbol)
             if spos and spos.qty > 0:
                 results.append(self.close_short(symbol, price, spos.qty, reason="emergency"))
+        else:
+            logger.error(
+                "EMERGENCY_FLATTEN %s — no portfolio reference; querying exchange for balance",
+                symbol,
+            )
+            try:
+                base_currency = symbol.split("/")[0] if "/" in symbol else symbol
+                balance = self.client.fetch_balance()
+                held = float(balance.get("free", {}).get(base_currency, 0))
+                if held > 0:
+                    order = self.client.create_market_order(symbol=symbol, side="sell", amount=held)
+                    order["exchange"] = self.exchange_id
+                    record_order(self.conn, order)
+                    logger.warning(
+                        "EMERGENCY_FLATTEN %s — sold %.6f %s via exchange balance lookup",
+                        symbol, held, base_currency,
+                    )
+                    return ExecResult(ok=True, order_id=str(order.get("id")))
+                else:
+                    logger.warning("EMERGENCY_FLATTEN %s — no %s balance found on exchange", symbol, base_currency)
+            except Exception as exc:
+                logger.error("EMERGENCY_FLATTEN %s — exchange fallback failed: %s", symbol, exc)
+            return ExecResult(ok=False, error="no_portfolio_reference")
         ok = all(r.ok for r in results) if results else False
         return ExecResult(ok=ok)
 
@@ -294,6 +352,7 @@ class SmartExecution(ExecutionEngine):
         qty: float,
         trailing_stop_pct: float = 0.0,
         take_profit_pct: float = 0.0,
+        trail_activation_pct: float = 0.0,
     ) -> ExecResult:
         """Passive limit buy: post at best bid, reprice if needed."""
         cfg = self.config
@@ -304,7 +363,7 @@ class SmartExecution(ExecutionEngine):
             if ob.get("bids"):
                 limit_price = ob["bids"][0][0]
         except Exception as exc:
-            logger.debug("Order book fetch failed, using signal price: %s", exc)
+            logger.warning("Order book fetch failed for %s, using signal price: %s", symbol, exc)
 
         for attempt in range(1 + cfg.max_reprices):
             try:
@@ -328,6 +387,7 @@ class SmartExecution(ExecutionEngine):
                             symbol, limit_price, qty,
                             trailing_stop_pct=trailing_stop_pct,
                             take_profit_pct=take_profit_pct,
+                            trail_activation_pct=trail_activation_pct,
                         )
                     logger.info(
                         "SMART_OPEN_LONG filled %s at %.2f (attempt %d)",
@@ -397,6 +457,12 @@ class SmartExecution(ExecutionEngine):
             spos = self.portfolio.short_positions.get(symbol)
             if spos and spos.qty > 0:
                 results.append(self.close_short(symbol, price, spos.qty, reason="emergency"))
+        else:
+            logger.error(
+                "SMART_EMERGENCY_FLATTEN %s — no portfolio reference; cannot determine position size",
+                symbol,
+            )
+            return ExecResult(ok=False, error="no_portfolio_reference")
         ok = all(r.ok for r in results) if results else False
         return ExecResult(ok=ok)
 
@@ -476,6 +542,7 @@ class RealisticPaperExecution(ExecutionEngine):
         qty: float,
         trailing_stop_pct: float = 0.0,
         take_profit_pct: float = 0.0,
+        trail_activation_pct: float = 0.0,
     ) -> ExecResult:
         fill_price = self._apply_slippage_buy(price)
         fill_qty = self._maybe_partial(qty)
@@ -484,12 +551,13 @@ class RealisticPaperExecution(ExecutionEngine):
             symbol, fill_price, fill_qty,
             trailing_stop_pct=trailing_stop_pct,
             take_profit_pct=take_profit_pct,
+            trail_activation_pct=trail_activation_pct,
         )
         if ok and self.conn is not None:
             ts_ms = int(time.time() * 1000)
             pos = self.portfolio.positions.get(symbol)
             if pos:
-                upsert_position(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
+                _safe_upsert(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
 
         if ok:
             logger.debug(
@@ -509,9 +577,9 @@ class RealisticPaperExecution(ExecutionEngine):
             ts_ms = int(time.time() * 1000)
             pos = self.portfolio.positions.get(symbol)
             if pos is None:
-                upsert_position(self.conn, symbol, 0.0, 0.0, ts_ms)
+                _safe_upsert(self.conn, symbol, 0.0, 0.0, ts_ms)
             else:
-                upsert_position(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
+                _safe_upsert(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
 
         if ok:
             logger.debug(
@@ -523,7 +591,8 @@ class RealisticPaperExecution(ExecutionEngine):
 
     def open_short(self, symbol: str, price: float, qty: float,
                    trailing_stop_pct: float = 0.0,
-                   take_profit_pct: float = 0.0) -> ExecResult:
+                   take_profit_pct: float = 0.0,
+                   trail_activation_pct: float = 0.0) -> ExecResult:
         fill_price = self._apply_slippage_sell(price)
         fill_qty = self._maybe_partial(qty)
 
@@ -531,12 +600,13 @@ class RealisticPaperExecution(ExecutionEngine):
             symbol, fill_price, fill_qty,
             trailing_stop_pct=trailing_stop_pct,
             take_profit_pct=take_profit_pct,
+            trail_activation_pct=trail_activation_pct,
         )
         if ok and self.conn is not None:
             ts_ms = int(time.time() * 1000)
             pos = self.portfolio.short_positions.get(symbol)
             if pos:
-                upsert_position(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
+                _safe_upsert(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
 
         if ok:
             logger.debug(
@@ -556,9 +626,9 @@ class RealisticPaperExecution(ExecutionEngine):
             ts_ms = int(time.time() * 1000)
             pos = self.portfolio.short_positions.get(symbol)
             if pos is None:
-                upsert_position(self.conn, symbol, 0.0, 0.0, ts_ms)
+                _safe_upsert(self.conn, symbol, 0.0, 0.0, ts_ms)
             else:
-                upsert_position(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
+                _safe_upsert(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
 
         if ok:
             logger.debug(

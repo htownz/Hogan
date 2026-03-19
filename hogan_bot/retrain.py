@@ -166,6 +166,15 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--oos-gate",
+        action="store_true",
+        default=False,
+        help="Enforce OOS validation gate: candidate must pass min Sharpe, max drawdown, and min trades",
+    )
+    p.add_argument("--oos-min-sharpe", type=float, default=0.0, help="Min OOS Sharpe to pass gate")
+    p.add_argument("--oos-max-drawdown", type=float, default=25.0, help="Max OOS drawdown %% to pass gate")
+    p.add_argument("--oos-min-trades", type=int, default=5, help="Min OOS trade count to pass gate")
+    p.add_argument(
         "--shadow-eval",
         action="store_true",
         help=(
@@ -705,6 +714,29 @@ def retrain_once(args: argparse.Namespace) -> dict:
     threshold = (current_score or 0.0) + args.min_improvement
     force = getattr(args, "force_promote", False)
     should_promote = force or current_score is None or new_score >= threshold
+
+    # OOS validation gate: block promotion if OOS metrics are too weak.
+    # Skip the gate for the very first model (current_score is None) — the
+    # system needs a model to operate at all.
+    _oos_gate_passed = True
+    _skip_oos_gate = current_score is None
+    if should_promote and not force and not _skip_oos_gate and getattr(args, "oos_gate", False) and oos_result is not None:
+        _oos_gate_passed = oos_result.passes_gate(
+            min_sharpe=getattr(args, "oos_min_sharpe", 0.0),
+            max_drawdown=getattr(args, "oos_max_drawdown", 25.0),
+            min_trades=getattr(args, "oos_min_trades", 5),
+        )
+        if not _oos_gate_passed:
+            should_promote = False
+            logger.info(
+                "OOS gate BLOCKED promotion: sharpe=%.2f dd=%.1f%% trades=%d "
+                "(min_sharpe=%.2f max_dd=%.1f%% min_trades=%d)",
+                oos_result.sharpe, oos_result.max_drawdown_pct, oos_result.trade_count,
+                getattr(args, "oos_min_sharpe", 0.0),
+                getattr(args, "oos_max_drawdown", 25.0),
+                getattr(args, "oos_min_trades", 5),
+            )
+
     if force and not (current_score is None or new_score >= threshold):
         logger.info(
             "--force-promote set: overriding promotion check "
@@ -728,6 +760,7 @@ def retrain_once(args: argparse.Namespace) -> dict:
         "current_score": float(current_score) if current_score is not None else None,
         "promoted": False,
         "dry_run": args.dry_run,
+        "oos_gate_passed": _oos_gate_passed,
     }
     # Surface scalar metrics from the training run (accuracy, f1, …)
     for k, v in metrics.items():
@@ -792,9 +825,13 @@ def retrain_once(args: argparse.Namespace) -> dict:
 
         else:
             improvement = new_score - (current_score or 0.0)
+            _cs_str = f"{current_score:.4f}" if current_score is not None else "none"
+            _reason = ""
+            if not _oos_gate_passed:
+                _reason = " [OOS gate failed]"
             result["message"] = (
                 f"Not promoted — {args.promotion_metric} {new_score:.4f} "
-                f"vs {current_score:.4f} (need +{args.min_improvement:.4f})"
+                f"vs {_cs_str} (need +{args.min_improvement:.4f}){_reason}"
             )
             logger.info("Model NOT promoted. %s", result["message"])
 

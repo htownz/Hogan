@@ -205,11 +205,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
             elif path == "/api/candles":
                 sym = qs.get("symbol", ["BTC/USD"])[0]
+                tf = qs.get("timeframe", ["1h"])[0]
                 limit = int(qs.get("limit", ["200"])[0])
                 rows = conn.execute(
                     "SELECT ts_ms, open, high, low, close, volume FROM candles "
-                    "WHERE symbol=? ORDER BY ts_ms DESC LIMIT ?",
-                    (sym, limit)
+                    "WHERE symbol=? AND timeframe=? ORDER BY ts_ms DESC LIMIT ?",
+                    (sym, tf, limit)
                 ).fetchall()
                 data = _json_rows(rows)
 

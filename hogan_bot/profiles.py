@@ -15,7 +15,8 @@ CANONICAL_PROFILE: dict[str, object] = {
     "use_ml_filter": True,
     "ml_buy_threshold": 0.51,
     "ml_sell_threshold": 0.49,
-    "ml_confidence_sizing": True,
+    "ml_confidence_sizing": False,
+    "use_ml_as_sizer": True,
 
     # ── Signal quality gates ──────────────────────────────────────────
     "min_final_confidence": 0.08,

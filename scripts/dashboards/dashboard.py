@@ -11,8 +11,15 @@ from __future__ import annotations
 import json
 import pickle
 import sqlite3
+import sys
 import time
 from pathlib import Path
+
+# Ensure the project root is on sys.path so ``hogan_bot`` is importable
+# regardless of the working directory Streamlit was launched from.
+_project_root = str(Path(__file__).resolve().parents[2])
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 
 import pandas as pd
 import plotly.express as px
@@ -72,6 +79,24 @@ def _load_equity(db: str, limit: int = 5000) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=_CACHE_TTL)
+def _latest_prices(db: str) -> dict[str, float]:
+    """Fetch the most recent close price per symbol from the candles table."""
+    try:
+        conn = sqlite3.connect(db)
+        rows = conn.execute(
+            "SELECT symbol, close FROM candles "
+            "WHERE (symbol, ts_ms) IN ("
+            "  SELECT symbol, MAX(ts_ms) FROM candles "
+            "  WHERE timeframe = '1h' GROUP BY symbol"
+            ")"
+        ).fetchall()
+        conn.close()
+        return {sym: price for sym, price in rows}
+    except Exception:
+        return {}
+
+
+@st.cache_data(ttl=_CACHE_TTL)
 def _load_paper_trades(db: str) -> pd.DataFrame:
     try:
         conn = sqlite3.connect(db)
@@ -104,13 +129,13 @@ def _load_paper_trades(db: str) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=_CACHE_TTL)
-def _load_candles(db: str, symbol: str, limit: int = 200) -> pd.DataFrame:
+def _load_candles(db: str, symbol: str, limit: int = 200, timeframe: str = "1h") -> pd.DataFrame:
     try:
         conn = sqlite3.connect(db)
         df = pd.read_sql_query(
             "SELECT ts_ms, open, high, low, close, volume FROM candles "
-            "WHERE symbol=? ORDER BY ts_ms DESC LIMIT ?",
-            conn, params=(symbol, limit),
+            "WHERE symbol=? AND timeframe=? ORDER BY ts_ms DESC LIMIT ?",
+            conn, params=(symbol, timeframe, limit),
         )
         conn.close()
         df["ts"] = pd.to_datetime(df["ts_ms"], unit="ms", utc=True)
@@ -171,6 +196,128 @@ def _pnl_color(val):
     if pd.isna(val):
         return ""
     return "color: #2ecc71" if val >= 0 else "color: #e74c3c"
+
+
+# ---------------------------------------------------------------------------
+# Swarm helpers
+# ---------------------------------------------------------------------------
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _load_agent_votes(db: str, limit: int = 400) -> pd.DataFrame:
+    try:
+        conn = sqlite3.connect(db)
+        df = pd.read_sql_query(
+            f"""SELECT sd.ts_ms, sav.agent_id, sav.action, sav.confidence,
+                       sav.veto, sav.size_scale
+                FROM swarm_agent_votes sav
+                JOIN swarm_decisions sd ON sav.decision_id = sd.id
+                ORDER BY sd.ts_ms DESC LIMIT {int(limit)}""",
+            conn,
+        )
+        conn.close()
+        if not df.empty:
+            df["ts"] = pd.to_datetime(df["ts_ms"], unit="ms", utc=True)
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _load_veto_ledger(db: str, limit: int = 200) -> pd.DataFrame:
+    try:
+        conn = sqlite3.connect(db)
+        df = pd.read_sql_query(
+            f"""SELECT sav.ts_ms, sav.agent_id, sav.block_reasons_json,
+                       sd.final_action AS swarm_action, sd.agreement
+                FROM swarm_agent_votes sav
+                JOIN swarm_decisions sd ON sav.decision_id = sd.id
+                WHERE sav.veto = 1
+                ORDER BY sav.ts_ms DESC LIMIT {int(limit)}""",
+            conn,
+        )
+        conn.close()
+        if not df.empty:
+            df["ts"] = pd.to_datetime(df["ts_ms"], unit="ms", utc=True)
+            df["reasons"] = df["block_reasons_json"].apply(
+                lambda x: ", ".join(json.loads(x)) if x else ""
+            )
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _load_decision_detail(db: str, decision_id: int) -> dict:
+    """Load full detail for a single swarm decision + its votes + baseline."""
+    try:
+        conn = sqlite3.connect(db)
+        dec = pd.read_sql_query(
+            "SELECT * FROM swarm_decisions WHERE id = ?", conn,
+            params=(decision_id,),
+        )
+        votes = pd.read_sql_query(
+            "SELECT agent_id, action, confidence, size_scale, veto, "
+            "       block_reasons_json, expected_edge_bps "
+            "FROM swarm_agent_votes WHERE decision_id = ?", conn,
+            params=(decision_id,),
+        )
+        baseline = pd.DataFrame()
+        if not dec.empty:
+            ts_ms = int(dec.iloc[0]["ts_ms"])
+            symbol = dec.iloc[0]["symbol"]
+            baseline = pd.read_sql_query(
+                "SELECT final_action, final_confidence, position_size, "
+                "       regime, ml_up_prob, conf_scale, block_reasons_json "
+                "FROM decision_log WHERE ts_ms = ? AND symbol = ? LIMIT 1",
+                conn, params=(ts_ms, symbol),
+            )
+        conn.close()
+        return {"decision": dec, "votes": votes, "baseline": baseline}
+    except Exception:
+        return {"decision": pd.DataFrame(), "votes": pd.DataFrame(), "baseline": pd.DataFrame()}
+
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _load_promotion_stats(db: str) -> dict:
+    """Collect counts needed for the Promotion Readiness Card."""
+    stats = {
+        "shadow_decisions": 0, "would_trade": 0,
+        "veto_events": 0, "distinct_regimes": 0,
+        "mean_agreement": 0.0,
+    }
+    try:
+        conn = sqlite3.connect(db)
+        row = conn.execute(
+            "SELECT COUNT(*) FROM swarm_decisions WHERE mode = 'shadow'"
+        ).fetchone()
+        stats["shadow_decisions"] = row[0] if row else 0
+
+        row = conn.execute(
+            "SELECT COUNT(*) FROM swarm_decisions "
+            "WHERE mode = 'shadow' AND final_action IN ('buy', 'sell')"
+        ).fetchone()
+        stats["would_trade"] = row[0] if row else 0
+
+        row = conn.execute(
+            "SELECT COUNT(*) FROM swarm_decisions WHERE mode = 'shadow' AND vetoed = 1"
+        ).fetchone()
+        stats["veto_events"] = row[0] if row else 0
+
+        row = conn.execute(
+            "SELECT COUNT(DISTINCT regime) "
+            "FROM swarm_decisions WHERE mode = 'shadow' AND regime IS NOT NULL"
+        ).fetchone()
+        stats["distinct_regimes"] = row[0] if row else 0
+
+        row = conn.execute(
+            "SELECT AVG(agreement) FROM swarm_decisions WHERE mode = 'shadow'"
+        ).fetchone()
+        stats["mean_agreement"] = round(row[0] or 0.0, 3)
+
+        conn.close()
+    except Exception:
+        pass
+    return stats
 
 
 def _bruno_html(mood: str = "neutral", regime: str = "unknown", quip: str = "") -> str:
@@ -401,8 +548,8 @@ def _determine_mood(
 # ---------------------------------------------------------------------------
 # Main tab layout
 # ---------------------------------------------------------------------------
-tab_live, tab_os, tab_signals, tab_model, tab_data, tab_backtest = st.tabs([
-    "Live Trading", "Market OS", "Signals & Candles", "ML Models", "Data Coverage", "Backtest"
+tab_live, tab_os, tab_signals, tab_model, tab_data, tab_backtest, tab_swarm, tab_replay = st.tabs([
+    "Live Trading", "Market OS", "Signals & Candles", "ML Models", "Data Coverage", "Backtest", "Swarm", "Swarm Replay"
 ])
 
 # ===========================================================================
@@ -435,6 +582,19 @@ with tab_live:
 
     max_dd = equity["drawdown"].max() * 100 if not equity.empty and "drawdown" in equity.columns else 0.0
 
+    # Compute unrealized P&L for open positions
+    prices = _latest_prices(DB_PATH)
+    unrealized_total = 0.0
+    if not open_trades.empty:
+        def _calc_unreal(row):
+            cur = prices.get(row["symbol"])
+            if cur is None or row["qty"] == 0:
+                return 0.0
+            if row["side"] in ("long", "buy"):
+                return (cur - row["entry_price"]) * row["qty"]
+            return (row["entry_price"] - cur) * row["qty"]
+        unrealized_total = open_trades.apply(_calc_unreal, axis=1).sum()
+
     # ── Bruno the Bull mascot + KPIs side-by-side ────────────────────────────
     bruno_col, kpi_col = st.columns([1, 4])
     with bruno_col:
@@ -443,14 +603,16 @@ with tab_live:
 
     with kpi_col:
         k1, k2, k3 = st.columns(3)
-        k1.metric("Equity", f"${cur_equity:,.2f}", delta=f"${total_pnl:+,.2f}")
-        k2.metric("Total P&L", f"${total_pnl:+,.2f}", delta=f"{total_pnl_pct:+.2f}%")
+        effective_equity = cur_equity + unrealized_total
+        k1.metric("Equity (incl. unrealized)", f"${effective_equity:,.2f}", delta=f"${total_pnl + unrealized_total:+,.2f}")
+        k2.metric("Realized P&L", f"${total_pnl:+,.2f}", delta=f"{total_pnl_pct:+.2f}%")
         k3.metric("Win Rate", f"{win_rate:.1f}%", delta=f"{len(closed)} closed trades")
 
-        k4, k5, k6 = st.columns(3)
+        k4, k5, k6, k7 = st.columns(4)
         k4.metric("Avg Win / Loss", f"${avg_win:.2f} / ${avg_loss:.2f}")
         k5.metric("Max Drawdown", f"{max_dd:.2f}%")
         k6.metric("Open Positions", len(open_trades))
+        k7.metric("Unrealized P&L", f"${unrealized_total:+,.2f}")
 
     st.divider()
 
@@ -494,15 +656,28 @@ with tab_live:
 
     st.divider()
 
-    # ── Open positions ────────────────────────────────────────────────────────
+    # ── Open positions with unrealized P&L ────────────────────────────────────
     st.subheader(f"Open Positions ({len(open_trades)})")
     if not open_trades.empty:
         disp = open_trades[[
             "symbol", "side", "entry_price", "qty", "ml_up_prob", "strategy_conf", "opened"
         ]].copy()
         disp["notional_usd"] = (disp["qty"] * disp["entry_price"]).round(2)
+        disp["current_price"] = disp["symbol"].map(prices)
+        disp["unrealized_pnl"] = open_trades.apply(_calc_unreal, axis=1).round(2)
         disp["opened"] = disp["opened"].dt.strftime("%m-%d %H:%M")
-        st.dataframe(disp, width='stretch', hide_index=True)
+        cols_order = [
+            "symbol", "side", "entry_price", "current_price", "qty",
+            "notional_usd", "unrealized_pnl", "ml_up_prob", "strategy_conf", "opened"
+        ]
+        st.dataframe(
+            disp[cols_order].style.map(
+                lambda v: "color: #2ecc71" if isinstance(v, (int, float)) and v > 0
+                else ("color: #e74c3c" if isinstance(v, (int, float)) and v < 0 else ""),
+                subset=["unrealized_pnl"],
+            ),
+            width='stretch', hide_index=True,
+        )
     else:
         st.info("No open positions right now.")
 
@@ -598,8 +773,10 @@ with tab_live:
 with tab_os:
     st.header("Market Operating System")
 
-    os_sym = st.selectbox("Symbol", ["BTC/USD", "ETH/USD"], key="os_sym")
-    os_candles = _load_candles(DB_PATH, os_sym, limit=200)
+    os_col1, os_col2 = st.columns(2)
+    os_sym = os_col1.selectbox("Symbol", ["BTC/USD", "ETH/USD"], key="os_sym")
+    os_tf = os_col2.selectbox("Timeframe", ["1h", "4h", "1d"], key="os_tf")
+    os_candles = _load_candles(DB_PATH, os_sym, limit=200, timeframe=os_tf)
 
     if os_candles.empty:
         st.info("No candle data available.")
@@ -688,9 +865,9 @@ with tab_os:
                 conn_fresh.close()
 
                 if not freshness.empty:
-                    st.dataframe(freshness, use_container_width=True, hide_index=True)
+                    st.dataframe(freshness, width='stretch', hide_index=True)
                 if not deriv_fresh.empty:
-                    st.dataframe(deriv_fresh, use_container_width=True, hide_index=True)
+                    st.dataframe(deriv_fresh, width='stretch', hide_index=True)
             except Exception:
                 st.info("No feature freshness data available.")
 
@@ -706,8 +883,11 @@ with tab_os:
 with tab_signals:
     st.header("Signals & Candles")
 
-    sig_sym = st.selectbox("Symbol", ["BTC/USD", "ETH/USD"], key="sig_sym")
-    candles = _load_candles(DB_PATH, sig_sym, limit=288)  # last 24h at 5m
+    sig_col1, sig_col2, sig_col3 = st.columns(3)
+    sig_sym = sig_col1.selectbox("Symbol", ["BTC/USD", "ETH/USD"], key="sig_sym")
+    sig_tf = sig_col2.selectbox("Timeframe", ["1h", "15m", "5m", "4h", "1d"], key="sig_tf")
+    sig_limit = sig_col3.number_input("Bars", value=200, min_value=50, max_value=2000, step=50, key="sig_lim")
+    candles = _load_candles(DB_PATH, sig_sym, limit=int(sig_limit), timeframe=sig_tf)
 
     if candles.empty:
         st.warning(f"No candles in DB for {sig_sym}")
@@ -733,7 +913,7 @@ with tab_signals:
             ))
 
         fig_candle.update_layout(
-            title=f"{sig_sym} — Last 24h (5m candles)",
+            title=f"{sig_sym} — {sig_tf} candles (last {sig_limit} bars)",
             xaxis_rangeslider_visible=False,
             height=480,
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
@@ -878,11 +1058,15 @@ with tab_data:
 with tab_backtest:
     st.header("Quick Backtest")
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     bt_symbol = col1.selectbox("Symbol", ["BTC/USD", "ETH/USD"], key="bt_sym")
     bt_tf = col2.selectbox("Timeframe", ["1h", "4h", "1d"], key="bt_tf")
     bt_limit = col3.number_input("Bars", value=2000, min_value=200, step=200, key="bt_lim")
-    bt_use_ml = col4.checkbox("Use ML filter", value=True, key="bt_ml")
+
+    opt1, opt2, opt3 = st.columns(3)
+    bt_use_ml = opt1.checkbox("Use ML filter", value=True, key="bt_ml")
+    bt_shorts = opt2.checkbox("Enable shorts", value=True, key="bt_shorts")
+    bt_ml_sizer = opt3.checkbox("ML as sizer", value=False, key="bt_sizer")
 
     if st.button("Run Backtest", type="primary"):
         with st.spinner("Running backtest..."):
@@ -928,6 +1112,18 @@ with tab_backtest:
                         min_vote_margin=cfg.signal_min_vote_margin,
                         trailing_stop_pct=cfg.trailing_stop_pct,
                         take_profit_pct=cfg.take_profit_pct,
+                        trail_activation_pct=cfg.trail_activation_pct,
+                        enable_shorts=bt_shorts,
+                        use_ml_as_sizer=bt_ml_sizer,
+                        max_hold_hours=cfg.max_hold_hours,
+                        short_max_hold_hours=cfg.short_max_hold_hours,
+                        min_edge_multiple=cfg.min_edge_multiple,
+                        min_final_confidence=cfg.min_final_confidence,
+                        min_tech_confidence=cfg.min_tech_confidence,
+                        min_regime_confidence=cfg.min_regime_confidence,
+                        max_whipsaws=cfg.max_whipsaws,
+                        reversal_confidence_mult=cfg.reversal_confidence_multiplier,
+                        db_path=DB_PATH,
                     )
 
                     summary = result.summary_dict()
@@ -956,6 +1152,934 @@ with tab_backtest:
 
             except Exception as exc:
                 st.error(f"Backtest failed: {exc}")
+
+# ===========================================================================
+# TAB 7 — SWARM DECISION LAYER
+# ===========================================================================
+with tab_swarm:
+    st.header("Swarm Decision Layer")
+
+    try:
+        _sw_conn = sqlite3.connect(DB_PATH)
+
+        _sw_has_tables = True
+        try:
+            _sw_conn.execute("SELECT 1 FROM swarm_decisions LIMIT 1")
+        except Exception:
+            _sw_has_tables = False
+
+        if not _sw_has_tables:
+            st.info("Swarm tables not found in this database. Enable swarm mode to start logging decisions.")
+        else:
+            _sw_count = _sw_conn.execute("SELECT COUNT(*) FROM swarm_decisions").fetchone()[0]
+
+            if _sw_count == 0:
+                st.metric("Total Swarm Decisions", 0)
+                st.info("No swarm decisions logged yet. Run the bot with HOGAN_SWARM_ENABLED=true to start.")
+            else:
+                # ── Section 1: Live Swarm Snapshot ────────────────────
+                st.subheader("Live Swarm Snapshot")
+                try:
+                    from hogan_bot.swarm_observability import load_latest_swarm_decision
+                    _snap = load_latest_swarm_decision(_sw_conn)
+                    if not _snap.empty:
+                        _s = _snap.iloc[0]
+                        snap_cols = st.columns(6)
+                        snap_cols[0].metric("Decisions", _sw_count)
+                        snap_cols[1].metric("Mode", _s.get("mode", "—"))
+                        snap_cols[2].metric("Action", _s.get("final_action", "—"))
+                        snap_cols[3].metric("Confidence", f"{_s.get('final_conf', 0):.0%}")
+                        snap_cols[4].metric("Agreement", f"{_s.get('agreement', 0):.0%}")
+                        _vetoed = "Yes" if _s.get("vetoed") else "No"
+                        snap_cols[5].metric("Vetoed", _vetoed)
+
+                        _snap_ts = pd.to_datetime(_s.get("ts_ms", 0), unit="ms", utc=True)
+                        _age = pd.Timestamp.now("UTC") - _snap_ts
+                        _age_str = f"{_age.total_seconds() / 60:.0f}m ago" if _age.total_seconds() < 3600 else f"{_age.total_seconds() / 3600:.1f}h ago"
+                        st.caption(f"Last update: {_snap_ts.strftime('%Y-%m-%d %H:%M UTC')} ({_age_str}) | Symbol: {_s.get('symbol', '?')} | TF: {_s.get('timeframe', '?')}")
+                    else:
+                        st.metric("Total Swarm Decisions", _sw_count)
+                except Exception:
+                    st.metric("Total Swarm Decisions", _sw_count)
+
+                st.divider()
+
+                col_a, col_b = st.columns(2)
+
+                with col_a:
+                    st.subheader("Consensus Over Time")
+                    df_agree = pd.read_sql_query(
+                        "SELECT ts_ms, agreement, entropy, final_action "
+                        "FROM swarm_decisions ORDER BY ts_ms DESC LIMIT 200",
+                        _sw_conn,
+                    )
+                    if not df_agree.empty:
+                        df_agree["ts"] = pd.to_datetime(df_agree["ts_ms"], unit="ms")
+                        import plotly.graph_objects as go
+                        fig_sw = go.Figure()
+                        fig_sw.add_trace(go.Scatter(
+                            x=df_agree["ts"], y=df_agree["agreement"],
+                            name="Agreement", line=dict(color="#00cc96"),
+                        ))
+                        fig_sw.add_trace(go.Scatter(
+                            x=df_agree["ts"], y=df_agree["entropy"],
+                            name="Entropy", line=dict(color="#ef553b"),
+                        ))
+                        fig_sw.update_layout(
+                            height=300, margin=dict(l=20, r=20, t=30, b=20),
+                            yaxis_title="Score",
+                        )
+                        st.plotly_chart(fig_sw, width='stretch')
+
+                with col_b:
+                    st.subheader("Weight History")
+                    df_wt = pd.read_sql_query(
+                        "SELECT ts_ms, weights_json, source "
+                        "FROM swarm_weight_snapshots ORDER BY ts_ms DESC LIMIT 100",
+                        _sw_conn,
+                    )
+                    if not df_wt.empty:
+                        import json as _json
+                        df_wt["ts"] = pd.to_datetime(df_wt["ts_ms"], unit="ms")
+                        _weight_records = []
+                        for _, row in df_wt.iterrows():
+                            w = _json.loads(row["weights_json"])
+                            for agent, weight in w.items():
+                                _weight_records.append({
+                                    "ts": row["ts"], "agent": agent, "weight": weight,
+                                })
+                        if _weight_records:
+                            df_wr = pd.DataFrame(_weight_records)
+                            import plotly.express as px
+                            fig_wt = px.line(df_wr, x="ts", y="weight", color="agent")
+                            fig_wt.update_layout(
+                                height=300, margin=dict(l=20, r=20, t=30, b=20),
+                            )
+                            st.plotly_chart(fig_wt, width='stretch')
+                    else:
+                        st.info("No weight snapshots yet.")
+
+                st.subheader("Top Veto Reasons")
+                df_vetoes = pd.read_sql_query(
+                    "SELECT agent_id, block_reasons_json "
+                    "FROM swarm_agent_votes WHERE veto = 1 "
+                    "ORDER BY ts_ms DESC LIMIT 500",
+                    _sw_conn,
+                )
+                if not df_vetoes.empty:
+                    import json as _json
+                    _reason_counts: dict[str, int] = {}
+                    for _, row in df_vetoes.iterrows():
+                        reasons = _json.loads(row["block_reasons_json"])
+                        for r in reasons:
+                            key = f"{row['agent_id']}: {r}"
+                            _reason_counts[key] = _reason_counts.get(key, 0) + 1
+                    if _reason_counts:
+                        df_rc = pd.DataFrame(
+                            sorted(_reason_counts.items(), key=lambda x: -x[1])[:15],
+                            columns=["Reason", "Count"],
+                        )
+                        st.bar_chart(df_rc.set_index("Reason"))
+                else:
+                    st.info("No veto events logged yet.")
+
+                st.subheader("Shadow vs Baseline Divergence")
+                df_div = pd.read_sql_query(
+                    "SELECT ts_ms, final_action, mode, agreement "
+                    "FROM swarm_decisions WHERE mode = 'shadow' "
+                    "ORDER BY ts_ms DESC LIMIT 100",
+                    _sw_conn,
+                )
+                if not df_div.empty:
+                    df_div["ts"] = pd.to_datetime(df_div["ts_ms"], unit="ms")
+                    st.dataframe(
+                        df_div[["ts", "final_action", "agreement"]].head(20),
+                        width='stretch',
+                    )
+                else:
+                    st.info("No shadow decisions logged yet.")
+
+                # ── Panel A: Agent Voting Board ──────────────────────────
+                st.subheader("Agent Voting Board")
+                _vb_bars = st.slider("Recent bars", 10, 100, 25, key="vb_bars")
+                df_vb = _load_agent_votes(DB_PATH, limit=_vb_bars * 10)
+                if not df_vb.empty:
+                    pivot = df_vb.pivot_table(
+                        index="ts", columns="agent_id",
+                        values="action", aggfunc="first",
+                    ).tail(_vb_bars)
+                    action_map = {"buy": 1.0, "sell": -1.0, "hold": 0.0}
+                    pivot_num = pivot.map(lambda x: action_map.get(str(x), 0.0))
+                    fig_vb = px.imshow(
+                        pivot_num.T,
+                        x=[t.strftime("%m-%d %H:%M") for t in pivot_num.index],
+                        y=list(pivot_num.columns),
+                        color_continuous_scale=[[0, "#e74c3c"], [0.5, "#95a5a6"], [1, "#2ecc71"]],
+                        zmin=-1, zmax=1,
+                        labels={"color": "Action (buy=1, sell=-1)"},
+                        aspect="auto",
+                    )
+                    fig_vb.update_layout(
+                        height=250, margin=dict(l=0, r=0, t=10, b=0),
+                    )
+                    st.plotly_chart(fig_vb, width='stretch')
+                else:
+                    st.info("No agent votes with decision_id found.")
+
+                # ── Panel B: Veto Ledger ─────────────────────────────────
+                st.subheader("Veto Ledger")
+                df_vl = _load_veto_ledger(DB_PATH)
+                if not df_vl.empty:
+                    vl_m1, vl_m2 = st.columns(2)
+                    vl_m1.metric("Total Vetoes", len(df_vl))
+                    all_reasons: dict[str, int] = {}
+                    for _, r in df_vl.iterrows():
+                        for reason in json.loads(r["block_reasons_json"]):
+                            all_reasons[reason] = all_reasons.get(reason, 0) + 1
+                    if all_reasons:
+                        top3 = sorted(all_reasons.items(), key=lambda x: -x[1])[:3]
+                        vl_m2.metric("Top Reason", top3[0][0] if top3 else "—")
+                        fig_vr = px.bar(
+                            x=[r for r, _ in top3], y=[c for _, c in top3],
+                            labels={"x": "Reason", "y": "Count"},
+                            title="Top 3 Veto Reasons", height=200,
+                        )
+                        fig_vr.update_layout(margin=dict(l=0, r=0, t=30, b=0))
+                        st.plotly_chart(fig_vr, width='stretch')
+                    st.dataframe(
+                        df_vl[["ts", "agent_id", "reasons", "swarm_action", "agreement"]].head(50),
+                        width='stretch', hide_index=True,
+                    )
+                else:
+                    st.info("No vetoes logged yet.")
+
+                # ── Panel C: Replay by Decision ──────────────────────────
+                st.subheader("Replay by Decision")
+                df_recent = pd.read_sql_query(
+                    "SELECT id, ts_ms, final_action, symbol, agreement, vetoed "
+                    "FROM swarm_decisions ORDER BY ts_ms DESC LIMIT 50",
+                    _sw_conn,
+                )
+                if not df_recent.empty:
+                    df_recent["label"] = (
+                        pd.to_datetime(df_recent["ts_ms"], unit="ms").dt.strftime("%m-%d %H:%M")
+                        + " | " + df_recent["final_action"]
+                    )
+                    chosen = st.selectbox(
+                        "Select decision", df_recent["label"].tolist(), key="replay_sel",
+                    )
+                    chosen_idx = df_recent[df_recent["label"] == chosen].index[0]
+                    chosen_id = int(df_recent.loc[chosen_idx, "id"])
+                    detail = _load_decision_detail(DB_PATH, chosen_id)
+
+                    dec_df = detail["decision"]
+                    votes_df = detail["votes"]
+                    base_df = detail["baseline"]
+
+                    if not dec_df.empty:
+                        d = dec_df.iloc[0]
+                        rc1, rc2, rc3, rc4, rc5 = st.columns(5)
+                        rc1.metric("Action", d.get("final_action", "—"))
+                        rc2.metric("Confidence", f"{d.get('confidence', 0):.2f}")
+                        rc3.metric("Agreement", f"{d.get('agreement', 0):.2f}")
+                        rc4.metric("Entropy", f"{d.get('entropy', 0):.3f}")
+                        rc5.metric("Vetoed", "Yes" if d.get("vetoed") else "No")
+
+                    if not votes_df.empty:
+                        st.markdown("**Per-Agent Votes**")
+                        votes_df["reasons"] = votes_df["block_reasons_json"].apply(
+                            lambda x: ", ".join(json.loads(x)) if x else ""
+                        )
+                        st.dataframe(
+                            votes_df[["agent_id", "action", "confidence", "size_scale", "veto", "reasons"]],
+                            width='stretch', hide_index=True,
+                        )
+
+                    if not base_df.empty:
+                        st.markdown("**Baseline Comparison**")
+                        b = base_df.iloc[0]
+                        bc1, bc2, bc3 = st.columns(3)
+                        bc1.metric("Baseline Action", b.get("final_action", "—"))
+                        bc2.metric("Baseline Confidence", f"{b.get('final_confidence', 0):.2f}")
+                        bc3.metric("Regime", b.get("regime", "—"))
+                    else:
+                        st.info("No matching baseline decision found for this timestamp.")
+
+                    # Decision Story (plain-English)
+                    try:
+                        from hogan_bot.swarm_replay import render_decision_story
+                        if not dec_df.empty:
+                            _bl_row = base_df.iloc[0] if not base_df.empty else None
+                            story = render_decision_story(
+                                dec_df.iloc[0], votes=votes_df, baseline=_bl_row,
+                            )
+                            with st.expander("Decision Story (plain English)", expanded=False):
+                                st.markdown(story)
+                    except Exception:
+                        pass
+
+                    # Raw JSON
+                    if not dec_df.empty:
+                        with st.expander("Raw Decision JSON", expanded=False):
+                            _dj = dec_df.iloc[0].get("decision_json", "{}")
+                            try:
+                                st.json(json.loads(_dj) if isinstance(_dj, str) else _dj)
+                            except Exception:
+                                st.code(_dj)
+                else:
+                    st.info("No swarm decisions to replay.")
+
+                # ── Panel D: Promotion Readiness Card ────────────────────
+                st.subheader("Promotion Readiness")
+                promo = _load_promotion_stats(DB_PATH)
+                pr1, pr2, pr3, pr4 = st.columns(4)
+                _targets = {
+                    "shadow_decisions": 300, "would_trade": 100,
+                    "veto_events": 50, "distinct_regimes": 3,
+                }
+                pr1.metric("Shadow Decisions", f"{promo['shadow_decisions']} / {_targets['shadow_decisions']}")
+                pr2.metric("Would-Trade", f"{promo['would_trade']} / {_targets['would_trade']}")
+                pr3.metric("Veto Events", f"{promo['veto_events']} / {_targets['veto_events']}")
+                pr4.metric("Regime Coverage", f"{promo['distinct_regimes']} / {_targets['distinct_regimes']}")
+
+                all_met = all(
+                    promo[k] >= v for k, v in _targets.items()
+                )
+                for key, target in _targets.items():
+                    pct = min(promo[key] / target, 1.0) if target else 0.0
+                    st.progress(pct, text=f"{key}: {promo[key]}/{target}")
+
+                if all_met:
+                    st.success("READY — All shadow sample targets met. Consider running promotion_check.py.")
+                else:
+                    st.warning("COLLECTING — Shadow sample targets not yet met.")
+                st.metric("Mean Agreement", f"{promo['mean_agreement']:.3f}")
+
+                # ── Section 5: Learning & Drift ──────────────────────
+                st.subheader("Learning & Drift")
+                try:
+                    from hogan_bot.swarm_observability import (
+                        load_swarm_decisions, load_swarm_score_calibration,
+                    )
+                    from hogan_bot.swarm_metrics import (
+                        compute_disagreement_stats, compute_trade_density,
+                        compute_agent_leaderboard,
+                    )
+
+                    _drift_decisions = load_swarm_decisions(_sw_conn, limit=500)
+
+                    if not _drift_decisions.empty:
+                        # Disagreement stats
+                        dis_stats = compute_disagreement_stats(_drift_decisions)
+                        ds1, ds2, ds3 = st.columns(3)
+                        ds1.metric("Mean Agreement", f"{dis_stats['mean_agreement']:.0%}")
+                        ds2.metric("Mean Entropy", f"{dis_stats['mean_entropy']:.3f}")
+                        ds3.metric("High Disagreement %", f"{dis_stats['high_disagreement_pct']:.1%}")
+
+                        # Trade density chart
+                        density = compute_trade_density(_drift_decisions, bucket_hours=24)
+                        if not density.empty:
+                            fig_density = go.Figure()
+                            fig_density.add_trace(go.Bar(
+                                x=density["bucket_start"], y=density["trades"],
+                                name="Trades", marker_color="#2ecc71",
+                            ))
+                            fig_density.add_trace(go.Bar(
+                                x=density["bucket_start"], y=density["holds"],
+                                name="Holds", marker_color="#95a5a6",
+                            ))
+                            fig_density.update_layout(
+                                title="Trade Density (24h buckets)",
+                                barmode="stack", height=250,
+                                margin=dict(l=0, r=0, t=30, b=0),
+                            )
+                            st.plotly_chart(fig_density, width='stretch')
+
+                        # Agent leaderboard
+                        _lb_votes = _load_agent_votes(DB_PATH, limit=2000)
+                        if not _lb_votes.empty:
+                            leaderboard = compute_agent_leaderboard(_lb_votes)
+                            if not leaderboard.empty:
+                                st.markdown("**Agent Leaderboard**")
+                                lb_display = leaderboard[[
+                                    c for c in ["agent_id", "vote_count", "veto_count",
+                                                "veto_rate", "mean_confidence",
+                                                "buys", "sells", "holds"]
+                                    if c in leaderboard.columns
+                                ]]
+                                st.dataframe(lb_display, width='stretch', hide_index=True)
+
+                        # Score calibration (if outcomes exist)
+                        try:
+                            cal_df = load_swarm_score_calibration(_sw_conn)
+                            if not cal_df.empty and "forward_60m_bps" in cal_df.columns:
+                                _has_outcomes = cal_df["forward_60m_bps"].notna().any()
+                                if _has_outcomes:
+                                    from hogan_bot.swarm_metrics import compute_opportunity_monotonicity
+                                    mono = compute_opportunity_monotonicity(cal_df)
+                                    st.markdown("**Score Calibration**")
+                                    mc1, mc2 = st.columns(2)
+                                    mc1.metric("Score-Return Correlation", f"{mono['correlation']:.3f}")
+                                    mc2.metric("Monotonic", "Yes" if mono['monotonic'] else "No")
+                                    if mono["bins"]:
+                                        bins_df = pd.DataFrame(mono["bins"])
+                                        fig_cal = px.bar(
+                                            bins_df, x="bin", y="mean_return",
+                                            title="Mean Forward Return by Confidence Bin",
+                                            height=200,
+                                        )
+                                        fig_cal.update_layout(margin=dict(l=0, r=0, t=30, b=0))
+                                        st.plotly_chart(fig_cal, width='stretch')
+                        except Exception:
+                            pass
+                    else:
+                        st.info("Not enough decisions for drift analysis.")
+                except Exception as _drift_err:
+                    st.info(f"Learning & Drift data unavailable: {_drift_err}")
+
+                # ── Persisted Promotion Reports ──────────────────────
+                try:
+                    from hogan_bot.swarm_observability import load_swarm_promotion_status
+                    _promo_report = load_swarm_promotion_status(_sw_conn)
+                    if not _promo_report.empty:
+                        st.subheader("Latest Promotion Report")
+                        _pr = _promo_report.iloc[0]
+                        pr1, pr2, pr3 = st.columns(3)
+                        pr1.metric("Phase", _pr.get("phase", "—"))
+                        pr2.metric("Recommendation", _pr.get("recommendation", "—"))
+                        _bl_count = len(json.loads(_pr.get("blockers_json", "[]")))
+                        pr3.metric("Blockers", _bl_count)
+                        with st.expander("Full Report"):
+                            st.text(_pr.get("summary", "No summary available."))
+                            try:
+                                st.json(json.loads(_pr.get("gates_json", "[]")))
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
+            # ── Section: Daily Digest ────────────────────────
+            try:
+                st.subheader("Daily Digest")
+                from hogan_bot.swarm_daily_digest import build_digest
+                _digest = build_digest(_sw_conn)
+                _sev_colors = {"healthy": "green", "watch": "blue", "warning": "orange", "critical": "red"}
+                _sev_color = _sev_colors.get(_digest.severity, "gray")
+                st.markdown(f"**Severity:** :{_sev_color}[{_digest.severity.upper()}]")
+                st.markdown(f"> {_digest.headline}")
+
+                dig_cols = st.columns(4)
+                dig_cols[0].metric("Decisions", _digest.metrics.get("decision_count", 0))
+                dig_cols[1].metric("Would-Trades", _digest.metrics.get("would_trade_count", 0))
+                _vr_pct = f"{_digest.metrics.get('veto_ratio', 0):.0%}"
+                dig_cols[2].metric("Veto Ratio", _vr_pct)
+                dig_cols[3].metric("Regimes", _digest.metrics.get("distinct_regimes", 0))
+
+                if _digest.flags:
+                    with st.expander(f"Flags ({len(_digest.flags)})", expanded=True):
+                        for _f in _digest.flags:
+                            _icon = {"critical": "🔴", "warning": "🟡", "watch": "🔵"}.get(_f.level, "⚪")
+                            st.markdown(f"{_icon} **[{_f.level.upper()}]** {_f.message}")
+
+                if _digest.operator_actions:
+                    with st.expander("Operator Actions Today", expanded=True):
+                        for _i, _a in enumerate(_digest.operator_actions, 1):
+                            st.markdown(f"{_i}. {_a}")
+
+                if _digest.replay_candidates:
+                    with st.expander(f"Replay Shortlist ({len(_digest.replay_candidates)})"):
+                        for _rc in _digest.replay_candidates[:8]:
+                            st.markdown(f"- **#{_rc.decision_id}** {_rc.symbol} {_rc.ts_iso} — {_rc.reason}")
+
+                with st.expander("Full Markdown Digest"):
+                    st.markdown(_digest.summary_md)
+            except Exception as _dig_err:
+                st.info(f"Daily Digest unavailable: {_dig_err}")
+
+            # ── Section: Weekly Review ────────────────────────
+            try:
+                st.subheader("Weekly Review")
+                from hogan_bot.swarm_weekly_review import build_weekly_review
+                _wreview = build_weekly_review(_sw_conn)
+                _wr_colors = {"healthy": "green", "watch": "blue", "warning": "orange", "critical": "red"}
+                _wr_color = _wr_colors.get(_wreview.severity, "gray")
+                st.markdown(f"**Severity:** :{_wr_color}[{_wreview.severity.upper()}]  **Recommendation:** {_wreview.recommendation}")
+                st.markdown(f"> {_wreview.headline}")
+
+                wr_cols = st.columns(5)
+                wr_cols[0].metric("Decisions", _wreview.metrics.get("decision_count", 0))
+                wr_cols[1].metric("Would-Trades", _wreview.metrics.get("would_trade_count", 0))
+                wr_cols[2].metric("Vetoes", _wreview.metrics.get("veto_count", 0))
+                _wvr = f"{_wreview.metrics.get('veto_ratio', 0):.0%}"
+                wr_cols[3].metric("Veto Ratio", _wvr)
+                wr_cols[4].metric("Regimes", _wreview.metrics.get("distinct_regimes", 0))
+
+                _dom = _wreview.metrics.get("dominant_veto_agent")
+                if _dom:
+                    _dom_share = _wreview.metrics.get("dominant_veto_agent_share", 0)
+                    st.warning(f"Dominant veto agent: **{_dom}** ({_dom_share:.0%} of vetoes)")
+
+                if _wreview.flags:
+                    with st.expander(f"Flags ({len(_wreview.flags)})", expanded=True):
+                        for _wf in _wreview.flags:
+                            _wicon = {"critical": "🔴", "warning": "🟡", "watch": "🔵"}.get(_wf.level, "⚪")
+                            st.markdown(f"{_wicon} **[{_wf.level.upper()}]** {_wf.message}")
+
+                if _wreview.agent_scores:
+                    with st.expander("Agent Leaderboard"):
+                        import pandas as _wr_pd
+                        _al_data = [{
+                            "Agent": a.agent_id, "Decisions": a.decisions, "Vetoes": a.vetoes,
+                            "Hold Rate": f"{a.hold_rate:.0%}",
+                            "Confidence": f"{a.mean_confidence:.2f}" if a.mean_confidence else "—",
+                        } for a in _wreview.agent_scores]
+                        st.dataframe(_wr_pd.DataFrame(_al_data), width='stretch')
+
+                _wow_avail = _wreview.metrics.get("prior_week_available", False)
+                if _wow_avail:
+                    with st.expander("Week-over-Week Deltas"):
+                        wow_cols = st.columns(3)
+                        _d_delta = _wreview.metrics.get("decision_count_wow_delta", 0)
+                        _wt_delta = _wreview.metrics.get("would_trade_wow_delta", 0)
+                        _vr_delta = _wreview.metrics.get("veto_ratio_wow_delta", 0)
+                        wow_cols[0].metric("Decisions", _wreview.metrics.get("decision_count", 0), delta=_d_delta)
+                        wow_cols[1].metric("Would-Trades", _wreview.metrics.get("would_trade_count", 0), delta=_wt_delta)
+                        wow_cols[2].metric("Veto Ratio", f"{_wreview.metrics.get('veto_ratio', 0):.1%}", delta=f"{_vr_delta:+.1%}", delta_color="inverse")
+
+                if _wreview.operator_actions:
+                    with st.expander("Operator Actions This Week", expanded=True):
+                        for _wi, _wa in enumerate(_wreview.operator_actions, 1):
+                            st.markdown(f"{_wi}. {_wa}")
+
+                if _wreview.cursor_actions:
+                    with st.expander("Cursor Actions This Week"):
+                        for _wi, _wa in enumerate(_wreview.cursor_actions, 1):
+                            st.markdown(f"{_wi}. {_wa}")
+
+                if _wreview.replay_candidates:
+                    with st.expander(f"Weekly Replay Shortlist ({len(_wreview.replay_candidates)})"):
+                        for _wrc in _wreview.replay_candidates[:10]:
+                            st.markdown(f"- **#{_wrc.decision_id}** [{_wrc.category}] {_wrc.symbol} {_wrc.ts_iso} — {_wrc.reason}")
+
+                with st.expander("Full Markdown Review"):
+                    st.markdown(_wreview.summary_md)
+            except Exception as _wr_err:
+                st.info(f"Weekly Review unavailable: {_wr_err}")
+
+            # ── Section: Thresholds & Quarantine ─────────────────
+            try:
+                st.subheader("Thresholds & Quarantine")
+                from hogan_bot.storage import _create_schema as _tq_schema
+                _tq_schema(_sw_conn)
+
+                # Panel 1 — Stall Status
+                from hogan_bot.stall_detection import get_latest_stall_alerts, compute_stall_summary
+                _stall_status = compute_stall_summary(_sw_conn)
+                _stall_colors = {"healthy": "green", "info": "blue", "warning": "orange", "critical": "red"}
+                st.markdown(f"**Stall Status:** :{_stall_colors.get(_stall_status, 'gray')}[{_stall_status.upper()}]")
+
+                _stall_alerts = get_latest_stall_alerts(_sw_conn, limit=5)
+                if _stall_alerts:
+                    for _sa in _stall_alerts:
+                        _sa_icon = {"critical": "🔴", "warn": "🟡", "info": "🔵"}.get(_sa["severity"], "⚪")
+                        st.markdown(f"{_sa_icon} **{_sa['code']}** — {_sa['notes']}")
+
+                # Panel 2 — Agent Mode Control
+                from hogan_bot.agent_quarantine import get_all_agent_modes
+                _all_modes = get_all_agent_modes(_sw_conn)
+                if _all_modes:
+                    with st.expander("Agent Modes", expanded=True):
+                        import pandas as _tq_pd
+                        _mode_data = [
+                            {"Agent": s.agent_id, "Mode": s.mode, "Reason": s.reason,
+                             "Operator": s.operator, "Changed": s.changed_at[:19] if s.changed_at else "—"}
+                            for s in _all_modes.values()
+                        ]
+                        st.dataframe(_tq_pd.DataFrame(_mode_data), width='stretch')
+                else:
+                    st.info("No agent mode overrides set. All agents running in `active` mode.")
+
+                # Panel 3 — Pre-veto vs Post-veto
+                try:
+                    _pv_row = _sw_conn.execute(
+                        """SELECT
+                            SUM(CASE WHEN pre_veto_action IN ('buy','sell') THEN 1 ELSE 0 END),
+                            SUM(CASE WHEN final_action IN ('buy','sell') AND vetoed=0 THEN 1 ELSE 0 END),
+                            AVG(pre_veto_agreement), AVG(agreement),
+                            AVG(pre_veto_confidence), AVG(final_conf),
+                            COUNT(*)
+                           FROM swarm_decisions WHERE pre_veto_action IS NOT NULL""",
+                    ).fetchone()
+                    if _pv_row and _pv_row[6] and _pv_row[6] > 0:
+                        with st.expander("Pre-Veto vs Post-Veto"):
+                            pv_cols = st.columns(3)
+                            pv_cols[0].metric("Pre-Veto Trades", _pv_row[0] or 0)
+                            pv_cols[0].metric("Post-Veto Trades", _pv_row[1] or 0)
+                            pv_cols[1].metric("Pre-Veto Agreement", f"{_pv_row[2]:.3f}" if _pv_row[2] else "—")
+                            pv_cols[1].metric("Post-Veto Agreement", f"{_pv_row[3]:.3f}" if _pv_row[3] else "—")
+                            pv_cols[2].metric("Pre-Veto Confidence", f"{_pv_row[4]:.3f}" if _pv_row[4] else "—")
+                            pv_cols[2].metric("Post-Veto Confidence", f"{_pv_row[5]:.3f}" if _pv_row[5] else "—")
+                except Exception:
+                    pass
+
+                # Panel 4 — Dominant Veto Agents
+                try:
+                    _dom_rows = _sw_conn.execute(
+                        """SELECT sav.agent_id, COUNT(*) as cnt
+                           FROM swarm_agent_votes sav WHERE sav.veto = 1
+                           GROUP BY sav.agent_id ORDER BY cnt DESC LIMIT 5""",
+                    ).fetchall()
+                    if _dom_rows:
+                        _total_vetoes = sum(r[1] for r in _dom_rows)
+                        with st.expander("Dominant Veto Agents"):
+                            import pandas as _tq_pd2
+                            _dom_data = [
+                                {"Agent": r[0], "Vetoes": r[1],
+                                 "Share": f"{r[1]/_total_vetoes:.0%}" if _total_vetoes else "—"}
+                                for r in _dom_rows
+                            ]
+                            st.dataframe(_tq_pd2.DataFrame(_dom_data), width='stretch')
+                except Exception:
+                    pass
+
+                # Panel 5 — Threshold Bundle History
+                try:
+                    from hogan_bot.threshold_registry import list_bundles, get_change_history
+                    _tb_agents = _sw_conn.execute(
+                        "SELECT DISTINCT agent_id FROM swarm_threshold_bundles ORDER BY agent_id",
+                    ).fetchall()
+                    if _tb_agents:
+                        with st.expander("Threshold Bundles"):
+                            for (_tb_aid,) in _tb_agents:
+                                st.markdown(f"**{_tb_aid}**")
+                                _bundles = list_bundles(_tb_aid, _sw_conn)
+                                for _b in _bundles[:5]:
+                                    _status = "ACTIVE" if _b.active else "inactive"
+                                    st.markdown(f"- `{_b.bundle_id}` v{_b.version} ({_status}) — {_b.notes or 'no notes'}")
+                except Exception:
+                    pass
+
+                # Panel 6 — Suggested Actions
+                _suggest: list[str] = []
+                if _stall_status == "critical":
+                    _suggest.append("Review and relax dominant veto agent thresholds in shadow mode.")
+                if _all_modes:
+                    for _am_s in _all_modes.values():
+                        if _am_s.mode == "active":
+                            pass
+                if any(a.get("code") == "DOMINANT_VETO_AGENT" for a in _stall_alerts):
+                    _da = next((a for a in _stall_alerts if a["code"] == "DOMINANT_VETO_AGENT"), None)
+                    if _da:
+                        _suggest.append(f"Consider setting dominant agent to `no_veto` mode: {_da['notes']}")
+                if any(a.get("code") == "REGIME_BLINDNESS" for a in _stall_alerts):
+                    _suggest.append("Fix regime logging before trusting promotion readiness.")
+                if _suggest:
+                    with st.expander("Suggested Actions"):
+                        for _si, _sa_txt in enumerate(_suggest, 1):
+                            st.markdown(f"{_si}. {_sa_txt}")
+
+            except Exception as _tq_err:
+                st.info(f"Thresholds & Quarantine unavailable: {_tq_err}")
+
+        _sw_conn.close()
+    except Exception as exc:
+        st.error(f"Error loading swarm data: {exc}")
+
+# ===========================================================================
+# TAB 8 — SWARM REPLAY
+# ===========================================================================
+with tab_replay:
+    st.header("Swarm Replay")
+
+    try:
+        _rp_conn = sqlite3.connect(DB_PATH)
+        _rp_has_tables = True
+        try:
+            _rp_conn.execute("SELECT 1 FROM swarm_decisions LIMIT 1")
+        except Exception:
+            _rp_has_tables = False
+
+        if not _rp_has_tables:
+            st.info("Swarm tables not found. Enable swarm mode to start logging decisions for replay.")
+        else:
+            # Ensure newer tables (swarm_attribution, swarm_outcomes, etc.) exist
+            try:
+                from hogan_bot.storage import _create_schema
+                _create_schema(_rp_conn)
+            except Exception:
+                pass
+
+            from hogan_bot.swarm_replay_queries import ReplayFilter, list_replay_decisions, get_replay_decision
+            from hogan_bot.swarm_attribution import classify_outcome, compute_full_attribution, build_learning_note
+            from hogan_bot.swarm_replay import render_decision_story
+
+            # ── Zone A: Replay Selector ───────────────────────────
+            st.subheader("Replay Selector")
+            za1, za2, za3, za4 = st.columns(4)
+            _rp_symbol = za1.text_input("Symbol", value="BTC/USD", key="rp_sym")
+            _rp_source = za2.selectbox(
+                "Source filter",
+                ["all", "traded", "vetoed", "skipped", "swarm"],
+                key="rp_source",
+            )
+            _rp_sort = za3.selectbox(
+                "Sort by",
+                ["latest", "highest_opportunity", "biggest_winner", "biggest_loser",
+                 "highest_disagreement", "veto_events"],
+                key="rp_sort",
+            )
+            _rp_limit = za4.number_input("Max results", min_value=10, max_value=500, value=100, key="rp_limit")
+
+            flt = ReplayFilter(
+                symbol=_rp_symbol if _rp_symbol else None,
+                source=_rp_source if _rp_source != "all" else None,
+                sort_by=_rp_sort,
+                limit=int(_rp_limit),
+            )
+            decisions = list_replay_decisions(_rp_conn, flt)
+
+            if not decisions:
+                st.info("No swarm decisions found matching your filters.")
+            else:
+                # Build selector labels
+                _labels = []
+                for d in decisions:
+                    ts = pd.to_datetime(d["ts_ms"], unit="ms").strftime("%m-%d %H:%M")
+                    action = d.get("swarm_action", "?")
+                    label_tag = d.get("attr_label") or d.get("outcome_label") or ""
+                    _labels.append(f"#{d['id']} | {ts} | {action} | {label_tag}")
+
+                chosen_label = st.selectbox("Select decision to replay", _labels, key="rp_dec_sel")
+                chosen_idx = _labels.index(chosen_label)
+                chosen_dec_id = decisions[chosen_idx]["id"]
+
+                replay = get_replay_decision(_rp_conn, chosen_dec_id)
+
+                if replay and replay["decision"]:
+                    dec = replay["decision"]
+                    votes_list = replay["votes"]
+                    outcome = replay["outcome"]
+                    attribution = replay["attribution"]
+                    baseline = replay["baseline_compare"]
+                    candles_df = replay["candles"]
+                    similar = replay["similar_events"]
+
+                    # Compute attribution on the fly if not persisted
+                    if not attribution and outcome:
+                        attr = compute_full_attribution(dec, outcome, baseline)
+                        note = build_learning_note(
+                            dec, votes_list, outcome, attr,
+                        )
+                        attr["learning_note"] = note
+                        attribution = attr
+
+                    # ── Zone B: Decision Summary Strip ────────────
+                    st.subheader("Decision Summary")
+                    _ts_str = pd.to_datetime(dec.get("ts_ms", 0), unit="ms").strftime("%Y-%m-%d %H:%M UTC")
+                    zb_cols = st.columns(6)
+                    zb_cols[0].metric("Timestamp", _ts_str)
+                    zb_cols[1].metric("Symbol", dec.get("symbol", "—"))
+                    zb_cols[2].metric("Swarm Action", dec.get("final_action", "—"))
+                    zb_cols[3].metric("Confidence", f"{dec.get('final_conf', 0):.0%}")
+                    zb_cols[4].metric("Agreement", f"{dec.get('agreement', 0):.0%}")
+                    _out_label = (attribution or {}).get("outcome_label", "Pending")
+                    zb_cols[5].metric("Outcome", _out_label)
+
+                    zb2_cols = st.columns(5)
+                    zb2_cols[0].metric("Mode", dec.get("mode", "—"))
+                    _baseline_action = baseline.get("final_action", "—") if baseline else "—"
+                    zb2_cols[1].metric("Baseline Action", _baseline_action)
+                    zb2_cols[2].metric("Vetoed", "Yes" if dec.get("vetoed") else "No")
+                    zb2_cols[3].metric("Entropy", f"{dec.get('entropy', 0):.3f}")
+                    _fwd = outcome.get("forward_60m_bps") if outcome else None
+                    zb2_cols[4].metric("60m Return", f"{_fwd:+.1f} bps" if _fwd is not None else "—")
+
+                    st.divider()
+
+                    # ── Zone C: Market State & Chart ──────────────
+                    st.subheader("Market Context")
+                    if not candles_df.empty and "close" in candles_df.columns:
+                        import plotly.graph_objects as go
+                        fig_rp = go.Figure()
+                        candles_df["ts"] = pd.to_datetime(candles_df["ts_ms"], unit="ms")
+                        fig_rp.add_trace(go.Candlestick(
+                            x=candles_df["ts"],
+                            open=candles_df["open"], high=candles_df["high"],
+                            low=candles_df["low"], close=candles_df["close"],
+                            name="Price",
+                        ))
+                        # Decision marker
+                        dec_ts = pd.to_datetime(dec.get("ts_ms", 0), unit="ms")
+                        dec_price = candles_df.loc[
+                            candles_df["ts_ms"] == dec.get("ts_ms"), "close"
+                        ]
+                        if not dec_price.empty:
+                            _marker_color = {"buy": "#2ecc71", "sell": "#e74c3c"}.get(
+                                dec.get("final_action", "hold"), "#f39c12"
+                            )
+                            fig_rp.add_trace(go.Scatter(
+                                x=[dec_ts], y=[float(dec_price.iloc[0])],
+                                mode="markers", marker=dict(size=14, color=_marker_color, symbol="diamond"),
+                                name=f"Decision: {dec.get('final_action', 'hold')}",
+                            ))
+                        fig_rp.update_layout(
+                            height=350, margin=dict(l=0, r=0, t=10, b=0),
+                            xaxis_rangeslider_visible=False,
+                        )
+                        st.plotly_chart(fig_rp, width='stretch')
+                    else:
+                        st.info("No candle data available around this decision.")
+
+                    # Market state table
+                    try:
+                        _dj = json.loads(dec.get("decision_json", "{}") or "{}")
+                    except (json.JSONDecodeError, TypeError):
+                        _dj = {}
+                    _block_reasons = []
+                    try:
+                        _block_reasons = json.loads(dec.get("block_reasons_json", "[]") or "[]")
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                    ms_cols = st.columns(4)
+                    ms_cols[0].metric("Regime", _dj.get("regime", "—"))
+                    ms_cols[1].metric("ATR %", f"{_dj.get('atr_pct', '—')}")
+                    ms_cols[2].metric("Mode", dec.get("mode", "—"))
+                    if _block_reasons:
+                        ms_cols[3].metric("Blockers", len(_block_reasons))
+                        with st.expander("Block reasons"):
+                            for br in _block_reasons:
+                                st.text(f"• {br}")
+                    else:
+                        ms_cols[3].metric("Blockers", 0)
+
+                    st.divider()
+
+                    # ── Zone D: Agent Board + Controller Story ────
+                    zd_left, zd_right = st.columns(2)
+
+                    with zd_left:
+                        st.subheader("Agent Voting Board")
+                        if votes_list:
+                            for v in votes_list:
+                                _veto_badge = " [VETO]" if v.get("veto") else ""
+                                _conf = v.get("confidence", 0)
+                                st.markdown(
+                                    f"**{v.get('agent_id', '?')}**{_veto_badge} — "
+                                    f"`{v.get('action', '?')}` ({_conf:.0%})"
+                                )
+                                v_cols = st.columns(3)
+                                v_cols[0].caption(f"Edge: {v.get('expected_edge_bps', '—')} bps")
+                                v_cols[1].caption(f"Size: {v.get('size_scale', 1.0):.2f}")
+                                try:
+                                    _vr = json.loads(v.get("block_reasons_json", "[]") or "[]")
+                                except (json.JSONDecodeError, TypeError):
+                                    _vr = []
+                                if _vr:
+                                    v_cols[2].caption(f"Reasons: {', '.join(_vr[:2])}")
+                        else:
+                            st.info("No agent votes recorded for this decision.")
+
+                    with zd_right:
+                        st.subheader("Decision Story")
+                        _story = render_decision_story(
+                            dec,
+                            votes=pd.DataFrame(votes_list) if votes_list else None,
+                            baseline=baseline,
+                        )
+                        st.markdown(_story)
+
+                    st.divider()
+
+                    # ── Zone E: Outcome / Attribution / Similar / Learning ──
+                    st.subheader("Analysis")
+                    e_tab1, e_tab2, e_tab3, e_tab4, e_tab5 = st.tabs([
+                        "Outcome", "Attribution", "Similar Events", "Learning Note", "Diagnostics"
+                    ])
+
+                    with e_tab1:
+                        if outcome:
+                            oc1, oc2, oc3, oc4 = st.columns(4)
+                            oc1.metric("60m Return", f"{outcome.get('forward_60m_bps', 0):+.1f} bps")
+                            oc2.metric("MAE", f"{outcome.get('mae_bps', 0):.1f} bps")
+                            oc3.metric("MFE", f"{outcome.get('mfe_bps', 0):.1f} bps")
+                            oc4.metric("Label", outcome.get("outcome_label", "—"))
+
+                            oc5, oc6, oc7 = st.columns(3)
+                            oc5.metric("Trade Taken", "Yes" if outcome.get("was_trade_taken") else "No")
+                            oc6.metric("Veto Correct", {1: "Yes", 0: "No"}.get(
+                                outcome.get("was_veto_correct"), "N/A"))
+                            oc7.metric("Skip Correct", {1: "Yes", 0: "No"}.get(
+                                outcome.get("was_skip_correct"), "N/A"))
+
+                            _5m = outcome.get("forward_5m_bps")
+                            _15m = outcome.get("forward_15m_bps")
+                            _30m = outcome.get("forward_30m_bps")
+                            _60m = outcome.get("forward_60m_bps")
+                            if any(x is not None for x in [_5m, _15m, _30m, _60m]):
+                                markout_df = pd.DataFrame({
+                                    "window": ["5m", "15m", "30m", "60m"],
+                                    "bps": [_5m or 0, _15m or 0, _30m or 0, _60m or 0],
+                                })
+                                st.bar_chart(markout_df.set_index("window"))
+                        else:
+                            st.info("Outcome not yet available — forward window may not have matured.")
+
+                    with e_tab2:
+                        if attribution:
+                            attr_names = ["direction", "veto", "posture", "entry", "cost", "disagreement"]
+                            attr_vals = [attribution.get(f"{n}_attr", 0) for n in attr_names]
+                            attr_df = pd.DataFrame({"component": attr_names, "score": attr_vals})
+
+                            st.bar_chart(attr_df.set_index("component"))
+                            st.caption("Score range: -1 (detracted) to +1 (contributed)")
+
+                            with st.expander("Raw attribution"):
+                                st.json({k: v for k, v in attribution.items() if k != "learning_note"})
+                        else:
+                            st.info("Attribution not yet computed — requires outcome data.")
+
+                    with e_tab3:
+                        if similar:
+                            st.markdown(f"**Top {len(similar)} similar historical decisions:**")
+                            for i, s in enumerate(similar):
+                                s_ts = pd.to_datetime(s.get("ts_ms", 0), unit="ms").strftime("%m-%d %H:%M")
+                                s_action = s.get("final_action", "?")
+                                s_fwd = s.get("forward_60m_bps")
+                                s_label = s.get("attr_label") or s.get("outcome_label") or ""
+                                fwd_str = f"{s_fwd:+.1f}bps" if s_fwd is not None else "—"
+                                st.text(f"{i+1}. #{s.get('id','?')} | {s_ts} | {s_action} | {fwd_str} | {s_label}")
+                        else:
+                            st.info("No similar events found.")
+
+                    with e_tab4:
+                        if attribution and attribution.get("learning_note"):
+                            st.markdown(attribution["learning_note"])
+                        elif attribution:
+                            note = build_learning_note(dec, votes_list, outcome or {}, attribution)
+                            st.markdown(note)
+                        else:
+                            st.info("Learning note requires outcome and attribution data.")
+
+                    with e_tab5:
+                        st.markdown("**Diagnostics**")
+                        _diag_cols = st.columns(3)
+                        _diag_cols[0].metric("Votes recorded", len(votes_list))
+                        _diag_cols[1].metric("Outcome available", "Yes" if outcome else "No")
+                        _diag_cols[2].metric("Attribution available", "Yes" if attribution else "No")
+
+                        _expected_agents = 4
+                        if len(votes_list) < _expected_agents:
+                            st.warning(f"Expected {_expected_agents} agent votes, found {len(votes_list)}.")
+
+                        with st.expander("Raw decision JSON"):
+                            st.json(_dj)
+
+                else:
+                    st.warning("Could not load replay data for the selected decision.")
+
+        _rp_conn.close()
+    except Exception as exc:
+        st.error(f"Error loading replay data: {exc}")
 
 # ---------------------------------------------------------------------------
 # Footer

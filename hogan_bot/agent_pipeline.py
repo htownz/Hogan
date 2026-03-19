@@ -106,8 +106,8 @@ class TechnicalAgent:
             try:
                 from hogan_bot.strategy_router import StrategyRouter
                 self._router = StrategyRouter(config)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("StrategyRouter unavailable, using classic signal path: %s", exc)
 
     def analyze(self, candles: pd.DataFrame, **runtime_state) -> TechSignal:
         """Produce a TechSignal. ``runtime_state`` passes dynamic per-bar RL
@@ -125,7 +125,7 @@ class TechnicalAgent:
                 raw = self._router.route(candles, cfg, regime_state)
                 conf = float(raw.confidence)
                 if raw.action != "hold" and conf <= 0.0:
-                    conf = 1.0
+                    conf = 0.10
                 family_name = self._router.families.get(
                     regime_state.regime, self._router.families.get("trending_up")
                 )
@@ -178,7 +178,7 @@ class TechnicalAgent:
             raw = generate_signal(candles, **kwargs)
             conf = float(raw.confidence)
             if raw.action != "hold" and conf <= 0.0:
-                conf = 1.0
+                conf = 0.10
             return TechSignal(
                 action=raw.action,
                 confidence=conf,
@@ -268,7 +268,7 @@ class SentimentAgent:
                 scores["funding"] = max(-1.0, min(1.0, -raw_funding * 0.5))
 
         except Exception as exc:
-            logger.debug("SentimentAgent data lookup failed: %s", exc)
+            logger.warning("SentimentAgent data lookup failed: %s", exc)
 
         if not scores:
             return SentimentSignal(bias="neutral", strength=0.0)
@@ -276,10 +276,13 @@ class SentimentAgent:
         all_keys = ["fear_greed", "news_sentiment", "social_vol", "funding"]
         weights = {"fear_greed": 0.35, "news_sentiment": 0.30,
                    "social_vol": 0.20, "funding": 0.15}
-        composite = sum(
-            scores.get(k, 0.5 if k == "fear_greed" else 0.0) * w
-            for k, w in weights.items()
-        )
+
+        available_weights = {k: w for k, w in weights.items() if k in scores}
+        total_w = sum(available_weights.values())
+        if total_w > 0:
+            composite = sum(scores[k] * w / total_w for k, w in available_weights.items())
+        else:
+            composite = 0.5
 
         coverage = sum(1 for k in all_keys if k in scores) / len(all_keys)
 
@@ -353,7 +356,7 @@ class MacroAgent:
                     except Exception:
                         pass
         except Exception as exc:
-            logger.debug("MacroAgent data lookup failed: %s", exc)
+            logger.warning("MacroAgent data lookup failed: %s", exc)
 
         data_age_hours = max(_metric_ages) if _metric_ages else 999.0
 
@@ -522,9 +525,13 @@ class MetaWeigher:
         # When the technical agent returns "hold" with high confidence, it
         # means the price action does NOT support any trade.  This should
         # dampen how much sentiment/macro alone can drive a trade.
+        # Raise the floor when sentiment+macro agree directionally so that
+        # strong non-tech consensus can still produce entries.
         if tech.action == "hold" and tech.confidence > 0.3:
             hold_dampen = 1.0 - (tech.confidence * w["technical"] * 2.0)
-            hold_dampen = max(0.2, hold_dampen)
+            _non_tech_agree = (sent_score > 0 and macro_score > 0) or (sent_score < 0 and macro_score < 0)
+            _dampen_floor = 0.4 if _non_tech_agree else 0.2
+            hold_dampen = max(_dampen_floor, hold_dampen)
             raw_score *= hold_dampen
 
         combined_score = raw_score
@@ -641,8 +648,8 @@ class AgentPipeline:
                             **rp.agent_scores,
                             "_sample_count": rp.trade_count,
                         }
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to load learned weights from PerformanceTracker: %s", exc)
         self.meta = MetaWeigher(
             weights=weights,
             buy_threshold=getattr(config, "meta_buy_threshold", 0.25),
@@ -653,6 +660,7 @@ class AgentPipeline:
         self.rag_retriever = rag_retriever
         self.perf_tracker = performance_tracker
         self.adaptive_conf = adaptive_confidence
+        self._last_signal: dict[str, AgentSignal] = {}
 
     def run(
         self,
@@ -704,7 +712,7 @@ class AgentPipeline:
             try:
                 rag_context = self.rag_retriever.retrieve_relevant_context(features, k=5)
             except Exception as exc:
-                logger.debug("RAG retrieval failed (non-fatal): %s", exc)
+                logger.warning("RAG retrieval failed (non-fatal): %s", exc)
 
         signal = self.meta.combine(tech, sent, macro, rag_context=rag_context, regime=regime)
 
@@ -712,7 +720,7 @@ class AgentPipeline:
         try:
             forecast = compute_forecast(candles)
         except Exception as exc:
-            logger.debug("Forecast head failed (non-fatal): %s", exc)
+            logger.warning("Forecast head failed (trading without forecast): %s", exc)
             forecast = ForecastResult(confidence=0.0)
 
         try:
@@ -721,7 +729,7 @@ class AgentPipeline:
             mhb = getattr(self.config, "max_hold_bars", 24)
             risk_est = compute_risk(candles, stop_pct=stop, tp_pct=tp, max_hold_bars=mhb)
         except Exception as exc:
-            logger.debug("Risk head failed (non-fatal): %s", exc)
+            logger.warning("Risk head failed (trading without risk estimates): %s", exc)
             risk_est = RiskEstimate()
 
         signal.forecast = forecast
@@ -785,6 +793,7 @@ class AgentPipeline:
             symbol, tech.action, sent.bias, macro.regime, signal.confidence,
             forecast.summary(), risk_est.summary(),
         )
+        self._last_signal[symbol] = signal
         return signal
 
     def record_trade_outcome(
@@ -814,11 +823,11 @@ class AgentPipeline:
                     realized_pnl=realized_pnl,
                 )
             except Exception as exc:
-                logger.debug("Performance tracker record failed: %s", exc)
+                logger.warning("Performance tracker record failed: %s", exc)
 
         if self.adaptive_conf is not None and ml_up_prob is not None:
             try:
                 actual_label = 1 if realized_pnl > 0 else 0
                 self.adaptive_conf.record_outcome(ml_up_prob, actual_label)
             except Exception as exc:
-                logger.debug("Adaptive confidence record failed: %s", exc)
+                logger.warning("Adaptive confidence record failed: %s", exc)

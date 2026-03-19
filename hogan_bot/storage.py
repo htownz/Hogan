@@ -21,9 +21,12 @@ Typical workflow::
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import uuid as _uuid
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 
@@ -248,6 +251,7 @@ def _create_schema(conn: sqlite3.Connection) -> None:
             regime            TEXT,
             tech_action       TEXT,
             tech_confidence   REAL,
+            pipeline_action   TEXT,
             sent_bias         REAL,
             sent_strength     REAL,
             macro_regime      TEXT,
@@ -288,6 +292,221 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         "ON decision_log (final_action)"
     )
 
+    # -------------------------------------------------------------------
+    # Swarm Decision Layer tables
+    # -------------------------------------------------------------------
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS swarm_decisions (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_ms           INTEGER NOT NULL,
+            symbol          TEXT    NOT NULL,
+            timeframe       TEXT    NOT NULL,
+            as_of_ms        INTEGER,
+            mode            TEXT    NOT NULL,
+            final_action    TEXT    NOT NULL,
+            final_conf      REAL    NOT NULL,
+            final_scale     REAL    NOT NULL,
+            agreement       REAL    NOT NULL,
+            entropy         REAL    NOT NULL,
+            vetoed          INTEGER NOT NULL,
+            block_reasons_json TEXT NOT NULL,
+            weights_json    TEXT    NOT NULL,
+            decision_json   TEXT    NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_swarm_decisions_ts "
+        "ON swarm_decisions (symbol, timeframe, ts_ms)"
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS swarm_agent_votes (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_ms           INTEGER NOT NULL,
+            symbol          TEXT    NOT NULL,
+            timeframe       TEXT    NOT NULL,
+            as_of_ms        INTEGER,
+            agent_id        TEXT    NOT NULL,
+            action          TEXT    NOT NULL,
+            confidence      REAL    NOT NULL,
+            expected_edge_bps REAL,
+            size_scale      REAL    NOT NULL,
+            veto            INTEGER NOT NULL,
+            block_reasons_json TEXT NOT NULL,
+            vote_json       TEXT    NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_swarm_votes_ts "
+        "ON swarm_agent_votes (symbol, timeframe, ts_ms)"
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS swarm_weight_snapshots (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_ms           INTEGER NOT NULL,
+            symbol          TEXT    NOT NULL,
+            timeframe       TEXT    NOT NULL,
+            regime          TEXT,
+            weights_json    TEXT    NOT NULL,
+            source          TEXT    NOT NULL,
+            notes           TEXT
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_swarm_weights_ts "
+        "ON swarm_weight_snapshots (symbol, timeframe, ts_ms)"
+    )
+
+    # -------------------------------------------------------------------
+    # Swarm outcomes — forward markouts and attribution per decision
+    # -------------------------------------------------------------------
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS swarm_outcomes (
+            decision_id         INTEGER PRIMARY KEY REFERENCES swarm_decisions(id),
+            forward_5m_bps      REAL,
+            forward_15m_bps     REAL,
+            forward_30m_bps     REAL,
+            forward_60m_bps     REAL,
+            mae_bps             REAL,
+            mfe_bps             REAL,
+            realized_slippage_bps REAL,
+            was_trade_taken     INTEGER NOT NULL DEFAULT 0,
+            baseline_would_trade INTEGER,
+            swarm_would_trade   INTEGER,
+            was_veto_correct    INTEGER,
+            was_skip_correct    INTEGER,
+            outcome_label       TEXT,
+            updated_ms          INTEGER NOT NULL
+        )
+        """
+    )
+
+    # -------------------------------------------------------------------
+    # Swarm promotion reports — persisted promotion check results
+    # -------------------------------------------------------------------
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS swarm_promotion_reports (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_ms      INTEGER NOT NULL,
+            candidate_id    TEXT    NOT NULL,
+            baseline_id     TEXT,
+            phase           TEXT    NOT NULL,
+            symbol          TEXT    NOT NULL,
+            timeframe       TEXT    NOT NULL,
+            recommendation  TEXT    NOT NULL,
+            blockers_json   TEXT    NOT NULL,
+            warnings_json   TEXT    NOT NULL,
+            metrics_json    TEXT    NOT NULL,
+            gates_json      TEXT    NOT NULL,
+            summary         TEXT    NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_swarm_promo_ts "
+        "ON swarm_promotion_reports (symbol, timeframe, created_ms)"
+    )
+
+    # -------------------------------------------------------------------
+    # Swarm attribution — per-decision outcome attribution scores
+    # -------------------------------------------------------------------
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS swarm_attribution (
+            decision_id         INTEGER PRIMARY KEY REFERENCES swarm_decisions(id),
+            outcome_label       TEXT    NOT NULL,
+            direction_attr      REAL    NOT NULL DEFAULT 0.0,
+            veto_attr           REAL    NOT NULL DEFAULT 0.0,
+            posture_attr        REAL    NOT NULL DEFAULT 0.0,
+            entry_attr          REAL    NOT NULL DEFAULT 0.0,
+            cost_attr           REAL    NOT NULL DEFAULT 0.0,
+            disagreement_attr   REAL    NOT NULL DEFAULT 0.0,
+            learning_note       TEXT    NOT NULL DEFAULT '',
+            attr_json           TEXT    NOT NULL DEFAULT '{}',
+            updated_ms          INTEGER NOT NULL
+        )
+        """
+    )
+
+    # -------------------------------------------------------------------
+    # Threshold tuning and agent quarantine tables
+    # -------------------------------------------------------------------
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS swarm_threshold_bundles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_ms INTEGER NOT NULL,
+            agent_id TEXT NOT NULL,
+            bundle_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            values_json TEXT NOT NULL,
+            notes TEXT,
+            active INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_swarm_threshold_bundles_agent
+          ON swarm_threshold_bundles(agent_id, bundle_id, version)
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS swarm_threshold_changes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_ms INTEGER NOT NULL,
+            agent_id TEXT NOT NULL,
+            bundle_id TEXT NOT NULL,
+            field_name TEXT NOT NULL,
+            old_value_json TEXT,
+            new_value_json TEXT,
+            reason TEXT NOT NULL,
+            operator TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_swarm_threshold_changes_agent
+          ON swarm_threshold_changes(agent_id, ts_ms)
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS swarm_agent_modes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_ms INTEGER NOT NULL,
+            agent_id TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            operator TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_swarm_agent_modes_agent
+          ON swarm_agent_modes(agent_id, ts_ms)
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS swarm_stall_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_ms INTEGER NOT NULL,
+            code TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            metric_name TEXT NOT NULL,
+            actual REAL NOT NULL,
+            threshold REAL NOT NULL,
+            notes TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_swarm_stall_alerts_ts
+          ON swarm_stall_alerts(ts_ms)
+    """)
+
     # ── Schema migrations for existing databases ──────────────────────
     for _alt in (
         "ALTER TABLE paper_trades ADD COLUMN entry_decision_id INTEGER",
@@ -302,11 +521,24 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         "ALTER TABLE paper_trades ADD COLUMN bars_held INTEGER",
         "ALTER TABLE paper_trades ADD COLUMN exit_regime TEXT",
         "ALTER TABLE paper_trades ADD COLUMN entry_atr_pct REAL",
+        "ALTER TABLE swarm_agent_votes ADD COLUMN decision_id INTEGER REFERENCES swarm_decisions(id)",
+        "ALTER TABLE decision_log ADD COLUMN swarm_decision_id INTEGER",
+        "ALTER TABLE decision_log ADD COLUMN pipeline_action TEXT",
+        "ALTER TABLE swarm_decisions ADD COLUMN pre_veto_action TEXT",
+        "ALTER TABLE swarm_decisions ADD COLUMN pre_veto_confidence REAL",
+        "ALTER TABLE swarm_decisions ADD COLUMN pre_veto_agreement REAL",
+        "ALTER TABLE swarm_decisions ADD COLUMN pre_veto_entropy REAL",
+        "ALTER TABLE swarm_decisions ADD COLUMN dominant_veto_agent TEXT",
+        "ALTER TABLE swarm_decisions ADD COLUMN veto_count INTEGER",
+        "ALTER TABLE swarm_decisions ADD COLUMN veto_agents_json TEXT",
+        "ALTER TABLE swarm_decisions ADD COLUMN stall_state TEXT",
+        "ALTER TABLE swarm_decisions ADD COLUMN regime TEXT",
     ):
         try:
             conn.execute(_alt)
-        except sqlite3.OperationalError:
-            pass  # column already exists
+        except sqlite3.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                logger.warning("Schema migration failed for '%s': %s", _alt[:60], exc)
 
     conn.commit()
 
@@ -814,6 +1046,7 @@ def log_decision(
     regime: str | None = None,
     tech_action: str | None = None,
     tech_confidence: float | None = None,
+    pipeline_action: str | None = None,
     sent_bias: float | None = None,
     sent_strength: float | None = None,
     macro_regime: str | None = None,
@@ -841,13 +1074,14 @@ def log_decision(
     size_score: float | None = None,
     quality_components_json: str | None = None,
     block_reasons: list[str] | None = None,
+    swarm_decision_id: int | None = None,
 ) -> int:
     """Insert a structured decision packet.  Returns the row id (decision_id)."""
     cur = conn.execute(
         """
         INSERT INTO decision_log (
             ts_ms, symbol, regime,
-            tech_action, tech_confidence,
+            tech_action, tech_confidence, pipeline_action,
             sent_bias, sent_strength,
             macro_regime, macro_risk_on,
             meta_weights_json,
@@ -858,12 +1092,13 @@ def log_decision(
             ml_up_prob, conf_scale, explanation,
             linked_trade_id,
             direction_score, quality_score, size_score,
-            quality_components_json, block_reasons_json
-        ) VALUES (?,?,?, ?,?, ?,?, ?,?, ?, ?,?,?,?, ?,?,?,?,?, ?, ?,?,?, ?,?,?, ?, ?,?,?, ?,?)
+            quality_components_json, block_reasons_json,
+            swarm_decision_id
+        ) VALUES (?,?,?, ?,?,?, ?,?, ?,?, ?, ?,?,?,?, ?,?,?,?,?, ?, ?,?,?, ?,?,?, ?, ?,?,?, ?,?, ?)
         """,
         (
             int(ts_ms), symbol, regime,
-            tech_action, tech_confidence,
+            tech_action, tech_confidence, pipeline_action,
             sent_bias, sent_strength,
             macro_regime,
             (1 if macro_risk_on else 0) if macro_risk_on is not None else None,
@@ -877,6 +1112,7 @@ def log_decision(
             direction_score, quality_score, size_score,
             quality_components_json,
             json.dumps(block_reasons) if block_reasons else None,
+            swarm_decision_id,
         ),
     )
     conn.commit()

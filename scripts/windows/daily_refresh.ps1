@@ -32,7 +32,7 @@ Add-Content $LOG_FILE "═══════════════════
 Set-Location $HOGAN_ROOT
 
 try {
-    & $VENV_PYTHON refresh_daily.py 2>&1 | Tee-Object -Append -FilePath $LOG_FILE
+    & $VENV_PYTHON scripts\data\refresh_daily.py 2>&1 | Tee-Object -Append -FilePath $LOG_FILE
     $exit_code = $LASTEXITCODE
 } catch {
     Add-Content $LOG_FILE "ERROR: $_"

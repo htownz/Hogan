@@ -8,11 +8,16 @@ import pandas as pd
 
 from hogan_bot.agent_pipeline import AgentPipeline
 from hogan_bot.decision import (
+    GateDecision,
     apply_ml_filter,
     edge_gate,
     entry_quality_gate,
     estimate_spread_from_candles,
+    loss_streak_scale,
+    ml_blind_blocks_shorts,
+    ml_blind_scale,
     ml_confidence,
+    ml_probability_sizer,
     pullback_gate,
     ranging_gate,
 )
@@ -21,7 +26,7 @@ from hogan_bot.expectancy import ExpectancyTracker
 from hogan_bot.indicators import compute_atr
 from hogan_bot.ml import TrainedModel, predict_up_probability
 from hogan_bot.paper import PaperPortfolio
-from hogan_bot.regime import detect_regime, reset_regime_history
+from hogan_bot.regime import detect_regime, reset_regime_history, RegimeTransitionTracker
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
 from hogan_bot.timeframe_utils import bars_per_year as tf_bars_per_year
 from hogan_bot.timeframe_utils import infer_timeframe_from_candles
@@ -887,6 +892,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     min_vote_margin: int = 1,
     trailing_stop_pct: float = 0.0,
     take_profit_pct: float = 0.0,
+    trail_activation_pct: float = 0.0,
     ml_confidence_sizing: bool = False,
     atr_stop_multiplier: float = 1.5,
     use_ict: bool = False,
@@ -936,6 +942,17 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     min_regime_confidence: float = 0.30,
     max_whipsaws: int = 3,
     reversal_confidence_mult: float = 1.3,
+    macro_sitout=None,
+    use_ml_as_sizer: bool = False,
+    funding_overlay=None,
+    use_policy_core: bool = False,
+    swarm_enabled: bool = False,
+    swarm_mode: str = "shadow",
+    swarm_agents: str = "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1",
+    exit_drawdown_pct: float = 0.03,
+    exit_time_decay: float = 0.75,
+    exit_vol_expansion: float = 2.0,
+    exit_stagnation_bars: int = 12,
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
@@ -984,19 +1001,40 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         ict_ote_enabled=ict_ote_enabled, ict_ote_low=ict_ote_low,
         ict_ote_high=ict_ote_high, use_rl_agent=use_rl_agent,
         rl_policy=rl_policy, symbols=[symbol],
+        timeframe=_tf,
         # Fields required by effective_thresholds()
         ml_buy_threshold=ml_buy_threshold,
         ml_sell_threshold=ml_sell_threshold,
         trailing_stop_pct=trailing_stop_pct,
         take_profit_pct=take_profit_pct,
         use_regime_detection=True,
+        # Fields needed by policy_core.decide()
+        fee_rate=fee_rate,
+        max_risk_per_trade=max_risk_per_trade,
+        aggressive_allocation=aggressive_allocation,
+        use_ml_filter=ml_model is not None,
+        use_ml_as_sizer=use_ml_as_sizer,
+        ml_confidence_sizing=ml_confidence_sizing,
+        min_edge_multiple=min_edge_multiple,
+        min_final_confidence=min_final_confidence,
+        min_tech_confidence=min_tech_confidence,
+        min_regime_confidence=min_regime_confidence,
+        max_whipsaws=max_whipsaws,
+        swarm_enabled=swarm_enabled,
+        swarm_mode=swarm_mode,
+        swarm_agents=swarm_agents,
+        swarm_min_agreement=0.60,
+        swarm_min_vote_margin=0.10,
+        swarm_max_entropy=0.95,
+        swarm_log_full_votes=True,
     )
     _bt_conn = None
     if db_path:
         import sqlite3
         _bt_conn = sqlite3.connect(db_path, check_same_thread=False)
         _bt_conn.execute("PRAGMA journal_mode=WAL")
-        _bt_conn.execute("PRAGMA query_only=ON")
+        if not (swarm_enabled and use_policy_core):
+            _bt_conn.execute("PRAGMA query_only=ON")
     _pipeline = AgentPipeline(_bt_config, conn=_bt_conn)
 
     wins = 0
@@ -1063,16 +1101,18 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         "ranging_blocked_whipsaw": 0,
         "mtf_thesis_created": 0, "mtf_thesis_executed": 0,
         "mtf_thesis_expired": 0, "mtf_15m_entry_used": 0,
+        "blocked_short_ml_blind": 0, "loss_streak_scaled": 0,
     }
     # ML probability histogram (to understand model output distribution)
     _ml_probs: list[float] = []
+    # Trade outcome history for loss-streak dampener (True=win, False=loss)
+    _trade_outcomes: list[bool] = []
 
-    # ExitEvaluator (parity with event_loop — configurable thresholds)
     _exit_eval = ExitEvaluator(
-        drawdown_panic_pct=0.03,
-        time_decay_threshold=0.75,
-        volatility_expansion_threshold=2.0,
-        max_consolidation_bars=12,
+        drawdown_panic_pct=exit_drawdown_pct,
+        time_decay_threshold=exit_time_decay,
+        volatility_expansion_threshold=exit_vol_expansion,
+        max_consolidation_bars=exit_stagnation_bars,
     )
 
     # Regime tracking (parity with event_loop)
@@ -1081,10 +1121,16 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     _whipsaw_count: int = 0
     _last_signal: str = "hold"
     _regime_per_bar: list[str | None] = []
+    _regime_transition = RegimeTransitionTracker(cooldown_bars=3, min_scale=0.40)
 
     # Next-open execution: pending buys/sells to fill at next bar's open
     _pending_buys: dict[str, float] = {}
     _pending_sells: dict[str, tuple[float, float, int | None, str]] = {}
+
+    _pc_state = None
+    if use_policy_core:
+        from hogan_bot.policy_core import PolicyState, decide as _pc_decide
+        _pc_state = PolicyState()
 
     min_rows = max(long_ma_window, volume_window) + 2
     _lookback = max(200, long_ma_window * 3, volume_window * 3)
@@ -1103,7 +1149,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             for sym, size in list(_pending_buys.items()):
                 _pending_buys.pop(sym, None)
                 buy_px = open_px * (1.0 + slip_mult)
-                if portfolio.execute_buy(sym, buy_px, size, trailing_stop_pct=trailing_stop_pct, take_profit_pct=take_profit_pct):
+                if portfolio.execute_buy(sym, buy_px, size, trailing_stop_pct=trailing_stop_pct, take_profit_pct=take_profit_pct, trail_activation_pct=trail_activation_pct):
                     trades += 1
                     _entry_bar[sym] = i - 1
                     _entry_regime[sym] = _current_regime
@@ -1117,6 +1163,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     trades += 1
                     closed += 1
                     is_win = sell_px > avg_entry
+                    _trade_outcomes.append(is_win)
                     if is_win:
                         wins += 1
                     elif loss_cooldown_bars > 0:
@@ -1148,11 +1195,19 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "entry_regime": _entry_regime.pop(sym, _current_regime),
                             "regime_confidence": _entry_regime_conf.pop(sym, _regime_conf),
                             "close_reason": reason,
+                            "take_profit_pct": take_profit_pct,
                         })
-            for sym, size in list(_pending_shorts.items()):
+            for sym, _ps_val in list(_pending_shorts.items()):
                 _pending_shorts.pop(sym, None)
+                if isinstance(_ps_val, tuple):
+                    size, _ps_atr = _ps_val
+                else:
+                    size, _ps_atr = _ps_val, None
                 short_px = open_px * (1.0 - slip_mult)
-                if portfolio.execute_short(sym, short_px, size, trailing_stop_pct=trailing_stop_pct, take_profit_pct=take_profit_pct):
+                if portfolio.execute_short(sym, short_px, size, trailing_stop_pct=trailing_stop_pct, take_profit_pct=take_profit_pct, trail_activation_pct=trail_activation_pct):
+                    spos = portfolio.short_positions.get(sym)
+                    if spos is not None and _ps_atr is not None:
+                        spos.entry_atr_pct = _ps_atr
                     trades += 1
                     _short_entry_bar[sym] = i - 1
                     _short_entry_regime[sym] = _current_regime
@@ -1166,6 +1221,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     trades += 1
                     short_closed += 1
                     is_win = cover_px < avg_entry
+                    _trade_outcomes.append(is_win)
                     if is_win:
                         short_wins += 1
                     elif loss_cooldown_bars > 0:
@@ -1197,6 +1253,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "entry_regime": _short_entry_regime.pop(sym, _current_regime),
                             "regime_confidence": _short_entry_regime_conf.pop(sym, _regime_conf),
                             "close_reason": reason,
+                            "take_profit_pct": take_profit_pct,
                         })
 
         mark = {symbol: px}
@@ -1207,6 +1264,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             _short_max = max_hold_bars
         else:
             _short_max = 0
+
         exits = portfolio.check_exits(
             mark, max_hold_bars=max_hold_bars,
             short_max_hold_bars=_short_max,
@@ -1233,6 +1291,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         trades += 1
                         short_closed += 1
                         is_win = cover_px < avg_entry
+                        _trade_outcomes.append(is_win)
                         if is_win:
                             short_wins += 1
                         elif loss_cooldown_bars > 0:
@@ -1273,6 +1332,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                 "entry_regime": _short_entry_regime.pop(exit_symbol, _current_regime),
                                 "regime_confidence": _short_entry_regime_conf.pop(exit_symbol, _regime_conf),
                                 "close_reason": reason,
+                                "take_profit_pct": take_profit_pct,
                             })
                 continue
 
@@ -1294,6 +1354,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     trades += 1
                     closed += 1
                     is_win = sell_px > avg_entry
+                    _trade_outcomes.append(is_win)
                     if is_win:
                         wins += 1
                     elif loss_cooldown_bars > 0:
@@ -1328,6 +1389,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "entry_regime": _entry_regime.pop(exit_symbol, _current_regime),
                             "regime_confidence": _entry_regime_conf.pop(exit_symbol, _regime_conf),
                             "close_reason": reason,
+                            "take_profit_pct": take_profit_pct,
                         })
 
         # Build RL position state for this bar
@@ -1351,6 +1413,11 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 pass
         _regime_per_bar.append(_current_regime)
 
+        # Regime transition dampener: reduce sizing at regime boundaries
+        _transition_scale = _regime_transition.update(_current_regime) if _current_regime else 1.0
+        if _transition_scale < 1.0:
+            _funnel["regime_transition_bars"] = _funnel.get("regime_transition_bars", 0) + 1
+
         # Regime-adjusted thresholds (parity with event_loop)
         _eff: dict[str, float] = {}
         if _rstate is not None:
@@ -1363,166 +1430,276 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         _eff_ml_sell = _eff.get("ml_sell_threshold", ml_sell_threshold)
         _eff_tp = _eff.get("take_profit_pct", take_profit_pct)
         _eff_ts = _eff.get("trailing_stop_pct", trailing_stop_pct)
-        _eff_position_scale = _eff.get("position_scale", 1.0)
+        _eff_position_scale = _eff.get("position_scale", 1.0) * _transition_scale
         _eff_allow_longs = _eff.get("allow_longs", True)
         _eff_allow_shorts = _eff.get("allow_shorts", True)
         _eff_long_size_scale = _eff.get("long_size_scale", 1.0)
         _eff_short_size_scale = _eff.get("short_size_scale", 1.0)
 
         _as_of = _bar_ts_ms(candles, i - 1) if _bt_conn is not None else None
-        signal = _pipeline.run(
-            window,
-            symbol=symbol,
-            as_of_ms=_as_of,
-            rl_in_position=_rl_in_pos,
-            rl_unrealized_pnl=_rl_upnl,
-            rl_bars_in_trade=_rl_bars_in_trade,
-            regime=_current_regime,
-            regime_state=_rstate,
-        )
 
-        _funnel["bars_evaluated"] += 1
-        action = signal.action
-        conf_scale = signal.confidence or 1.0
+        # ── Policy-core delegation ──────────────────────────────────
+        if use_policy_core:
+            _pc_state.ml_probs = _ml_probs
+            _pc_state.trade_outcomes = _trade_outcomes
 
-        # Track pipeline output before any filtering
-        if action == "buy":
-            _funnel["pipeline_buy"] += 1
-        elif action == "sell":
-            _funnel["pipeline_sell"] += 1
-
-        up_prob = None
-        if ml_model is not None:
-            up_prob = predict_up_probability(window, ml_model)
-            _ml_probs.append(up_prob)
-            _ml_gd = apply_ml_filter(action, up_prob, _eff_ml_buy, _eff_ml_sell)
-            action = _ml_gd.action
-            if ml_confidence_sizing:
-                conf_scale *= ml_confidence(up_prob)
-
-        if action == "buy":
-            _funnel["post_ml_buy"] += 1
-        elif action == "sell":
-            _funnel["post_ml_sell"] += 1
-
-        _atr_series = compute_atr(window, window=14)
-        _atr_pct = float(_atr_series.iloc[-1]) / max(px, 1e-9)
-        _spread_est = estimate_spread_from_candles(window)
-        _forecast_ret = None
-        if signal.forecast is not None and getattr(signal.forecast, 'confidence', 0) > 0.2:
-            _er = signal.forecast.expected_return
-            if isinstance(_er, dict) and _er:
-                _forecast_ret = max(abs(v) for v in _er.values())
-            elif isinstance(_er, (int, float)):
-                _forecast_ret = abs(float(_er))
-        _edge_gd = edge_gate(
-            action,
-            atr_pct=_atr_pct,
-            take_profit_pct=_eff_tp,
-            fee_rate=fee_rate,
-            min_edge_multiple=min_edge_multiple,
-            forecast_expected_return=_forecast_ret,
-            estimated_spread=_spread_est,
-        )
-        action = _edge_gd.action
-
-        if _edge_gd.blocked_by:
-            blk = _edge_gd.blocked_by
-            if "atr" in blk:
-                _funnel["edge_blocked_atr"] += 1
-            elif "tp" in blk:
-                _funnel["edge_blocked_tp"] += 1
-            elif "forecast" in blk:
-                _funnel["edge_blocked_forecast"] += 1
-            elif "spread" in blk:
-                _funnel["edge_blocked_spread"] += 1
-
-        if action == "buy":
-            _funnel["post_edge_buy"] += 1
-        elif action == "sell":
-            _funnel["post_edge_sell"] += 1
-
-        _tech_conf = signal.tech.confidence if signal.tech else None
-        _quality_gd = entry_quality_gate(
-            action,
-            final_confidence=signal.confidence,
-            tech_confidence=_tech_conf,
-            regime=_current_regime,
-            regime_confidence=_regime_conf,
-            recent_whipsaw_count=_whipsaw_count,
-            min_final_confidence=min_final_confidence,
-            min_tech_confidence=min_tech_confidence,
-            min_regime_confidence=min_regime_confidence,
-            max_whipsaws=max_whipsaws,
-        )
-        action = _quality_gd.action
-        _quality_scale = _quality_gd.size_scale
-
-        if action == "buy":
-            _funnel["post_quality_buy"] += 1
-        elif action == "sell":
-            _funnel["post_quality_sell"] += 1
-
-        _tech_action = signal.tech.action if signal.tech else None
-        _ranging_gd = ranging_gate(
-            action,
-            regime=_current_regime,
-            tech_action=_tech_action,
-            up_prob=up_prob if ml_model is not None else None,
-            recent_whipsaw_count=_whipsaw_count,
-        )
-        action = _ranging_gd.action
-        _ranging_scale = _ranging_gd.size_scale
-
-        if _ranging_gd.blocked_by:
-            blk = _ranging_gd.blocked_by
-            if "tech" in blk:
-                _funnel["ranging_blocked_tech"] += 1
-            elif "ml" in blk:
-                _funnel["ranging_blocked_ml"] += 1
-            elif "whipsaw" in blk:
-                _funnel["ranging_blocked_whipsaw"] += 1
-
-        if enable_pullback_gate:
-            _pb_range = 0.70 if _use_mtf else 0.55
-            _pb_runup = 3.0 if _use_mtf else 2.0
-            _pullback_gd = pullback_gate(
-                action, window,
-                max_range_position=_pb_range,
-                max_run_up_pct=_pb_runup,
-                regime=_current_regime,
+            _intent = _pc_decide(
+                symbol=symbol,
+                candles=window,
+                equity_usd=equity_curve[-1] if equity_curve else starting_balance_usd,
+                config=_bt_config,
+                pipeline=_pipeline,
+                ml_model=ml_model,
+                state=_pc_state,
+                conn=_bt_conn,
+                as_of_ms=_as_of,
+                mode="backtest",
+                recent_whipsaw_count=_whipsaw_count,
+                macro_sitout=macro_sitout,
+                funding_overlay=funding_overlay,
+                enable_pullback_gate=enable_pullback_gate,
+                enable_freshness_check=False,
+                peak_equity_usd=guard.peak_equity,
             )
-            action = _pullback_gd.action
-            _pullback_scale = _pullback_gd.size_scale
-            if _pullback_gd.blocked_by:
-                _funnel["pullback_blocked"] = _funnel.get("pullback_blocked", 0) + 1
-                if "resistance" in (_pullback_gd.blocked_by or ""):
-                    _funnel["pullback_blocked_resistance"] = _funnel.get("pullback_blocked_resistance", 0) + 1
-            elif _pullback_scale < 1.0 and action == "buy":
-                _funnel["pullback_halved"] = _funnel.get("pullback_halved", 0) + 1
-        else:
-            _pullback_scale = 1.0
 
-        if action == "buy":
-            _funnel["post_ranging_buy"] += 1
-        elif action == "sell":
-            _funnel["post_ranging_sell"] += 1
+            action = _intent.action
+            up_prob = _intent.up_prob
+            size = _intent.size_usd / px if px > 0 else 0.0
+            conf_scale = _intent.conf_scale
+            _quality_scale = _intent.quality_scale
+            _ranging_scale = _intent.ranging_scale
+            _pullback_scale = _intent.pullback_scale
+            _momentum_scale = _intent.momentum_scale
+            _atr_pct = _intent.atr_pct
+            _eff_ts = _intent.eff_trailing_stop_pct or _eff_ts
+            _eff_tp = _intent.eff_take_profit_pct or _eff_tp
+            _eff_allow_longs = _intent.eff_allow_longs
+            _eff_allow_shorts = _intent.eff_allow_shorts
+            _eff_long_size_scale = _intent.eff_long_size_scale
+            _eff_short_size_scale = _intent.eff_short_size_scale
+            signal = types.SimpleNamespace(
+                action=_intent.action,
+                confidence=_intent.confidence,
+                stop_distance_pct=_intent.stop_distance_pct,
+                volume_ratio=_intent.vol_ratio,
+                tech=None,
+                forecast=None,
+                explanation=_intent.explanation,
+            )
 
-        equity = portfolio.total_equity(mark)
-        equity_curve.append(equity)
+            _funnel["bars_evaluated"] += 1
+            if _intent.action == "buy":
+                _funnel["pipeline_buy"] += 1
+                _funnel["post_ml_buy"] += 1
+                _funnel["post_edge_buy"] += 1
+                _funnel["post_quality_buy"] += 1
+                _funnel["post_ranging_buy"] += 1
+            elif _intent.action == "sell":
+                _funnel["pipeline_sell"] += 1
+                _funnel["post_ml_sell"] += 1
+                _funnel["post_edge_sell"] += 1
+                _funnel["post_quality_sell"] += 1
+                _funnel["post_ranging_sell"] += 1
+            for _br in _intent.block_reasons:
+                _funnel[_br] = _funnel.get(_br, 0) + 1
 
-        if not guard.update_and_check(equity):
-            break
+            equity = portfolio.total_equity(mark)
+            equity_curve.append(equity)
+            if not guard.update_and_check(equity):
+                break
 
-        size = calculate_position_size(
-            equity_usd=equity,
-            price=px,
-            stop_distance_pct=signal.stop_distance_pct,
-            max_risk_per_trade=max_risk_per_trade,
-            max_allocation_pct=aggressive_allocation,
-            confidence_scale=conf_scale * _quality_scale * _ranging_scale * _pullback_scale * _eff_position_scale,
-            fee_rate=fee_rate,
-        )
+        if not use_policy_core:
+            signal = _pipeline.run(
+                window,
+                symbol=symbol,
+                as_of_ms=_as_of,
+                rl_in_position=_rl_in_pos,
+                rl_unrealized_pnl=_rl_upnl,
+                rl_bars_in_trade=_rl_bars_in_trade,
+                regime=_current_regime,
+                regime_state=_rstate,
+            )
+
+            _funnel["bars_evaluated"] += 1
+            action = signal.action
+            conf_scale = 1.0
+
+            # Track pipeline output before any filtering
+            if action == "buy":
+                _funnel["pipeline_buy"] += 1
+            elif action == "sell":
+                _funnel["pipeline_sell"] += 1
+
+            up_prob = None
+            if ml_model is not None:
+                if hasattr(ml_model, "set_regime"):
+                    ml_model.set_regime(_current_regime)
+                up_prob = predict_up_probability(window, ml_model)
+                _ml_probs.append(up_prob)
+                if use_ml_as_sizer:
+                    conf_scale *= ml_probability_sizer(action, up_prob)
+                else:
+                    _ml_gd = apply_ml_filter(action, up_prob, _eff_ml_buy, _eff_ml_sell)
+                    action = _ml_gd.action
+                    if ml_confidence_sizing:
+                        conf_scale *= ml_confidence(up_prob)
+                _blind = ml_blind_scale(_ml_probs)
+                if _blind < 1.0:
+                    conf_scale *= _blind
+                    _funnel["ml_blind_scaled"] = _funnel.get("ml_blind_scaled", 0) + 1
+
+            _ls_scale = loss_streak_scale(_trade_outcomes)
+            if _ls_scale < 1.0:
+                conf_scale *= _ls_scale
+                _funnel["loss_streak_scaled"] = _funnel.get("loss_streak_scaled", 0) + 1
+
+            if action == "buy":
+                _funnel["post_ml_buy"] += 1
+            elif action == "sell":
+                _funnel["post_ml_sell"] += 1
+
+            _atr_series = compute_atr(window, window=14)
+            _atr_pct = float(_atr_series.iloc[-1]) / max(px, 1e-9)
+            _spread_est = estimate_spread_from_candles(window)
+            _forecast_ret = None
+            if signal.forecast is not None and getattr(signal.forecast, 'confidence', 0) > 0.2:
+                _er = signal.forecast.expected_return
+                if isinstance(_er, dict) and _er:
+                    _forecast_ret = max(abs(v) for v in _er.values())
+                elif isinstance(_er, (int, float)):
+                    _forecast_ret = abs(float(_er))
+            _edge_gd = edge_gate(
+                action,
+                atr_pct=_atr_pct,
+                take_profit_pct=_eff_tp,
+                fee_rate=fee_rate,
+                min_edge_multiple=min_edge_multiple,
+                forecast_expected_return=_forecast_ret,
+                estimated_spread=_spread_est,
+                atr_friction_multiple=getattr(_bt_config, "sell_atr_friction_multiple", 0.8),
+                buy_atr_friction_multiple=getattr(_bt_config, "buy_atr_friction_multiple", 0.25),
+            )
+            action = _edge_gd.action
+
+            if _edge_gd.blocked_by:
+                blk = _edge_gd.blocked_by
+                if "atr" in blk:
+                    _funnel["edge_blocked_atr"] += 1
+                elif "tp" in blk:
+                    _funnel["edge_blocked_tp"] += 1
+                elif "forecast" in blk:
+                    _funnel["edge_blocked_forecast"] += 1
+                elif "spread" in blk:
+                    _funnel["edge_blocked_spread"] += 1
+
+            if action == "buy":
+                _funnel["post_edge_buy"] += 1
+            elif action == "sell":
+                _funnel["post_edge_sell"] += 1
+
+            _tech_conf = signal.tech.confidence if signal.tech else None
+            _quality_gd = entry_quality_gate(
+                action,
+                final_confidence=signal.confidence,
+                tech_confidence=_tech_conf,
+                regime=_current_regime,
+                regime_confidence=_regime_conf,
+                recent_whipsaw_count=_whipsaw_count,
+                min_final_confidence=min_final_confidence,
+                min_tech_confidence=min_tech_confidence,
+                min_regime_confidence=min_regime_confidence,
+                max_whipsaws=max_whipsaws,
+            )
+            action = _quality_gd.action
+            _quality_scale = _quality_gd.size_scale
+
+            if action == "buy":
+                _funnel["post_quality_buy"] += 1
+            elif action == "sell":
+                _funnel["post_quality_sell"] += 1
+
+            _tech_action = signal.tech.action if signal.tech else None
+            _ranging_gd = ranging_gate(
+                action,
+                regime=_current_regime,
+                tech_action=_tech_action,
+                up_prob=up_prob if ml_model is not None else None,
+                recent_whipsaw_count=_whipsaw_count,
+            )
+            action = _ranging_gd.action
+            _ranging_scale = _ranging_gd.size_scale
+
+            if _ranging_gd.blocked_by:
+                blk = _ranging_gd.blocked_by
+                if "tech" in blk:
+                    _funnel["ranging_blocked_tech"] += 1
+                elif "ml" in blk:
+                    _funnel["ranging_blocked_ml"] += 1
+                elif "whipsaw" in blk:
+                    _funnel["ranging_blocked_whipsaw"] += 1
+
+            if enable_pullback_gate:
+                _pb_range = 0.70 if _use_mtf else 0.55
+                _pb_runup = 3.0 if _use_mtf else 2.0
+                _pullback_gd = pullback_gate(
+                    action, window,
+                    max_range_position=_pb_range,
+                    max_run_up_pct=_pb_runup,
+                    regime=_current_regime,
+                )
+                action = _pullback_gd.action
+                _pullback_scale = _pullback_gd.size_scale
+                if _pullback_gd.blocked_by:
+                    _funnel["pullback_blocked"] = _funnel.get("pullback_blocked", 0) + 1
+                    if "resistance" in (_pullback_gd.blocked_by or ""):
+                        _funnel["pullback_blocked_resistance"] = _funnel.get("pullback_blocked_resistance", 0) + 1
+                elif _pullback_scale < 1.0 and action == "buy":
+                    _funnel["pullback_halved"] = _funnel.get("pullback_halved", 0) + 1
+            else:
+                _pullback_scale = 1.0
+
+            if action == "buy":
+                _funnel["post_ranging_buy"] += 1
+            elif action == "sell":
+                _funnel["post_ranging_sell"] += 1
+
+            # ── Long momentum confirmation ───────────────────────────────────
+            _momentum_scale = 1.0
+            if action == "buy" and len(window) >= 8 and _current_regime != "ranging":
+                _ema8 = window["close"].ewm(span=8, min_periods=8).mean().iloc[-1]
+                if _ema8 > 0 and px < _ema8:
+                    _pct_below = (_ema8 - px) / _ema8
+                    _momentum_scale = max(0.40, 1.0 - _pct_below * 20.0)
+                    _funnel["long_momentum_reduced"] = _funnel.get("long_momentum_reduced", 0) + 1
+                else:
+                    _funnel["long_momentum_confirmed"] = _funnel.get("long_momentum_confirmed", 0) + 1
+
+            equity = portfolio.total_equity(mark)
+            equity_curve.append(equity)
+
+            if not guard.update_and_check(equity):
+                break
+
+            size = calculate_position_size(
+                equity_usd=equity,
+                price=px,
+                stop_distance_pct=signal.stop_distance_pct,
+                max_risk_per_trade=max_risk_per_trade,
+                max_allocation_pct=aggressive_allocation,
+                confidence_scale=max(0.15, conf_scale * _quality_scale * _ranging_scale * _pullback_scale * _eff_position_scale * _momentum_scale),
+                fee_rate=fee_rate,
+            )
+
+            # ── Macro sitout filter ────────────────────────────────────────
+            if macro_sitout is not None and action != "hold":
+                _bar_ts = candles.iloc[i - 1].get("timestamp") if i > 0 else None
+                _sitout = macro_sitout.check(_bar_ts)
+                if _sitout.should_sitout:
+                    _funnel["macro_sitout"] = _funnel.get("macro_sitout", 0) + 1
+                    action = "hold"
+                elif _sitout.size_scale < 1.0:
+                    size *= _sitout.size_scale
+                    _funnel["macro_scaled"] = _funnel.get("macro_scaled", 0) + 1
 
         # Track whipsaws (signal flipped from last bar)
         if action != "hold" and _last_signal != "hold" and action != _last_signal:
@@ -1573,6 +1750,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                 symbol, _mtf_px, _mtf_size,
                                 trailing_stop_pct=_eff_ts,
                                 take_profit_pct=_eff_tp,
+                                trail_activation_pct=trail_activation_pct,
                             ):
                                 _pos = portfolio.positions.get(symbol)
                                 if _pos is not None:
@@ -1638,62 +1816,86 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         if action == "buy":
             _consecutive_exit_signals = 0
 
-            # Cover any existing short first
+            # Cover any existing short first (with ExitEvaluator confirmation)
             if enable_shorts and symbol in portfolio.short_positions:
                 _consecutive_short_exit_signals += 1
                 spos = portfolio.short_positions[symbol]
-                if spos.bars_held >= _min_hold_bars:
-                    _consecutive_short_exit_signals = 0
-                    cover_qty = spos.qty
-                    s_avg_entry = spos.avg_entry
-                    s_entry_bar = _short_entry_bar.get(symbol)
-                    if use_next_open and i < len(candles):
-                        _pending_covers[symbol] = (cover_qty, s_avg_entry, s_entry_bar, "buy_signal")
-                        _short_entry_bar.pop(symbol, None)
+                if spos.bars_held < _min_hold_bars:
+                    pass
+                elif _consecutive_short_exit_signals < _exit_confirm_bars:
+                    pass
+                else:
+                    _short_exit_dec = _exit_eval.should_exit(
+                        candles=window,
+                        entry_price=spos.avg_entry,
+                        current_price=px,
+                        bars_held=spos.bars_held,
+                        side="short",
+                        max_hold_bars=_short_max if _short_max > 0 else max_hold_bars,
+                        entry_atr=getattr(spos, "entry_atr_pct", None) or None,
+                        vol_ratio=signal.volume_ratio,
+                        regime=_current_regime,
+                        max_favorable_pct=getattr(spos, "max_favorable_pct", 0.0),
+                    )
+                    if not _short_exit_dec.should_exit:
+                        pass
                     else:
-                        cover_px = px * (1.0 + slip_mult)
-                        _short_entry_bar.pop(symbol, None)
-                        if portfolio.execute_cover(symbol, cover_px, cover_qty):
-                            trades += 1
-                            short_closed += 1
-                            _funnel["short_covered_signal"] += 1
-                            is_win = cover_px < s_avg_entry
-                            if is_win:
-                                short_wins += 1
-                            elif loss_cooldown_bars > 0:
-                                _cooldown_remaining = loss_cooldown_bars
-                            trade_log.append(
-                                {"bar": bar_ts, "action": "cover", "reason": "buy_signal", "price": cover_px, "qty": cover_qty}
-                            )
-                            gross_pct = (s_avg_entry - cover_px) / s_avg_entry if s_avg_entry else 0
-                            _expectancy.record_trade(
-                                symbol=symbol, regime=_current_regime or "backtest",
-                                gross_pnl_pct=gross_pct, net_pnl_pct=gross_pct - 2 * fee_rate,
-                                hold_bars=(i - 1 - s_entry_bar) if s_entry_bar is not None else 0,
-                                close_reason="buy_signal",
-                            )
-                            if s_entry_bar is not None:
-                                exit_bar_idx = min(i - 1, len(candles) - 1)
-                                fee = cover_qty * (s_avg_entry + cover_px) * fee_rate
-                                pnl_usd = (s_avg_entry - cover_px) * cover_qty - fee
-                                pnl_pct = (s_avg_entry - cover_px) / s_avg_entry * 100 if s_avg_entry else 0
-                                closed_trades.append({
-                                    "entry_bar_idx": s_entry_bar,
-                                    "exit_bar_idx": exit_bar_idx,
-                                    "entry_ts_ms": _bar_ts_ms(candles, s_entry_bar),
-                                    "exit_ts_ms": _bar_ts_ms(candles, exit_bar_idx),
-                                    "side": "short",
-                                    "entry_price": s_avg_entry,
-                                    "exit_price": cover_px,
-                                    "qty": cover_qty,
-                                    "pnl_usd": pnl_usd,
-                                    "pnl_pct": pnl_pct,
-                                    "entry_regime": _short_entry_regime.pop(symbol, _current_regime),
-                                    "regime_confidence": _short_entry_regime_conf.pop(symbol, _regime_conf),
-                                    "close_reason": "buy_signal",
-                                })
+                        _consecutive_short_exit_signals = 0
+                        cover_qty = spos.qty
+                        s_avg_entry = spos.avg_entry
+                        s_entry_bar = _short_entry_bar.get(symbol)
+                        if use_next_open and i < len(candles):
+                            _pending_covers[symbol] = (cover_qty, s_avg_entry, s_entry_bar, "buy_signal")
+                            _short_entry_bar.pop(symbol, None)
+                        else:
+                            cover_px = px * (1.0 + slip_mult)
+                            _short_entry_bar.pop(symbol, None)
+                            if portfolio.execute_cover(symbol, cover_px, cover_qty):
+                                trades += 1
+                                short_closed += 1
+                                _funnel["short_covered_signal"] += 1
+                                is_win = cover_px < s_avg_entry
+                                _trade_outcomes.append(is_win)
+                                if is_win:
+                                    short_wins += 1
+                                elif loss_cooldown_bars > 0:
+                                    _cooldown_remaining = loss_cooldown_bars
+                                trade_log.append(
+                                    {"bar": bar_ts, "action": "cover", "reason": "buy_signal", "price": cover_px, "qty": cover_qty}
+                                )
+                                gross_pct = (s_avg_entry - cover_px) / s_avg_entry if s_avg_entry else 0
+                                _expectancy.record_trade(
+                                    symbol=symbol, regime=_current_regime or "backtest",
+                                    gross_pnl_pct=gross_pct, net_pnl_pct=gross_pct - 2 * fee_rate,
+                                    hold_bars=(i - 1 - s_entry_bar) if s_entry_bar is not None else 0,
+                                    close_reason="buy_signal",
+                                )
+                                if s_entry_bar is not None:
+                                    exit_bar_idx = min(i - 1, len(candles) - 1)
+                                    fee = cover_qty * (s_avg_entry + cover_px) * fee_rate
+                                    pnl_usd = (s_avg_entry - cover_px) * cover_qty - fee
+                                    pnl_pct = (s_avg_entry - cover_px) / s_avg_entry * 100 if s_avg_entry else 0
+                                    closed_trades.append({
+                                        "entry_bar_idx": s_entry_bar,
+                                        "exit_bar_idx": exit_bar_idx,
+                                        "entry_ts_ms": _bar_ts_ms(candles, s_entry_bar),
+                                        "exit_ts_ms": _bar_ts_ms(candles, exit_bar_idx),
+                                        "side": "short",
+                                        "entry_price": s_avg_entry,
+                                        "exit_price": cover_px,
+                                        "qty": cover_qty,
+                                        "pnl_usd": pnl_usd,
+                                        "pnl_pct": pnl_pct,
+                                        "entry_regime": _short_entry_regime.pop(symbol, _current_regime),
+                                        "regime_confidence": _short_entry_regime_conf.pop(symbol, _regime_conf),
+                                        "close_reason": "buy_signal",
+                                        "take_profit_pct": _eff_tp,
+                                    })
 
             _long_size = size * _eff_long_size_scale
+            if funding_overlay is not None:
+                _bar_ts_val = candles.iloc[i - 1].get("timestamp") if i > 0 else None
+                _long_size *= funding_overlay.position_scale("buy", _bar_ts_val)
             if not _eff_allow_longs:
                 _funnel["blocked_regime_no_longs"] += 1
             elif symbol in portfolio.positions:
@@ -1712,6 +1914,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     symbol, buy_px, _long_size,
                     trailing_stop_pct=_eff_ts,
                     take_profit_pct=_eff_tp,
+                    trail_activation_pct=trail_activation_pct,
                 ):
                     _pos = portfolio.positions.get(symbol)
                     if _pos is not None:
@@ -1742,20 +1945,26 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         max_hold_bars=max_hold_bars,
                         entry_atr=getattr(pos, "entry_atr_pct", None) or None,
                         vol_ratio=signal.volume_ratio,
+                        regime=_current_regime,
+                        max_favorable_pct=getattr(pos, "max_favorable_pct", 0.0),
                     )
                     _consecutive_exit_signals += 1
                     _rev_thresh = min_final_confidence * reversal_confidence_mult
-                    if pos.bars_held < _min_hold_bars:
+                    _short_reversal = (
+                        enable_shorts and _eff_allow_shorts
+                        and symbol not in portfolio.short_positions
+                    )
+                    if pos.bars_held < _min_hold_bars and not _short_reversal:
                         pass
-                    elif getattr(signal, "final_confidence", getattr(signal, "confidence", 0.0)) < _rev_thresh:
+                    elif getattr(signal, "final_confidence", getattr(signal, "confidence", 0.0)) < _rev_thresh and not _short_reversal:
                         pass
-                    elif _consecutive_exit_signals < _exit_confirm_bars:
+                    elif _consecutive_exit_signals < _exit_confirm_bars and not _short_reversal:
                         pass
-                    elif not _exit_dec.should_exit:
+                    elif not _exit_dec.should_exit and not _short_reversal:
                         pass
                     else:
                         _consecutive_exit_signals = 0
-                        sell_qty = min(qty, size)
+                        sell_qty = qty if size <= 0 else min(qty, size)
                         avg_entry = pos.avg_entry
                         _mae = getattr(pos, "max_adverse_pct", 0.0)
                         _mfe = getattr(pos, "max_favorable_pct", 0.0)
@@ -1771,6 +1980,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                 trades += 1
                                 closed += 1
                                 is_win = sell_px_sig > avg_entry
+                                _trade_outcomes.append(is_win)
                                 if is_win:
                                     wins += 1
                                 elif loss_cooldown_bars > 0:
@@ -1805,6 +2015,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                         "entry_regime": _entry_regime.pop(symbol, _current_regime),
                                         "regime_confidence": _entry_regime_conf.pop(symbol, _regime_conf),
                                         "close_reason": "signal",
+                                        "take_profit_pct": _eff_tp,
                                     })
 
             # Open short when flat and shorts enabled.
@@ -1823,20 +2034,26 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     _cooldown_remaining = 0
                 _consecutive_exit_signals = 0
                 _short_size = size * _eff_short_size_scale
+                if funding_overlay is not None:
+                    _bar_ts_val = candles.iloc[i - 1].get("timestamp") if i > 0 else None
+                    _short_size *= funding_overlay.position_scale("sell", _bar_ts_val)
                 if not _eff_allow_shorts:
                     _funnel["blocked_regime_no_shorts"] += 1
+                elif ml_blind_blocks_shorts(_ml_probs):
+                    _funnel["blocked_short_ml_blind"] += 1
                 elif _cooldown_remaining > 0:
                     _funnel["blocked_cooldown"] += 1
                 elif _short_size <= 0:
                     _funnel["blocked_regime_no_shorts"] += 1
                 elif use_next_open and i < len(candles):
-                    _pending_shorts[symbol] = _short_size
+                    _pending_shorts[symbol] = (_short_size, _atr_pct)
                 else:
                     short_px = px * (1.0 - slip_mult)
                     if portfolio.execute_short(
                         symbol, short_px, _short_size,
                         trailing_stop_pct=_eff_ts,
                         take_profit_pct=_eff_tp,
+                        trail_activation_pct=trail_activation_pct,
                     ):
                         spos = portfolio.short_positions.get(symbol)
                         if spos is not None:

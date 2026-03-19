@@ -30,6 +30,8 @@ try:
 except ImportError:
     ccxt = None  # type: ignore[assignment]
 
+from hogan_bot.retry import ccxt_retry, retry, CCXT_TRANSIENT
+
 logger = logging.getLogger(__name__)
 
 
@@ -148,19 +150,12 @@ class ExchangeClient:
             )
 
         def _fetch_with_retry(**kwargs):
-            for attempt in range(3):
-                try:
-                    return self._exchange.fetch_ohlcv(symbol, timeframe=timeframe, **kwargs)
-                except (ccxt.RequestTimeout, ccxt.NetworkError) as e:
-                    if attempt < 2:
-                        delay = 2 ** attempt
-                        logger.warning(
-                            "Exchange %s timeout (attempt %d/3), retry in %ds: %s",
-                            self.exchange_id, attempt + 1, delay, e,
-                        )
-                        time.sleep(delay)
-                    else:
-                        raise
+            return retry(
+                self._exchange.fetch_ohlcv,
+                symbol, timeframe=timeframe, **kwargs,
+                retryable=CCXT_TRANSIENT,
+                label=f"fetch_ohlcv({self.exchange_id}/{symbol}/{timeframe})",
+            )
 
         # ── Fast path: single request is enough ─────────────────────────────
         if limit <= _MAX_BARS_PER_REQUEST or since is not None:
@@ -247,6 +242,7 @@ class ExchangeClient:
     # Market snapshot
     # ------------------------------------------------------------------
 
+    @ccxt_retry
     def fetch_ticker(self, symbol: str) -> dict[str, Any]:
         """Return the latest ticker for *symbol*.
 
@@ -255,6 +251,7 @@ class ExchangeClient:
         """
         return self._exchange.fetch_ticker(symbol)
 
+    @ccxt_retry
     def fetch_order_book(self, symbol: str, depth: int = 20) -> dict[str, Any]:
         """Return the current order book up to *depth* levels.
 
@@ -263,6 +260,7 @@ class ExchangeClient:
         """
         return self._exchange.fetch_order_book(symbol, limit=depth)
 
+    @ccxt_retry
     def fetch_trades(self, symbol: str, limit: int = 100) -> list[dict]:
         """Return the most recent public trades for *symbol*."""
         return self._exchange.fetch_trades(symbol, limit=limit)
@@ -284,7 +282,11 @@ class ExchangeClient:
             logger.debug("%s does not support fetchFundingRate", self.exchange_id)
             return None
         try:
-            return self._exchange.fetch_funding_rate(symbol)
+            return retry(
+                self._exchange.fetch_funding_rate, symbol,
+                retryable=CCXT_TRANSIENT,
+                label=f"fetch_funding_rate({symbol})",
+            )
         except ccxt.BaseError as exc:
             logger.debug("fetch_funding_rate(%s) failed: %s", symbol, exc)
             return None
@@ -300,7 +302,11 @@ class ExchangeClient:
             logger.debug("%s does not support fetchOpenInterest", self.exchange_id)
             return None
         try:
-            return self._exchange.fetch_open_interest(symbol)
+            return retry(
+                self._exchange.fetch_open_interest, symbol,
+                retryable=CCXT_TRANSIENT,
+                label=f"fetch_open_interest({symbol})",
+            )
         except ccxt.BaseError as exc:
             logger.debug("fetch_open_interest(%s) failed: %s", symbol, exc)
             return None
@@ -312,7 +318,11 @@ class ExchangeClient:
         if not self._exchange.has.get("fetchFundingRateHistory"):
             return None
         try:
-            return self._exchange.fetch_funding_rate_history(symbol, limit=limit)
+            return retry(
+                self._exchange.fetch_funding_rate_history, symbol, limit=limit,
+                retryable=CCXT_TRANSIENT,
+                label=f"fetch_funding_rate_history({symbol})",
+            )
         except ccxt.BaseError as exc:
             logger.debug("fetch_funding_rate_history(%s) failed: %s", symbol, exc)
             return None
@@ -321,6 +331,7 @@ class ExchangeClient:
     # Discovery helpers
     # ------------------------------------------------------------------
 
+    @ccxt_retry
     def list_symbols(self, quote: str | None = None) -> list[str]:
         """Return all active symbols, optionally filtered by quote currency.
 
@@ -348,6 +359,7 @@ class ExchangeClient:
         """Return ``True`` when the exchange advertises support for *method*."""
         return bool(self._exchange.has.get(method))
 
+    @ccxt_retry
     def market_info(self, symbol: str) -> dict[str, Any]:
         """Return CCXT market metadata for *symbol* (precision, limits, fees)."""
         markets = self._exchange.load_markets()
@@ -359,6 +371,7 @@ class ExchangeClient:
     # Private / account endpoints (paper-mode safety)
     # ------------------------------------------------------------------
 
+    @ccxt_retry
     def fetch_balance(self) -> dict[str, Any]:
         """Return account balances.  Requires valid API credentials."""
         return self._exchange.fetch_balance()
@@ -381,13 +394,16 @@ class ExchangeClient:
         params = params or {}
         return self._exchange.create_order(symbol, "limit", side, amount, price, params)
 
+    @ccxt_retry
     def cancel_order(self, order_id: str, symbol: str | None = None, params: dict | None = None) -> dict:
         params = params or {}
         return self._exchange.cancel_order(order_id, symbol, params)
 
+    @ccxt_retry
     def fetch_open_orders(self, symbol: str | None = None, limit: int | None = None) -> list[dict]:
         return self._exchange.fetch_open_orders(symbol, None, limit)
 
+    @ccxt_retry
     def fetch_my_trades(self, symbol: str | None = None, since: int | None = None, limit: int = 100) -> list[dict]:
         """Fetch your historical trades (fills). 'since' is ms timestamp."""
         return self._exchange.fetch_my_trades(symbol=symbol, since=since, limit=limit)

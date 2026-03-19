@@ -19,6 +19,9 @@ from hogan_bot.decision import (
     compute_quality_components,
     edge_gate,
     entry_quality_gate,
+    loss_streak_scale,
+    ml_blind_blocks_shorts,
+    ml_blind_scale,
     ranging_gate,
 )
 from hogan_bot.regime import detect_regime, effective_thresholds
@@ -217,3 +220,326 @@ class TestSignalPathParity:
         assert qc1.overall == pytest.approx(qc2.overall)
         assert qc1.ml_separation == pytest.approx(qc2.ml_separation)
         assert qc1.spread_penalty == pytest.approx(qc2.spread_penalty)
+
+
+class TestMlBlindScale:
+    """Verify ml_blind_scale detects low-conviction model output."""
+
+    def test_diverse_probs_return_one(self):
+        probs = [0.3, 0.7, 0.4, 0.6, 0.55, 0.35, 0.65, 0.45, 0.5, 0.72]
+        assert ml_blind_scale(probs) == pytest.approx(1.0)
+
+    def test_tight_cluster_scales_down(self):
+        probs = [0.50, 0.505, 0.498, 0.502, 0.501, 0.499, 0.503, 0.497]
+        scale = ml_blind_scale(probs)
+        assert scale < 1.0
+        assert scale >= 0.50
+
+    def test_empty_returns_one(self):
+        assert ml_blind_scale([]) == 1.0
+
+    def test_none_returns_one(self):
+        assert ml_blind_scale(None) == 1.0
+
+    def test_short_list_returns_one(self):
+        assert ml_blind_scale([0.5, 0.5]) == 1.0
+
+    def test_floor_respected(self):
+        probs = [0.50] * 30
+        scale = ml_blind_scale(probs, floor_scale=0.40)
+        assert scale >= 0.40
+
+
+class TestRangingGateAsymmetric:
+    """Verify ranging gate is more lenient on buys than sells."""
+
+    def test_buy_passes_with_low_ml_separation(self):
+        gd = ranging_gate("buy", regime="ranging", tech_action="buy",
+                          up_prob=0.52, recent_whipsaw_count=0)
+        assert gd.action == "buy"
+
+    def test_sell_blocked_with_low_ml_separation(self):
+        gd = ranging_gate("sell", regime="ranging", tech_action="sell",
+                          up_prob=0.48, recent_whipsaw_count=0)
+        assert gd.action == "hold"
+
+    def test_buy_survives_whipsaws_that_block_sell(self):
+        gd_buy = ranging_gate("buy", regime="ranging", tech_action="buy",
+                              up_prob=0.75, recent_whipsaw_count=2)
+        gd_sell = ranging_gate("sell", regime="ranging", tech_action="sell",
+                               up_prob=0.25, recent_whipsaw_count=2)
+        assert gd_buy.action == "buy"
+        assert gd_sell.action == "hold"
+
+    def test_buy_tech_disagree_scales_not_blocks(self):
+        gd = ranging_gate("buy", regime="ranging", tech_action="sell",
+                          up_prob=0.75, recent_whipsaw_count=0)
+        assert gd.action == "buy"
+        assert gd.size_scale == pytest.approx(0.70)
+
+    def test_sell_tech_disagree_scales_half(self):
+        gd = ranging_gate("sell", regime="ranging", tech_action="buy",
+                          up_prob=0.25, recent_whipsaw_count=0)
+        assert gd.action == "sell"
+        assert gd.size_scale == pytest.approx(0.50)
+
+
+class TestMlBlindBlocksShorts:
+    """Verify shorts are blocked when ML conviction is extremely low."""
+
+    def test_diverse_probs_no_block(self):
+        probs = list(np.linspace(0.30, 0.70, 30))
+        assert ml_blind_blocks_shorts(probs) is False
+
+    def test_tight_cluster_blocks(self):
+        probs = [0.50] * 30
+        assert ml_blind_blocks_shorts(probs) is True
+
+    def test_empty_no_block(self):
+        assert ml_blind_blocks_shorts([]) is False
+
+    def test_none_no_block(self):
+        assert ml_blind_blocks_shorts(None) is False
+
+    def test_moderate_spread_no_block(self):
+        probs = list(np.linspace(0.47, 0.55, 30))
+        assert ml_blind_blocks_shorts(probs) is False
+
+    def test_just_below_threshold_blocks(self):
+        probs = [0.50 + x * 0.001 for x in range(30)]
+        assert ml_blind_blocks_shorts(probs) is True
+
+
+class TestLossStreakScale:
+    """Verify sizing dampens after consecutive losses."""
+
+    def test_no_outcomes_returns_one(self):
+        assert loss_streak_scale([]) == 1.0
+
+    def test_all_wins_returns_one(self):
+        assert loss_streak_scale([True, True, True, True]) == 1.0
+
+    def test_three_losses_dampens(self):
+        outcomes = [True, True, False, False, False]
+        assert loss_streak_scale(outcomes) == 0.50
+
+    def test_two_losses_no_dampen(self):
+        outcomes = [True, True, False, False]
+        assert loss_streak_scale(outcomes) == 1.0
+
+    def test_win_resets_streak(self):
+        outcomes = [False, False, False, True]
+        assert loss_streak_scale(outcomes) == 1.0
+
+    def test_long_loss_streak(self):
+        outcomes = [False] * 10
+        assert loss_streak_scale(outcomes) == 0.50
+
+    def test_custom_threshold(self):
+        outcomes = [False, False]
+        assert loss_streak_scale(outcomes, streak_threshold=2) == 0.50
+
+
+class TestPolicyCoreEquivalence:
+    """Verify policy_core.decide() produces deterministic, consistent output.
+
+    Given the same synthetic candles and config, the decision must be
+    identical across calls.  This is the critical correctness gate
+    before any swarm work.
+    """
+
+    @pytest.fixture()
+    def core_inputs(self):
+        """Shared fixture: candles + real BotConfig + pipeline."""
+        from dataclasses import replace as dc_replace
+        candles = _synthetic_candles(200, seed=42)
+        cfg = dc_replace(
+            BotConfig(),
+            symbols=["BTC/USD"],
+            timeframe="1h",
+            use_ml_filter=False,
+            use_ml_as_sizer=False,
+            paper_mode=True,
+            starting_balance_usd=10000.0,
+            use_regime_detection=True,
+        )
+        from hogan_bot.agent_pipeline import AgentPipeline
+        pipeline = AgentPipeline(cfg, conn=None)
+        return candles, cfg, pipeline
+
+    def test_decide_deterministic(self, core_inputs):
+        """Two identical calls must return identical DecisionIntents."""
+        from hogan_bot.policy_core import PolicyState, decide
+
+        candles, cfg, pipeline = core_inputs
+        for _ in range(2):
+            state = PolicyState()
+            intent = decide(
+                symbol="BTC/USD",
+                candles=candles,
+                equity_usd=10000.0,
+                config=cfg,
+                pipeline=pipeline,
+                ml_model=None,
+                state=state,
+                mode="backtest",
+            )
+
+            state2 = PolicyState()
+            intent2 = decide(
+                symbol="BTC/USD",
+                candles=candles,
+                equity_usd=10000.0,
+                config=cfg,
+                pipeline=pipeline,
+                ml_model=None,
+                state=state2,
+                mode="backtest",
+            )
+
+            assert intent.action == intent2.action
+            assert intent.confidence == pytest.approx(intent2.confidence)
+            assert intent.size_usd == pytest.approx(intent2.size_usd, rel=1e-6)
+            assert intent.regime == intent2.regime
+            assert intent.eff_trailing_stop_pct == pytest.approx(
+                intent2.eff_trailing_stop_pct or 0, abs=1e-9
+            )
+            assert intent.eff_allow_longs == intent2.eff_allow_longs
+            assert intent.eff_allow_shorts == intent2.eff_allow_shorts
+
+    def test_decide_returns_decision_intent(self, core_inputs):
+        """decide() must return a DecisionIntent dataclass."""
+        from hogan_bot.policy_core import PolicyState, decide
+        from hogan_bot.swarm_decision.types import DecisionIntent
+
+        candles, cfg, pipeline = core_inputs
+        state = PolicyState()
+        intent = decide(
+            symbol="BTC/USD",
+            candles=candles,
+            equity_usd=10000.0,
+            config=cfg,
+            pipeline=pipeline,
+            ml_model=None,
+            state=state,
+            mode="backtest",
+        )
+        assert isinstance(intent, DecisionIntent)
+        assert intent.action in ("buy", "sell", "hold")
+        assert 0.0 <= intent.confidence <= 1.0
+        assert intent.size_usd >= 0.0
+        assert intent.swarm is None
+
+    def test_decide_with_mock_ml_model(self, core_inputs):
+        """decide() with a mock ML model still produces deterministic output."""
+        from hogan_bot.policy_core import PolicyState, decide
+
+        from dataclasses import replace as dc_replace
+        candles, cfg, pipeline = core_inputs
+        cfg_ml = dc_replace(
+            cfg,
+            use_ml_filter=True,
+            ml_confidence_sizing=True,
+            use_ml_as_sizer=False,
+        )
+
+        mock_model = MagicMock()
+        mock_model.predict_proba = MagicMock(return_value=[[0.45, 0.55]])
+        mock_model.set_regime = MagicMock()
+
+        state1 = PolicyState()
+        intent1 = decide(
+            symbol="BTC/USD",
+            candles=candles,
+            equity_usd=10000.0,
+            config=cfg_ml,
+            pipeline=pipeline,
+            ml_model=mock_model,
+            state=state1,
+            mode="backtest",
+        )
+
+        state2 = PolicyState()
+        intent2 = decide(
+            symbol="BTC/USD",
+            candles=candles,
+            equity_usd=10000.0,
+            config=cfg_ml,
+            pipeline=pipeline,
+            ml_model=mock_model,
+            state=state2,
+            mode="backtest",
+        )
+
+        assert intent1.action == intent2.action
+        assert intent1.up_prob == pytest.approx(intent2.up_prob or 0, abs=1e-6)
+        assert intent1.size_usd == pytest.approx(intent2.size_usd, rel=1e-6)
+
+    def test_block_reasons_populated(self, core_inputs):
+        """block_reasons should be a list (possibly empty) on every intent."""
+        from hogan_bot.policy_core import PolicyState, decide
+
+        candles, cfg, pipeline = core_inputs
+        state = PolicyState()
+        intent = decide(
+            symbol="BTC/USD",
+            candles=candles,
+            equity_usd=10000.0,
+            config=cfg,
+            pipeline=pipeline,
+            ml_model=None,
+            state=state,
+            mode="backtest",
+        )
+        assert isinstance(intent.block_reasons, list)
+
+    def test_regime_fields_populated(self, core_inputs):
+        """Regime and effective parameters should be populated."""
+        from hogan_bot.policy_core import PolicyState, decide
+
+        candles, cfg, pipeline = core_inputs
+        state = PolicyState()
+        intent = decide(
+            symbol="BTC/USD",
+            candles=candles,
+            equity_usd=10000.0,
+            config=cfg,
+            pipeline=pipeline,
+            ml_model=None,
+            state=state,
+            mode="backtest",
+        )
+        assert intent.regime in ("trending_up", "trending_down", "ranging", "volatile", None)
+        assert isinstance(intent.eff_allow_longs, bool)
+        assert isinstance(intent.eff_allow_shorts, bool)
+        assert intent.atr_pct >= 0.0
+
+
+class TestEdgeGateAsymmetric:
+    """Verify edge gate uses lower ATR threshold for buys."""
+
+    def test_buy_passes_at_lower_atr(self):
+        gd = edge_gate("buy", atr_pct=0.0015, take_profit_pct=0.054,
+                        fee_rate=0.001)
+        assert gd.action == "buy"
+
+    def test_sell_blocked_at_same_atr(self):
+        gd = edge_gate("sell", atr_pct=0.0015, take_profit_pct=0.054,
+                        fee_rate=0.001)
+        assert gd.action == "hold"
+
+    def test_both_pass_at_high_atr(self):
+        gd_buy = edge_gate("buy", atr_pct=0.005, take_profit_pct=0.054,
+                           fee_rate=0.001)
+        gd_sell = edge_gate("sell", atr_pct=0.005, take_profit_pct=0.054,
+                            fee_rate=0.001)
+        assert gd_buy.action == "buy"
+        assert gd_sell.action == "sell"
+
+    def test_both_blocked_at_zero_atr(self):
+        gd_buy = edge_gate("buy", atr_pct=0.0, take_profit_pct=0.054,
+                           fee_rate=0.001)
+        gd_sell = edge_gate("sell", atr_pct=0.0, take_profit_pct=0.054,
+                            fee_rate=0.001)
+        assert gd_buy.action == "hold"
+        assert gd_sell.action == "hold"

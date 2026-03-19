@@ -45,10 +45,15 @@ class TestCalculatePositionSize:
     def test_confidence_zero_gives_zero(self):
         assert calculate_position_size(10_000, 100, 0.02, 0.01, 0.20, confidence_scale=0.0) == 0.0
 
-    def test_confidence_clamped_above_one(self):
-        size = calculate_position_size(10_000, 100, 0.02, 0.01, 0.20, confidence_scale=1.5)
+    def test_confidence_scales_up_to_ceiling(self):
         full = calculate_position_size(10_000, 100, 0.02, 0.01, 0.20, confidence_scale=1.0)
-        assert size == pytest.approx(full)
+        boosted = calculate_position_size(10_000, 100, 0.02, 0.01, 0.20, confidence_scale=1.3)
+        assert boosted == pytest.approx(full * 1.3)
+
+    def test_confidence_clamped_at_ceiling(self):
+        full = calculate_position_size(10_000, 100, 0.02, 0.01, 0.20, confidence_scale=1.0)
+        capped = calculate_position_size(10_000, 100, 0.02, 0.01, 0.20, confidence_scale=2.0)
+        assert capped == pytest.approx(full * 1.5)
 
     def test_fee_aware_scaling(self):
         # Stop at 0.2%, fee_rate at 0.1% → stop < 3*fee → scale down

@@ -28,6 +28,7 @@ import os
 import time
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import pandas as pd
 
@@ -41,13 +42,18 @@ from hogan_bot.config import (
 )
 from hogan_bot.data_engine import CandleRingBuffer, LiveDataEngine
 from hogan_bot.decision import (
+    GateDecision,
     QualityComponents,
     apply_ml_filter,
     compute_quality_components,
     edge_gate,
     entry_quality_gate,
     estimate_spread_from_candles,
+    loss_streak_scale,
+    ml_blind_blocks_shorts,
+    ml_blind_scale,
     ml_confidence,
+    ml_probability_sizer,
     pullback_gate,
     ranging_gate,
 )
@@ -76,6 +82,23 @@ from hogan_bot.storage import (
 logger = logging.getLogger(__name__)
 
 
+class _FailedResult:
+    """Sentinel returned by _safe_exec when an executor call throws."""
+    ok = False
+    error: str = ""
+    def __init__(self, error: str = ""):
+        self.error = error
+
+
+async def _safe_exec(fn, *args, **kwargs):
+    """Run *fn* in a thread so blocking I/O doesn't stall the event loop."""
+    try:
+        return await asyncio.to_thread(fn, *args, **kwargs)
+    except Exception as exc:
+        logger.error("Executor call %s raised: %s", getattr(fn, "__name__", fn), exc)
+        return _FailedResult(str(exc))
+
+
 def _compute_data_ages(conn) -> dict[str, float]:
     """Compute hours since last update for each data source in the DB."""
     if conn is None:
@@ -96,8 +119,8 @@ def _compute_data_ages(conn) -> dict[str, float]:
             if row and row[0]:
                 age_h = (now_s - row[0] / 1000.0) / 3600.0
                 ages[source_key] = max(0.0, age_h)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("_compute_data_ages %s: %s", table, exc)
     return ages
 
 
@@ -128,6 +151,9 @@ class SignalResult:
     eff_allow_shorts: bool = True
     eff_long_size_scale: float = 1.0
     eff_short_size_scale: float = 1.0
+    swarm_decision_id: int | None = None
+    raw_tech_action: str | None = None
+    pipeline_action: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +166,82 @@ class SignalEvaluator:
         self.config = config
         self.ml_model = ml_model
         self.pipeline = AgentPipeline(config, conn=conn)
+        self._ml_probs: deque[float] = deque(maxlen=50)
+        self._trade_outcomes: deque[bool] = deque(maxlen=50)
+        from hogan_bot.regime import RegimeTransitionTracker
+        self._regime_transition = RegimeTransitionTracker(cooldown_bars=3, min_scale=0.40)
+        self._use_policy_core = getattr(config, "use_policy_core", True)
+        if self._use_policy_core:
+            from hogan_bot.policy_core import PolicyState
+            self._policy_states: dict[str, PolicyState] = {}
+            self._conn = conn
+
+    def _policy_core_evaluate(
+        self,
+        symbol: str,
+        candles: pd.DataFrame,
+        equity: float,
+        recent_whipsaw_count: int = 0,
+        *,
+        mtf_candles: dict[str, pd.DataFrame] | None = None,
+        peak_equity: float | None = None,
+    ) -> SignalResult:
+        """Delegate to policy_core.decide() and translate back to SignalResult."""
+        from hogan_bot.policy_core import PolicyState, decide
+
+        if symbol not in self._policy_states:
+            self._policy_states[symbol] = PolicyState()
+        state = self._policy_states[symbol]
+        state.ml_probs = self._ml_probs
+        state.trade_outcomes = self._trade_outcomes
+
+        import time as _time_mod
+        intent = decide(
+            symbol=symbol,
+            candles=candles,
+            equity_usd=equity,
+            config=self.config,
+            pipeline=self.pipeline,
+            ml_model=self.ml_model,
+            state=state,
+            conn=getattr(self, "_conn", None),
+            mode="live",
+            recent_whipsaw_count=recent_whipsaw_count,
+            mtf_candles=mtf_candles,
+            enable_pullback_gate=True,
+            enable_freshness_check=True,
+            peak_equity_usd=peak_equity,
+            as_of_ms=int(_time_mod.time() * 1000),
+        )
+
+        px = float(candles["close"].iloc[-1])
+        size_coins = intent.size_usd / px if px > 0 else 0.0
+
+        return SignalResult(
+            action=intent.action,
+            size=size_coins,
+            up_prob=intent.up_prob,
+            regime=intent.regime,
+            atr_pct=intent.atr_pct,
+            final_confidence=intent.confidence,
+            tech_confidence=intent.tech_confidence,
+            conf_scale=intent.conf_scale * intent.quality_scale,
+            vol_ratio=intent.vol_ratio,
+            explanation=intent.explanation,
+            forecast_ret=intent.forecast_ret,
+            agent_weights=intent.agent_weights,
+            feature_freshness=intent.feature_freshness,
+            block_reasons=intent.block_reasons if intent.block_reasons else None,
+            eff_trailing_stop_pct=intent.eff_trailing_stop_pct,
+            eff_take_profit_pct=intent.eff_take_profit_pct,
+            eff_allow_longs=intent.eff_allow_longs,
+            eff_allow_shorts=intent.eff_allow_shorts,
+            eff_long_size_scale=intent.eff_long_size_scale,
+            eff_short_size_scale=intent.eff_short_size_scale,
+            swarm_decision_id=intent.swarm_decision_id,
+            raw_tech_action=intent.raw_tech_action,
+            pipeline_action=intent.pipeline_action,
+        )
 
     def evaluate(
         self,
@@ -149,8 +251,16 @@ class SignalEvaluator:
         recent_whipsaw_count: int = 0,
         *,
         mtf_candles: dict[str, pd.DataFrame] | None = None,
+        peak_equity: float | None = None,
     ) -> SignalResult:
         """Returns a SignalResult with action, sizing, and rich metadata."""
+        if self._use_policy_core:
+            return self._policy_core_evaluate(
+                symbol, candles, equity, recent_whipsaw_count,
+                mtf_candles=mtf_candles,
+                peak_equity=peak_equity,
+            )
+
         cfg = symbol_config(self.config, symbol)
 
         regime_name = None
@@ -159,11 +269,11 @@ class SignalEvaluator:
         if getattr(cfg, "use_regime_detection", True):
             try:
                 from hogan_bot.regime import detect_regime
-                _rstate = detect_regime(candles)
+                _rstate = detect_regime(candles, symbol=symbol)
                 regime_name = _rstate.regime
                 regime_conf = _rstate.confidence
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Regime detection failed (using fallback): %s", exc)
 
         # Regime-adjusted thresholds (ML gates, stop/TP, position scale)
         eff: dict[str, float] = {}
@@ -171,8 +281,8 @@ class SignalEvaluator:
             try:
                 from hogan_bot.regime import effective_thresholds
                 eff = effective_thresholds(_rstate, cfg)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("effective_thresholds failed (using defaults): %s", exc)
         eff_ml_buy = eff.get("ml_buy_threshold", cfg.ml_buy_threshold)
         eff_ml_sell = eff.get("ml_sell_threshold", cfg.ml_sell_threshold)
         eff_tp = eff.get("take_profit_pct", cfg.take_profit_pct)
@@ -183,19 +293,27 @@ class SignalEvaluator:
         eff_long_size_scale = eff.get("long_size_scale", 1.0)
         eff_short_size_scale = eff.get("short_size_scale", 1.0)
 
+        # Regime transition dampener: reduce sizing at regime boundaries
+        _transition_scale = self._regime_transition.update(regime_name) if regime_name else 1.0
+        eff_long_size_scale *= _transition_scale
+        eff_short_size_scale *= _transition_scale
+
         result = self.pipeline.run(
             candles, symbol=symbol, config_override=cfg,
             regime=regime_name, regime_state=_rstate,
         )
         px = float(candles["close"].iloc[-1])
 
+        _raw_tech_action = result.tech.action if result.tech else None
+        _pipeline_action = result.action
+
         up_prob = None
-        conf_scale = result.confidence or 1.0
+        conf_scale = 1.0
         action = result.action
 
         block_reasons: list[str] = []
 
-        if cfg.use_ml_filter and self.ml_model is not None:
+        if (cfg.use_ml_filter or cfg.use_ml_as_sizer) and self.ml_model is not None:
             if cfg.use_mtf_extended and mtf_candles:
                 try:
                     from hogan_bot.ml import build_feature_row_extended
@@ -213,13 +331,34 @@ class SignalEvaluator:
                         logger.debug("MTF extended features computed: %d values", len(_mtf_features))
                 except Exception as exc:
                     logger.debug("MTF features fallback: %s", exc)
+            if hasattr(self.ml_model, "set_regime"):
+                self.ml_model.set_regime(regime_name)
             up_prob = predict_up_probability(candles, self.ml_model)
-            ml_gate = apply_ml_filter(action, up_prob, eff_ml_buy, eff_ml_sell)
-            action = ml_gate.action
-            if ml_gate.blocked_by:
-                block_reasons.append(ml_gate.blocked_by)
-            if cfg.ml_confidence_sizing:
-                conf_scale = ml_confidence(up_prob) * (result.confidence or 1.0)
+            self._ml_probs.append(up_prob)
+            if cfg.use_ml_as_sizer:
+                conf_scale = ml_probability_sizer(action, up_prob)
+            else:
+                ml_gate = apply_ml_filter(action, up_prob, eff_ml_buy, eff_ml_sell)
+                action = ml_gate.action
+                if ml_gate.blocked_by:
+                    block_reasons.append(ml_gate.blocked_by)
+                if cfg.ml_confidence_sizing:
+                    conf_scale = ml_confidence(up_prob)
+            _blind = ml_blind_scale(self._ml_probs)
+            if _blind < 1.0:
+                conf_scale *= _blind
+                logger.info("ML_BLIND: prob std low -> scale %.2f", _blind)
+
+        _ls = loss_streak_scale(self._trade_outcomes)
+        if _ls < 1.0:
+            conf_scale *= _ls
+            _streak = 0
+            for _o in reversed(self._trade_outcomes):
+                if not _o:
+                    _streak += 1
+                else:
+                    break
+            logger.info("LOSS_STREAK: %d consecutive losses -> scale %.2f", _streak, _ls)
 
         forecast_ret = None
         if result.forecast is not None and result.forecast.confidence > 0.2:
@@ -239,6 +378,8 @@ class SignalEvaluator:
             min_edge_multiple=getattr(cfg, "min_edge_multiple", 1.5),
             forecast_expected_return=forecast_ret,
             estimated_spread=spread_est,
+            atr_friction_multiple=getattr(cfg, "sell_atr_friction_multiple", 0.8),
+            buy_atr_friction_multiple=getattr(cfg, "buy_atr_friction_multiple", 0.25),
         )
         action = edge_gd.action
         if edge_gd.blocked_by:
@@ -293,8 +434,8 @@ class SignalEvaluator:
                             "SELECT * FROM candles WHERE symbol=? AND timeframe='1d' ORDER BY ts_ms",
                             self.pipeline.conn, params=(symbol,),
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("MTF daily candle query failed: %s", exc)
                 _m30_df = mtf_candles.get(cfg.mtf_m30_timeframe)
                 _mtf_bias = evaluate_mtf(
                     daily_candles=_daily_df,
@@ -333,8 +474,8 @@ class SignalEvaluator:
                     logger.info("FRESHNESS_PENALTY %s: scale=0.75 (crit=%d all=%d)", symbol, crit_stale, all_stale)
                 if feat_result.has_stale:
                     logger.warning("STALE_FEATURES %s: %s", symbol, feat_result.stale_features)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Feature freshness check failed: %s", exc)
 
         _qc = compute_quality_components(
             final_confidence=result.confidence,
@@ -350,13 +491,18 @@ class SignalEvaluator:
             quality_gate_scale=quality_scale,
         )
 
+        _MIN_COMPOSITE_SCALE = 0.15
+        _composite = max(
+            _MIN_COMPOSITE_SCALE,
+            conf_scale * quality_scale * ranging_scale * pullback_scale * eff_position_scale * _freshness_scale * _mtf_conf_mult,
+        )
         size = calculate_position_size(
             equity_usd=equity,
             price=px,
             stop_distance_pct=result.stop_distance_pct,
             max_risk_per_trade=cfg.max_risk_per_trade,
             max_allocation_pct=cfg.aggressive_allocation,
-            confidence_scale=conf_scale * quality_scale * ranging_scale * pullback_scale * eff_position_scale * _freshness_scale * _mtf_conf_mult,
+            confidence_scale=_composite,
             fee_rate=cfg.fee_rate,
         )
 
@@ -396,6 +542,8 @@ class SignalEvaluator:
             eff_allow_shorts=eff_allow_shorts,
             eff_long_size_scale=eff_long_size_scale,
             eff_short_size_scale=eff_short_size_scale,
+            raw_tech_action=_raw_tech_action,
+            pipeline_action=_pipeline_action,
         )
 
 
@@ -412,7 +560,22 @@ async def run_event_loop(
     from hogan_bot.champion import apply_champion_mode
     config = apply_champion_mode(config)
 
+    from hogan_bot.config import apply_sweep_results
+    apply_sweep_results(config)
+
     conn = get_connection(config.db_path)
+    try:
+        await _run_event_loop_inner(config, conn, max_events)
+    finally:
+        conn.close()
+        logger.info("Database connection closed.")
+
+
+async def _run_event_loop_inner(
+    config: BotConfig,
+    conn,
+    max_events: int | None,
+) -> None:
     notifier = make_notifier(config.webhook_url or None)
 
     live_ack = (os.getenv("HOGAN_LIVE_ACK", "") or "").strip()
@@ -474,8 +637,7 @@ async def run_event_loop(
             executor = PaperExecution(portfolio=portfolio, conn=conn, exchange_id="paper")
 
     ml_model: TrainedModel | None = None
-    _need_ml = config.use_ml_filter or getattr(config, "use_ml_as_sizer", False)
-    if _need_ml:
+    if config.use_ml_filter or config.use_ml_as_sizer:
         try:
             ml_model = load_model(config.ml_model_path)
             logger.info("Loaded ML model from %s", config.ml_model_path)
@@ -485,6 +647,27 @@ async def run_event_loop(
             logger.warning("ML model load error: %s", exc)
 
     evaluator = SignalEvaluator(config, ml_model, conn=conn)
+
+    _macro_sitout = None
+    _use_macro_sitout = os.getenv("HOGAN_MACRO_SITOUT", "").strip().lower() in ("1", "true", "yes")
+    if _use_macro_sitout:
+        try:
+            from hogan_bot.macro_sitout import MacroSitout
+            _macro_sitout = MacroSitout.from_db(conn)
+            logger.info("Macro sitout filter enabled (greed-only scaling)")
+        except Exception as exc:
+            logger.warning("Macro sitout init failed: %s", exc)
+
+    _funding_overlay = None
+    _use_funding = os.getenv("HOGAN_USE_FUNDING_OVERLAY", "").strip().lower() in ("1", "true", "yes")
+    if _use_funding:
+        try:
+            from hogan_bot.funding_overlay import FundingOverlay
+            _funding_overlay = FundingOverlay.from_db(conn)
+            logger.info("Funding rate overlay enabled")
+        except Exception as exc:
+            logger.warning("Funding overlay init failed: %s", exc)
+
     from hogan_bot.exit_model import ExitEvaluator
     _exit_eval = ExitEvaluator(
         drawdown_panic_pct=config.exit_drawdown_pct,
@@ -493,17 +676,29 @@ async def run_event_loop(
         max_consolidation_bars=config.exit_stagnation_bars,
     )
     _expectancy = ExpectancyTracker()
-    buffer = CandleRingBuffer(maxlen=config.ohlcv_limit)
 
     _perf_tracker = None
     try:
         from hogan_bot.performance_tracker import PerformanceTracker
         _perf_tracker = PerformanceTracker(db_path=config.db_path)
-        logger.info("PerformanceTracker initialized (shadow mode)")
+        if _perf_tracker.restore_from_db():
+            logger.info("PerformanceTracker restored state from DB snapshot")
+        else:
+            logger.info("PerformanceTracker initialized (no prior snapshot)")
     except Exception as exc:
-        logger.debug("PerformanceTracker unavailable: %s", exc)
+        logger.warning("PerformanceTracker unavailable: %s", exc)
     _perf_trade_count = 0
     _PERF_PROPOSAL_INTERVAL = 50
+
+    # Walk-forward failure response: compute sizing penalty at startup
+    _wf_scale = 1.0
+    try:
+        from hogan_bot.decision import wf_failure_scale
+        _wf_scale = wf_failure_scale()
+        if _wf_scale < 1.0:
+            logger.info("WF failure scale applied: %.2f", _wf_scale)
+    except Exception as exc:
+        logger.debug("wf_failure_scale error: %s", exc)
 
     # Parity with backtest: max_hold_bars, loss_cooldown, slippage
     max_hold_bars, loss_cooldown_bars = effective_hold_cooldown_bars(config, config.timeframe)
@@ -534,7 +729,8 @@ async def run_event_loop(
         metrics_server = MetricsServer(port=getattr(config, "metrics_port", 8000))
         metrics_server.start()
         _has_metrics = True
-    except Exception:
+    except Exception as exc:
+        logger.warning("Metrics server failed to start (Prometheus unavailable): %s", exc)
         _has_metrics = False
 
     _mtf_timeframes = config.mtf_timeframes or []
@@ -558,6 +754,8 @@ async def run_event_loop(
             timeframes=_all_timeframes,
             ring_buffer_len=config.ohlcv_limit,
         )
+    buffer = engine.buffer
+
     if _mtf_timeframes:
         logger.info("MTF candle subscriptions: %s (primary=%s)", _all_timeframes, config.timeframe)
 
@@ -567,6 +765,19 @@ async def run_event_loop(
     _entry_regime: dict[str, str] = {}
     _entry_regime_conf: dict[str, float] = {}
     _EXPECTANCY_LOG_INTERVAL = 50
+    _entry_up_prob: dict[str, float | None] = {}
+
+    def _record_outcome(sym: str, regime: str, pnl: float, up_prob: float | None = None) -> None:
+        """Feed closed-trade results back to AgentPipeline for learned weights."""
+        last_sig = evaluator.pipeline._last_signal.get(sym)
+        if last_sig is not None:
+            evaluator.pipeline.record_trade_outcome(
+                symbol=sym,
+                regime=regime,
+                signal=last_sig,
+                realized_pnl=pnl,
+                ml_up_prob=up_prob,
+            )
 
     # FX session filter (active when any symbol looks like an FX pair)
     _fx_session_filter = None
@@ -602,8 +813,9 @@ async def run_event_loop(
 
             buffer.push(symbol, tf, event.candle.to_dict())
             candles = buffer.to_df(symbol, tf)
+            _min_candles = max(config.long_ma_window, 20)
 
-            if candles.empty or len(candles) < max(config.long_ma_window, 20):
+            if candles.empty or len(candles) < _min_candles:
                 event_count += 1
                 continue
 
@@ -628,7 +840,7 @@ async def run_event_loop(
                     CASH.set(portfolio.cash_usd)
                     DRAWDOWN.set(dd)
             except Exception as exc:
-                logger.debug("Equity record error: %s", exc)
+                logger.warning("Equity record error: %s", exc)
 
             # DrawdownGuard
             if not guard.update_and_check(equity):
@@ -673,7 +885,7 @@ async def run_event_loop(
                     bars_held = getattr(pos, "bars_held", 0)
                     mae_pct = getattr(pos, "max_adverse_pct", 0.0)
                     mfe_pct = getattr(pos, "max_favorable_pct", 0.0)
-                    res = executor.close_long(exit_symbol, ep, qty, reason=reason)
+                    res = await _safe_exec(executor.close_long, exit_symbol, ep, qty, reason=reason)
                     executed = bool(res.ok)
                     sell_px = ep
                     _exit_entry_regime = _entry_regime.pop(exit_symbol, _current_regime.get(exit_symbol, "unknown"))
@@ -687,6 +899,7 @@ async def run_event_loop(
                                 exit_regime=_exit_entry_regime,
                                 entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                             )
+                        evaluator._trade_outcomes.append(sell_px > avg_entry)
                         gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
                         net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                         _expectancy.record_trade(
@@ -699,6 +912,7 @@ async def run_event_loop(
                             hold_bars=bars_held,
                             close_reason=reason,
                         )
+                        _record_outcome(exit_symbol, _exit_entry_regime, gross_pnl_pct, _entry_up_prob.pop(exit_symbol, None))
                         if _perf_tracker:
                             try:
                                 _perf_tracker.record_trade_outcome(
@@ -710,11 +924,14 @@ async def run_event_loop(
                                     realized_pnl=gross_pnl_pct,
                                 )
                                 _perf_trade_count += 1
-                            except Exception:
-                                pass
+                            except Exception as exc:
+                                logger.debug("PerfTracker record error: %s", exc)
                         is_loss = sell_px < avg_entry
                         if is_loss and loss_cooldown_bars > 0:
                             _cooldown_remaining = loss_cooldown_bars
+                    if not executed:
+                        logger.error("AUTO_EXIT_FAILED %s reason=%s px=%.2f qty=%.6f — %s",
+                                     exit_symbol, reason, ep, qty, getattr(res, "error", "unknown"))
                     if notifier and executed:
                         notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason,
                                                       "price": sell_px, "qty": qty})
@@ -730,7 +947,7 @@ async def run_event_loop(
                     mae_pct = getattr(pos, "max_adverse_pct", 0.0)
                     mfe_pct = getattr(pos, "max_favorable_pct", 0.0)
                     cover_px = ep
-                    res = executor.close_short(exit_symbol, cover_px, qty, reason=reason)
+                    res = await _safe_exec(executor.close_short, exit_symbol, cover_px, qty, reason=reason)
                     executed = bool(res.ok)
                     _exit_s_entry_regime = _entry_regime.pop(exit_symbol, _current_regime.get(exit_symbol, "unknown"))
                     if executed:
@@ -743,6 +960,7 @@ async def run_event_loop(
                                 exit_regime=_exit_s_entry_regime,
                                 entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                             )
+                        evaluator._trade_outcomes.append(cover_px < avg_entry)
                         gross_pnl_pct = (avg_entry - cover_px) / avg_entry if avg_entry else 0
                         net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                         _expectancy.record_trade(
@@ -755,6 +973,7 @@ async def run_event_loop(
                             hold_bars=bars_held,
                             close_reason=reason,
                         )
+                        _record_outcome(exit_symbol, _exit_s_entry_regime, gross_pnl_pct, _entry_up_prob.pop(exit_symbol, None))
                         if _perf_tracker:
                             try:
                                 _perf_tracker.record_trade_outcome(
@@ -766,8 +985,11 @@ async def run_event_loop(
                                     realized_pnl=gross_pnl_pct,
                                 )
                                 _perf_trade_count += 1
-                            except Exception:
-                                pass
+                            except Exception as exc:
+                                logger.debug("PerfTracker record error: %s", exc)
+                    if not executed:
+                        logger.error("AUTO_EXIT_SHORT_FAILED %s reason=%s px=%.2f qty=%.6f — %s",
+                                     exit_symbol, reason, cover_px, qty, getattr(res, "error", "unknown"))
                     if notifier and executed:
                         notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason,
                                                       "price": cover_px, "qty": qty})
@@ -783,8 +1005,8 @@ async def run_event_loop(
                 try:
                     from hogan_bot.metrics import DEAD_MAN_ALERTS
                     DEAD_MAN_ALERTS.inc()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("DEAD_MAN_ALERTS metric error: %s", exc)
 
             # FX session filter: block trading during off-hours/weekends
             if _fx_session_filter is not None:
@@ -805,6 +1027,7 @@ async def run_event_loop(
                     symbol, candles, equity,
                     recent_whipsaw_count=_whipsaw_counts.get(symbol, 0),
                     mtf_candles=_mtf_data if _mtf_data else None,
+                    peak_equity=guard.peak_equity,
                 )
                 action = sig.action
                 size = sig.size
@@ -836,8 +1059,9 @@ async def run_event_loop(
                     ts_ms=int(time.time() * 1000),
                     symbol=symbol,
                     regime=_sym_regime,
-                    tech_action=action,
+                    tech_action=sig.raw_tech_action or action,
                     tech_confidence=sig.tech_confidence,
+                    pipeline_action=sig.pipeline_action or action,
                     final_action=action,
                     final_confidence=sig.final_confidence,
                     position_size=size,
@@ -851,9 +1075,10 @@ async def run_event_loop(
                     size_score=sig.size_score,
                     quality_components_json=sig.quality_components.to_json() if sig.quality_components else None,
                     block_reasons=sig.block_reasons,
+                    swarm_decision_id=sig.swarm_decision_id,
                 )
             except Exception as exc:
-                logger.debug("Decision log error: %s", exc)
+                logger.warning("Decision log error: %s", exc)
 
             # Track consecutive exit signals for confirmation
             if action == "sell" and symbol in portfolio.positions:
@@ -875,8 +1100,8 @@ async def run_event_loop(
                 if _iprofile.use_pip_based_risk:
                     _eff_stop = _iprofile.default_stop_pct
                     _eff_tp = _iprofile.default_tp_pct
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Instrument profile lookup failed for %s: %s", symbol, exc)
 
             # FX session filter: block new entries during off-hours
             _fx_session_ok = True
@@ -888,86 +1113,158 @@ async def run_event_loop(
                         _fx_session_ok = False
                     elif not session_filter():
                         _fx_session_ok = False
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("FX session check error for %s: %s", symbol, exc)
+
+            # ── Macro sitout filter (parity with backtest) ────────────
+            _macro_scale = 1.0
+            if _macro_sitout is not None and action != "hold":
+                try:
+                    from datetime import timezone as _tz
+                    _bar_dt = datetime.now(tz=_tz.utc)
+                    _sitout_r = _macro_sitout.check(_bar_dt)
+                    if _sitout_r.should_sitout:
+                        logger.debug("MACRO_SITOUT %s — %s", symbol, _sitout_r.summary)
+                        action = "hold"
+                    elif _sitout_r.size_scale < 1.0:
+                        _macro_scale = _sitout_r.size_scale
+                        logger.debug("MACRO_SCALE %s — %.2fx — %s", symbol, _macro_scale, _sitout_r.summary)
+                except Exception as _mse:
+                    logger.warning("Macro sitout check error: %s", _mse)
 
             if action == "buy" and px > 0:
-                # Cover existing short first (parity with backtest)
+                # Cover existing short first (with ExitEvaluator confirmation — parity with backtest)
                 if enable_shorts and symbol in portfolio.short_positions:
                     spos = portfolio.short_positions[symbol]
-                    if spos.bars_held >= min_hold_bars:
-                        _consecutive_short_exit_signals[symbol] = 0
-                        cover_qty = spos.qty
-                        s_avg_entry = spos.avg_entry
-                        cover_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
-                        res = executor.close_short(symbol, cover_px, cover_qty, reason="buy_signal")
-                        if res.ok:
-                            _exit_s_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
-                            now_ms = int(time.time() * 1000)
-                            fee = cover_qty * cover_px * config.fee_rate
-                            if not allow_live:
-                                s_bars = getattr(spos, "bars_held", 0)
-                                close_paper_trade(
-                                    conn, symbol, "short", cover_px, fee, now_ms,
-                                    close_reason="buy_signal",
-                                    max_adverse_pct=getattr(spos, "max_adverse_pct", 0.0),
-                                    max_favorable_pct=getattr(spos, "max_favorable_pct", 0.0),
-                                    bars_held=s_bars,
-                                    exit_regime=_exit_s_regime,
-                                    entry_atr_pct=getattr(spos, "entry_atr_pct", None),
-                                )
-                            gross_pnl_pct = (s_avg_entry - cover_px) / s_avg_entry if s_avg_entry else 0
-                            net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
-                            _expectancy.record_trade(
-                                symbol=symbol,
-                                regime=_exit_s_regime,
-                                gross_pnl_pct=gross_pnl_pct,
-                                net_pnl_pct=net_pnl_pct,
-                                hold_bars=getattr(spos, "bars_held", 0),
-                                close_reason="buy_signal",
+                    if spos.bars_held < min_hold_bars:
+                        logger.debug(
+                            "HOLD_SHORT %s — min hold not met (%d/%d bars)",
+                            symbol, spos.bars_held, min_hold_bars,
+                        )
+                    elif _consecutive_short_exit_signals[symbol] < exit_confirm_bars:
+                        logger.debug(
+                            "HOLD_SHORT %s — exit confirmation %d/%d",
+                            symbol, _consecutive_short_exit_signals[symbol], exit_confirm_bars,
+                        )
+                    else:
+                        _short_exit_dec = _exit_eval.should_exit(
+                            candles=candles,
+                            entry_price=spos.avg_entry,
+                            current_price=px,
+                            bars_held=spos.bars_held,
+                            side="short",
+                            max_hold_bars=short_max_hold_bars if short_max_hold_bars > 0 else max_hold_bars,
+                            entry_atr=getattr(spos, "entry_atr_pct", None) or None,
+                            vol_ratio=sig.vol_ratio,
+                            regime=_sym_regime,
+                            max_favorable_pct=getattr(spos, "max_favorable_pct", 0.0),
+                        )
+                        if not _short_exit_dec.should_exit:
+                            logger.debug(
+                                "EXIT_MODEL_SHORT %s — thesis intact, holding despite buy signal",
+                                symbol,
                             )
-                            is_loss = cover_px > s_avg_entry
-                            if is_loss and loss_cooldown_bars > 0:
-                                _cooldown_remaining = loss_cooldown_bars
-                            if notifier:
-                                notifier.notify("cover", {"symbol": symbol, "price": cover_px,
-                                                          "qty": cover_qty, "reason": "buy_signal"})
-                        logger.info("COVER_SHORT %s px=%.2f qty=%.6f equity=%.2f reason=buy_signal",
-                                    symbol, cover_px, cover_qty, equity)
+                        else:
+                            _consecutive_short_exit_signals[symbol] = 0
+                            cover_qty = spos.qty
+                            s_avg_entry = spos.avg_entry
+                            cover_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
+                            res = await _safe_exec(executor.close_short, symbol, cover_px, cover_qty, reason="buy_signal")
+                            if res.ok:
+                                _exit_s_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
+                                now_ms = int(time.time() * 1000)
+                                fee = cover_qty * cover_px * config.fee_rate
+                                if not allow_live:
+                                    s_bars = getattr(spos, "bars_held", 0)
+                                    close_paper_trade(
+                                        conn, symbol, "short", cover_px, fee, now_ms,
+                                        close_reason="buy_signal",
+                                        max_adverse_pct=getattr(spos, "max_adverse_pct", 0.0),
+                                        max_favorable_pct=getattr(spos, "max_favorable_pct", 0.0),
+                                        bars_held=s_bars,
+                                        exit_regime=_exit_s_regime,
+                                        entry_atr_pct=getattr(spos, "entry_atr_pct", None),
+                                    )
+                                evaluator._trade_outcomes.append(cover_px < s_avg_entry)
+                                gross_pnl_pct = (s_avg_entry - cover_px) / s_avg_entry if s_avg_entry else 0
+                                net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
+                                _expectancy.record_trade(
+                                    symbol=symbol,
+                                    regime=_exit_s_regime,
+                                    gross_pnl_pct=gross_pnl_pct,
+                                    net_pnl_pct=net_pnl_pct,
+                                    hold_bars=getattr(spos, "bars_held", 0),
+                                    close_reason="buy_signal",
+                                )
+                                _record_outcome(symbol, _exit_s_regime, gross_pnl_pct, _entry_up_prob.pop(symbol, None))
+                                is_loss = cover_px > s_avg_entry
+                                if is_loss and loss_cooldown_bars > 0:
+                                    _cooldown_remaining = loss_cooldown_bars
+                                if notifier:
+                                    notifier.notify("cover", {"symbol": symbol, "price": cover_px,
+                                                              "qty": cover_qty, "reason": "buy_signal"})
+                            if not res.ok:
+                                logger.error("COVER_SHORT_FAILED %s px=%.2f qty=%.6f — %s",
+                                             symbol, cover_px, cover_qty, getattr(res, "error", "unknown"))
+                            logger.info("COVER_SHORT %s px=%.2f qty=%.6f equity=%.2f reason=buy_signal ok=%s",
+                                        symbol, cover_px, cover_qty, equity, res.ok)
 
                 if not sig.eff_allow_longs:
-                    logger.debug("REGIME_BLOCK %s — longs not allowed in %s", symbol, _sym_regime)
+                    logger.info("BUY_BLOCK %s — regime %s disallows longs (eff_allow_longs=False)", symbol, _sym_regime)
                 elif symbol in portfolio.positions:
                     pass  # already long
+                elif symbol in portfolio.short_positions:
+                    pass  # short still held (min_hold_bars not met); block long to prevent simultaneous long+short
                 elif _cooldown_remaining > 0:
                     logger.debug("COOLDOWN %s — %d bars remaining", symbol, _cooldown_remaining)
                 elif not _fx_session_ok:
                     logger.debug("FX_SESSION_BLOCK %s — outside allowed trading hours", symbol)
                 else:
-                    _long_size = size * sig.eff_long_size_scale
-                    buy_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
-                    res = executor.open_long(symbol, buy_px, _long_size,
-                                            trailing_stop_pct=_eff_stop,
-                                            take_profit_pct=_eff_tp)
-                    executed = bool(res.ok)
-                    if executed:
-                        _entry_regime[symbol] = _sym_regime or "unknown"
-                        _entry_regime_conf[symbol] = getattr(sig, "final_confidence", 0.0)
-                        pos = portfolio.positions.get(symbol)
-                        if pos is not None:
-                            pos.entry_atr_pct = _sym_atr_pct
-                        now_ms = int(time.time() * 1000)
-                        fee = _long_size * buy_px * config.fee_rate
-                        if not allow_live:
-                            open_paper_trade(conn, symbol, "long", buy_px, _long_size, fee, now_ms,
-                                             ml_up_prob=up_prob,
-                                             strategy_conf=sig.final_confidence,
-                                             vol_ratio=sig.vol_ratio)
-                        if notifier:
-                            notifier.notify("buy", {"symbol": symbol, "price": buy_px,
-                                                    "qty": _long_size, "ml_up_prob": up_prob})
-                    logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s long_scale=%.2f",
-                                symbol, buy_px, _long_size, up_prob or -1, equity, _sym_regime, sig.eff_long_size_scale)
+                    _momentum_scale = 1.0
+                    if not evaluator._use_policy_core:
+                        if len(candles) >= 8 and _sym_regime != "ranging":
+                            _ema8 = candles["close"].ewm(span=8, min_periods=8).mean().iloc[-1]
+                            if _ema8 > 0 and px < _ema8:
+                                _pct_below = (_ema8 - px) / _ema8
+                                _momentum_scale = max(0.40, 1.0 - _pct_below * 20.0)
+                    _funding_scale = 1.0
+                    if _funding_overlay is not None:
+                        _funding_scale = _funding_overlay.position_scale("buy", datetime.now(tz=timezone.utc))
+                    _exp_scale = _expectancy.expectancy_size_scale(regime=_sym_regime or "unknown")
+                    _long_size = size * sig.eff_long_size_scale * _macro_scale * _momentum_scale * _funding_scale * _wf_scale * _exp_scale
+                    if _long_size <= 0:
+                        logger.info("BUY_BLOCK %s — size scaled to zero (base=%.6f eff_scale=%.2f macro=%.2f mom=%.2f fund=%.2f)",
+                                    symbol, size, sig.eff_long_size_scale, _macro_scale, _momentum_scale, _funding_scale)
+                    else:
+                        buy_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
+                        res = await _safe_exec(executor.open_long, symbol, buy_px, _long_size,
+                                               trailing_stop_pct=_eff_stop,
+                                               take_profit_pct=_eff_tp,
+                                               trail_activation_pct=config.trail_activation_pct)
+                        executed = bool(res.ok)
+                        if executed:
+                            _entry_regime[symbol] = _sym_regime or "unknown"
+                            _entry_regime_conf[symbol] = getattr(sig, "final_confidence", 0.0)
+                            _entry_up_prob[symbol] = up_prob
+                            pos = portfolio.positions.get(symbol)
+                            if pos is not None:
+                                pos.entry_atr_pct = _sym_atr_pct
+                            now_ms = int(time.time() * 1000)
+                            fee = _long_size * buy_px * config.fee_rate
+                            if not allow_live:
+                                open_paper_trade(conn, symbol, "long", buy_px, _long_size, fee, now_ms,
+                                                 ml_up_prob=up_prob,
+                                                 strategy_conf=sig.final_confidence,
+                                                 vol_ratio=sig.vol_ratio)
+                            if notifier:
+                                notifier.notify("buy", {"symbol": symbol, "price": buy_px,
+                                                        "qty": _long_size, "ml_up_prob": up_prob})
+                            logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s long_scale=%.2f",
+                                        symbol, buy_px, _long_size, up_prob or -1, equity, _sym_regime, sig.eff_long_size_scale)
+                        else:
+                            _fail_detail = getattr(res, "error", "") or "unknown"
+                            logger.warning("BUY_FAILED %s px=%.2f qty=%.6f — %s",
+                                           symbol, buy_px, _long_size, _fail_detail)
 
             elif action == "sell" and px > 0:
                 _closed_long_this_bar = False
@@ -1001,6 +1298,8 @@ async def run_event_loop(
                             max_hold_bars=max_hold_bars,
                             entry_atr=getattr(pos, "entry_atr_pct", None) or None,
                             vol_ratio=sig.vol_ratio,
+                            regime=_sym_regime,
+                            max_favorable_pct=getattr(pos, "max_favorable_pct", 0.0),
                         )
                         if not exit_decision.should_exit:
                             logger.debug(
@@ -1009,10 +1308,10 @@ async def run_event_loop(
                             )
                             event_count += 1
                             continue
-                        sell_qty = min(pos.qty, size)
+                        sell_qty = pos.qty if size <= 0 else min(pos.qty, size)
                         sell_px = px if _executor_owns_fill else px * (1.0 - slip_mult)
                         avg_entry = pos.avg_entry
-                        res = executor.close_long(symbol, sell_px, sell_qty, reason="signal")
+                        res = await _safe_exec(executor.close_long, symbol, sell_px, sell_qty, reason="signal")
                         executed = bool(res.ok)
                         _sig_entry_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
                         if executed:
@@ -1029,6 +1328,7 @@ async def run_event_loop(
                                     exit_regime=_sig_entry_regime,
                                     entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                                 )
+                            evaluator._trade_outcomes.append(sell_px > avg_entry)
                             gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
                             net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                             bars_held = getattr(pos, "bars_held", 0)
@@ -1042,6 +1342,7 @@ async def run_event_loop(
                                 hold_bars=bars_held,
                                 close_reason="signal",
                             )
+                            _record_outcome(symbol, _sig_entry_regime, gross_pnl_pct, _entry_up_prob.pop(symbol, None))
                             if _perf_tracker:
                                 try:
                                     _perf_tracker.record_trade_outcome(
@@ -1053,8 +1354,8 @@ async def run_event_loop(
                                         realized_pnl=gross_pnl_pct,
                                     )
                                     _perf_trade_count += 1
-                                except Exception:
-                                    pass
+                                except Exception as exc:
+                                    logger.debug("PerfTracker record error: %s", exc)
                             _consecutive_exit_signals[symbol] = 0
                             is_loss = sell_px < avg_entry
                             if is_loss and loss_cooldown_bars > 0:
@@ -1062,8 +1363,11 @@ async def run_event_loop(
                             if notifier:
                                 notifier.notify("sell", {"symbol": symbol, "price": sell_px,
                                                          "qty": sell_qty, "ml_up_prob": up_prob})
-                        logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
-                                    symbol, sell_px, sell_qty, up_prob or -1, equity)
+                        if not executed:
+                            logger.error("SELL_FAILED %s px=%.2f qty=%.6f — %s",
+                                         symbol, sell_px, sell_qty, getattr(res, "error", "unknown"))
+                        logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f ok=%s",
+                                    symbol, sell_px, sell_qty, up_prob or -1, equity, executed)
 
                 # ── Open short when flat and shorts enabled ───────────
                 _allow_short_entry = (
@@ -1077,23 +1381,33 @@ async def run_event_loop(
                 if _allow_short_entry:
                     if _closed_long_this_bar:
                         _cooldown_remaining = 0
-                    _short_size = size * sig.eff_short_size_scale
+                    _funding_short_scale = 1.0
+                    if _funding_overlay is not None:
+                        _funding_short_scale = _funding_overlay.position_scale("sell", datetime.now(tz=timezone.utc))
+                    _exp_short_scale = _expectancy.expectancy_size_scale(regime=_sym_regime or "unknown")
+                    _short_size = size * sig.eff_short_size_scale * _macro_scale * _funding_short_scale * _wf_scale * _exp_short_scale
                     if not sig.eff_allow_shorts:
-                        logger.debug("REGIME_BLOCK %s — shorts not allowed in %s", symbol, _sym_regime)
+                        logger.info("SHORT_BLOCK %s — regime %s disallows shorts (eff_allow_shorts=False)", symbol, _sym_regime)
+                    elif ml_blind_blocks_shorts(evaluator._ml_probs):
+                        logger.info("SHORT_BLOCK %s — ML blind (prob std too low for shorts)", symbol)
                     elif _cooldown_remaining > 0:
-                        logger.debug("COOLDOWN %s — %d bars remaining (short)", symbol, _cooldown_remaining)
+                        logger.info("SHORT_BLOCK %s — cooldown %d bars remaining", symbol, _cooldown_remaining)
                     elif _short_size <= 0:
-                        logger.debug("REGIME_BLOCK %s — short size scaled to zero", symbol)
+                        logger.info("SHORT_BLOCK %s — size scaled to zero (base=%.6f eff_scale=%.2f macro=%.2f)",
+                                    symbol, size, sig.eff_short_size_scale, _macro_scale)
                     else:
                         short_px = px if _executor_owns_fill else px * (1.0 - slip_mult)
-                        res = executor.open_short(
+                        res = await _safe_exec(
+                            executor.open_short,
                             symbol, short_px, _short_size,
                             trailing_stop_pct=_eff_stop,
                             take_profit_pct=_eff_tp,
+                            trail_activation_pct=config.trail_activation_pct,
                         )
                         if res.ok:
                             _entry_regime[symbol] = _sym_regime or "unknown"
                             _entry_regime_conf[symbol] = getattr(sig, "final_confidence", 0.0)
+                            _entry_up_prob[symbol] = up_prob
                             spos = portfolio.short_positions.get(symbol)
                             if spos is not None:
                                 spos.entry_atr_pct = _sym_atr_pct
@@ -1107,11 +1421,17 @@ async def run_event_loop(
                             if notifier:
                                 notifier.notify("short", {"symbol": symbol, "price": short_px,
                                                           "qty": _short_size, "ml_up_prob": up_prob})
-                        logger.info("SHORT %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s short_scale=%.2f",
-                                    symbol, short_px, _short_size, up_prob or -1, equity, _sym_regime, sig.eff_short_size_scale)
-                elif not enable_shorts and symbol not in portfolio.positions:
-                    logger.debug("HOLD %s px=%.2f ml=%.3f equity=%.2f",
-                                 symbol, px, up_prob or -1, equity)
+                            logger.info("SHORT %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s short_scale=%.2f",
+                                        symbol, short_px, _short_size, up_prob or -1, equity, _sym_regime, sig.eff_short_size_scale)
+                        else:
+                            _fail_detail = getattr(res, "error", "") or "unknown"
+                            logger.warning("SHORT_FAILED %s px=%.2f qty=%.6f — %s",
+                                           symbol, short_px, _short_size, _fail_detail)
+                elif not _allow_short_entry:
+                    logger.info("SHORT_SKIP %s — entry preconditions not met (shorts=%s in_long=%s in_short=%s fx_ok=%s close_rev=%s)",
+                                symbol, enable_shorts, symbol in portfolio.positions,
+                                symbol in portfolio.short_positions, _fx_session_ok,
+                                _closed_long_this_bar and not enable_close_and_reverse)
             else:
                 logger.debug("HOLD %s px=%.2f ml=%.3f equity=%.2f",
                              symbol, px, up_prob or -1, equity)
@@ -1123,8 +1443,8 @@ async def run_event_loop(
                 total = sum(counts.values())
                 non_hold = counts.get("buy", 0) + counts.get("sell", 0)
                 SIGNAL_QUALITY.labels(symbol=symbol).set(non_hold / max(total, 1))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("SIGNAL_QUALITY metric error: %s", exc)
 
             # Periodic expectancy summary
             if (
@@ -1163,6 +1483,7 @@ async def run_event_loop(
                             {r: {k: round(v, 3) for k, v in w.items()} for r, w in proposal.regime_weights.items()}
                             if hasattr(proposal, "regime_weights") else str(proposal),
                         )
+                    _perf_tracker.save_to_db()
                 except Exception as exc:
                     logger.debug("PerformanceTracker proposal error: %s", exc)
 
@@ -1173,8 +1494,15 @@ async def run_event_loop(
         report = _expectancy.summary()
         logger.info("FINAL EXPECTANCY REPORT: %s", report)
 
+    # Persist tracker state for restart survival
+    if _perf_tracker:
+        try:
+            _perf_tracker.save_to_db()
+            logger.info("PerformanceTracker state saved on shutdown")
+        except Exception as exc:
+            logger.debug("PerformanceTracker save on shutdown failed: %s", exc)
+
     logger.info("Event loop terminated after %d events.", event_count)
-    conn.close()
 
 
 # ---------------------------------------------------------------------------

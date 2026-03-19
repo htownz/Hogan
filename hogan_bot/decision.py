@@ -218,10 +218,15 @@ def edge_gate(
     forecast_expected_return: float | None = None,
     estimated_spread: float = 0.0,
     atr_friction_multiple: float = 0.8,
+    buy_atr_friction_multiple: float = 0.25,
 ) -> GateDecision:
     """Block entries where the expected move is insufficient relative to friction.
 
     Total friction = round-trip fees + round-trip spread.
+
+    Asymmetric: buys use a lower ATR friction multiple (0.5x) than sells (0.8x)
+    because the long side benefits from mean-reversion in low-vol periods, while
+    the short side does not.
 
     Checks four conditions (any failure -> hold):
     1. ATR must exceed atr_friction_multiple * total friction (enough volatility)
@@ -236,15 +241,16 @@ def edge_gate(
     round_trip_spread = 2.0 * estimated_spread
     total_friction = round_trip_fees + round_trip_spread
 
-    if atr_pct < total_friction * atr_friction_multiple:
+    _eff_atr_mult = buy_atr_friction_multiple if action == "buy" else atr_friction_multiple
+    if atr_pct < total_friction * _eff_atr_mult:
         logger.debug(
             "EDGE_GATE: ATR %.4f < %.4f (%.1fx friction: fees=%.4f spread=%.4f) -> hold",
-            atr_pct, total_friction * atr_friction_multiple,
-            atr_friction_multiple, round_trip_fees, round_trip_spread,
+            atr_pct, total_friction * _eff_atr_mult,
+            _eff_atr_mult, round_trip_fees, round_trip_spread,
         )
         return GateDecision(
             action="hold", blocked_by="edge_gate_atr_low",
-            detail={"atr_pct": atr_pct, "required": total_friction * atr_friction_multiple},
+            detail={"atr_pct": atr_pct, "required": total_friction * _eff_atr_mult},
         )
 
     if take_profit_pct > 0 and take_profit_pct < total_friction * min_edge_multiple:
@@ -302,8 +308,8 @@ def get_regime_quality_adjustments(regime: str | None) -> dict[str, float]:
         rc = DEFAULT_REGIME_CONFIGS.get(regime)
         if rc is not None:
             return {"final_mult": rc.quality_final_mult, "tech_mult": rc.quality_tech_mult}
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Regime quality config lookup failed for %s (using hardcoded fallback): %s", regime, exc)
     return _REGIME_QUALITY_ADJUSTMENTS.get(regime, {})
 
 
@@ -390,11 +396,17 @@ def ranging_gate(
     ml_separation_min: float = 0.06,
     whipsaw_block_threshold: int = 2,
     soft_mode: bool = True,
+    buy_ml_separation_min: float = 0.03,
+    buy_whipsaw_block_threshold: int = 3,
 ) -> GateDecision:
     """Extra protections for ranging markets.
 
     Only active when regime == "ranging". When ``soft_mode=True`` (default),
     near-miss checks shrink size to 0.5x instead of always blocking.
+
+    Asymmetric: buys get relaxed thresholds (lower ML separation, higher
+    whipsaw threshold, always soft) because the long side has historically
+    been over-filtered in ranging regimes. Sells keep strict thresholds.
 
     Checks:
     1. Tech action must agree with final action (sentiment/macro alone cannot carry)
@@ -404,11 +416,17 @@ def ranging_gate(
     if action == "hold" or regime != "ranging":
         return GateDecision(action=action)
 
+    _is_buy = action == "buy"
+    _eff_ml_sep = buy_ml_separation_min if _is_buy else ml_separation_min
+    _eff_whip = buy_whipsaw_block_threshold if _is_buy else whipsaw_block_threshold
+    _eff_soft = True if _is_buy else soft_mode
+
     if tech_action is not None and tech_action != action:
-        if soft_mode:
-            logger.debug("RANGING_GATE: tech=%s != action=%s -> size 0.5x", tech_action, action)
+        if _eff_soft:
+            _scale = 0.70 if _is_buy else 0.50
+            logger.debug("RANGING_GATE: tech=%s != action=%s -> size %.1fx", tech_action, action, _scale)
             return GateDecision(
-                action=action, size_scale=0.5,
+                action=action, size_scale=_scale,
                 blocked_by=None,
                 detail={"tech_action": tech_action, "final_action": action, "soft": True},
             )
@@ -420,30 +438,31 @@ def ranging_gate(
 
     if up_prob is not None:
         separation = abs(up_prob - 0.5)
-        if separation < ml_separation_min:
-            if soft_mode and separation >= ml_separation_min * 0.6:
-                logger.debug("RANGING_GATE: ML separation %.3f marginal -> size 0.5x", separation)
+        if separation < _eff_ml_sep:
+            if _eff_soft and separation >= _eff_ml_sep * 0.6:
+                _scale = 0.70 if _is_buy else 0.50
+                logger.debug("RANGING_GATE: ML separation %.3f marginal -> size %.1fx", separation, _scale)
                 return GateDecision(
-                    action=action, size_scale=0.5,
-                    detail={"separation": separation, "required": ml_separation_min, "soft": True},
+                    action=action, size_scale=_scale,
+                    detail={"separation": separation, "required": _eff_ml_sep, "soft": True},
                 )
             logger.debug(
                 "RANGING_GATE: ML separation %.3f < %.3f -> hold",
-                separation, ml_separation_min,
+                separation, _eff_ml_sep,
             )
             return GateDecision(
                 action="hold", blocked_by="ranging_gate_ml_indifference",
-                detail={"separation": separation, "required": ml_separation_min},
+                detail={"separation": separation, "required": _eff_ml_sep},
             )
 
-    if recent_whipsaw_count >= whipsaw_block_threshold:
+    if recent_whipsaw_count >= _eff_whip:
         logger.debug(
             "RANGING_GATE: whipsaws %d >= %d in ranging -> hold",
-            recent_whipsaw_count, whipsaw_block_threshold,
+            recent_whipsaw_count, _eff_whip,
         )
         return GateDecision(
             action="hold", blocked_by="ranging_gate_whipsaw",
-            detail={"whipsaws": recent_whipsaw_count, "threshold": whipsaw_block_threshold},
+            detail={"whipsaws": recent_whipsaw_count, "threshold": _eff_whip},
         )
 
     return GateDecision(action=action)
@@ -486,7 +505,7 @@ def pullback_gate(
     range_pos = (close - local_low) / local_range
 
     close_lookback = float(candles["close"].iloc[-(lookback + 1)])
-    run_up_pct = (close - close_lookback) / close_lookback * 100
+    run_up_pct = (close - close_lookback) / max(close_lookback, 1e-9) * 100
 
     _strict_regimes = ("ranging", "trending_up")
     _strict_thresh = 0.40 if regime in _strict_regimes else max_range_position
@@ -530,6 +549,81 @@ def pullback_gate(
     return GateDecision(action=action)
 
 
+def sell_pullback_gate(
+    action: str,
+    candles: pd.DataFrame,
+    *,
+    lookback: int = 12,
+    min_range_position: float = 0.45,
+    max_drop_pct: float = 2.0,
+    regime: str | None = None,
+) -> GateDecision:
+    """Block sell/short entries that chase recent price drops.
+
+    Mirror of ``pullback_gate`` for the sell side:
+    - In ``ranging`` or ``trending_down``, shorting near the range bottom
+      is selling at support — block even without a large drop.
+    - Otherwise, require both near-bottom AND chasing drop to block.
+    """
+    if action != "sell" or len(candles) < lookback + 1:
+        return GateDecision(action=action)
+
+    close = float(candles["close"].iloc[-1])
+    highs = candles["high"].iloc[-(lookback + 1):]
+    lows = candles["low"].iloc[-(lookback + 1):]
+    local_high = float(highs.max())
+    local_low = float(lows.min())
+
+    local_range = local_high - local_low
+    if local_range <= 0:
+        return GateDecision(action=action)
+    range_pos = (close - local_low) / local_range
+
+    close_lookback = float(candles["close"].iloc[-(lookback + 1)])
+    drop_pct = (close_lookback - close) / max(close_lookback, 1e-9) * 100
+
+    _strict_regimes = ("ranging", "trending_down")
+    _strict_thresh = 0.60 if regime in _strict_regimes else min_range_position
+    near_bottom = range_pos < _strict_thresh
+    chasing_drop = drop_pct > max_drop_pct
+
+    if regime in _strict_regimes and near_bottom:
+        return GateDecision(
+            action="hold",
+            blocked_by=f"sell_pullback_gate_{regime}_support",
+            detail={
+                "range_position": round(range_pos, 3),
+                "threshold": _strict_thresh,
+                "regime": regime,
+            },
+        )
+
+    if near_bottom and chasing_drop:
+        return GateDecision(
+            action="hold",
+            blocked_by="sell_pullback_gate_chasing",
+            detail={
+                "range_position": round(range_pos, 3),
+                "min_range_position": min_range_position,
+                "drop_pct": round(drop_pct, 2),
+                "max_drop_pct": max_drop_pct,
+            },
+        )
+
+    if near_bottom:
+        return GateDecision(
+            action=action,
+            size_scale=0.5,
+            detail={
+                "range_position": round(range_pos, 3),
+                "drop_pct": round(drop_pct, 2),
+                "note": "near bottom but no excessive drop; half-size",
+            },
+        )
+
+    return GateDecision(action=action)
+
+
 def ml_confidence(up_prob: float) -> float:
     """Return a position-size scaling factor in [0, 1] based on how far the
     predicted probability is from the indifferent 0.5 mark.
@@ -542,6 +636,115 @@ def ml_confidence(up_prob: float) -> float:
         return 0.0
     up_prob = max(0.0, min(1.0, up_prob))
     return min(1.0, abs(up_prob - 0.5) * 2.0)
+
+
+def ml_probability_sizer(
+    action: str,
+    up_prob: float,
+    sensitivity: float = 3.0,
+    floor: float = 0.30,
+    ceiling: float = 1.50,
+) -> float:
+    """Map ML probability to a continuous position-size scale.
+
+    Unlike the binary ml_filter (which blocks trades), this function
+    never blocks — it scales position size proportionally to how much
+    the model agrees with the technical signal.
+
+    For buy:  scale = 1.0 + (up_prob - 0.50) * sensitivity
+    For sell: scale = 1.0 + (0.50 - up_prob) * sensitivity
+    Clamped to [floor, ceiling].
+
+    With sensitivity=3.0:
+      buy  @ prob=0.40 → 0.70x     buy  @ prob=0.55 → 1.15x
+      sell @ prob=0.60 → 0.70x     sell @ prob=0.45 → 1.15x
+    """
+    if up_prob is None or np.isnan(up_prob):
+        return 1.0
+    up_prob = max(0.0, min(1.0, up_prob))
+    if action == "buy":
+        scale = 1.0 + (up_prob - 0.50) * sensitivity
+    elif action == "sell":
+        scale = 1.0 + (0.50 - up_prob) * sensitivity
+    else:
+        return 1.0
+    return max(floor, min(ceiling, scale))
+
+
+def ml_blind_scale(
+    recent_probs: list[float] | np.ndarray,
+    *,
+    window: int = 24,
+    std_threshold: float = 0.02,
+    floor_scale: float = 0.50,
+) -> float:
+    """Detect when the ML model is 'blind' and scale down accordingly.
+
+    When the model's recent output probabilities cluster tightly around 0.50
+    (low standard deviation), it has no conviction.  In that state we reduce
+    position sizing rather than trusting a coinflip.
+
+    Returns a scale factor in [floor_scale, 1.0].  Below *std_threshold*
+    the scale drops linearly from 1.0 toward *floor_scale*.
+    """
+    if recent_probs is None or len(recent_probs) < max(4, window // 4):
+        return 1.0
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+    tail = tail[~np.isnan(tail)]
+    if len(tail) < 4:
+        return 1.0
+    std = float(np.std(tail))
+    if std >= std_threshold:
+        return 1.0
+    ratio = std / std_threshold
+    return floor_scale + (1.0 - floor_scale) * ratio
+
+
+def ml_blind_blocks_shorts(
+    recent_probs: list[float] | np.ndarray,
+    *,
+    window: int = 24,
+    block_threshold: float = 0.015,
+) -> bool:
+    """Return True when the ML model is so indecisive that shorts should be blocked.
+
+    Shorts with zero model conviction are pure noise — they never hit TP and
+    bleed via stop-out or max-hold timeout.  This gate blocks short entries
+    when the rolling probability std drops below *block_threshold* (stricter
+    than the sizing scale's 0.02).
+    """
+    if recent_probs is None or len(recent_probs) < max(4, window // 4):
+        return False
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+    tail = tail[~np.isnan(tail)]
+    if len(tail) < 4:
+        return False
+    return float(np.std(tail)) < block_threshold
+
+
+def loss_streak_scale(
+    recent_outcomes: list[bool],
+    *,
+    streak_threshold: int = 3,
+    dampened_scale: float = 0.50,
+) -> float:
+    """Reduce sizing after consecutive losses.
+
+    Counts consecutive losses from the end of *recent_outcomes* (True=win,
+    False=loss).  When the streak reaches *streak_threshold*, returns
+    *dampened_scale*.  Otherwise returns 1.0.
+    """
+    if not recent_outcomes:
+        return 1.0
+    streak = 0
+    for outcome in reversed(recent_outcomes):
+        if not outcome:
+            streak += 1
+        else:
+            break
+    if streak >= streak_threshold:
+        return dampened_scale
+    return 1.0
 
 
 class AdaptiveConfidence:
@@ -727,3 +930,50 @@ class AdaptiveConfidence:
             "recency_factor": round(self._recency_accuracy_factor(), 3),
             "bin_accuracy": bin_accuracy,
         }
+
+
+# ---------------------------------------------------------------------------
+# Walk-forward failure response
+# ---------------------------------------------------------------------------
+
+def wf_failure_scale(
+    report_path: str = "diagnostics/walk_forward_report.json",
+    *,
+    min_scale: float = 0.50,
+    max_age_hours: float = 168.0,
+) -> float:
+    """Read the latest walk-forward report and return a sizing penalty.
+
+    - PASS gate → 1.0 (no penalty)
+    - FAIL gate → linear penalty based on how many windows failed, floored
+      at *min_scale*
+    - Missing or stale report → 1.0 (no penalty, cannot punish missing data)
+
+    Designed to be called once at startup or periodically (e.g. every 24h).
+    """
+    from pathlib import Path
+    rpt = Path(report_path)
+    if not rpt.exists():
+        return 1.0
+    try:
+        import os
+        age_hours = (time.time() - os.path.getmtime(rpt)) / 3600.0
+        if age_hours > max_age_hours:
+            return 1.0
+        data = json.loads(rpt.read_text(encoding="utf-8"))
+        summary = data.get("summary", {})
+        gate = summary.get("passes_gate", True)
+        if gate:
+            return 1.0
+        n_windows = summary.get("n_windows", 1) or 1
+        n_positive = summary.get("n_positive", 0)
+        failure_frac = 1.0 - (n_positive / n_windows)
+        scale = max(min_scale, 1.0 - failure_frac * 0.5)
+        logger.info(
+            "WF failure response: %d/%d windows positive → scale=%.2f",
+            n_positive, n_windows, scale,
+        )
+        return scale
+    except Exception as exc:
+        logger.debug("wf_failure_scale error: %s", exc)
+        return 1.0

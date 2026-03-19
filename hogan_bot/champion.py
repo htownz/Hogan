@@ -46,7 +46,8 @@ class ChampionLocks:
     signal_min_vote_margin: int = 1
 
     use_regime_detection: bool = True
-    ml_confidence_sizing: bool = True
+    ml_confidence_sizing: bool = False
+    use_ml_as_sizer: bool = True
 
     # Regime-routed strategy families (trend/mean-revert/breakout)
     use_strategy_router: bool = True
@@ -112,11 +113,11 @@ def apply_champion_mode(config):
             )
             overrides[field_name] = champion_val
 
-    # Champion mode also switches to champion model (trained on 15-feature subset)
+    # Champion mode also switches to champion model (trained on 8-feature subset)
     champion_path = getattr(config, "champion_ml_model_path", "models/hogan_champion.pkl")
     if config.ml_model_path != champion_path:
         overrides["ml_model_path"] = champion_path
-        logger.info("CHAMPION_MODE: ml_model_path -> %s (15-feature model)", champion_path)
+        logger.info("CHAMPION_MODE: ml_model_path -> %s (8-feature model)", champion_path)
 
     if overrides:
         config = replace(config, **overrides)

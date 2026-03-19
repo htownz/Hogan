@@ -97,6 +97,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Explicit short max hold in hours (default: use config value or same as long max hold)",
     )
+    parser.add_argument(
+        "--no-policy-core",
+        action="store_true",
+        help="Force legacy decision path (bypass policy_core.decide and swarm)",
+    )
     return parser.parse_args()
 
 
@@ -107,7 +112,7 @@ def _load_rl_policy(model_path: str):
     return _RL_POLICY_CACHE[model_path]
 
 
-def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, overrides: dict | None = None, use_ict: bool = False, use_rl_agent: bool = False, rl_policy=None, db_path: str | None = None, enable_shorts: bool = False, candles_15m=None, mtf_thesis_max_age: int = 4, enable_pullback_gate: bool = True, enable_close_and_reverse: bool = False, short_max_hold_hours: float | None = None):
+def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, overrides: dict | None = None, use_ict: bool = False, use_rl_agent: bool = False, rl_policy=None, db_path: str | None = None, enable_shorts: bool = False, candles_15m=None, mtf_thesis_max_age: int = 4, enable_pullback_gate: bool = True, enable_close_and_reverse: bool = False, short_max_hold_hours: float | None = None, use_policy_core: bool = True):
     """Run one backtest with optional per-key overrides on *cfg*.
 
     Returns the full :class:`~hogan_bot.backtest.BacktestResult` object so
@@ -171,6 +176,12 @@ def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, ov
         enable_pullback_gate=enable_pullback_gate,
         enable_close_and_reverse=enable_close_and_reverse,
         short_max_hold_hours=short_max_hold_hours if short_max_hold_hours is not None else cfg.short_max_hold_hours,
+        use_policy_core=use_policy_core,
+        use_ml_as_sizer=cfg.use_ml_as_sizer,
+        exit_drawdown_pct=cfg.exit_drawdown_pct,
+        exit_time_decay=cfg.exit_time_decay,
+        exit_vol_expansion=cfg.exit_vol_expansion,
+        exit_stagnation_bars=cfg.exit_stagnation_bars,
     )
 
 
@@ -215,6 +226,7 @@ def main() -> None:
     _enable_shorts = args.enable_shorts or profile_cli.get("enable_shorts", False)
     _enable_pullback = (not args.no_pullback_gate) and profile_cli.get("enable_pullback_gate", True)
     _enable_car = args.enable_close_and_reverse or profile_cli.get("enable_close_and_reverse", False)
+    _use_pc = not args.no_policy_core and cfg.use_policy_core
 
     _candles_15m = None
     if args.mtf_exec and args.from_db:
@@ -244,6 +256,7 @@ def main() -> None:
                 enable_pullback_gate=_enable_pullback,
                 enable_close_and_reverse=_enable_car,
                 short_max_hold_hours=args.short_max_hold_hours,
+                use_policy_core=_use_pc,
             )
             summary = result.summary_dict()
             funnel = summary.pop("signal_funnel", {})
@@ -271,6 +284,7 @@ def main() -> None:
                 enable_pullback_gate=_enable_pullback,
                 enable_close_and_reverse=_enable_car,
                 short_max_hold_hours=args.short_max_hold_hours,
+                use_policy_core=_use_pc,
             )
             rows.append({"config": label, **result.summary_dict()})
 
@@ -286,6 +300,7 @@ def main() -> None:
             enable_pullback_gate=_enable_pullback,
             enable_close_and_reverse=_enable_car,
             short_max_hold_hours=args.short_max_hold_hours,
+            use_policy_core=_use_pc,
         )
         print(json.dumps(result.summary_dict(), indent=2))
 

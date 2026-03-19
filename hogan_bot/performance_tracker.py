@@ -78,13 +78,20 @@ class RegimePerformance:
 
     @property
     def sharpe(self) -> float:
+        """Per-trade Sharpe ratio (mean / std, not annualized).
+
+        Previous implementation used sqrt(252) which assumes daily
+        trade frequency.  Since pnl_values are per-trade with no
+        timestamp, annualization is misleading.  Callers that need
+        an annualized figure should multiply by sqrt(trades_per_year).
+        """
         if len(self.pnl_values) < 3:
             return 0.0
         arr = np.array(self.pnl_values)
         std = float(np.std(arr))
         if std < 1e-9:
             return 0.0
-        return float(np.mean(arr) / std * np.sqrt(252))
+        return float(np.mean(arr) / std)
 
     def to_dict(self) -> dict:
         return {
@@ -204,6 +211,83 @@ class PerformanceTracker:
             total, len(self._regime_data),
         )
         return total
+
+    # ------ Persist / restore in-memory state for restart survival ------
+
+    def save_to_db(self) -> None:
+        """Persist current regime performance state to SQLite."""
+        try:
+            from hogan_bot.storage import get_connection
+            conn = get_connection(self.db_path)
+            try:
+                conn.execute(
+                    """CREATE TABLE IF NOT EXISTS perf_tracker_state (
+                           id   INTEGER PRIMARY KEY AUTOINCREMENT,
+                           ts_ms INTEGER NOT NULL,
+                           state_json TEXT NOT NULL
+                       )"""
+                )
+                payload = {}
+                for regime, rp in self._regime_data.items():
+                    payload[regime] = {
+                        "trade_count": rp.trade_count,
+                        "win_count": rp.win_count,
+                        "total_pnl": rp.total_pnl,
+                        "pnl_values": rp.pnl_values[-self.max_window:],
+                        "tech_alignment": rp.tech_alignment,
+                        "sent_alignment": rp.sent_alignment,
+                        "macro_alignment": rp.macro_alignment,
+                    }
+                conn.execute(
+                    "INSERT INTO perf_tracker_state (ts_ms, state_json) VALUES (?, ?)",
+                    (int(time.time() * 1000), json.dumps(payload)),
+                )
+                conn.commit()
+                logger.debug("PerformanceTracker state saved (%d regimes)", len(payload))
+            finally:
+                conn.close()
+        except Exception as exc:
+            logger.debug("PerformanceTracker save_to_db failed: %s", exc)
+
+    def restore_from_db(self) -> bool:
+        """Restore in-memory state from the most recent DB snapshot.
+
+        Returns True if state was successfully restored.
+        """
+        try:
+            from hogan_bot.storage import get_connection
+            conn = get_connection(self.db_path)
+            try:
+                row = conn.execute(
+                    "SELECT state_json FROM perf_tracker_state ORDER BY ts_ms DESC LIMIT 1"
+                ).fetchone()
+            finally:
+                conn.close()
+            if not row:
+                return False
+            payload = json.loads(row[0])
+            self._regime_data.clear()
+            for regime, data in payload.items():
+                rp = RegimePerformance(
+                    regime=regime,
+                    trade_count=data["trade_count"],
+                    win_count=data["win_count"],
+                    total_pnl=data["total_pnl"],
+                    pnl_values=data["pnl_values"],
+                    tech_alignment=data.get("tech_alignment", 0.0),
+                    sent_alignment=data.get("sent_alignment", 0.0),
+                    macro_alignment=data.get("macro_alignment", 0.0),
+                )
+                self._regime_data[regime] = rp
+            total = sum(rp.trade_count for rp in self._regime_data.values())
+            logger.info(
+                "PerformanceTracker restored %d trades across %d regimes from DB snapshot",
+                total, len(self._regime_data),
+            )
+            return True
+        except Exception as exc:
+            logger.debug("PerformanceTracker restore_from_db failed: %s", exc)
+            return False
 
     def propose_weight_update(
         self,
