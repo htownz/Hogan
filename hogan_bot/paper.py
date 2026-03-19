@@ -60,9 +60,8 @@ class PaperPortfolio:
 
     def total_equity(self, mark_prices: dict[str, float]) -> float:
         long_value = sum(pos.qty * mark_prices.get(symbol, 0.0) for symbol, pos in self.positions.items())
-        # Short P&L: positive when price has fallen below our entry (profitable)
         short_pnl = sum(
-            (pos.avg_entry - mark_prices.get(symbol, 0.0)) * pos.qty
+            (pos.avg_entry - mark_prices.get(symbol, pos.avg_entry)) * pos.qty
             for symbol, pos in self.short_positions.items()
         )
         return self.cash_usd + long_value + short_pnl
@@ -161,7 +160,11 @@ class PaperPortfolio:
         return True
 
     def execute_cover(self, symbol: str, price: float, qty: float) -> bool:
-        """Close (cover) a short position and realise P&L."""
+        """Close (cover) a short position and realise P&L.
+
+        Covers always succeed when the position exists — refusing to close a
+        short with unlimited upside risk is worse than temporary negative cash.
+        """
         pos = self.short_positions.get(symbol)
         if pos is None:
             logger.warning("execute_cover rejected %s: no open short position", symbol)
@@ -172,6 +175,12 @@ class PaperPortfolio:
         pnl = (pos.avg_entry - price) * qty
         fee = qty * price * self.fee_rate
         self.cash_usd += pnl - fee
+        if self.cash_usd < 0:
+            logger.warning(
+                "execute_cover %s: cash negative after cover (cash=%.2f, pnl=%.2f, fee=%.2f) "
+                "— short loss exceeded available cash",
+                symbol, self.cash_usd, pnl, fee,
+            )
         pos.qty -= qty
         if pos.qty <= 1e-12:
             self.short_positions.pop(symbol, None)
@@ -214,7 +223,7 @@ class PaperPortfolio:
                 if not pos.trail_active and pos.trail_activation_pct > 0:
                     if pos.avg_entry > 0 and pos.max_favorable_pct >= pos.trail_activation_pct:
                         pos.trail_active = True
-                        pos.peak_price = px
+                        pos.peak_price = pos.avg_entry * (1.0 + pos.max_favorable_pct)
                 elif pos.trail_activation_pct <= 0:
                     pos.trail_active = True
                 if pos.trail_active:
@@ -250,7 +259,7 @@ class PaperPortfolio:
                 if not pos.trail_active and pos.trail_activation_pct > 0:
                     if pos.avg_entry > 0 and pos.max_favorable_pct >= pos.trail_activation_pct:
                         pos.trail_active = True
-                        pos.trough_price = px
+                        pos.trough_price = pos.avg_entry * (1.0 - pos.max_favorable_pct)
                 elif pos.trail_activation_pct <= 0:
                     pos.trail_active = True
                 if pos.trail_active:

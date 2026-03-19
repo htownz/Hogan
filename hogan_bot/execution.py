@@ -200,19 +200,35 @@ class LiveExecution(ExecutionEngine):
         if portfolio is None:
             logger.warning("LiveExecution created without portfolio — emergency_flatten will attempt exchange-level close")
 
+    @staticmethod
+    def _extract_fill_price(order: dict, fallback: float) -> float:
+        """Best-effort extraction of actual fill price from CCXT order response."""
+        avg = order.get("average")
+        if avg is not None and avg > 0:
+            return float(avg)
+        cost = order.get("cost", 0)
+        filled = order.get("filled", 0)
+        if cost and filled and filled > 0:
+            return float(cost) / float(filled)
+        return fallback
+
     def open_long(self, symbol: str, price: float, qty: float,
                   trailing_stop_pct: float = 0.0,
-                  take_profit_pct: float = 0.0) -> ExecResult:
+                  take_profit_pct: float = 0.0,
+                  trail_activation_pct: float = 0.0) -> ExecResult:
         try:
             order = self.client.create_market_order(symbol=symbol, side="buy", amount=qty)
             order["exchange"] = self.exchange_id
             record_order(self.conn, order)
             self._sync_fills(symbol)
+            fill_price = self._extract_fill_price(order, price)
+            fill_qty = float(order.get("filled", qty))
             if self.portfolio is not None:
                 self.portfolio.execute_buy(
-                    symbol, price, qty,
+                    symbol, fill_price, fill_qty,
                     trailing_stop_pct=trailing_stop_pct,
                     take_profit_pct=take_profit_pct,
+                    trail_activation_pct=trail_activation_pct,
                 )
             return ExecResult(ok=True, order_id=str(order.get("id")))
         except Exception as exc:  # pragma: no cover
@@ -226,8 +242,10 @@ class LiveExecution(ExecutionEngine):
             order["exchange"] = self.exchange_id
             record_order(self.conn, order)
             self._sync_fills(symbol)
+            fill_price = self._extract_fill_price(order, price)
+            fill_qty = float(order.get("filled", qty))
             if self.portfolio is not None:
-                self.portfolio.execute_sell(symbol, price, qty)
+                self.portfolio.execute_sell(symbol, fill_price, fill_qty)
             return ExecResult(ok=True, order_id=str(order.get("id")))
         except Exception as exc:  # pragma: no cover
             logger.exception("Live close_long failed: %s", exc)
@@ -244,12 +262,24 @@ class LiveExecution(ExecutionEngine):
                 results.append(self.close_short(symbol, price, spos.qty, reason="emergency"))
         else:
             logger.error(
-                "EMERGENCY_FLATTEN %s — no portfolio reference; attempting market sell at exchange level",
+                "EMERGENCY_FLATTEN %s — no portfolio reference; querying exchange for balance",
                 symbol,
             )
             try:
-                order = self.client.create_market_order(symbol=symbol, side="sell", amount=0)
-                logger.warning("EMERGENCY_FLATTEN %s — exchange-level sell attempted (manual verification required)", symbol)
+                base_currency = symbol.split("/")[0] if "/" in symbol else symbol
+                balance = self.client.fetch_balance()
+                held = float(balance.get("free", {}).get(base_currency, 0))
+                if held > 0:
+                    order = self.client.create_market_order(symbol=symbol, side="sell", amount=held)
+                    order["exchange"] = self.exchange_id
+                    record_order(self.conn, order)
+                    logger.warning(
+                        "EMERGENCY_FLATTEN %s — sold %.6f %s via exchange balance lookup",
+                        symbol, held, base_currency,
+                    )
+                    return ExecResult(ok=True, order_id=str(order.get("id")))
+                else:
+                    logger.warning("EMERGENCY_FLATTEN %s — no %s balance found on exchange", symbol, base_currency)
             except Exception as exc:
                 logger.error("EMERGENCY_FLATTEN %s — exchange fallback failed: %s", symbol, exc)
             return ExecResult(ok=False, error="no_portfolio_reference")
@@ -323,6 +353,7 @@ class SmartExecution(ExecutionEngine):
         qty: float,
         trailing_stop_pct: float = 0.0,
         take_profit_pct: float = 0.0,
+        trail_activation_pct: float = 0.0,
     ) -> ExecResult:
         """Passive limit buy: post at best bid, reprice if needed."""
         cfg = self.config
@@ -357,6 +388,7 @@ class SmartExecution(ExecutionEngine):
                             symbol, limit_price, qty,
                             trailing_stop_pct=trailing_stop_pct,
                             take_profit_pct=take_profit_pct,
+                            trail_activation_pct=trail_activation_pct,
                         )
                     logger.info(
                         "SMART_OPEN_LONG filled %s at %.2f (attempt %d)",
