@@ -47,7 +47,7 @@ def _schema(conn: sqlite3.Connection) -> None:
         );
         CREATE TABLE IF NOT EXISTS decision_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT, ts_ms INTEGER, symbol TEXT,
-            action TEXT, swarm_decision_id INTEGER
+            final_action TEXT, swarm_decision_id INTEGER
         );
         CREATE TABLE IF NOT EXISTS swarm_weight_snapshots (
             id INTEGER PRIMARY KEY AUTOINCREMENT, ts_ms INTEGER NOT NULL,
