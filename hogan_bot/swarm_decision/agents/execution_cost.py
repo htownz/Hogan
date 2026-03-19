@@ -42,6 +42,11 @@ def _corwin_schultz_spread(candles: pd.DataFrame, window: int = 20) -> float:
     beta_mean = np.nanmean(beta)
     gamma_mean = np.nanmean(gamma_arr)
 
+    if not np.isfinite(beta_mean) or not np.isfinite(gamma_mean):
+        return 0.0
+    if beta_mean < 0 or gamma_mean < 0:
+        return 0.0
+
     k = math.sqrt(2.0) - 1.0
     denom = 3.0 - 2.0 * math.sqrt(2.0)
     if denom == 0:
@@ -51,6 +56,8 @@ def _corwin_schultz_spread(candles: pd.DataFrame, window: int = 20) -> float:
     alpha = max(alpha, 0.0)
 
     spread = 2.0 * (math.exp(alpha) - 1.0) / (1.0 + math.exp(alpha))
+    if not math.isfinite(spread):
+        return 0.0
     return max(0.0, spread)
 
 

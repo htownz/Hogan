@@ -59,7 +59,7 @@ class ExitEvaluator:
         # caused premature exits on normal pullbacks.
         trend_fast_ma: int = 8,
         trend_slow_ma: int = 34,
-        stagnation_threshold: float = 0.002,
+        stagnation_threshold: float = 0.003,
         # Short-specific overrides — applied when side != "long"
         short_drawdown_panic_pct: float | None = None,
         short_time_decay_threshold: float | None = None,
@@ -101,6 +101,7 @@ class ExitEvaluator:
         entry_atr: float | None = None,
         vol_ratio: float | None = None,
         regime: str | None = None,
+        max_favorable_pct: float = 0.0,
     ) -> ExitDecision:
         """Evaluate whether the current position should be exited.
 
@@ -143,15 +144,24 @@ class ExitEvaluator:
             )
 
         # 2. Drawdown panic: significant unrealized loss
-        if upnl_pct < -dd_panic:
+        # MFE-aware: a trade that has already captured significant profit
+        # (high max_favorable_pct) has proven its thesis and deserves a
+        # wider drawdown leash.  We widen the panic threshold by up to 50%
+        # proportional to how much profit was captured.
+        _mfe_relief = min(0.50, max_favorable_pct * 5.0) if max_favorable_pct > 0 else 0.0
+        _eff_dd_panic = dd_panic * (1.0 + _mfe_relief)
+        if upnl_pct < -_eff_dd_panic:
             atr_pct = self._current_atr_pct(candles)
             atr_mult = 1.2 if is_short else 1.5
             if abs(upnl_pct) > atr_pct * atr_mult:
-                logger.debug("EXIT_MODEL: drawdown panic (upnl=%.3f, side=%s)", upnl_pct, side)
+                logger.debug(
+                    "EXIT_MODEL: drawdown panic (upnl=%.3f, mfe=%.3f, eff_dd=%.3f, side=%s)",
+                    upnl_pct, max_favorable_pct, _eff_dd_panic, side,
+                )
                 return ExitDecision(
                     should_exit=True,
                     reason="drawdown_exceeded",
-                    urgency=min(1.0, abs(upnl_pct) / dd_panic),
+                    urgency=min(1.0, abs(upnl_pct) / _eff_dd_panic),
                 )
 
         # 3. Time decay: position has aged past expected hold window
