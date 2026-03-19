@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l \"C:\\\\Users\\\\15125\\\\Documents\\\\Hogan\\\\Hogan\"/tests/*.py)",
+      "Bash(xargs wc:*)",
+      "Bash(wc -l tests/test_*.py)",
+      "Bash(ls -1 test_*.py)",
+      "Bash(done)",
+      "Bash(python -m pytest tests/ --collect-only -q)",
+      "Bash(python -m pytest tests/ -x -q --tb=short)"
+    ]
+  }
+}
