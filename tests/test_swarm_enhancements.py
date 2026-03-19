@@ -152,7 +152,7 @@ class TestOutcomeWriter:
             "SELECT outcome_label FROM swarm_outcomes", conn
         )["outcome_label"].unique()
         for label in labels:
-            assert label in ("win", "loss", "scratch", "pending")
+            assert label in ("win", "loss", "scratch", "pending", "no_trade")
         conn.close()
 
     def test_tf_to_minutes(self):
