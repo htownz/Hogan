@@ -46,7 +46,7 @@ def _schema(conn: sqlite3.Connection) -> None:
         );
         CREATE TABLE IF NOT EXISTS decision_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT, ts_ms INTEGER, symbol TEXT,
-            action TEXT, swarm_decision_id INTEGER
+            final_action TEXT, swarm_decision_id INTEGER
         );
         CREATE TABLE IF NOT EXISTS swarm_weight_snapshots (
             id INTEGER PRIMARY KEY AUTOINCREMENT, ts_ms INTEGER NOT NULL,
@@ -111,7 +111,7 @@ def _seed_healthy(conn: sqlite3.Connection, n: int = 100) -> None:
                  json.dumps({}), i + 1),
             )
         conn.execute(
-            "INSERT INTO decision_log (ts_ms, symbol, action, swarm_decision_id) VALUES (?,?,?,?)",
+            "INSERT INTO decision_log (ts_ms, symbol, final_action, swarm_decision_id) VALUES (?,?,?,?)",
             (base_ts + i * 60_000, "BTC/USD", action, i + 1),
         )
     conn.commit()
