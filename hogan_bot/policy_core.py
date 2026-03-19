@@ -74,6 +74,7 @@ class PolicyState:
     ml_probs: deque[float] = field(default_factory=lambda: deque(maxlen=50))
     trade_outcomes: deque[bool] = field(default_factory=lambda: deque(maxlen=50))
     swarm_weights_logged: bool = False
+    swarm_bars_since_weight_learn: int = 0
 
     # Regime transition tracker (created lazily)
     _regime_transition: object | None = None
@@ -135,7 +136,22 @@ def _resolve_swarm_weights(
                 import json
                 return json.loads(row[0])
         except Exception as exc:
-            logger.debug("Swarm weight DB lookup failed: %s", exc)
+            logger.debug("Swarm regime weight DB lookup failed: %s", exc)
+
+    # 1b. Global promoted weights (fallback when regime-specific not available)
+    if conn is not None:
+        try:
+            row = conn.execute(
+                """SELECT weights_json FROM swarm_weight_snapshots
+                   WHERE symbol = ? AND regime IS NULL AND source = 'promoted'
+                   ORDER BY ts_ms DESC LIMIT 1""",
+                (symbol,),
+            ).fetchone()
+            if row:
+                import json
+                return json.loads(row[0])
+        except Exception as exc:
+            logger.debug("Swarm global weight DB lookup failed: %s", exc)
 
     # 2. Explicit config string
     _w_str = getattr(config, "swarm_weights", "")
@@ -635,6 +651,78 @@ def decide(
                             backfill_outcomes(conn, symbol=symbol, lookback_hours=72)
                         except Exception as exc:
                             logger.debug("Swarm outcome backfill error: %s", exc)
+
+                        # Periodic weight learning loop
+                        state.swarm_bars_since_weight_learn += 1
+                        _wl_interval = getattr(config, "swarm_weight_learning_interval_bars", 24)
+                        if (
+                            getattr(config, "swarm_weight_learning_enabled", False)
+                            and state.swarm_bars_since_weight_learn >= _wl_interval
+                        ):
+                            state.swarm_bars_since_weight_learn = 0
+                            try:
+                                from hogan_bot.swarm_decision.weight_learner import (
+                                    WeightProposal,
+                                    propose_weights as _propose_w,
+                                    log_weight_proposal as _log_w_proposal,
+                                    promote_weights as _promote_w,
+                                )
+                                _tf = getattr(config, "timeframe", "1h")
+                                _min_t = getattr(config, "swarm_weight_min_trades", 50)
+                                _max_s = getattr(config, "swarm_weight_max_daily_shift", 0.05)
+                                _auto = getattr(config, "swarm_weight_auto_promote", False)
+
+                                # Regime-specific proposal (for regime-aware weights)
+                                if regime_name:
+                                    _wl_regime = _propose_w(
+                                        conn,
+                                        current_weights=controller.weights,
+                                        symbol=symbol,
+                                        min_trades=_min_t,
+                                        max_daily_shift=_max_s,
+                                        regime=regime_name,
+                                    )
+                                    _log_w_proposal(conn, symbol, _tf, _wl_regime)
+                                    if _wl_regime.min_trades_met and not _wl_regime.stable and _auto:
+                                        _promote_w(conn, symbol, _tf, _wl_regime)
+                                        if getattr(config, "swarm_use_regime_weights", False):
+                                            controller.set_weights(_wl_regime.proposed_weights)
+                                            logger.info(
+                                                "SWARM regime weight promoted (%s): %s",
+                                                regime_name,
+                                                {k: round(v, 4) for k, v in _wl_regime.proposed_weights.items()},
+                                            )
+
+                                # Global proposal (all-regime fallback)
+                                _wl_global = _propose_w(
+                                    conn,
+                                    current_weights=controller.weights,
+                                    symbol=symbol,
+                                    min_trades=_min_t,
+                                    max_daily_shift=_max_s,
+                                    regime=None,
+                                )
+                                _wl_global_copy = WeightProposal(
+                                    current_weights=_wl_global.current_weights,
+                                    proposed_weights=_wl_global.proposed_weights,
+                                    deltas=_wl_global.deltas,
+                                    evidence=_wl_global.evidence,
+                                    min_trades_met=_wl_global.min_trades_met,
+                                    regime=None,
+                                    stable=_wl_global.stable,
+                                    notes=_wl_global.notes,
+                                )
+                                _log_w_proposal(conn, symbol, _tf, _wl_global_copy)
+                                if _wl_global.min_trades_met and not _wl_global.stable and _auto:
+                                    _promote_w(conn, symbol, _tf, _wl_global_copy)
+                                    if not getattr(config, "swarm_use_regime_weights", False):
+                                        controller.set_weights(_wl_global.proposed_weights)
+                                        logger.info(
+                                            "SWARM global weight promoted: %s",
+                                            {k: round(v, 4) for k, v in _wl_global.proposed_weights.items()},
+                                        )
+                            except Exception as exc:
+                                logger.debug("Swarm weight learning error: %s", exc)
                     except Exception as exc:
                         logger.warning("Swarm decision logging error: %s", exc)
         except Exception as exc:

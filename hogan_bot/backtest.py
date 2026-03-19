@@ -1880,6 +1880,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                         "entry_regime": _short_entry_regime.pop(symbol, _current_regime),
                                         "regime_confidence": _short_entry_regime_conf.pop(symbol, _regime_conf),
                                         "close_reason": "buy_signal",
+                                        "take_profit_pct": _eff_tp,
                                     })
 
             _long_size = size * _eff_long_size_scale
@@ -2005,6 +2006,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                         "entry_regime": _entry_regime.pop(symbol, _current_regime),
                                         "regime_confidence": _entry_regime_conf.pop(symbol, _regime_conf),
                                         "close_reason": "signal",
+                                        "take_profit_pct": _eff_tp,
                                     })
 
             # Open short when flat and shorts enabled.

@@ -244,6 +244,9 @@ class BotConfig:
     swarm_weight_max_daily_shift: float = 0.05
     swarm_log_full_votes: bool = True
     swarm_use_regime_weights: bool = False
+    swarm_weight_learning_enabled: bool = False
+    swarm_weight_learning_interval_bars: int = 24
+    swarm_weight_auto_promote: bool = False
 
     # Swarm agent thresholds (configurable via env)
     swarm_risk_max_drawdown_pct: float = 0.10
@@ -716,6 +719,9 @@ def load_config() -> BotConfig:
         swarm_weight_max_daily_shift=float(os.getenv("HOGAN_SWARM_WEIGHT_MAX_DAILY_SHIFT", "0.05")),
         swarm_log_full_votes=os.getenv("HOGAN_SWARM_LOG_FULL_VOTES", "true").lower() == "true",
         swarm_use_regime_weights=os.getenv("HOGAN_SWARM_USE_REGIME_WEIGHTS", "false").lower() == "true",
+        swarm_weight_learning_enabled=os.getenv("HOGAN_SWARM_WEIGHT_LEARNING", "false").lower() == "true",
+        swarm_weight_learning_interval_bars=int(os.getenv("HOGAN_SWARM_WEIGHT_LEARNING_INTERVAL", "24")),
+        swarm_weight_auto_promote=os.getenv("HOGAN_SWARM_WEIGHT_AUTO_PROMOTE", "false").lower() == "true",
         rl_model_path=os.getenv("HOGAN_RL_MODEL_PATH", "models/hogan_rl_policy.zip"),
         rl_reward_type=os.getenv("HOGAN_RL_REWARD_TYPE", "risk_adjusted"),
         rl_timesteps=int(os.getenv("HOGAN_RL_TIMESTEPS", "200000")),
