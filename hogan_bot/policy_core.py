@@ -249,7 +249,7 @@ def decide(
             regime_name = _rstate.regime
             regime_conf = _rstate.confidence
         except Exception as exc:
-            logger.debug("Regime detection failed: %s", exc)
+            logger.warning("Regime detection failed (using fallback): %s", exc)
 
     eff: dict[str, float] = {}
     if _rstate is not None:
@@ -257,7 +257,7 @@ def decide(
             from hogan_bot.regime import effective_thresholds
             eff = effective_thresholds(_rstate, cfg)
         except Exception as exc:
-            logger.debug("effective_thresholds failed: %s", exc)
+            logger.warning("effective_thresholds failed (using defaults): %s", exc)
 
     eff_ml_buy = eff.get("ml_buy_threshold", cfg.ml_buy_threshold)
     eff_ml_sell = eff.get("ml_sell_threshold", cfg.ml_sell_threshold)
@@ -427,7 +427,7 @@ def decide(
                 elif crit_stale >= 1 or all_stale >= 4:
                     freshness_scale = 0.75
         except Exception as exc:
-            logger.debug("Feature freshness check failed: %s", exc)
+            logger.warning("Feature freshness check failed: %s", exc)
 
     # ------------------------------------------------------------------
     # 6b. Macro correlation filter (SPY/QQQ/DXY/VIX/GLD)
@@ -448,7 +448,7 @@ def decide(
             elif _mf.confidence_mult < 1.0:
                 macro_filter_scale = _mf.confidence_mult
         except Exception as _mf_exc:
-            logger.debug("Macro filter error: %s", _mf_exc)
+            logger.warning("Macro filter error: %s", _mf_exc)
 
     # ------------------------------------------------------------------
     # 7. Momentum confirmation (long-only, graduated)
@@ -633,7 +633,7 @@ def decide(
                         except Exception as exc:
                             logger.debug("Swarm outcome backfill error: %s", exc)
                     except Exception as exc:
-                        logger.debug("Swarm decision logging error: %s", exc)
+                        logger.warning("Swarm decision logging error: %s", exc)
         except Exception as exc:
             logger.warning("Swarm layer error: %s", exc)
 

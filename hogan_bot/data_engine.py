@@ -236,15 +236,15 @@ class LiveDataEngine(DataEngineBase):
                     from hogan_bot.metrics import WS_RECONNECTS
                     for sym in self.symbols:
                         WS_RECONNECTS.labels(symbol=sym).inc()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("WS_RECONNECTS metric update failed: %s", exc)
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, _RECONNECT_MAX)
             finally:
                 try:
                     await exchange.close()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Exchange close error during teardown: %s", exc)
             backoff = _RECONNECT_BASE  # reset after clean reconnect
 
     async def _watch_symbol(self, exchange, symbol: str, timeframe: str) -> None:
@@ -267,15 +267,15 @@ class LiveDataEngine(DataEngineBase):
                     try:
                         self._queue.put_nowait(event)
                     except asyncio.QueueFull:
-                        pass  # drop oldest if queue saturated
+                        logger.warning("Candle queue full — dropping %s/%s event (consumer too slow)", symbol, timeframe)
 
                     self._last_candle_ts[symbol] = time.time()
                     try:
                         from hogan_bot.metrics import CANDLES_RECEIVED, DATA_LAG_SECONDS
                         CANDLES_RECEIVED.labels(symbol=symbol, timeframe=timeframe).inc()
                         DATA_LAG_SECONDS.labels(symbol=symbol).set(0)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Candle metrics update failed: %s", exc)
             except Exception as exc:
                 logger.warning("watchOHLCV error for %s/%s: %s", symbol, timeframe, exc)
                 raise  # bubble up to trigger reconnect
@@ -346,7 +346,7 @@ class LiveDataEngine(DataEngineBase):
                 try:
                     self._queue.put_nowait(event)
                 except asyncio.QueueFull:
-                    pass
+                    logger.debug("Queue full during REST warmup for %s — dropping initial event", symbol)
 
         # Steady-state polling: fetch latest 2 candles per interval, with
         # timestamp de-duplication so the buffer stays clean.
@@ -381,7 +381,7 @@ class LiveDataEngine(DataEngineBase):
                             try:
                                 self._queue.put_nowait(event)
                             except asyncio.QueueFull:
-                                pass
+                                logger.warning("Candle queue full — dropping %s/%s REST event (consumer too slow)", symbol, tf)
                         self._last_candle_ts[symbol] = time.time()
                     except Exception as exc:
                         logger.warning("REST poll error %s/%s: %s", symbol, tf, exc)
@@ -399,8 +399,8 @@ class LiveDataEngine(DataEngineBase):
                 try:
                     from hogan_bot.metrics import DATA_LAG_SECONDS
                     DATA_LAG_SECONDS.labels(symbol=sym).set(now - last)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("DATA_LAG_SECONDS metric update failed: %s", exc)
         return stale
 
 
@@ -482,7 +482,7 @@ class OandaDataEngine(DataEngineBase):
                             try:
                                 self._queue.put_nowait(event)
                             except asyncio.QueueFull:
-                                pass
+                                logger.warning("Candle queue full — dropping %s/%s Oanda event (consumer too slow)", symbol, tf)
                         self._last_candle_ts[symbol] = time.time()
                     except Exception as exc:
                         logger.warning("Oanda poll error %s/%s: %s", symbol, tf, exc)
