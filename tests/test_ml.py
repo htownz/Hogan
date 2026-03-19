@@ -16,6 +16,7 @@ except ImportError:
 
 from hogan_bot.feature_registry import get_feature_columns
 from hogan_bot.ml import (
+    TrainedModel,
     _FEATURE_COLUMNS,
     _feature_frame,
     build_feature_frame,

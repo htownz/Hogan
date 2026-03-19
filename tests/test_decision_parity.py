@@ -7,6 +7,7 @@ This catches drift between event_loop.py and backtest.py decision logic.
 from __future__ import annotations
 
 import types
+from unittest.mock import MagicMock
 
 import numpy as np
 import pandas as pd
