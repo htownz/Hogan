@@ -46,13 +46,15 @@ class RiskStewardAgent:
         peak_equity = shared_context.get("peak_equity_usd", equity)
         if peak_equity > 0:
             dd = (peak_equity - equity) / peak_equity
-            if dd >= self._max_dd:
+            dd_ratio = dd / self._max_dd  # 0.0 to 1.0+
+            if dd_ratio >= 1.0:
                 veto = True
                 size_scale = 0.0
                 reasons.append(f"drawdown_{dd:.1%}")
-            elif dd >= self._max_dd * 0.5:
-                size_scale *= 0.5
-                reasons.append(f"drawdown_warning_{dd:.1%}")
+            elif dd_ratio >= 0.3:
+                # Graduated: 30% of max_dd → 0.85x, 70% → 0.50x, 100% → 0.0x
+                size_scale *= max(0.15, 1.0 - (dd_ratio - 0.3) * 1.21)
+                reasons.append(f"drawdown_scale_{dd:.1%}")
 
         atr_pct = shared_context.get("atr_pct", 0.0)
         hist_vol = shared_context.get("hist_vol_20", 0.0)

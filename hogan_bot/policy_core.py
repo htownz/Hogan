@@ -344,6 +344,25 @@ def decide(
             block_reasons.append("ml_blind_blocks_shorts")
 
     # ------------------------------------------------------------------
+    # 3b. Optional regime-ensemble blend
+    # ------------------------------------------------------------------
+    if up_prob is not None and getattr(cfg, "use_regime_ensemble", False):
+        try:
+            from hogan_bot.ml_advanced import load_artifact, predict_up_probability as regime_predict
+            _ensemble_path = getattr(cfg, "regime_ensemble_path", "models/advanced_ensemble.pkl")
+            _artifact = load_artifact(_ensemble_path)
+            if _artifact is not None:
+                _regime_prob = regime_predict(_artifact, candles)
+                _blend = getattr(cfg, "regime_ensemble_blend", 0.30)
+                up_prob = up_prob * (1.0 - _blend) + _regime_prob * _blend
+                logger.debug(
+                    "REGIME_ENSEMBLE: blended prob=%.4f (standard=%.4f, regime=%.4f, blend=%.2f)",
+                    up_prob, up_prob, _regime_prob, _blend,
+                )
+        except Exception as exc:
+            logger.debug("Regime ensemble unavailable: %s", exc)
+
+    # ------------------------------------------------------------------
     # 4. Loss-streak dampener
     # ------------------------------------------------------------------
     _ls_scale = loss_streak_scale(state.trade_outcomes)
@@ -357,6 +376,20 @@ def decide(
     atr_pct = float(_atr_series.iloc[-1]) / max(px, 1e-9)
     # ATR-adaptive trailing stop floor: never tighter than 1.5× current ATR
     eff_ts = max(eff_ts, atr_pct * 1.5)
+
+    # Adaptive stop widening via RiskHead MAE: if the model predicts a high
+    # probability of hitting the stop, widen by the MAE ratio (capped at 1.5×).
+    _risk_est = signal.risk_estimate
+    if _risk_est is not None and _risk_est.stop_hit_prob > 0.65:
+        _stop_pct_bps = signal.stop_distance_pct * 100  # convert to bps-like
+        if _stop_pct_bps > 0:
+            _mae_scale = max(1.0, _risk_est.max_adverse_pct / _stop_pct_bps)
+            signal.stop_distance_pct *= min(1.5, _mae_scale)
+            logger.debug(
+                "POLICY: adaptive stop widened (stop_hit_prob=%.2f, mae_scale=%.2f, new_stop=%.4f)",
+                _risk_est.stop_hit_prob, _mae_scale, signal.stop_distance_pct,
+            )
+
     spread_est = estimate_spread_from_candles(candles)
 
     forecast_ret: float | None = None

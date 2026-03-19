@@ -1894,7 +1894,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                         "take_profit_pct": _eff_tp,
                                     })
 
-            _long_size = size * _eff_long_size_scale
+            _exp_scale = _expectancy.expectancy_size_scale(regime=_current_regime or "unknown")
+            _long_size = size * _eff_long_size_scale * _exp_scale
             if funding_overlay is not None:
                 _bar_ts_val = candles.iloc[i - 1]["timestamp"] if i > 0 and "timestamp" in candles.columns else None
                 _long_size *= funding_overlay.position_scale("buy", _bar_ts_val)
@@ -2035,7 +2036,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     _funnel["close_and_reverse"] = _funnel.get("close_and_reverse", 0) + 1
                     _cooldown_remaining = 0
                 _consecutive_exit_signals = 0
-                _short_size = size * _eff_short_size_scale
+                _exp_short_scale = _expectancy.expectancy_size_scale(regime=_current_regime or "unknown")
+                _short_size = size * _eff_short_size_scale * _exp_short_scale
                 if funding_overlay is not None:
                     _bar_ts_val = candles.iloc[i - 1]["timestamp"] if i > 0 and "timestamp" in candles.columns else None
                     _short_size *= funding_overlay.position_scale("sell", _bar_ts_val)

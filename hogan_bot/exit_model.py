@@ -242,7 +242,7 @@ class ExitEvaluator:
             )
 
         # 6. Volume fade: volume dried up while position stalls in mild profit
-        if vol_ratio is not None and vol_ratio < 0.5 and 0.0 <= upnl_pct < 0.005:
+        if vol_ratio is not None and vol_ratio < 0.5 and -0.002 <= upnl_pct < 0.001:
             logger.debug("EXIT_MODEL: volume fade (vol_ratio=%.2f, upnl=%.4f)", vol_ratio, upnl_pct)
             return ExitDecision(
                 should_exit=True,

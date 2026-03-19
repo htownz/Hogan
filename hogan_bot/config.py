@@ -197,6 +197,21 @@ class BotConfig:
     # Set HOGAN_USE_MTF_EXTENDED=true in .env after retraining.
     use_mtf_extended: bool = True
 
+    # Portfolio correlation: when holding a position in one symbol and entering
+    # another highly correlated symbol, scale down the new position to avoid
+    # doubling effective exposure (BTC/ETH ~0.85 correlation).
+    portfolio_correlation_scale: float = 0.60
+
+    # Auto-train forecast models on startup if pkl files are missing.
+    # Safe to enable: only trains once if models don't exist, then persists.
+    auto_train_forecast: bool = False
+
+    # Regime ensemble: blend per-regime ML models with standard prediction.
+    # Requires a trained AdvancedEnsembleArtifact (see ml_advanced.py).
+    use_regime_ensemble: bool = False
+    regime_ensemble_blend: float = 0.30  # weight of regime-ensemble prediction
+    regime_ensemble_path: str = "models/advanced_ensemble.pkl"
+
     # Online learning
     use_online_learning: bool = False
     online_learning_interval: int = 50

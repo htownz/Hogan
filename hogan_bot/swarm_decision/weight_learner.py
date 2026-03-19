@@ -166,13 +166,22 @@ def propose_weights(
     total_ideal = sum(ideal_weights.values()) or 1.0
     ideal_weights = {k: v / total_ideal for k, v in ideal_weights.items()}
 
-    # Bound the shift per agent
+    # Bound the shift per agent — adaptive rate based on evidence strength
     proposed: dict[str, float] = {}
     for aid in current_weights:
         curr = current_weights.get(aid, 0.0)
         ideal = ideal_weights.get(aid, curr)
         delta = ideal - curr
-        clamped_delta = max(-max_daily_shift, min(max_daily_shift, delta))
+        # Accelerate learning when evidence is strong
+        agent_shift = max_daily_shift
+        if aid in evidence:
+            _acc = evidence[aid]["accuracy"]
+            _votes = evidence[aid]["total_votes"]
+            if _votes >= min_trades * 3 and (_acc < 0.35 or _acc > 0.70):
+                agent_shift = max_daily_shift * 3.0
+            elif _votes >= min_trades * 2 and (_acc < 0.40 or _acc > 0.65):
+                agent_shift = max_daily_shift * 2.0
+        clamped_delta = max(-agent_shift, min(agent_shift, delta))
         proposed[aid] = max(0.01, curr + clamped_delta)
 
     # Normalize proposed to sum to 1.0

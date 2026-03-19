@@ -25,6 +25,7 @@ import argparse
 import asyncio
 import logging
 import os
+import sqlite3
 import time
 from collections import defaultdict
 from dataclasses import dataclass
@@ -677,6 +678,19 @@ async def _run_event_loop_inner(
     )
     _expectancy = ExpectancyTracker()
 
+    # Online learner (behind config flag)
+    _online_learner = None
+    _online_learner_bar_count = 0
+    _online_drift_scale = 1.0  # reduced when feature drift detected
+    if getattr(config, "use_online_learning", False):
+        try:
+            from hogan_bot.online_learner import OnlineLearner
+            _online_learner = OnlineLearner(db_path=config.db_path)
+            logger.info("OnlineLearner initialized (interval=%d bars)",
+                        getattr(config, "online_learning_interval", 50))
+        except Exception as exc:
+            logger.warning("OnlineLearner unavailable: %s", exc)
+
     _perf_tracker = None
     try:
         from hogan_bot.performance_tracker import PerformanceTracker
@@ -699,6 +713,33 @@ async def _run_event_loop_inner(
             logger.info("WF failure scale applied: %.2f", _wf_scale)
     except Exception as exc:
         logger.debug("wf_failure_scale error: %s", exc)
+
+    # Auto-train forecast models if missing and flag is set
+    if getattr(config, "auto_train_forecast", False):
+        import glob as _glob
+        _forecast_files = _glob.glob("models/forecast_*.pkl")
+        if not _forecast_files:
+            logger.info("AUTO_TRAIN_FORECAST: no forecast models found — training from historical data")
+            try:
+                from hogan_bot.forecast import train_forecast_models
+                _train_conn = sqlite3.connect(config.db_path)
+                # Fetch historical candles for the primary symbol
+                _hist_candles = pd.read_sql_query(
+                    "SELECT * FROM candles WHERE symbol = ? ORDER BY ts_ms",
+                    _train_conn,
+                    params=[config.symbols[0] if config.symbols else "BTC/USD"],
+                )
+                if len(_hist_candles) >= 500:
+                    _fc_result = train_forecast_models(_hist_candles, db_conn=_train_conn)
+                    logger.info("AUTO_TRAIN_FORECAST: trained %d models: %s",
+                                len(_fc_result), list(_fc_result.keys()))
+                else:
+                    logger.warning("AUTO_TRAIN_FORECAST: insufficient historical candles (%d < 500)", len(_hist_candles))
+                _train_conn.close()
+            except Exception as exc:
+                logger.warning("AUTO_TRAIN_FORECAST failed: %s", exc)
+        else:
+            logger.debug("AUTO_TRAIN_FORECAST: %d forecast models already exist", len(_forecast_files))
 
     # Parity with backtest: max_hold_bars, loss_cooldown, slippage
     max_hold_bars, loss_cooldown_bars = effective_hold_cooldown_bars(config, config.timeframe)
@@ -1030,7 +1071,7 @@ async def _run_event_loop_inner(
                     peak_equity=guard.peak_equity,
                 )
                 action = sig.action
-                size = sig.size
+                size = sig.size * _online_drift_scale
                 up_prob = sig.up_prob
                 _sym_regime = sig.regime
                 _sym_atr_pct = sig.atr_pct
@@ -1231,7 +1272,14 @@ async def _run_event_loop_inner(
                     if _funding_overlay is not None:
                         _funding_scale = _funding_overlay.position_scale("buy", datetime.now(tz=timezone.utc))
                     _exp_scale = _expectancy.expectancy_size_scale(regime=_sym_regime or "unknown")
-                    _long_size = size * sig.eff_long_size_scale * _macro_scale * _momentum_scale * _funding_scale * _wf_scale * _exp_scale
+                    # Portfolio correlation: reduce size if already holding another symbol
+                    _corr_scale = 1.0
+                    _other_syms = set(portfolio.positions) | set(portfolio.short_positions)
+                    _other_syms.discard(symbol)
+                    if _other_syms and config.portfolio_correlation_scale < 1.0:
+                        _corr_scale = config.portfolio_correlation_scale
+                        logger.debug("CORR_SCALE %s — other positions %s, scale=%.2f", symbol, _other_syms, _corr_scale)
+                    _long_size = size * sig.eff_long_size_scale * _macro_scale * _momentum_scale * _funding_scale * _wf_scale * _exp_scale * _corr_scale
                     if _long_size <= 0:
                         logger.info("BUY_BLOCK %s — size scaled to zero (base=%.6f eff_scale=%.2f macro=%.2f mom=%.2f fund=%.2f)",
                                     symbol, size, sig.eff_long_size_scale, _macro_scale, _momentum_scale, _funding_scale)
@@ -1385,7 +1433,14 @@ async def _run_event_loop_inner(
                     if _funding_overlay is not None:
                         _funding_short_scale = _funding_overlay.position_scale("sell", datetime.now(tz=timezone.utc))
                     _exp_short_scale = _expectancy.expectancy_size_scale(regime=_sym_regime or "unknown")
-                    _short_size = size * sig.eff_short_size_scale * _macro_scale * _funding_short_scale * _wf_scale * _exp_short_scale
+                    # Portfolio correlation: reduce size if already holding another symbol
+                    _corr_short_scale = 1.0
+                    _other_short_syms = set(portfolio.positions) | set(portfolio.short_positions)
+                    _other_short_syms.discard(symbol)
+                    if _other_short_syms and config.portfolio_correlation_scale < 1.0:
+                        _corr_short_scale = config.portfolio_correlation_scale
+                        logger.debug("CORR_SCALE_SHORT %s — other positions %s, scale=%.2f", symbol, _other_short_syms, _corr_short_scale)
+                    _short_size = size * sig.eff_short_size_scale * _macro_scale * _funding_short_scale * _wf_scale * _exp_short_scale * _corr_short_scale
                     if not sig.eff_allow_shorts:
                         logger.info("SHORT_BLOCK %s — regime %s disallows shorts (eff_allow_shorts=False)", symbol, _sym_regime)
                     elif ml_blind_blocks_shorts(evaluator._ml_probs):
@@ -1486,6 +1541,32 @@ async def _run_event_loop_inner(
                     _perf_tracker.save_to_db()
                 except Exception as exc:
                     logger.debug("PerformanceTracker proposal error: %s", exc)
+
+            # Online learner periodic update
+            if _online_learner is not None:
+                _online_learner_bar_count += 1
+                _ol_interval = getattr(config, "online_learning_interval", 50)
+                if _online_learner_bar_count % _ol_interval == 0:
+                    try:
+                        _ol_result = _online_learner.update()
+                        _drift_features = _ol_result.get("drift_features", [])
+                        if len(_drift_features) >= 5:
+                            _online_drift_scale = 0.70
+                            logger.warning(
+                                "ONLINE_DRIFT: %d features drifted — reducing ML confidence to 0.70x",
+                                len(_drift_features),
+                            )
+                        elif len(_drift_features) >= 2:
+                            _online_drift_scale = 0.85
+                            logger.info(
+                                "ONLINE_DRIFT: %d features drifted — reducing ML confidence to 0.85x",
+                                len(_drift_features),
+                            )
+                        else:
+                            _online_drift_scale = 1.0
+                        logger.debug("ONLINE_LEARNER update: %s", _ol_result)
+                    except Exception as exc:
+                        logger.debug("OnlineLearner update error: %s", exc)
 
             event_count += 1
 
