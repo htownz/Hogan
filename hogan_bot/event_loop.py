@@ -1110,6 +1110,7 @@ async def _run_event_loop_inner(
                             entry_atr=getattr(spos, "entry_atr_pct", None) or None,
                             vol_ratio=sig.vol_ratio,
                             regime=_sym_regime,
+                            max_favorable_pct=getattr(spos, "max_favorable_pct", 0.0),
                         )
                         if not _short_exit_dec.should_exit:
                             logger.debug(
@@ -1250,6 +1251,7 @@ async def _run_event_loop_inner(
                             entry_atr=getattr(pos, "entry_atr_pct", None) or None,
                             vol_ratio=sig.vol_ratio,
                             regime=_sym_regime,
+                            max_favorable_pct=getattr(pos, "max_favorable_pct", 0.0),
                         )
                         if not exit_decision.should_exit:
                             logger.debug(

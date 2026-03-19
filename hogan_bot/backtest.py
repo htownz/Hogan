@@ -1186,6 +1186,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "entry_regime": _entry_regime.pop(sym, _current_regime),
                             "regime_confidence": _entry_regime_conf.pop(sym, _regime_conf),
                             "close_reason": reason,
+                            "take_profit_pct": take_profit_pct,
                         })
             for sym, _ps_val in list(_pending_shorts.items()):
                 _pending_shorts.pop(sym, None)
@@ -1243,6 +1244,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "entry_regime": _short_entry_regime.pop(sym, _current_regime),
                             "regime_confidence": _short_entry_regime_conf.pop(sym, _regime_conf),
                             "close_reason": reason,
+                            "take_profit_pct": take_profit_pct,
                         })
 
         mark = {symbol: px}
@@ -1321,6 +1323,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                 "entry_regime": _short_entry_regime.pop(exit_symbol, _current_regime),
                                 "regime_confidence": _short_entry_regime_conf.pop(exit_symbol, _regime_conf),
                                 "close_reason": reason,
+                                "take_profit_pct": take_profit_pct,
                             })
                 continue
 
@@ -1377,6 +1380,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "entry_regime": _entry_regime.pop(exit_symbol, _current_regime),
                             "regime_confidence": _entry_regime_conf.pop(exit_symbol, _regime_conf),
                             "close_reason": reason,
+                            "take_profit_pct": take_profit_pct,
                         })
 
         # Build RL position state for this bar
@@ -1822,6 +1826,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         entry_atr=getattr(spos, "entry_atr_pct", None) or None,
                         vol_ratio=signal.volume_ratio,
                         regime=_current_regime,
+                        max_favorable_pct=getattr(spos, "max_favorable_pct", 0.0),
                     )
                     if not _short_exit_dec.should_exit:
                         pass
@@ -1931,6 +1936,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         entry_atr=getattr(pos, "entry_atr_pct", None) or None,
                         vol_ratio=signal.volume_ratio,
                         regime=_current_regime,
+                        max_favorable_pct=getattr(pos, "max_favorable_pct", 0.0),
                     )
                     _consecutive_exit_signals += 1
                     _rev_thresh = min_final_confidence * reversal_confidence_mult

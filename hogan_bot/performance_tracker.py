@@ -79,13 +79,20 @@ class RegimePerformance:
 
     @property
     def sharpe(self) -> float:
+        """Per-trade Sharpe ratio (mean / std, not annualized).
+
+        Previous implementation used sqrt(252) which assumes daily
+        trade frequency.  Since pnl_values are per-trade with no
+        timestamp, annualization is misleading.  Callers that need
+        an annualized figure should multiply by sqrt(trades_per_year).
+        """
         if len(self.pnl_values) < 3:
             return 0.0
         arr = np.array(self.pnl_values)
         std = float(np.std(arr))
         if std < 1e-9:
             return 0.0
-        return float(np.mean(arr) / std * np.sqrt(252))
+        return float(np.mean(arr) / std)
 
     def to_dict(self) -> dict:
         return {
