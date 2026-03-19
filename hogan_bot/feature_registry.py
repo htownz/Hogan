@@ -175,7 +175,8 @@ FEATURE_REGISTRY: dict[str, FeatureMeta] = {m.name: m for m in [
     _intermarket("intermarket_gold_btc_rel"),
 ]}
 
-assert len(FEATURE_REGISTRY) == 59, f"Expected 59 features, got {len(FEATURE_REGISTRY)}"
+if len(FEATURE_REGISTRY) != 59:
+    raise ValueError(f"Expected 59 features, got {len(FEATURE_REGISTRY)}")
 
 
 # ---------------------------------------------------------------------------
@@ -214,8 +215,11 @@ CHAMPION_FEATURE_DECISIONS: dict[str, str] = {
     "macd_hist_pct": DECISION_ENTRY_EDGE,
 }
 
-assert len(CHAMPION_FEATURE_COLUMNS) == 8
-assert all(c in FEATURE_REGISTRY for c in CHAMPION_FEATURE_COLUMNS)
+if len(CHAMPION_FEATURE_COLUMNS) != 8:
+    raise ValueError(f"Expected 8 champion features, got {len(CHAMPION_FEATURE_COLUMNS)}")
+if not all(c in FEATURE_REGISTRY for c in CHAMPION_FEATURE_COLUMNS):
+    _missing = [c for c in CHAMPION_FEATURE_COLUMNS if c not in FEATURE_REGISTRY]
+    raise ValueError(f"Champion features not in registry: {_missing}")
 
 
 # Full 59 in canonical order (matches ml._FEATURE_COLUMNS)
