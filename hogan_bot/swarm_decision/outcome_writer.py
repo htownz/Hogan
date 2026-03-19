@@ -136,8 +136,8 @@ def _write_one_outcome(
         )
         if not baseline_row.empty:
             bl_action = baseline_row.iloc[0]["pipeline_action"]
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Baseline lookup by id failed for %s: %s", dec_id, exc)
     if bl_action is None:
         try:
             baseline_row = pd.read_sql_query(
@@ -147,11 +147,12 @@ def _write_one_outcome(
             )
             if not baseline_row.empty:
                 bl_action = (
-                    baseline_row.iloc[0].get("pipeline_action")
-                    or baseline_row.iloc[0].get("final_action")
+                    baseline_row.iloc[0]["pipeline_action"]
+                    if pd.notna(baseline_row.iloc[0]["pipeline_action"])
+                    else baseline_row.iloc[0]["final_action"]
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Baseline lookup by ts_ms failed for %s/%s: %s", symbol, ts_ms, exc)
     if bl_action is not None:
         baseline_would_trade = 1 if bl_action in ("buy", "sell") else 0
 

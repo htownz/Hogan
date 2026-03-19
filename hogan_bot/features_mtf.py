@@ -123,7 +123,8 @@ EXT_FEATURE_NAMES: list[str] = [
     "defi_stablecoin_b",              # Stablecoin mcap USD billions (÷300 → ~[0,1])
 ]
 
-assert len(EXT_FEATURE_NAMES) == 41, f"Expected 41 ext features, got {len(EXT_FEATURE_NAMES)}"
+if len(EXT_FEATURE_NAMES) != 41:
+    raise ValueError(f"Expected 41 ext features, got {len(EXT_FEATURE_NAMES)}")
 
 _MTF_MIN_BARS: int = 20   # minimum candles needed to compute MTF features
 

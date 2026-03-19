@@ -1563,7 +1563,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             _spread_est = estimate_spread_from_candles(window)
             _forecast_ret = None
             if signal.forecast is not None and getattr(signal.forecast, 'confidence', 0) > 0.2:
-                _er = signal.forecast.expected_return
+                _er = getattr(signal.forecast, 'expected_return', None)
                 if isinstance(_er, dict) and _er:
                     _forecast_ret = max(abs(v) for v in _er.values())
                 elif isinstance(_er, (int, float)):
@@ -1692,7 +1692,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
 
             # ── Macro sitout filter ────────────────────────────────────────
             if macro_sitout is not None and action != "hold":
-                _bar_ts = candles.iloc[i - 1].get("timestamp") if i > 0 else None
+                _bar_ts = candles.iloc[i - 1]["timestamp"] if i > 0 and "timestamp" in candles.columns else None
                 _sitout = macro_sitout.check(_bar_ts)
                 if _sitout.should_sitout:
                     _funnel["macro_sitout"] = _funnel.get("macro_sitout", 0) + 1
@@ -1894,7 +1894,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
 
             _long_size = size * _eff_long_size_scale
             if funding_overlay is not None:
-                _bar_ts_val = candles.iloc[i - 1].get("timestamp") if i > 0 else None
+                _bar_ts_val = candles.iloc[i - 1]["timestamp"] if i > 0 and "timestamp" in candles.columns else None
                 _long_size *= funding_overlay.position_scale("buy", _bar_ts_val)
             if not _eff_allow_longs:
                 _funnel["blocked_regime_no_longs"] += 1
@@ -2035,7 +2035,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 _consecutive_exit_signals = 0
                 _short_size = size * _eff_short_size_scale
                 if funding_overlay is not None:
-                    _bar_ts_val = candles.iloc[i - 1].get("timestamp") if i > 0 else None
+                    _bar_ts_val = candles.iloc[i - 1]["timestamp"] if i > 0 and "timestamp" in candles.columns else None
                     _short_size *= funding_overlay.position_scale("sell", _bar_ts_val)
                 if not _eff_allow_shorts:
                     _funnel["blocked_regime_no_shorts"] += 1

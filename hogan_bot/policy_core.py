@@ -517,7 +517,7 @@ def decide(
     # ------------------------------------------------------------------
     macro_scale = 1.0
     if macro_sitout is not None and action != "hold":
-        _bar_ts = candles.iloc[-1].get("timestamp") if "timestamp" in candles.columns else None
+        _bar_ts = candles.iloc[-1]["timestamp"] if "timestamp" in candles.columns else None
         _sitout = macro_sitout.check(_bar_ts)
         if _sitout.should_sitout:
             action = "hold"
