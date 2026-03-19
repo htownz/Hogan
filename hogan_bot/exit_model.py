@@ -82,13 +82,39 @@ class ExitEvaluator:
         self._short_vol_contraction_threshold = short_vol_contraction_threshold or 0.50
         self._short_max_consolidation_bars = short_max_consolidation_bars or max(max_consolidation_bars - 4, 6)
 
-    # Regime multipliers: (drawdown_mult, time_decay_mult, stagnation_mult, trend_reversal_mult)
-    _REGIME_EXIT_ADJUSTMENTS: dict[str, tuple[float, float, float, float]] = {
-        "volatile":       (1.40, 0.85, 0.75, 0.80),
-        "trending_up":    (1.20, 1.00, 1.00, 1.00),
-        "trending_down":  (1.00, 0.90, 0.85, 0.90),
-        "ranging":        (0.85, 0.80, 0.70, 1.10),
+    # Per-regime exit parameter overrides.  Each key maps to a dict of
+    # parameter → value.  Absent keys fall through to the base (side-aware)
+    # defaults.  This replaces the old multiplier-tuple approach with
+    # explicit values that are easier to reason about and sweep.
+    _REGIME_EXIT_PARAMS: dict[str, dict[str, float]] = {
+        "volatile": {
+            "drawdown_panic_pct": 0.042,       # wider: tolerate vol noise
+            "time_decay_threshold": 0.65,      # faster exit: vol can reverse
+            "stagnation_bars_mult": 0.75,      # shorter patience in chop
+            "trend_reversal_threshold": 0.48,  # easier reversal trigger
+        },
+        "trending_up": {
+            "drawdown_panic_pct": 0.036,       # slightly wider than base
+            "time_decay_threshold": 0.75,      # standard
+            "stagnation_bars_mult": 1.00,
+            "trend_reversal_threshold": 0.60,  # strict: stay in trend
+        },
+        "trending_down": {
+            "drawdown_panic_pct": 0.030,       # tighter: protect capital
+            "time_decay_threshold": 0.68,      # faster
+            "stagnation_bars_mult": 0.85,
+            "trend_reversal_threshold": 0.54,  # easier trigger
+        },
+        "ranging": {
+            "drawdown_panic_pct": 0.025,       # tight: mean reversion
+            "time_decay_threshold": 0.60,      # aggressive time decay
+            "stagnation_bars_mult": 0.70,      # exit fast in chop
+            "trend_reversal_threshold": 0.66,  # harder to call reversal in noise
+        },
     }
+
+    # Legacy compat alias (external code may reference this)
+    _REGIME_EXIT_ADJUSTMENTS = _REGIME_EXIT_PARAMS
 
     def should_exit(
         self,
@@ -125,13 +151,21 @@ class ExitEvaluator:
         stag_bars = self._short_max_consolidation_bars if is_short else self._max_consolidation_bars
         trend_rev_thresh = self._trend_reversal_threshold
 
-        # Apply regime-specific adjustments
-        if regime and regime in self._REGIME_EXIT_ADJUSTMENTS:
-            dd_m, td_m, st_m, tr_m = self._REGIME_EXIT_ADJUSTMENTS[regime]
-            dd_panic *= dd_m
-            td_threshold *= td_m
-            stag_bars = max(4, int(stag_bars * st_m))
-            trend_rev_thresh *= tr_m
+        # Apply regime-specific parameter overrides
+        if regime and regime in self._REGIME_EXIT_PARAMS:
+            _rp = self._REGIME_EXIT_PARAMS[regime]
+            if "drawdown_panic_pct" in _rp:
+                dd_panic = _rp["drawdown_panic_pct"]
+                if is_short:
+                    dd_panic *= 0.67
+            if "time_decay_threshold" in _rp:
+                td_threshold = _rp["time_decay_threshold"]
+                if is_short:
+                    td_threshold = min(td_threshold, self._short_time_decay_threshold)
+            if "stagnation_bars_mult" in _rp:
+                stag_bars = max(4, int(stag_bars * _rp["stagnation_bars_mult"]))
+            if "trend_reversal_threshold" in _rp:
+                trend_rev_thresh = _rp["trend_reversal_threshold"]
 
         # 1. Trend persistence check: has the trend actually reversed?
         trend_score = self._trend_persistence(close, side)
@@ -217,6 +251,20 @@ class ExitEvaluator:
                 urgency=0.25,
             )
 
+        # 7. Momentum exhaustion: price extending but momentum fading
+        if bars_held >= 4 and upnl_pct > 0.003:
+            _exh = self._momentum_exhaustion(close, side)
+            if _exh > 0.5:
+                logger.debug(
+                    "EXIT_MODEL: momentum exhaustion (score=%.2f, upnl=%.3f, side=%s)",
+                    _exh, upnl_pct, side,
+                )
+                return ExitDecision(
+                    should_exit=True,
+                    reason="momentum_exhaustion",
+                    urgency=min(1.0, _exh),
+                )
+
         return ExitDecision()
 
     def _trend_persistence(self, close: pd.Series, side: str) -> float:
@@ -259,6 +307,50 @@ class ExitEvaluator:
             raw = -raw
 
         return float(max(-1.0, min(1.0, raw)))
+
+    def _momentum_exhaustion(self, close: pd.Series, side: str) -> float:
+        """Detect price-momentum divergence (exhaustion).
+
+        For longs: price making higher highs but RSI declining = bearish divergence.
+        For shorts: price making lower lows but RSI rising = bullish divergence.
+
+        Returns a score in [0, 1] where > 0.5 signals exhaustion.
+        """
+        _window = 14
+        if len(close) < _window + 5:
+            return 0.0
+
+        delta = close.diff()
+        gain = delta.clip(lower=0).rolling(_window).mean()
+        loss = (-delta.clip(upper=0)).rolling(_window).mean()
+        rs = gain / loss.replace(0, 1e-9)
+        rsi = 100 - (100 / (1 + rs))
+
+        rsi_vals = rsi.iloc[-8:].dropna()
+        close_vals = close.iloc[-8:]
+        if len(rsi_vals) < 6 or len(close_vals) < 6:
+            return 0.0
+
+        half = len(close_vals) // 2
+        price_first = float(close_vals.iloc[:half].mean())
+        price_second = float(close_vals.iloc[half:].mean())
+        rsi_first = float(rsi_vals.iloc[:half].mean())
+        rsi_second = float(rsi_vals.iloc[half:].mean())
+
+        if side == "long":
+            price_rising = price_second > price_first
+            rsi_falling = rsi_second < rsi_first - 2.0
+            if price_rising and rsi_falling and rsi_second > 60:
+                divergence = (rsi_first - rsi_second) / max(rsi_first, 1.0)
+                return float(min(1.0, divergence * 3.0))
+        else:
+            price_falling = price_second < price_first
+            rsi_rising = rsi_second > rsi_first + 2.0
+            if price_falling and rsi_rising and rsi_second < 40:
+                divergence = (rsi_second - rsi_first) / max(100 - rsi_first, 1.0)
+                return float(min(1.0, divergence * 3.0))
+
+        return 0.0
 
     def _current_atr_pct(self, candles: pd.DataFrame) -> float:
         """Current ATR as a percentage of price."""
