@@ -532,7 +532,12 @@ class RealisticPaperExecution(ExecutionEngine):
         import random
         if self.config.partial_fill_probability > 0:
             if random.random() < self.config.partial_fill_probability:
-                return qty * self.config.min_fill_ratio
+                filled = qty * self.config.min_fill_ratio
+                logger.info(
+                    "PARTIAL_FILL: requested=%.6f filled=%.6f (%.0f%% fill ratio)",
+                    qty, filled, self.config.min_fill_ratio * 100,
+                )
+                return filled
         return qty
 
     def open_long(

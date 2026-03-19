@@ -27,7 +27,7 @@ import logging
 import os
 import sqlite3
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -637,6 +637,25 @@ async def _run_event_loop_inner(
         else:
             executor = PaperExecution(portfolio=portfolio, conn=conn, exchange_id="paper")
 
+    # Reconcile portfolio with DB: restore open paper trades from prior session
+    try:
+        _open_trades = conn.execute(
+            "SELECT symbol, side, entry_price, qty FROM paper_trades WHERE exit_price IS NULL"
+        ).fetchall()
+        for _ot_symbol, _ot_side, _ot_entry, _ot_qty in _open_trades:
+            _ot_entry = float(_ot_entry)
+            _ot_qty = float(_ot_qty)
+            if _ot_side == "long" and _ot_symbol not in portfolio.positions:
+                portfolio.execute_buy(_ot_symbol, _ot_entry, _ot_qty)
+                logger.info("RECONCILE: restored open long %s qty=%.6f entry=%.2f", _ot_symbol, _ot_qty, _ot_entry)
+            elif _ot_side == "short" and _ot_symbol not in portfolio.short_positions:
+                portfolio.execute_short(_ot_symbol, _ot_entry, _ot_qty)
+                logger.info("RECONCILE: restored open short %s qty=%.6f entry=%.2f", _ot_symbol, _ot_qty, _ot_entry)
+        if _open_trades:
+            logger.info("RECONCILE: restored %d open position(s) from DB", len(_open_trades))
+    except Exception as exc:
+        logger.warning("Position reconciliation failed: %s", exc)
+
     ml_model: TrainedModel | None = None
     if config.use_ml_filter or config.use_ml_as_sizer:
         try:
@@ -860,6 +879,17 @@ async def _run_event_loop_inner(
                 event_count += 1
                 continue
 
+            # Gap staleness guard: skip trading if most recent candle is too old
+            # (e.g., after weekend gaps or exchange outages).  Indicators need
+            # fresh data to produce reliable signals.
+            if "ts_ms" in candles.columns:
+                _latest_candle_ms = int(candles["ts_ms"].iloc[-1])
+                _candle_age_h = (time.time() * 1000 - _latest_candle_ms) / 3_600_000
+                if _candle_age_h > 4.0:
+                    logger.warning("GAP_GUARD %s — latest candle is %.1fh old, skipping trading", symbol, _candle_age_h)
+                    event_count += 1
+                    continue
+
             mark_prices = {s: float(buffer.to_df(s, tf)["close"].iloc[-1])
                            for s in config.symbols
                            if not buffer.to_df(s, tf).empty}
@@ -978,7 +1008,7 @@ async def _run_event_loop_inner(
                                                       "price": sell_px, "qty": qty})
                     logger.info("AUTO_EXIT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, sell_px, qty)
 
-                elif reason in ("short_trailing_stop", "short_take_profit", "short_max_hold_time"):
+                elif reason in ("short_trailing_stop", "short_take_profit", "short_max_hold_time", "short_max_loss"):
                     pos = portfolio.short_positions.get(exit_symbol)
                     if pos is None:
                         continue

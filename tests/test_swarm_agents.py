@@ -118,7 +118,7 @@ class TestRiskSteward:
         )
         assert vote.veto is False
         assert vote.size_scale < 1.0
-        assert any("warning" in r for r in vote.block_reasons)
+        assert any("drawdown" in r for r in vote.block_reasons)
 
     def test_vol_spike_vetoes(self):
         from hogan_bot.swarm_decision.agents.risk_steward import RiskStewardAgent

@@ -251,6 +251,16 @@ class PaperPortfolio:
                     pos.max_adverse_pct = max(pos.max_adverse_pct, abs(move_pct))
                 else:
                     pos.max_favorable_pct = max(pos.max_favorable_pct, move_pct)
+            # Short max-loss guardrail: emergency exit if unrealized loss
+            # exceeds 10% of entry value (shorts have unlimited upside risk).
+            if pos.avg_entry > 0 and px > pos.avg_entry * 1.10:
+                _short_loss_pct = (px - pos.avg_entry) / pos.avg_entry
+                logger.warning(
+                    "SHORT_MAX_LOSS %s — unrealized loss %.1f%% exceeds 10%% guardrail",
+                    symbol, _short_loss_pct * 100,
+                )
+                exits.append((symbol, "short_max_loss"))
+                continue
             _s_max = short_max_hold_bars if short_max_hold_bars > 0 else max_hold_bars
             if _s_max > 0 and pos.bars_held >= _s_max:
                 exits.append((symbol, "short_max_hold_time"))
