@@ -65,7 +65,7 @@ class BotConfig:
     signal_min_vote_margin: int = 1
 
     # Exit management (0 = disabled)
-    trailing_stop_pct: float = 0.025
+    trailing_stop_pct: float = 0.030
     take_profit_pct: float = 0.054
     # Trailing stop activation: only start trailing after MFE reaches this %.
     # Prevents noise-triggered stops in the first bars after entry.
@@ -403,13 +403,13 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         allow_longs=True,
         allow_shorts=True,
         long_size_scale=0.40,
-        short_size_scale=1.50,
+        short_size_scale=1.00,
     ),
     "ranging": RegimeConfig(
         volume_threshold_mult=1.10,
         ml_buy_threshold=0.58,
         ml_sell_threshold=0.42,
-        trailing_stop_mult=1.20,
+        trailing_stop_mult=0.90,
         take_profit_mult=0.85,
         position_scale=0.85,
         strategy_family="mean_revert",
@@ -441,9 +441,9 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         quality_final_mult=1.20,
         quality_tech_mult=1.10,
         allow_longs=True,
-        allow_shorts=True,
+        allow_shorts=False,
         long_size_scale=0.50,
-        short_size_scale=0.50,
+        short_size_scale=0.0,
     ),
 }
 
@@ -654,7 +654,7 @@ def load_config() -> BotConfig:
         fvg_min_gap_pct=float(os.getenv("HOGAN_FVG_MIN_GAP_PCT", "0.001")),
         signal_mode=os.getenv("HOGAN_SIGNAL_MODE", "any"),
         signal_min_vote_margin=max(1, int(os.getenv("HOGAN_SIGNAL_MIN_VOTE_MARGIN", "1"))),
-        trailing_stop_pct=_env_float("HOGAN_TRAILING_STOP_PCT", "0.025"),
+        trailing_stop_pct=_env_float("HOGAN_TRAILING_STOP_PCT", "0.030"),
         take_profit_pct=_env_float("HOGAN_TAKE_PROFIT_PCT", "0.054"),
         trail_activation_pct=_env_float("HOGAN_TRAIL_ACTIVATION_PCT", "0.005"),
         atr_stop_multiplier=float(os.getenv("HOGAN_ATR_STOP_MULTIPLIER", "2.5")),

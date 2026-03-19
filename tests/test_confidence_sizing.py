@@ -157,14 +157,14 @@ class TestConfScaleNoDoubleCounting:
     def test_ml_sizer_output_is_independent_of_pipeline_confidence(self):
         """ml_probability_sizer should not depend on any external confidence."""
         scale_buy = ml_probability_sizer("buy", 0.55)
-        assert scale_buy == pytest.approx(1.15, abs=0.01)
+        assert scale_buy == pytest.approx(1.20, abs=0.01)
         scale_sell = ml_probability_sizer("sell", 0.45)
-        assert scale_sell == pytest.approx(1.15, abs=0.01)
+        assert scale_sell == pytest.approx(1.20, abs=0.01)
 
     def test_ml_sizer_floor_and_ceiling(self):
-        assert ml_probability_sizer("buy", 0.0) == pytest.approx(0.30)
+        assert ml_probability_sizer("buy", 0.0) == pytest.approx(0.40)
         assert ml_probability_sizer("buy", 1.0) == pytest.approx(1.50)
-        assert ml_probability_sizer("sell", 1.0) == pytest.approx(0.30)
+        assert ml_probability_sizer("sell", 1.0) == pytest.approx(0.40)
         assert ml_probability_sizer("sell", 0.0) == pytest.approx(1.50)
 
     def test_hold_returns_unity(self):

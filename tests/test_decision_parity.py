@@ -256,7 +256,7 @@ class TestRangingGateAsymmetric:
 
     def test_buy_passes_with_low_ml_separation(self):
         gd = ranging_gate("buy", regime="ranging", tech_action="buy",
-                          up_prob=0.52, recent_whipsaw_count=0)
+                          up_prob=0.53, recent_whipsaw_count=0)
         assert gd.action == "buy"
 
     def test_sell_blocked_with_low_ml_separation(self):

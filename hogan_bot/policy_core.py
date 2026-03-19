@@ -355,6 +355,8 @@ def decide(
     # ------------------------------------------------------------------
     _atr_series = compute_atr(candles, window=14)
     atr_pct = float(_atr_series.iloc[-1]) / max(px, 1e-9)
+    # ATR-adaptive trailing stop floor: never tighter than 1.5× current ATR
+    eff_ts = max(eff_ts, atr_pct * 1.5)
     spread_est = estimate_spread_from_candles(candles)
 
     forecast_ret: float | None = None

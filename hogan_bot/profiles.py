@@ -19,14 +19,14 @@ CANONICAL_PROFILE: dict[str, object] = {
     "use_ml_as_sizer": True,
 
     # ── Signal quality gates ──────────────────────────────────────────
-    "min_final_confidence": 0.08,
+    "min_final_confidence": 0.20,
     "min_tech_confidence": 0.15,
     "min_regime_confidence": 0.30,
     "min_edge_multiple": 1.5,
     "max_whipsaws": 3,
 
     # ── Risk parameters ───────────────────────────────────────────────
-    "trailing_stop_pct": 0.0184,
+    "trailing_stop_pct": 0.030,
     "take_profit_pct": 0.0572,
     "fee_rate": 0.0026,
 

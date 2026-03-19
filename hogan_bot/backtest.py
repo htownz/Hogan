@@ -1560,6 +1560,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
 
             _atr_series = compute_atr(window, window=14)
             _atr_pct = float(_atr_series.iloc[-1]) / max(px, 1e-9)
+            # ATR-adaptive trailing stop floor: never tighter than 1.5× current ATR
+            _eff_ts = max(_eff_ts, _atr_pct * 1.5)
             _spread_est = estimate_spread_from_candles(window)
             _forecast_ret = None
             if signal.forecast is not None and getattr(signal.forecast, 'confidence', 0) > 0.2:

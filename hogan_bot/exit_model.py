@@ -106,8 +106,8 @@ class ExitEvaluator:
         },
         "ranging": {
             "drawdown_panic_pct": 0.025,       # tight: mean reversion
-            "time_decay_threshold": 0.60,      # aggressive time decay
-            "stagnation_bars_mult": 0.70,      # exit fast in chop
+            "time_decay_threshold": 0.70,      # patient: let mean-reversion thesis develop
+            "stagnation_bars_mult": 1.00,      # full stagnation window for ranging trades
             "trend_reversal_threshold": 0.66,  # harder to call reversal in noise
         },
     }
@@ -199,7 +199,7 @@ class ExitEvaluator:
 
         # 3. Time decay: position has aged past expected hold window
         hold_ratio = bars_held / max(max_hold_bars, 1)
-        if hold_ratio > td_threshold and upnl_pct < 0.005:
+        if hold_ratio > td_threshold and upnl_pct < 0.0:
             logger.debug("EXIT_MODEL: time decay (held %.0f%%, upnl=%.3f, side=%s)",
                          hold_ratio * 100, upnl_pct, side)
             return ExitDecision(
