@@ -96,8 +96,8 @@ def build_shadow_report(
     # Regime breakdown via json_extract on decision_json
     try:
         regimes = conn.execute(
-            f"SELECT json_extract(s.decision_json, '$.regime') AS r, COUNT(*) "
-            f"FROM swarm_decisions s WHERE s.mode = 'shadow' {sym_filter} "
+            f"SELECT s.regime AS r, COUNT(*) "
+            f"FROM swarm_decisions s WHERE s.mode = 'shadow' AND s.regime IS NOT NULL {sym_filter} "
             f"GROUP BY r",
             sym_params,
         ).fetchall()
