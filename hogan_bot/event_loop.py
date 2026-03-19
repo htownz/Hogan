@@ -248,7 +248,7 @@ class SignalEvaluator:
                 regime_name = _rstate.regime
                 regime_conf = _rstate.confidence
             except Exception as exc:
-                logger.debug("Regime detection failed: %s", exc)
+                logger.warning("Regime detection failed (using fallback): %s", exc)
 
         # Regime-adjusted thresholds (ML gates, stop/TP, position scale)
         eff: dict[str, float] = {}
@@ -257,7 +257,7 @@ class SignalEvaluator:
                 from hogan_bot.regime import effective_thresholds
                 eff = effective_thresholds(_rstate, cfg)
             except Exception as exc:
-                logger.debug("effective_thresholds failed: %s", exc)
+                logger.warning("effective_thresholds failed (using defaults): %s", exc)
         eff_ml_buy = eff.get("ml_buy_threshold", cfg.ml_buy_threshold)
         eff_ml_sell = eff.get("ml_sell_threshold", cfg.ml_sell_threshold)
         eff_tp = eff.get("take_profit_pct", cfg.take_profit_pct)
@@ -450,7 +450,7 @@ class SignalEvaluator:
                 if feat_result.has_stale:
                     logger.warning("STALE_FEATURES %s: %s", symbol, feat_result.stale_features)
         except Exception as exc:
-            logger.debug("Feature freshness check failed: %s", exc)
+            logger.warning("Feature freshness check failed: %s", exc)
 
         _qc = compute_quality_components(
             final_confidence=result.confidence,
@@ -655,7 +655,7 @@ async def _run_event_loop_inner(
         _perf_tracker = PerformanceTracker(db_path=config.db_path)
         logger.info("PerformanceTracker initialized (shadow mode)")
     except Exception as exc:
-        logger.debug("PerformanceTracker unavailable: %s", exc)
+        logger.warning("PerformanceTracker unavailable: %s", exc)
     _perf_trade_count = 0
     _PERF_PROPOSAL_INTERVAL = 50
 
@@ -682,7 +682,8 @@ async def _run_event_loop_inner(
         metrics_server = MetricsServer(port=getattr(config, "metrics_port", 8000))
         metrics_server.start()
         _has_metrics = True
-    except Exception:
+    except Exception as exc:
+        logger.warning("Metrics server failed to start (Prometheus unavailable): %s", exc)
         _has_metrics = False
 
     _mtf_timeframes = config.mtf_timeframes or []
@@ -792,7 +793,7 @@ async def _run_event_loop_inner(
                     CASH.set(portfolio.cash_usd)
                     DRAWDOWN.set(dd)
             except Exception as exc:
-                logger.debug("Equity record error: %s", exc)
+                logger.warning("Equity record error: %s", exc)
 
             # DrawdownGuard
             if not guard.update_and_check(equity):
@@ -881,6 +882,9 @@ async def _run_event_loop_inner(
                         is_loss = sell_px < avg_entry
                         if is_loss and loss_cooldown_bars > 0:
                             _cooldown_remaining = loss_cooldown_bars
+                    if not executed:
+                        logger.error("AUTO_EXIT_FAILED %s reason=%s px=%.2f qty=%.6f — %s",
+                                     exit_symbol, reason, ep, qty, getattr(res, "error", "unknown"))
                     if notifier and executed:
                         notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason,
                                                       "price": sell_px, "qty": qty})
@@ -936,6 +940,9 @@ async def _run_event_loop_inner(
                                 _perf_trade_count += 1
                             except Exception as exc:
                                 logger.debug("PerfTracker record error: %s", exc)
+                    if not executed:
+                        logger.error("AUTO_EXIT_SHORT_FAILED %s reason=%s px=%.2f qty=%.6f — %s",
+                                     exit_symbol, reason, cover_px, qty, getattr(res, "error", "unknown"))
                     if notifier and executed:
                         notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason,
                                                       "price": cover_px, "qty": qty})
@@ -1024,7 +1031,7 @@ async def _run_event_loop_inner(
                     swarm_decision_id=sig.swarm_decision_id,
                 )
             except Exception as exc:
-                logger.debug("Decision log error: %s", exc)
+                logger.warning("Decision log error: %s", exc)
 
             # Track consecutive exit signals for confirmation
             if action == "sell" and symbol in portfolio.positions:
@@ -1076,7 +1083,7 @@ async def _run_event_loop_inner(
                         _macro_scale = _sitout_r.size_scale
                         logger.debug("MACRO_SCALE %s — %.2fx — %s", symbol, _macro_scale, _sitout_r.summary)
                 except Exception as _mse:
-                    logger.debug("Macro sitout check error: %s", _mse)
+                    logger.warning("Macro sitout check error: %s", _mse)
 
             if action == "buy" and px > 0:
                 # Cover existing short first (with ExitEvaluator confirmation — parity with backtest)
@@ -1148,8 +1155,11 @@ async def _run_event_loop_inner(
                                 if notifier:
                                     notifier.notify("cover", {"symbol": symbol, "price": cover_px,
                                                               "qty": cover_qty, "reason": "buy_signal"})
-                            logger.info("COVER_SHORT %s px=%.2f qty=%.6f equity=%.2f reason=buy_signal",
-                                        symbol, cover_px, cover_qty, equity)
+                            if not res.ok:
+                                logger.error("COVER_SHORT_FAILED %s px=%.2f qty=%.6f — %s",
+                                             symbol, cover_px, cover_qty, getattr(res, "error", "unknown"))
+                            logger.info("COVER_SHORT %s px=%.2f qty=%.6f equity=%.2f reason=buy_signal ok=%s",
+                                        symbol, cover_px, cover_qty, equity, res.ok)
 
                 if not sig.eff_allow_longs:
                     logger.info("BUY_BLOCK %s — regime %s disallows longs (eff_allow_longs=False)", symbol, _sym_regime)
@@ -1202,8 +1212,9 @@ async def _run_event_loop_inner(
                             logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s long_scale=%.2f",
                                         symbol, buy_px, _long_size, up_prob or -1, equity, _sym_regime, sig.eff_long_size_scale)
                         else:
-                            logger.warning("BUY_FAILED %s px=%.2f qty=%.6f — execution returned ok=False",
-                                           symbol, buy_px, _long_size)
+                            _fail_detail = getattr(res, "error", "") or "unknown"
+                            logger.warning("BUY_FAILED %s px=%.2f qty=%.6f — %s",
+                                           symbol, buy_px, _long_size, _fail_detail)
 
             elif action == "sell" and px > 0:
                 _closed_long_this_bar = False
@@ -1301,8 +1312,11 @@ async def _run_event_loop_inner(
                             if notifier:
                                 notifier.notify("sell", {"symbol": symbol, "price": sell_px,
                                                          "qty": sell_qty, "ml_up_prob": up_prob})
-                        logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f",
-                                    symbol, sell_px, sell_qty, up_prob or -1, equity)
+                        if not executed:
+                            logger.error("SELL_FAILED %s px=%.2f qty=%.6f — %s",
+                                         symbol, sell_px, sell_qty, getattr(res, "error", "unknown"))
+                        logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f ok=%s",
+                                    symbol, sell_px, sell_qty, up_prob or -1, equity, executed)
 
                 # ── Open short when flat and shorts enabled ───────────
                 _allow_short_entry = (
@@ -1358,8 +1372,9 @@ async def _run_event_loop_inner(
                             logger.info("SHORT %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s short_scale=%.2f",
                                         symbol, short_px, _short_size, up_prob or -1, equity, _sym_regime, sig.eff_short_size_scale)
                         else:
-                            logger.warning("SHORT_FAILED %s px=%.2f qty=%.6f — execution returned ok=False",
-                                           symbol, short_px, _short_size)
+                            _fail_detail = getattr(res, "error", "") or "unknown"
+                            logger.warning("SHORT_FAILED %s px=%.2f qty=%.6f — %s",
+                                           symbol, short_px, _short_size, _fail_detail)
                 elif not _allow_short_entry:
                     logger.info("SHORT_SKIP %s — entry preconditions not met (shorts=%s in_long=%s in_short=%s fx_ok=%s close_rev=%s)",
                                 symbol, enable_shorts, symbol in portfolio.positions,
