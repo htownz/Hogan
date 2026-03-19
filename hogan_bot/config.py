@@ -564,23 +564,41 @@ def reload_symbol_configs() -> None:
     _symbol_config_cache.clear()
 
 
+def _env_float(var: str, default: str) -> float:
+    raw = os.getenv(var, default)
+    try:
+        return float(raw)
+    except (ValueError, TypeError):
+        logger.error("Invalid env %s=%r (expected float, using default %s)", var, raw, default)
+        return float(default)
+
+
+def _env_int(var: str, default: str) -> int:
+    raw = os.getenv(var, default)
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        logger.error("Invalid env %s=%r (expected int, using default %s)", var, raw, default)
+        return int(default)
+
+
 def load_config() -> BotConfig:
     """Load bot configuration from environment variables."""
     load_dotenv()
     return BotConfig(
-        starting_balance_usd=float(os.getenv("HOGAN_STARTING_BALANCE", "1800")),
-        aggressive_allocation=float(os.getenv("HOGAN_AGGRESSIVE_ALLOCATION", "0.75")),
-        max_risk_per_trade=float(os.getenv("HOGAN_MAX_RISK_PER_TRADE", "0.03")),
-        max_drawdown=float(os.getenv("HOGAN_MAX_DRAWDOWN", "0.15")),
+        starting_balance_usd=_env_float("HOGAN_STARTING_BALANCE", "1800"),
+        aggressive_allocation=_env_float("HOGAN_AGGRESSIVE_ALLOCATION", "0.75"),
+        max_risk_per_trade=_env_float("HOGAN_MAX_RISK_PER_TRADE", "0.03"),
+        max_drawdown=_env_float("HOGAN_MAX_DRAWDOWN", "0.15"),
         symbols=_split_symbols(os.getenv("HOGAN_SYMBOLS", "BTC/USD,ETH/USD")),
         timeframe=os.getenv("HOGAN_TIMEFRAME", "1h"),
         execution_timeframe=os.getenv("HOGAN_EXECUTION_TIMEFRAME", "15m"),
-        ohlcv_limit=int(os.getenv("HOGAN_OHLCV_LIMIT", "500")),
+        ohlcv_limit=_env_int("HOGAN_OHLCV_LIMIT", "500"),
         short_ma_window=int(os.getenv("HOGAN_SHORT_MA", "12")),
         long_ma_window=int(os.getenv("HOGAN_LONG_MA", "79")),
         volume_window=int(os.getenv("HOGAN_VOLUME_WINDOW", "20")),
         volume_threshold=float(os.getenv("HOGAN_VOLUME_THRESHOLD", "1.8")),
-        fee_rate=float(os.getenv("HOGAN_FEE_RATE", "0.0026")),
+        fee_rate=_env_float("HOGAN_FEE_RATE", "0.0026"),
         sleep_seconds=int(os.getenv("HOGAN_SLEEP_SECONDS", "30")),
         trade_weekends=os.getenv("HOGAN_TRADE_WEEKENDS", "false").lower() == "true",
         paper_mode=os.getenv("HOGAN_PAPER_MODE", "true").lower() == "true",
@@ -600,9 +618,9 @@ def load_config() -> BotConfig:
         fvg_min_gap_pct=float(os.getenv("HOGAN_FVG_MIN_GAP_PCT", "0.001")),
         signal_mode=os.getenv("HOGAN_SIGNAL_MODE", "any"),
         signal_min_vote_margin=max(1, int(os.getenv("HOGAN_SIGNAL_MIN_VOTE_MARGIN", "1"))),
-        trailing_stop_pct=float(os.getenv("HOGAN_TRAILING_STOP_PCT", "0.025")),
-        take_profit_pct=float(os.getenv("HOGAN_TAKE_PROFIT_PCT", "0.054")),
-        trail_activation_pct=float(os.getenv("HOGAN_TRAIL_ACTIVATION_PCT", "0.005")),
+        trailing_stop_pct=_env_float("HOGAN_TRAILING_STOP_PCT", "0.025"),
+        take_profit_pct=_env_float("HOGAN_TAKE_PROFIT_PCT", "0.054"),
+        trail_activation_pct=_env_float("HOGAN_TRAIL_ACTIVATION_PCT", "0.005"),
         atr_stop_multiplier=float(os.getenv("HOGAN_ATR_STOP_MULTIPLIER", "2.5")),
         exit_drawdown_pct=float(os.getenv("HOGAN_EXIT_DRAWDOWN_PCT", "0.03")),
         exit_time_decay=float(os.getenv("HOGAN_EXIT_TIME_DECAY", "0.75")),
@@ -652,7 +670,7 @@ def load_config() -> BotConfig:
         webhook_url=os.getenv("HOGAN_DISCORD_WEBHOOK_URL") or os.getenv("HOGAN_WEBHOOK_URL", ""),
         exchange_id=os.getenv("HOGAN_EXCHANGE", "kraken"),
         quote_currency=os.getenv("HOGAN_QUOTE_CCY", "USD"),
-        metrics_port=int(os.getenv("HOGAN_METRICS_PORT", "8000")),
+        metrics_port=_env_int("HOGAN_METRICS_PORT", "8000"),
         email_smtp_host=os.getenv("HOGAN_EMAIL_SMTP_HOST", ""),
         email_smtp_port=int(os.getenv("HOGAN_EMAIL_SMTP_PORT", "587")),
         email_username=os.getenv("HOGAN_EMAIL_USERNAME", ""),

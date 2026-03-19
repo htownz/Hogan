@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -74,11 +77,13 @@ class PaperPortfolio:
         trail_activation_pct: float = 0.0,
     ) -> bool:
         if qty <= 0 or price <= 0:
+            logger.warning("execute_buy rejected %s: invalid qty=%.6f or price=%.2f", symbol, qty, price)
             return False
         cost = qty * price
         fee = cost * self.fee_rate
         total = cost + fee
         if total > self.cash_usd:
+            logger.warning("execute_buy rejected %s: insufficient cash (need %.2f, have %.2f)", symbol, total, self.cash_usd)
             return False
 
         self.cash_usd -= total
@@ -99,8 +104,12 @@ class PaperPortfolio:
         return True
 
     def execute_sell(self, symbol: str, price: float, qty: float) -> bool:
-        pos = self.positions.get(symbol, Position())
+        pos = self.positions.get(symbol)
+        if pos is None:
+            logger.warning("execute_sell rejected %s: no open long position", symbol)
+            return False
         if qty <= 0 or price <= 0 or qty > pos.qty:
+            logger.warning("execute_sell rejected %s: invalid params (qty=%.6f, price=%.2f, held=%.6f)", symbol, qty, price, pos.qty)
             return False
 
         proceeds = qty * price
@@ -129,8 +138,10 @@ class PaperPortfolio:
         limited to available cash as a safety guardrail.
         """
         if qty <= 0 or price <= 0:
+            logger.warning("execute_short rejected %s: invalid qty=%.6f or price=%.2f", symbol, qty, price)
             return False
         if qty * price > self.cash_usd:
+            logger.warning("execute_short rejected %s: insufficient cash (need %.2f, have %.2f)", symbol, qty * price, self.cash_usd)
             return False
         fee = qty * price * self.fee_rate
         self.cash_usd -= fee
@@ -152,7 +163,11 @@ class PaperPortfolio:
     def execute_cover(self, symbol: str, price: float, qty: float) -> bool:
         """Close (cover) a short position and realise P&L."""
         pos = self.short_positions.get(symbol)
-        if pos is None or qty <= 0 or price <= 0 or qty > pos.qty:
+        if pos is None:
+            logger.warning("execute_cover rejected %s: no open short position", symbol)
+            return False
+        if qty <= 0 or price <= 0 or qty > pos.qty:
+            logger.warning("execute_cover rejected %s: invalid params (qty=%.6f, price=%.2f, held=%.6f)", symbol, qty, price, pos.qty)
             return False
         pnl = (pos.avg_entry - price) * qty
         fee = qty * price * self.fee_rate
@@ -183,6 +198,7 @@ class PaperPortfolio:
         for symbol, pos in list(self.positions.items()):
             px = mark_prices.get(symbol, 0.0)
             if px <= 0:
+                logger.debug("check_exits: skipping long %s — no valid price", symbol)
                 continue
             pos.bars_held += 1
             if pos.avg_entry > 0:
@@ -217,6 +233,7 @@ class PaperPortfolio:
         for symbol, pos in list(self.short_positions.items()):
             px = mark_prices.get(symbol, 0.0)
             if px <= 0:
+                logger.debug("check_exits: skipping short %s — no valid price", symbol)
                 continue
             pos.bars_held += 1
             if pos.avg_entry > 0:

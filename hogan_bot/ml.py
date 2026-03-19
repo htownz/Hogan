@@ -1,12 +1,15 @@
 """Machine-learning pipeline for Hogan: feature engineering, training, and inference."""
 from __future__ import annotations
 
+import logging
 import pickle
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from hogan_bot.indicators import (
     cloud_signal,
@@ -483,7 +486,8 @@ def build_feature_row(
         if last.isna().any():
             return None
         return [float(v) for v in last.values]
-    except Exception:  # noqa: BLE001
+    except Exception as exc:
+        logger.warning("build_feature_row failed (ML will be skipped this bar): %s", exc)
         return None
 
 
@@ -639,17 +643,20 @@ def make_paper_trade_labels(
 
     try:
         conn = _sqlite3.connect(db_path)
-        import pandas as _pd
-        trades_df = _pd.read_sql_query(
-            """SELECT trade_id, symbol, side, realized_pnl, open_ts_ms
-               FROM paper_trades
-               WHERE exit_price IS NOT NULL AND symbol = ?
-               ORDER BY open_ts_ms""",
-            conn,
-            params=(symbol,),
-        )
-        conn.close()
-    except Exception:  # noqa: BLE001
+        try:
+            import pandas as _pd
+            trades_df = _pd.read_sql_query(
+                """SELECT trade_id, symbol, side, realized_pnl, open_ts_ms
+                   FROM paper_trades
+                   WHERE exit_price IS NOT NULL AND symbol = ?
+                   ORDER BY open_ts_ms""",
+                conn,
+                params=(symbol,),
+            )
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.warning("make_paper_trade_labels failed for %s: %s", symbol, exc)
         return None, None
 
     if len(trades_df) < min_trades:
@@ -723,7 +730,8 @@ def make_backtest_labels(
         try:
             from hogan_bot.macro_features import add_macro_features, MACRO_FEATURE_NAMES
             frame = add_macro_features(frame, db_conn)
-        except Exception:
+        except Exception as exc:
+            logger.warning("make_backtest_labels: macro feature join failed — using zeros: %s", exc)
             from hogan_bot.macro_features import MACRO_FEATURE_NAMES
             for col in MACRO_FEATURE_NAMES:
                 if col not in frame.columns:
@@ -1521,8 +1529,8 @@ def build_feature_frame(candles: pd.DataFrame, db_conn=None) -> pd.DataFrame:
         try:
             from hogan_bot.macro_features import add_macro_features
             frame = add_macro_features(frame, db_conn)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("build_feature_frame: macro feature join failed — using zeros: %s", exc)
     for col in _FEATURE_COLUMNS:
         if col not in frame.columns:
             frame[col] = 0.0

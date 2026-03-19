@@ -106,8 +106,8 @@ class TechnicalAgent:
             try:
                 from hogan_bot.strategy_router import StrategyRouter
                 self._router = StrategyRouter(config)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("StrategyRouter unavailable, using classic signal path: %s", exc)
 
     def analyze(self, candles: pd.DataFrame, **runtime_state) -> TechSignal:
         """Produce a TechSignal. ``runtime_state`` passes dynamic per-bar RL
@@ -271,7 +271,7 @@ class SentimentAgent:
                 scores["funding"] = max(-1.0, min(1.0, -raw_funding * 0.5))
 
         except Exception as exc:
-            logger.debug("SentimentAgent data lookup failed: %s", exc)
+            logger.warning("SentimentAgent data lookup failed: %s", exc)
 
         if not scores:
             return SentimentSignal(bias="neutral", strength=0.0)
@@ -356,7 +356,7 @@ class MacroAgent:
                     except Exception:
                         pass
         except Exception as exc:
-            logger.debug("MacroAgent data lookup failed: %s", exc)
+            logger.warning("MacroAgent data lookup failed: %s", exc)
 
         data_age_hours = max(_metric_ages) if _metric_ages else 999.0
 
@@ -648,8 +648,8 @@ class AgentPipeline:
                             **rp.agent_scores,
                             "_sample_count": rp.trade_count,
                         }
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to load learned weights from PerformanceTracker: %s", exc)
         self.meta = MetaWeigher(
             weights=weights,
             buy_threshold=getattr(config, "meta_buy_threshold", 0.25),
@@ -712,7 +712,7 @@ class AgentPipeline:
             try:
                 rag_context = self.rag_retriever.retrieve_relevant_context(features, k=5)
             except Exception as exc:
-                logger.debug("RAG retrieval failed (non-fatal): %s", exc)
+                logger.warning("RAG retrieval failed (non-fatal): %s", exc)
 
         signal = self.meta.combine(tech, sent, macro, rag_context=rag_context, regime=regime)
 
@@ -720,7 +720,7 @@ class AgentPipeline:
         try:
             forecast = compute_forecast(candles)
         except Exception as exc:
-            logger.debug("Forecast head failed (non-fatal): %s", exc)
+            logger.warning("Forecast head failed (trading without forecast): %s", exc)
             forecast = ForecastResult(confidence=0.0)
 
         try:
@@ -729,7 +729,7 @@ class AgentPipeline:
             mhb = getattr(self.config, "max_hold_bars", 24)
             risk_est = compute_risk(candles, stop_pct=stop, tp_pct=tp, max_hold_bars=mhb)
         except Exception as exc:
-            logger.debug("Risk head failed (non-fatal): %s", exc)
+            logger.warning("Risk head failed (trading without risk estimates): %s", exc)
             risk_est = RiskEstimate()
 
         signal.forecast = forecast
@@ -823,11 +823,11 @@ class AgentPipeline:
                     realized_pnl=realized_pnl,
                 )
             except Exception as exc:
-                logger.debug("Performance tracker record failed: %s", exc)
+                logger.warning("Performance tracker record failed: %s", exc)
 
         if self.adaptive_conf is not None and ml_up_prob is not None:
             try:
                 actual_label = 1 if realized_pnl > 0 else 0
                 self.adaptive_conf.record_outcome(ml_up_prob, actual_label)
             except Exception as exc:
-                logger.debug("Adaptive confidence record failed: %s", exc)
+                logger.warning("Adaptive confidence record failed: %s", exc)

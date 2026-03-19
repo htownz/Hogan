@@ -21,8 +21,11 @@ Typical workflow::
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 
@@ -532,8 +535,9 @@ def _create_schema(conn: sqlite3.Connection) -> None:
     ):
         try:
             conn.execute(_alt)
-        except sqlite3.OperationalError:
-            pass  # column already exists
+        except sqlite3.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                logger.warning("Schema migration failed for '%s': %s", _alt[:60], exc)
 
     conn.commit()
 

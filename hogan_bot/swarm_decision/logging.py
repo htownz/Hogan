@@ -7,10 +7,12 @@ tables defined in ``storage._create_schema()``.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
-import time
 
 from hogan_bot.swarm_decision.types import AgentVote, SwarmDecision
+
+logger = logging.getLogger(__name__)
 
 
 def log_swarm_decision(
@@ -24,7 +26,15 @@ def log_swarm_decision(
     regime: str | None = None,
     stall_state: str | None = None,
 ) -> int:
-    """Persist one SwarmDecision row.  Returns the new row id."""
+    """Persist one SwarmDecision row.  Returns the new row id, or -1 on failure."""
+    try:
+        return _log_swarm_decision_inner(conn, ts_ms, symbol, timeframe, decision, mode, as_of_ms, regime, stall_state)
+    except Exception as exc:
+        logger.error("log_swarm_decision failed for %s at %d: %s", symbol, ts_ms, exc)
+        return -1
+
+
+def _log_swarm_decision_inner(conn, ts_ms, symbol, timeframe, decision, mode, as_of_ms, regime, stall_state) -> int:
     cur = conn.execute(
         """
         INSERT INTO swarm_decisions (
@@ -76,6 +86,13 @@ def log_agent_votes(
     decision_id: int | None = None,
 ) -> None:
     """Persist individual agent votes for a single bar."""
+    try:
+        return _log_agent_votes_inner(conn, ts_ms, symbol, timeframe, votes, as_of_ms, decision_id)
+    except Exception as exc:
+        logger.error("log_agent_votes failed for %s at %d: %s", symbol, ts_ms, exc)
+
+
+def _log_agent_votes_inner(conn, ts_ms, symbol, timeframe, votes, as_of_ms, decision_id) -> None:
     rows = []
     for v in votes:
         rows.append((
@@ -117,7 +134,15 @@ def log_weight_snapshot(
     source: str = "static",
     notes: str | None = None,
 ) -> int:
-    """Persist a weight snapshot.  Returns the new row id."""
+    """Persist a weight snapshot.  Returns the new row id, or -1 on failure."""
+    try:
+        return _log_weight_snapshot_inner(conn, ts_ms, symbol, timeframe, weights, regime, source, notes)
+    except Exception as exc:
+        logger.error("log_weight_snapshot failed for %s at %d: %s", symbol, ts_ms, exc)
+        return -1
+
+
+def _log_weight_snapshot_inner(conn, ts_ms, symbol, timeframe, weights, regime, source, notes) -> int:
     cur = conn.execute(
         """
         INSERT INTO swarm_weight_snapshots (

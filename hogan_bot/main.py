@@ -35,8 +35,8 @@ def run(max_loops: int | None = None) -> None:
         asyncio.run(run_event_loop(max_events=max_events))
     except KeyboardInterrupt:
         logger.info("Shutdown requested (KeyboardInterrupt).")
-    except Exception:
-        logger.critical("Fatal error in event loop — process exiting.", exc_info=True)
+    except Exception as exc:
+        logger.critical("Fatal error in event loop: %s — process exiting.", exc, exc_info=True)
         sys.exit(1)
 
 

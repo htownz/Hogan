@@ -58,9 +58,10 @@ class SwarmController:
         _total = sum(self._weights.values()) or 1.0
         self._weights = {k: v / _total for k, v in self._weights.items()}
 
-        self._min_agreement = getattr(config, "swarm_min_agreement", 0.60)
-        self._min_vote_margin = getattr(config, "swarm_min_vote_margin", 0.10)
-        self._max_entropy = getattr(config, "swarm_max_entropy", 0.95)
+        _cfg = config or object()
+        self._min_agreement = getattr(_cfg, "swarm_min_agreement", 0.60)
+        self._min_vote_margin = getattr(_cfg, "swarm_min_vote_margin", 0.10)
+        self._max_entropy = getattr(_cfg, "swarm_max_entropy", 0.95)
 
     @property
     def weights(self) -> dict[str, float]:

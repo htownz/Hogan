@@ -244,7 +244,7 @@ class SignalEvaluator:
         if getattr(cfg, "use_regime_detection", True):
             try:
                 from hogan_bot.regime import detect_regime
-                _rstate = detect_regime(candles)
+                _rstate = detect_regime(candles, symbol=symbol)
                 regime_name = _rstate.regime
                 regime_conf = _rstate.confidence
             except Exception as exc:
