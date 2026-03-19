@@ -123,14 +123,36 @@ def _write_one_outcome(
     # Was the trade taken? (non-hold, non-vetoed)
     was_trade_taken = 1 if action in ("buy", "sell") and not vetoed else 0
 
-    # Baseline comparison
-    baseline_row = pd.read_sql_query(
-        "SELECT final_action FROM decision_log WHERE ts_ms = ? AND symbol = ? LIMIT 1",
-        conn, params=(ts_ms, symbol),
-    )
+    # Baseline comparison — use pipeline_action (pre-swarm baseline) linked
+    # via swarm_decision_id.  Falls back to approximate ts_ms match if the
+    # linkage column is unavailable.
+    bl_action: str | None = None
     baseline_would_trade = None
-    if not baseline_row.empty:
-        bl_action = baseline_row.iloc[0]["final_action"]
+    try:
+        baseline_row = pd.read_sql_query(
+            "SELECT pipeline_action FROM decision_log "
+            "WHERE swarm_decision_id = ? AND symbol = ? LIMIT 1",
+            conn, params=(dec_id, symbol),
+        )
+        if not baseline_row.empty:
+            bl_action = baseline_row.iloc[0]["pipeline_action"]
+    except Exception:
+        pass
+    if bl_action is None:
+        try:
+            baseline_row = pd.read_sql_query(
+                "SELECT pipeline_action, final_action FROM decision_log "
+                "WHERE symbol = ? AND ts_ms BETWEEN ? AND ? LIMIT 1",
+                conn, params=(symbol, ts_ms - 5000, ts_ms + 5000),
+            )
+            if not baseline_row.empty:
+                bl_action = (
+                    baseline_row.iloc[0].get("pipeline_action")
+                    or baseline_row.iloc[0].get("final_action")
+                )
+        except Exception:
+            pass
+    if bl_action is not None:
         baseline_would_trade = 1 if bl_action in ("buy", "sell") else 0
 
     swarm_would_trade = 1 if action in ("buy", "sell") else 0
@@ -139,7 +161,6 @@ def _write_one_outcome(
     # (for the direction the baseline wanted to trade)
     was_veto_correct = None
     if vetoed and fwd_60m is not None and baseline_would_trade:
-        bl_action = baseline_row.iloc[0]["final_action"] if not baseline_row.empty else None
         if bl_action == "buy":
             was_veto_correct = 1 if fwd_60m < 0 else 0
         elif bl_action == "sell":
@@ -148,20 +169,22 @@ def _write_one_outcome(
     # Skip correctness (swarm said hold when baseline said trade)
     was_skip_correct = None
     if not vetoed and action == "hold" and baseline_would_trade and fwd_60m is not None:
-        bl_action = baseline_row.iloc[0]["final_action"] if not baseline_row.empty else None
         if bl_action == "buy":
             was_skip_correct = 1 if fwd_60m < 0 else 0
         elif bl_action == "sell":
             was_skip_correct = 1 if fwd_60m > 0 else 0
 
-    # Outcome label
+    # Outcome label — for hold (direction=0), label as "no_trade" rather
+    # than incorrectly mapping market direction to win/loss.
     if fwd_60m is not None:
-        if abs(fwd_60m) < 5:
+        if direction == 0:
+            outcome_label = "no_trade"
+        elif abs(fwd_60m) < 5:
             outcome_label = "scratch"
         elif fwd_60m > 0:
-            outcome_label = "win" if direction >= 0 else "loss"
+            outcome_label = "win" if direction > 0 else "loss"
         else:
-            outcome_label = "loss" if direction >= 0 else "win"
+            outcome_label = "loss" if direction > 0 else "win"
     else:
         outcome_label = "pending"
 

@@ -54,6 +54,12 @@ class ExitEvaluator:
         drawdown_panic_pct: float = 0.03,
         volatility_expansion_threshold: float = 2.0,
         time_decay_threshold: float = 0.75,
+        # Trend-persistence MA periods — aligned with strategy's Ripster
+        # cloud periods by default.  The previous 5/20 was too fast and
+        # caused premature exits on normal pullbacks.
+        trend_fast_ma: int = 8,
+        trend_slow_ma: int = 34,
+        stagnation_threshold: float = 0.002,
         # Short-specific overrides — applied when side != "long"
         short_drawdown_panic_pct: float | None = None,
         short_time_decay_threshold: float | None = None,
@@ -65,6 +71,9 @@ class ExitEvaluator:
         self._drawdown_panic_pct = drawdown_panic_pct
         self._vol_expansion_threshold = volatility_expansion_threshold
         self._time_decay_threshold = time_decay_threshold
+        self._trend_fast_ma = trend_fast_ma
+        self._trend_slow_ma = trend_slow_ma
+        self._stagnation_threshold = stagnation_threshold
 
         # Short defaults: tighter drawdown (2% vs 3%), faster decay (0.60 vs 0.75),
         # vol contraction at 0.5x entry ATR, shorter stagnation window.
@@ -180,7 +189,7 @@ class ExitEvaluator:
                     )
 
         # 5. Stagnation: position is flat for too long
-        if bars_held > stag_bars and abs(upnl_pct) < 0.002:
+        if bars_held > stag_bars and abs(upnl_pct) < self._stagnation_threshold:
             logger.debug("EXIT_MODEL: stagnation (bars=%d, upnl=%.4f, side=%s)",
                          bars_held, upnl_pct, side)
             return ExitDecision(
@@ -205,32 +214,35 @@ class ExitEvaluator:
 
         Uses a combination of short/long MA spread (normalized by ATR-like
         range to avoid unit mismatch) and recent momentum direction.
+
+        MA periods are configurable via ``trend_fast_ma`` / ``trend_slow_ma``
+        to align with the strategy's actual indicator periods.
         """
-        if len(close) < 20:
+        _min_bars = max(self._trend_slow_ma, 20)
+        if len(close) < _min_bars:
             return 0.0
 
-        ma_fast = close.rolling(5).mean().iloc[-1]
-        ma_slow = close.rolling(20).mean().iloc[-1]
+        ma_fast = close.rolling(self._trend_fast_ma).mean().iloc[-1]
+        ma_slow = close.rolling(self._trend_slow_ma).mean().iloc[-1]
 
         if pd.isna(ma_fast) or pd.isna(ma_slow) or ma_slow < 1e-9:
             return 0.0
 
-        # Normalize spread as a z-score relative to rolling std
-        rolling_std = close.rolling(20).std().iloc[-1]
+        rolling_std = close.rolling(self._trend_slow_ma).std().iloc[-1]
         if pd.isna(rolling_std) or rolling_std < 1e-9:
             rolling_std = abs(ma_slow) * 0.01
 
         ma_spread_z = (ma_fast - ma_slow) / rolling_std
 
-        recent_returns = close.pct_change().iloc[-5:].dropna()
+        _mom_window = max(self._trend_fast_ma, 5)
+        recent_returns = close.pct_change().iloc[-_mom_window:].dropna()
         if recent_returns.empty:
             momentum_z = 0.0
         else:
             ret_mean = float(recent_returns.mean())
             ret_std = float(recent_returns.std())
-            momentum_z = ret_mean / max(ret_std, 1e-9) if ret_std > 1e-9 else 0.0
+            momentum_z = ret_mean / max(ret_std, 0.001) if ret_std > 1e-9 else 0.0
 
-        # Both components are now z-score-like, combine with equal weight
         raw = ma_spread_z * 0.6 + momentum_z * 0.4
 
         if side != "long":
