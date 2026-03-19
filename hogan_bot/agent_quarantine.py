@@ -135,8 +135,9 @@ def auto_quarantine_check(
                         f"accuracy recovered to {acc:.3f} over {n} votes",
                         conn,
                     )
-    except Exception:
-        pass
+    except Exception as exc:
+        import logging as _logging
+        _logging.getLogger(__name__).debug("auto_quarantine_check error: %s", exc)
     return quarantined
 
 

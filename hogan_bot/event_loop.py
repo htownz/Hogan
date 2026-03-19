@@ -535,6 +535,9 @@ async def run_event_loop(
     from hogan_bot.champion import apply_champion_mode
     config = apply_champion_mode(config)
 
+    from hogan_bot.config import apply_sweep_results
+    apply_sweep_results(config)
+
     conn = get_connection(config.db_path)
     try:
         await _run_event_loop_inner(config, conn, max_events)
@@ -653,11 +656,24 @@ async def _run_event_loop_inner(
     try:
         from hogan_bot.performance_tracker import PerformanceTracker
         _perf_tracker = PerformanceTracker(db_path=config.db_path)
-        logger.info("PerformanceTracker initialized (shadow mode)")
+        if _perf_tracker.restore_from_db():
+            logger.info("PerformanceTracker restored state from DB snapshot")
+        else:
+            logger.info("PerformanceTracker initialized (no prior snapshot)")
     except Exception as exc:
         logger.warning("PerformanceTracker unavailable: %s", exc)
     _perf_trade_count = 0
     _PERF_PROPOSAL_INTERVAL = 50
+
+    # Walk-forward failure response: compute sizing penalty at startup
+    _wf_scale = 1.0
+    try:
+        from hogan_bot.decision import wf_failure_scale
+        _wf_scale = wf_failure_scale()
+        if _wf_scale < 1.0:
+            logger.info("WF failure scale applied: %.2f", _wf_scale)
+    except Exception as exc:
+        logger.debug("wf_failure_scale error: %s", exc)
 
     # Parity with backtest: max_hold_bars, loss_cooldown, slippage
     max_hold_bars, loss_cooldown_bars = effective_hold_cooldown_bars(config, config.timeframe)
@@ -1183,7 +1199,8 @@ async def _run_event_loop_inner(
                     _funding_scale = 1.0
                     if _funding_overlay is not None:
                         _funding_scale = _funding_overlay.position_scale("buy", datetime.now(tz=timezone.utc))
-                    _long_size = size * sig.eff_long_size_scale * _macro_scale * _momentum_scale * _funding_scale
+                    _exp_scale = _expectancy.expectancy_size_scale(regime=_sym_regime or "unknown")
+                    _long_size = size * sig.eff_long_size_scale * _macro_scale * _momentum_scale * _funding_scale * _wf_scale * _exp_scale
                     if _long_size <= 0:
                         logger.info("BUY_BLOCK %s — size scaled to zero (base=%.6f eff_scale=%.2f macro=%.2f mom=%.2f fund=%.2f)",
                                     symbol, size, sig.eff_long_size_scale, _macro_scale, _momentum_scale, _funding_scale)
@@ -1336,7 +1353,8 @@ async def _run_event_loop_inner(
                     _funding_short_scale = 1.0
                     if _funding_overlay is not None:
                         _funding_short_scale = _funding_overlay.position_scale("sell", datetime.now(tz=timezone.utc))
-                    _short_size = size * sig.eff_short_size_scale * _macro_scale * _funding_short_scale
+                    _exp_short_scale = _expectancy.expectancy_size_scale(regime=_sym_regime or "unknown")
+                    _short_size = size * sig.eff_short_size_scale * _macro_scale * _funding_short_scale * _wf_scale * _exp_short_scale
                     if not sig.eff_allow_shorts:
                         logger.info("SHORT_BLOCK %s — regime %s disallows shorts (eff_allow_shorts=False)", symbol, _sym_regime)
                     elif ml_blind_blocks_shorts(evaluator._ml_probs):
@@ -1434,6 +1452,7 @@ async def _run_event_loop_inner(
                             {r: {k: round(v, 3) for k, v in w.items()} for r, w in proposal.regime_weights.items()}
                             if hasattr(proposal, "regime_weights") else str(proposal),
                         )
+                    _perf_tracker.save_to_db()
                 except Exception as exc:
                     logger.debug("PerformanceTracker proposal error: %s", exc)
 
@@ -1443,6 +1462,14 @@ async def _run_event_loop_inner(
     if _expectancy._trades:
         report = _expectancy.summary()
         logger.info("FINAL EXPECTANCY REPORT: %s", report)
+
+    # Persist tracker state for restart survival
+    if _perf_tracker:
+        try:
+            _perf_tracker.save_to_db()
+            logger.info("PerformanceTracker state saved on shutdown")
+        except Exception as exc:
+            logger.debug("PerformanceTracker save on shutdown failed: %s", exc)
 
     logger.info("Event loop terminated after %d events.", event_count)
 
