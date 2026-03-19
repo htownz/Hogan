@@ -99,6 +99,34 @@ class ExpectancyTracker:
 
         return result
 
+    def expectancy_size_scale(
+        self,
+        regime: str = "unknown",
+        min_trades: int = 10,
+        neutral_expectancy: float = 0.0,
+        scale_range: tuple[float, float] = (0.50, 1.25),
+    ) -> float:
+        """Return a position size multiplier based on recent regime expectancy.
+
+        Maps the regime's expectancy_pct linearly onto [scale_range[0], scale_range[1]]:
+        - Negative expectancy → shrink toward scale_range[0]
+        - Positive expectancy → grow toward scale_range[1]
+        - Neutral or insufficient data → 1.0
+
+        This lets the system size up in regimes where it has historically
+        performed well and size down where it bleeds.
+        """
+        trades = self._by_regime.get(regime, [])
+        if len(trades) < min_trades:
+            return 1.0
+        stats = self._compute_stats(trades)
+        exp = stats.get("expectancy_pct", 0.0)
+        lo, hi = scale_range
+        if exp >= neutral_expectancy:
+            return min(hi, 1.0 + (exp * 50.0))
+        else:
+            return max(lo, 1.0 + (exp * 50.0))
+
     def signal_exit_loss_rate(self) -> float | None:
         """Fraction of signal-exit trades that were losers.
 

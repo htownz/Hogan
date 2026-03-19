@@ -93,6 +93,53 @@ def get_all_agent_modes(conn: sqlite3.Connection) -> dict[str, AgentQuarantineSt
     return result
 
 
+def auto_quarantine_check(
+    conn: sqlite3.Connection,
+    symbol: str | None = None,
+    min_accuracy: float = 0.35,
+    min_votes: int = 30,
+    days: int = 14,
+) -> list[str]:
+    """Check agent accuracy and quarantine underperformers.
+
+    Returns list of agent_ids that were quarantined this cycle.
+    Agents with accuracy below *min_accuracy* over at least *min_votes*
+    decisions are demoted to advisory_only.  Agents that recover above
+    the threshold are restored to active.
+    """
+    quarantined: list[str] = []
+    try:
+        from hogan_bot.swarm_decision.weight_learner import compute_agent_accuracy
+        df = compute_agent_accuracy(conn, symbol=symbol, min_outcomes=min_votes, days=days)
+        if df.empty:
+            return []
+        for _, row in df.iterrows():
+            aid = row["agent_id"]
+            acc = float(row["accuracy"])
+            n = int(row["total_votes"])
+            if n < min_votes:
+                continue
+            current = get_agent_mode(aid, conn)
+            if acc < min_accuracy and current == "active":
+                set_agent_mode(
+                    aid, "advisory_only", "auto_quarantine",
+                    f"accuracy={acc:.3f} < {min_accuracy} over {n} votes",
+                    conn,
+                )
+                quarantined.append(aid)
+            elif acc >= min_accuracy + 0.05 and current == "advisory_only":
+                state = get_agent_state(aid, conn)
+                if state.operator == "auto_quarantine":
+                    set_agent_mode(
+                        aid, "active", "auto_quarantine",
+                        f"accuracy recovered to {acc:.3f} over {n} votes",
+                        conn,
+                    )
+    except Exception:
+        pass
+    return quarantined
+
+
 def get_mode_history(agent_id: str, conn: sqlite3.Connection, limit: int = 20) -> list[dict]:
     rows = conn.execute(
         "SELECT ts_ms, mode, reason, operator FROM swarm_agent_modes WHERE agent_id = ? ORDER BY ts_ms DESC LIMIT ?",
