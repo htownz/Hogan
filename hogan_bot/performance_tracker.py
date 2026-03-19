@@ -220,31 +220,33 @@ class PerformanceTracker:
         try:
             from hogan_bot.storage import get_connection
             conn = get_connection(self.db_path)
-            conn.execute(
-                """CREATE TABLE IF NOT EXISTS perf_tracker_state (
-                       id   INTEGER PRIMARY KEY AUTOINCREMENT,
-                       ts_ms INTEGER NOT NULL,
-                       state_json TEXT NOT NULL
-                   )"""
-            )
-            payload = {}
-            for regime, rp in self._regime_data.items():
-                payload[regime] = {
-                    "trade_count": rp.trade_count,
-                    "win_count": rp.win_count,
-                    "total_pnl": rp.total_pnl,
-                    "pnl_values": rp.pnl_values[-self.max_window:],
-                    "tech_alignment": rp.tech_alignment,
-                    "sent_alignment": rp.sent_alignment,
-                    "macro_alignment": rp.macro_alignment,
-                }
-            conn.execute(
-                "INSERT INTO perf_tracker_state (ts_ms, state_json) VALUES (?, ?)",
-                (int(time.time() * 1000), json.dumps(payload)),
-            )
-            conn.commit()
-            conn.close()
-            logger.debug("PerformanceTracker state saved (%d regimes)", len(payload))
+            try:
+                conn.execute(
+                    """CREATE TABLE IF NOT EXISTS perf_tracker_state (
+                           id   INTEGER PRIMARY KEY AUTOINCREMENT,
+                           ts_ms INTEGER NOT NULL,
+                           state_json TEXT NOT NULL
+                       )"""
+                )
+                payload = {}
+                for regime, rp in self._regime_data.items():
+                    payload[regime] = {
+                        "trade_count": rp.trade_count,
+                        "win_count": rp.win_count,
+                        "total_pnl": rp.total_pnl,
+                        "pnl_values": rp.pnl_values[-self.max_window:],
+                        "tech_alignment": rp.tech_alignment,
+                        "sent_alignment": rp.sent_alignment,
+                        "macro_alignment": rp.macro_alignment,
+                    }
+                conn.execute(
+                    "INSERT INTO perf_tracker_state (ts_ms, state_json) VALUES (?, ?)",
+                    (int(time.time() * 1000), json.dumps(payload)),
+                )
+                conn.commit()
+                logger.debug("PerformanceTracker state saved (%d regimes)", len(payload))
+            finally:
+                conn.close()
         except Exception as exc:
             logger.debug("PerformanceTracker save_to_db failed: %s", exc)
 
@@ -256,10 +258,12 @@ class PerformanceTracker:
         try:
             from hogan_bot.storage import get_connection
             conn = get_connection(self.db_path)
-            row = conn.execute(
-                "SELECT state_json FROM perf_tracker_state ORDER BY ts_ms DESC LIMIT 1"
-            ).fetchone()
-            conn.close()
+            try:
+                row = conn.execute(
+                    "SELECT state_json FROM perf_tracker_state ORDER BY ts_ms DESC LIMIT 1"
+                ).fetchone()
+            finally:
+                conn.close()
             if not row:
                 return False
             payload = json.loads(row[0])
