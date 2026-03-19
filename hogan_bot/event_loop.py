@@ -453,12 +453,13 @@ async def run_event_loop(
             executor = PaperExecution(portfolio=portfolio, conn=conn, exchange_id="paper")
 
     ml_model: TrainedModel | None = None
-    if config.use_ml_filter:
+    _need_ml = config.use_ml_filter or getattr(config, "use_ml_as_sizer", False)
+    if _need_ml:
         try:
             ml_model = load_model(config.ml_model_path)
             logger.info("Loaded ML model from %s", config.ml_model_path)
         except FileNotFoundError:
-            logger.warning("ML model not found at %s; running without ML filter.", config.ml_model_path)
+            logger.warning("ML model not found at %s; running without ML.", config.ml_model_path)
         except Exception as exc:
             logger.warning("ML model load error: %s", exc)
 

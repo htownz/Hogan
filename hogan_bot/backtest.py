@@ -1741,7 +1741,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     _rev_thresh = min_final_confidence * reversal_confidence_mult
                     if pos.bars_held < _min_hold_bars:
                         pass
-                    elif signal.final_confidence < _rev_thresh:
+                    elif getattr(signal, "final_confidence", getattr(signal, "confidence", 0.0)) < _rev_thresh:
                         pass
                     elif _consecutive_exit_signals < _exit_confirm_bars:
                         pass

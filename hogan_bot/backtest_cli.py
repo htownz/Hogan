@@ -200,7 +200,7 @@ def main() -> None:
         client = ExchangeClient(cfg.exchange_id, cfg.kraken_api_key, cfg.kraken_api_secret)
         candles = client.fetch_ohlcv_df(args.symbol, timeframe=timeframe, limit=limit)
 
-    _use_ml = args.use_ml or (cfg.use_ml_filter if args.profile else False)
+    _use_ml = args.use_ml or (cfg.use_ml_filter if args.profile else False) or getattr(cfg, "use_ml_as_sizer", False)
     ml_model = load_model(cfg.ml_model_path) if _use_ml else None
 
     use_rl = args.use_rl or cfg.use_rl_agent
