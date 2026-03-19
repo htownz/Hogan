@@ -381,7 +381,7 @@ def fetch_divergence_stats(
     extra, params = _opt_filters(symbol, timeframe, prefix="sd")
     rows = conn.execute(
         f"""SELECT
-                sd.id, sd.final_action, dl.action AS baseline_action
+                sd.id, sd.final_action, dl.final_action AS baseline_action
             FROM swarm_decisions sd
             LEFT JOIN decision_log dl ON dl.swarm_decision_id = sd.id
             WHERE sd.ts_ms BETWEEN ? AND ?{extra}""",
