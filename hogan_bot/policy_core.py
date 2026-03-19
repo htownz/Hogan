@@ -237,6 +237,7 @@ def decide(
         entry_quality_gate,
         ranging_gate,
         pullback_gate,
+        sell_pullback_gate,
         ml_confidence,
         ml_probability_sizer,
         ml_blind_scale,
@@ -422,6 +423,12 @@ def decide(
         if _pullback_gd.blocked_by:
             block_reasons.append(_pullback_gd.blocked_by)
 
+        _sell_pullback_gd = sell_pullback_gate(action, candles, regime=regime_name)
+        action = _sell_pullback_gd.action
+        pullback_scale = min(pullback_scale, _sell_pullback_gd.size_scale)
+        if _sell_pullback_gd.blocked_by:
+            block_reasons.append(_sell_pullback_gd.blocked_by)
+
     # ------------------------------------------------------------------
     # 6. Feature freshness (live-only by default)
     # ------------------------------------------------------------------
@@ -532,6 +539,7 @@ def decide(
             from hogan_bot.swarm_decision.agents.risk_steward import RiskStewardAgent
             from hogan_bot.swarm_decision.agents.data_guardian import DataGuardianAgent
             from hogan_bot.swarm_decision.agents.execution_cost import ExecutionCostAgent
+            from hogan_bot.swarm_decision.agents.volatility_regime import VolatilityRegimeAgent
 
             _agents_str = getattr(config, "swarm_agents", "")
             _agent_ids = [a.strip() for a in _agents_str.split(",") if a.strip()]
@@ -557,6 +565,8 @@ def decide(
                         fee_rate=getattr(config, "swarm_exec_fee_rate", cfg.fee_rate),
                         min_edge_over_cost=getattr(config, "swarm_exec_min_edge_ratio", 1.5),
                     ))
+                elif aid == "volatility_regime_v1":
+                    agents.append(VolatilityRegimeAgent())
 
             if agents:
                 import math as _math_sw
@@ -622,6 +632,20 @@ def decide(
                 if _swarm_mode == "active" and swarm_decision is not None:
                     action = swarm_decision.final_action
                     size *= swarm_decision.final_size_scale
+                elif _swarm_mode == "conditional_active" and swarm_decision is not None:
+                    _ca_min_agreement = getattr(config, "swarm_conditional_min_agreement", 0.70)
+                    _ca_min_confidence = getattr(config, "swarm_conditional_min_confidence", 0.60)
+                    if (
+                        swarm_decision.agreement >= _ca_min_agreement
+                        and swarm_decision.final_confidence >= _ca_min_confidence
+                        and not swarm_decision.vetoed
+                    ):
+                        action = swarm_decision.final_action
+                        size *= swarm_decision.final_size_scale
+                        logger.debug(
+                            "SWARM conditional_active OVERRIDE: action=%s agreement=%.2f conf=%.2f",
+                            action, swarm_decision.agreement, swarm_decision.final_confidence,
+                        )
 
                 if conn is not None:
                     try:
@@ -721,6 +745,14 @@ def decide(
                                             "SWARM global weight promoted: %s",
                                             {k: round(v, 4) for k, v in _wl_global.proposed_weights.items()},
                                         )
+                                # Auto-quarantine underperformers
+                                try:
+                                    from hogan_bot.agent_quarantine import auto_quarantine_check
+                                    _quarantined = auto_quarantine_check(conn, symbol=symbol)
+                                    if _quarantined:
+                                        logger.info("SWARM auto-quarantined: %s", _quarantined)
+                                except Exception as _aq_exc:
+                                    logger.debug("Auto-quarantine error: %s", _aq_exc)
                             except Exception as exc:
                                 logger.debug("Swarm weight learning error: %s", exc)
                     except Exception as exc:

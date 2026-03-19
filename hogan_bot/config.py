@@ -247,6 +247,8 @@ class BotConfig:
     swarm_weight_learning_enabled: bool = False
     swarm_weight_learning_interval_bars: int = 24
     swarm_weight_auto_promote: bool = False
+    swarm_conditional_min_agreement: float = 0.70
+    swarm_conditional_min_confidence: float = 0.60
 
     # Swarm agent thresholds (configurable via env)
     swarm_risk_max_drawdown_pct: float = 0.10
@@ -585,6 +587,37 @@ def _env_int(var: str, default: str) -> int:
         return int(default)
 
 
+def apply_sweep_results(config: "BotConfig", sweep_path: str = "diagnostics/exit_sweep_results.json") -> None:
+    """Apply best exit parameters from a sweep results file (if present).
+
+    The sweep file is a JSON list of dicts with keys like trailing_stop_pct,
+    take_profit_pct, and a ranking metric (mean_return_pct).  This picks the
+    row with the highest mean_return_pct and applies its exit parameters.
+    """
+    from pathlib import Path
+    sweep_file = Path(sweep_path)
+    if not sweep_file.exists():
+        return
+    try:
+        import json
+        results = json.loads(sweep_file.read_text(encoding="utf-8"))
+        if not results:
+            return
+        best = max(results, key=lambda r: r.get("mean_return_pct", -999))
+        _ts = best.get("trailing_stop_pct")
+        _tp = best.get("take_profit_pct")
+        if _ts is not None and _ts > 0:
+            config.trailing_stop_pct = float(_ts)
+        if _tp is not None and _tp > 0:
+            config.take_profit_pct = float(_tp)
+        logger.info(
+            "Sweep results applied: trailing_stop=%.3f take_profit=%.3f (from %s)",
+            config.trailing_stop_pct, config.take_profit_pct, sweep_path,
+        )
+    except Exception as exc:
+        logger.debug("Failed to apply sweep results: %s", exc)
+
+
 def load_config() -> BotConfig:
     """Load bot configuration from environment variables."""
     load_dotenv()
@@ -722,6 +755,8 @@ def load_config() -> BotConfig:
         swarm_weight_learning_enabled=os.getenv("HOGAN_SWARM_WEIGHT_LEARNING", "false").lower() == "true",
         swarm_weight_learning_interval_bars=int(os.getenv("HOGAN_SWARM_WEIGHT_LEARNING_INTERVAL", "24")),
         swarm_weight_auto_promote=os.getenv("HOGAN_SWARM_WEIGHT_AUTO_PROMOTE", "false").lower() == "true",
+        swarm_conditional_min_agreement=float(os.getenv("HOGAN_SWARM_CONDITIONAL_MIN_AGREEMENT", "0.70")),
+        swarm_conditional_min_confidence=float(os.getenv("HOGAN_SWARM_CONDITIONAL_MIN_CONFIDENCE", "0.60")),
         rl_model_path=os.getenv("HOGAN_RL_MODEL_PATH", "models/hogan_rl_policy.zip"),
         rl_reward_type=os.getenv("HOGAN_RL_REWARD_TYPE", "risk_adjusted"),
         rl_timesteps=int(os.getenv("HOGAN_RL_TIMESTEPS", "200000")),

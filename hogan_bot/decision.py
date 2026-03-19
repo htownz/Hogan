@@ -549,6 +549,81 @@ def pullback_gate(
     return GateDecision(action=action)
 
 
+def sell_pullback_gate(
+    action: str,
+    candles: pd.DataFrame,
+    *,
+    lookback: int = 12,
+    min_range_position: float = 0.45,
+    max_drop_pct: float = 2.0,
+    regime: str | None = None,
+) -> GateDecision:
+    """Block sell/short entries that chase recent price drops.
+
+    Mirror of ``pullback_gate`` for the sell side:
+    - In ``ranging`` or ``trending_down``, shorting near the range bottom
+      is selling at support — block even without a large drop.
+    - Otherwise, require both near-bottom AND chasing drop to block.
+    """
+    if action != "sell" or len(candles) < lookback + 1:
+        return GateDecision(action=action)
+
+    close = float(candles["close"].iloc[-1])
+    highs = candles["high"].iloc[-(lookback + 1):]
+    lows = candles["low"].iloc[-(lookback + 1):]
+    local_high = float(highs.max())
+    local_low = float(lows.min())
+
+    local_range = local_high - local_low
+    if local_range <= 0:
+        return GateDecision(action=action)
+    range_pos = (close - local_low) / local_range
+
+    close_lookback = float(candles["close"].iloc[-(lookback + 1)])
+    drop_pct = (close_lookback - close) / max(close_lookback, 1e-9) * 100
+
+    _strict_regimes = ("ranging", "trending_down")
+    _strict_thresh = 0.60 if regime in _strict_regimes else min_range_position
+    near_bottom = range_pos < _strict_thresh
+    chasing_drop = drop_pct > max_drop_pct
+
+    if regime in _strict_regimes and near_bottom:
+        return GateDecision(
+            action="hold",
+            blocked_by=f"sell_pullback_gate_{regime}_support",
+            detail={
+                "range_position": round(range_pos, 3),
+                "threshold": _strict_thresh,
+                "regime": regime,
+            },
+        )
+
+    if near_bottom and chasing_drop:
+        return GateDecision(
+            action="hold",
+            blocked_by="sell_pullback_gate_chasing",
+            detail={
+                "range_position": round(range_pos, 3),
+                "min_range_position": min_range_position,
+                "drop_pct": round(drop_pct, 2),
+                "max_drop_pct": max_drop_pct,
+            },
+        )
+
+    if near_bottom:
+        return GateDecision(
+            action=action,
+            size_scale=0.5,
+            detail={
+                "range_position": round(range_pos, 3),
+                "drop_pct": round(drop_pct, 2),
+                "note": "near bottom but no excessive drop; half-size",
+            },
+        )
+
+    return GateDecision(action=action)
+
+
 def ml_confidence(up_prob: float) -> float:
     """Return a position-size scaling factor in [0, 1] based on how far the
     predicted probability is from the indifferent 0.5 mark.
@@ -855,3 +930,50 @@ class AdaptiveConfidence:
             "recency_factor": round(self._recency_accuracy_factor(), 3),
             "bin_accuracy": bin_accuracy,
         }
+
+
+# ---------------------------------------------------------------------------
+# Walk-forward failure response
+# ---------------------------------------------------------------------------
+
+def wf_failure_scale(
+    report_path: str = "diagnostics/walk_forward_report.json",
+    *,
+    min_scale: float = 0.50,
+    max_age_hours: float = 168.0,
+) -> float:
+    """Read the latest walk-forward report and return a sizing penalty.
+
+    - PASS gate → 1.0 (no penalty)
+    - FAIL gate → linear penalty based on how many windows failed, floored
+      at *min_scale*
+    - Missing or stale report → 1.0 (no penalty, cannot punish missing data)
+
+    Designed to be called once at startup or periodically (e.g. every 24h).
+    """
+    from pathlib import Path
+    rpt = Path(report_path)
+    if not rpt.exists():
+        return 1.0
+    try:
+        import os
+        age_hours = (time.time() - os.path.getmtime(rpt)) / 3600.0
+        if age_hours > max_age_hours:
+            return 1.0
+        data = json.loads(rpt.read_text(encoding="utf-8"))
+        summary = data.get("summary", {})
+        gate = summary.get("passes_gate", True)
+        if gate:
+            return 1.0
+        n_windows = summary.get("n_windows", 1) or 1
+        n_positive = summary.get("n_positive", 0)
+        failure_frac = 1.0 - (n_positive / n_windows)
+        scale = max(min_scale, 1.0 - failure_frac * 0.5)
+        logger.info(
+            "WF failure response: %d/%d windows positive → scale=%.2f",
+            n_positive, n_windows, scale,
+        )
+        return scale
+    except Exception as exc:
+        logger.debug("wf_failure_scale error: %s", exc)
+        return 1.0
