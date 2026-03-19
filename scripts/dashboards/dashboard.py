@@ -79,6 +79,24 @@ def _load_equity(db: str, limit: int = 5000) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=_CACHE_TTL)
+def _latest_prices(db: str) -> dict[str, float]:
+    """Fetch the most recent close price per symbol from the candles table."""
+    try:
+        conn = sqlite3.connect(db)
+        rows = conn.execute(
+            "SELECT symbol, close FROM candles "
+            "WHERE (symbol, ts_ms) IN ("
+            "  SELECT symbol, MAX(ts_ms) FROM candles "
+            "  WHERE timeframe = '1h' GROUP BY symbol"
+            ")"
+        ).fetchall()
+        conn.close()
+        return {sym: price for sym, price in rows}
+    except Exception:
+        return {}
+
+
+@st.cache_data(ttl=_CACHE_TTL)
 def _load_paper_trades(db: str) -> pd.DataFrame:
     try:
         conn = sqlite3.connect(db)
@@ -286,8 +304,8 @@ def _load_promotion_stats(db: str) -> dict:
         stats["veto_events"] = row[0] if row else 0
 
         row = conn.execute(
-            "SELECT COUNT(DISTINCT json_extract(decision_json, '$.regime')) "
-            "FROM swarm_decisions WHERE mode = 'shadow'"
+            "SELECT COUNT(DISTINCT regime) "
+            "FROM swarm_decisions WHERE mode = 'shadow' AND regime IS NOT NULL"
         ).fetchone()
         stats["distinct_regimes"] = row[0] if row else 0
 
@@ -564,6 +582,19 @@ with tab_live:
 
     max_dd = equity["drawdown"].max() * 100 if not equity.empty and "drawdown" in equity.columns else 0.0
 
+    # Compute unrealized P&L for open positions
+    prices = _latest_prices(DB_PATH)
+    unrealized_total = 0.0
+    if not open_trades.empty:
+        def _calc_unreal(row):
+            cur = prices.get(row["symbol"])
+            if cur is None or row["qty"] == 0:
+                return 0.0
+            if row["side"] in ("long", "buy"):
+                return (cur - row["entry_price"]) * row["qty"]
+            return (row["entry_price"] - cur) * row["qty"]
+        unrealized_total = open_trades.apply(_calc_unreal, axis=1).sum()
+
     # ── Bruno the Bull mascot + KPIs side-by-side ────────────────────────────
     bruno_col, kpi_col = st.columns([1, 4])
     with bruno_col:
@@ -572,14 +603,16 @@ with tab_live:
 
     with kpi_col:
         k1, k2, k3 = st.columns(3)
-        k1.metric("Equity", f"${cur_equity:,.2f}", delta=f"${total_pnl:+,.2f}")
-        k2.metric("Total P&L", f"${total_pnl:+,.2f}", delta=f"{total_pnl_pct:+.2f}%")
+        effective_equity = cur_equity + unrealized_total
+        k1.metric("Equity (incl. unrealized)", f"${effective_equity:,.2f}", delta=f"${total_pnl + unrealized_total:+,.2f}")
+        k2.metric("Realized P&L", f"${total_pnl:+,.2f}", delta=f"{total_pnl_pct:+.2f}%")
         k3.metric("Win Rate", f"{win_rate:.1f}%", delta=f"{len(closed)} closed trades")
 
-        k4, k5, k6 = st.columns(3)
+        k4, k5, k6, k7 = st.columns(4)
         k4.metric("Avg Win / Loss", f"${avg_win:.2f} / ${avg_loss:.2f}")
         k5.metric("Max Drawdown", f"{max_dd:.2f}%")
         k6.metric("Open Positions", len(open_trades))
+        k7.metric("Unrealized P&L", f"${unrealized_total:+,.2f}")
 
     st.divider()
 
@@ -623,15 +656,28 @@ with tab_live:
 
     st.divider()
 
-    # ── Open positions ────────────────────────────────────────────────────────
+    # ── Open positions with unrealized P&L ────────────────────────────────────
     st.subheader(f"Open Positions ({len(open_trades)})")
     if not open_trades.empty:
         disp = open_trades[[
             "symbol", "side", "entry_price", "qty", "ml_up_prob", "strategy_conf", "opened"
         ]].copy()
         disp["notional_usd"] = (disp["qty"] * disp["entry_price"]).round(2)
+        disp["current_price"] = disp["symbol"].map(prices)
+        disp["unrealized_pnl"] = open_trades.apply(_calc_unreal, axis=1).round(2)
         disp["opened"] = disp["opened"].dt.strftime("%m-%d %H:%M")
-        st.dataframe(disp, width='stretch', hide_index=True)
+        cols_order = [
+            "symbol", "side", "entry_price", "current_price", "qty",
+            "notional_usd", "unrealized_pnl", "ml_up_prob", "strategy_conf", "opened"
+        ]
+        st.dataframe(
+            disp[cols_order].style.map(
+                lambda v: "color: #2ecc71" if isinstance(v, (int, float)) and v > 0
+                else ("color: #e74c3c" if isinstance(v, (int, float)) and v < 0 else ""),
+                subset=["unrealized_pnl"],
+            ),
+            width='stretch', hide_index=True,
+        )
     else:
         st.info("No open positions right now.")
 

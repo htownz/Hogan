@@ -99,8 +99,8 @@ def _collect_evidence(
     # Distinct regimes
     try:
         row = conn.execute(
-            f"SELECT COUNT(DISTINCT json_extract(decision_json, '$.regime')) "
-            f"FROM swarm_decisions WHERE mode='shadow' {sym_filter}",
+            f"SELECT COUNT(DISTINCT regime) "
+            f"FROM swarm_decisions WHERE mode='shadow' AND regime IS NOT NULL {sym_filter}",
             sym_params,
         ).fetchone()
         ev["distinct_regimes"] = row[0] if row else 0
