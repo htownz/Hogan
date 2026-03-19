@@ -1942,7 +1942,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         pass
                     else:
                         _consecutive_exit_signals = 0
-                        sell_qty = min(qty, size)
+                        sell_qty = qty if size <= 0 else min(qty, size)
                         avg_entry = pos.avg_entry
                         _mae = getattr(pos, "max_adverse_pct", 0.0)
                         _mfe = getattr(pos, "max_favorable_pct", 0.0)

@@ -279,10 +279,13 @@ class SentimentAgent:
         all_keys = ["fear_greed", "news_sentiment", "social_vol", "funding"]
         weights = {"fear_greed": 0.35, "news_sentiment": 0.30,
                    "social_vol": 0.20, "funding": 0.15}
-        composite = sum(
-            scores.get(k, 0.5 if k == "fear_greed" else 0.0) * w
-            for k, w in weights.items()
-        )
+
+        available_weights = {k: w for k, w in weights.items() if k in scores}
+        total_w = sum(available_weights.values())
+        if total_w > 0:
+            composite = sum(scores[k] * w / total_w for k, w in available_weights.items())
+        else:
+            composite = 0.5
 
         coverage = sum(1 for k in all_keys if k in scores) / len(all_keys)
 

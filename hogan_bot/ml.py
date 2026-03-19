@@ -806,9 +806,11 @@ def select_features(
 ) -> list[str]:
     """Return the top features ranked by tree-based importance.
 
-    Uses a quick Random Forest fit on the full dataset to rank features,
-    then keeps up to *max_features* that exceed *min_importance*.  Also
-    drops features with >50% NaN rate or near-zero variance.
+    Uses a quick Random Forest fit to rank features, then keeps up to
+    *max_features* that exceed *min_importance*.  Also drops features
+    with >50% NaN rate or near-zero variance.
+
+    IMPORTANT: Callers must pass only training data to avoid data leakage.
     """
     try:
         from sklearn.ensemble import RandomForestClassifier
@@ -880,18 +882,19 @@ def train_logistic_regression(
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
-    from hogan_bot.champion import is_champion_mode as _is_champ
-    if prune_features and len(x) >= 500 and not _is_champ():
-        selected = select_features(x, y, max_features=max_features)
-        x = x[selected]
-        feature_columns = selected
-
     x, y, sample_weight = _blend_paper_labels(x, y, paper_labels, paper_labels_weight)
 
     split = int(len(x) * 0.8)
     x_train, x_test = x.iloc[:split], x.iloc[split:]
     y_train, y_test = y.iloc[:split], y.iloc[split:]
     w_train = sample_weight[:split] if sample_weight is not None else None
+
+    from hogan_bot.champion import is_champion_mode as _is_champ
+    if prune_features and len(x_train) >= 500 and not _is_champ():
+        selected = select_features(x_train, y_train, max_features=max_features)
+        x_train = x_train[selected]
+        x_test = x_test[selected]
+        feature_columns = selected
 
     scaler = StandardScaler()
     x_train_sc = scaler.fit_transform(x_train)
@@ -970,18 +973,19 @@ def train_random_forest(
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
-    from hogan_bot.champion import is_champion_mode as _is_champ
-    if prune_features and len(x) >= 500 and not _is_champ():
-        selected = select_features(x, y, max_features=max_features)
-        x = x[selected]
-        feature_columns = selected
-
     x, y, sample_weight = _blend_paper_labels(x, y, paper_labels, paper_labels_weight)
 
     split = int(len(x) * 0.8)
     x_train, x_test = x.iloc[:split], x.iloc[split:]
     y_train, y_test = y.iloc[:split], y.iloc[split:]
     w_train = sample_weight[:split] if sample_weight is not None else None
+
+    from hogan_bot.champion import is_champion_mode as _is_champ
+    if prune_features and len(x_train) >= 500 and not _is_champ():
+        selected = select_features(x_train, y_train, max_features=max_features)
+        x_train = x_train[selected]
+        x_test = x_test[selected]
+        feature_columns = selected
 
     model = RandomForestClassifier(
         n_estimators=200,
@@ -1058,18 +1062,19 @@ def train_xgboost(
     if x is None or y is None or len(x) < 200:
         raise RuntimeError("Not enough training rows. Increase OHLCV history.")
 
-    from hogan_bot.champion import is_champion_mode as _is_champ
-    if prune_features and len(x) >= 500 and not _is_champ():
-        selected = select_features(x, y, max_features=max_features)
-        x = x[selected]
-        feature_columns = selected
-
     x, y, sample_weight = _blend_paper_labels(x, y, paper_labels, paper_labels_weight)
 
     split = int(len(x) * 0.8)
     x_train, x_test = x.iloc[:split], x.iloc[split:]
     y_train, y_test = y.iloc[:split], y.iloc[split:]
     w_train = sample_weight[:split] if sample_weight is not None else None
+
+    from hogan_bot.champion import is_champion_mode as _is_champ
+    if prune_features and len(x_train) >= 500 and not _is_champ():
+        selected = select_features(x_train, y_train, max_features=max_features)
+        x_train = x_train[selected]
+        x_test = x_test[selected]
+        feature_columns = selected
 
     model = XGBClassifier(
         n_estimators=300,

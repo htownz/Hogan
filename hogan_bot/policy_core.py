@@ -274,7 +274,10 @@ def decide(
     )
     eff_long_size_scale *= _transition_scale
     eff_short_size_scale *= _transition_scale
-    eff_position_scale *= _transition_scale
+    # NOTE: Do NOT apply _transition_scale to eff_position_scale here.
+    # eff_position_scale flows into composite_scale → size, and then size is
+    # multiplied by eff_long/short_size_scale in the execution layer.  Applying
+    # transition dampening to both would square the effect (0.40 → 0.16).
 
     # ------------------------------------------------------------------
     # 2. AgentPipeline → signal
