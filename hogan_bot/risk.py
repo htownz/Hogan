@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def calculate_position_size(
     equity_usd: float,
@@ -55,7 +59,14 @@ class DrawdownGuard:
             self.peak_equity = current_equity
 
         if self.peak_equity <= 0:
+            logger.error("DrawdownGuard: peak_equity=%.2f is non-positive — halting trading", self.peak_equity)
             return False
 
         drawdown = (self.peak_equity - current_equity) / self.peak_equity
-        return drawdown <= self.max_drawdown
+        if drawdown > self.max_drawdown:
+            logger.warning(
+                "DrawdownGuard BREACH: drawdown=%.2f%% exceeds max=%.2f%% (equity=%.2f peak=%.2f)",
+                drawdown * 100, self.max_drawdown * 100, current_equity, self.peak_equity,
+            )
+            return False
+        return True

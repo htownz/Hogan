@@ -32,10 +32,13 @@ Usage
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +228,7 @@ class RegimeTransitionTracker:
 # Public API
 # ---------------------------------------------------------------------------
 
-_REGIME_HISTORY: list[str] = []
+_REGIME_HISTORY: dict[str, list[str]] = {}
 _REGIME_HYSTERESIS_BARS: int = 3
 
 
@@ -246,6 +249,7 @@ def detect_regime(
     btc_dominance: float | None = None,
     fear_greed: float | None = None,
     hysteresis_bars: int = _REGIME_HYSTERESIS_BARS,
+    symbol: str = "_default",
 ) -> RegimeState:
     """Classify the current market regime from OHLCV candles.
 
@@ -332,13 +336,15 @@ def detect_regime(
             confidence = min(1.0, confidence + 0.05)
 
     # Hysteresis: require N consecutive bars of the new regime before switching
-    _REGIME_HISTORY.append(regime)
-    if len(_REGIME_HISTORY) > hysteresis_bars * 3:
-        del _REGIME_HISTORY[:-hysteresis_bars * 3]
+    # Per-symbol history prevents multi-symbol bots from mixing regimes
+    _sym_hist = _REGIME_HISTORY.setdefault(symbol, [])
+    _sym_hist.append(regime)
+    if len(_sym_hist) > hysteresis_bars * 3:
+        del _sym_hist[:-hysteresis_bars * 3]
 
-    if len(_REGIME_HISTORY) >= hysteresis_bars + 1:
-        prev_regime = _REGIME_HISTORY[-(hysteresis_bars + 1)]
-        recent = _REGIME_HISTORY[-hysteresis_bars:]
+    if len(_sym_hist) >= hysteresis_bars + 1:
+        prev_regime = _sym_hist[-(hysteresis_bars + 1)]
+        recent = _sym_hist[-hysteresis_bars:]
         if regime != prev_regime and not all(r == regime for r in recent):
             regime = prev_regime
             confidence *= 0.8
@@ -502,6 +508,6 @@ def load_regime_signals(conn) -> dict[str, float | None]:
         row = cur.fetchone()
         if row:
             signals["fear_greed"] = float(row[0])
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.warning("load_regime_signals failed (BTC dominance/Fear&Greed unavailable): %s", exc)
     return signals

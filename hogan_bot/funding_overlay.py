@@ -50,7 +50,8 @@ class FundingOverlay:
                 conn,
                 params=(symbol,),
             )
-        except Exception:
+        except Exception as exc:
+            logger.error("FundingOverlay: DB query failed (not just empty data): %s", exc)
             df = pd.DataFrame()
 
         funding_dict: dict = {}
@@ -61,7 +62,7 @@ class FundingOverlay:
                 funding_dict[int(hk)] = float(val)
             logger.info("FundingOverlay: loaded %d hourly records", len(funding_dict))
         else:
-            logger.warning("FundingOverlay: no funding rate data found")
+            logger.warning("FundingOverlay: no funding rate data in derivatives_metrics table")
 
         return cls(_funding=funding_dict)
 

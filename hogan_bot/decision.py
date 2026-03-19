@@ -308,8 +308,8 @@ def get_regime_quality_adjustments(regime: str | None) -> dict[str, float]:
         rc = DEFAULT_REGIME_CONFIGS.get(regime)
         if rc is not None:
             return {"final_mult": rc.quality_final_mult, "tech_mult": rc.quality_tech_mult}
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Regime quality config lookup failed for %s (using hardcoded fallback): %s", regime, exc)
     return _REGIME_QUALITY_ADJUSTMENTS.get(regime, {})
 
 

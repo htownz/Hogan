@@ -13,6 +13,15 @@ from hogan_bot.storage import record_order, record_fill, upsert_position
 logger = logging.getLogger(__name__)
 
 
+def _safe_upsert(conn, symbol: str, qty: float, avg_entry: float, ts_ms: int) -> None:
+    """Persist position state to DB; log on failure but don't crash the trade."""
+    try:
+        upsert_position(conn, symbol, qty, avg_entry, ts_ms)
+    except Exception as exc:
+        logger.error("upsert_position failed for %s (qty=%.6f): %s — in-memory and DB may diverge",
+                      symbol, qty, exc)
+
+
 @dataclass
 class ExecResult:
     ok: bool
@@ -118,7 +127,7 @@ class PaperExecution(ExecutionEngine):
             ts_ms = int(time.time() * 1000)
             pos = self.portfolio.positions.get(symbol)
             if pos is not None:
-                upsert_position(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
+                _safe_upsert(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
         return ExecResult(ok=ok)
 
     def close_long(self, symbol: str, price: float, qty: float,
@@ -128,9 +137,9 @@ class PaperExecution(ExecutionEngine):
             ts_ms = int(time.time() * 1000)
             pos = self.portfolio.positions.get(symbol)
             if pos is None:
-                upsert_position(self.conn, symbol, 0.0, 0.0, ts_ms)
+                _safe_upsert(self.conn, symbol, 0.0, 0.0, ts_ms)
             else:
-                upsert_position(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
+                _safe_upsert(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
         return ExecResult(ok=ok)
 
     def open_short(self, symbol: str, price: float, qty: float,
@@ -147,7 +156,7 @@ class PaperExecution(ExecutionEngine):
             ts_ms = int(time.time() * 1000)
             pos = self.portfolio.short_positions.get(symbol)
             if pos is not None:
-                upsert_position(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
+                _safe_upsert(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
         return ExecResult(ok=ok)
 
     def close_short(self, symbol: str, price: float, qty: float,
@@ -157,9 +166,9 @@ class PaperExecution(ExecutionEngine):
             ts_ms = int(time.time() * 1000)
             pos = self.portfolio.short_positions.get(symbol)
             if pos is None:
-                upsert_position(self.conn, symbol, 0.0, 0.0, ts_ms)
+                _safe_upsert(self.conn, symbol, 0.0, 0.0, ts_ms)
             else:
-                upsert_position(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
+                _safe_upsert(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
         return ExecResult(ok=ok)
 
     def emergency_flatten(self, symbol: str, price: float) -> ExecResult:
@@ -188,6 +197,8 @@ class LiveExecution(ExecutionEngine):
         self.conn = conn
         self.exchange_id = exchange_id
         self.portfolio = portfolio
+        if portfolio is None:
+            logger.warning("LiveExecution created without portfolio — emergency_flatten will attempt exchange-level close")
 
     def open_long(self, symbol: str, price: float, qty: float,
                   trailing_stop_pct: float = 0.0,
@@ -231,6 +242,17 @@ class LiveExecution(ExecutionEngine):
             spos = self.portfolio.short_positions.get(symbol)
             if spos and spos.qty > 0:
                 results.append(self.close_short(symbol, price, spos.qty, reason="emergency"))
+        else:
+            logger.error(
+                "EMERGENCY_FLATTEN %s — no portfolio reference; attempting market sell at exchange level",
+                symbol,
+            )
+            try:
+                order = self.client.create_market_order(symbol=symbol, side="sell", amount=0)
+                logger.warning("EMERGENCY_FLATTEN %s — exchange-level sell attempted (manual verification required)", symbol)
+            except Exception as exc:
+                logger.error("EMERGENCY_FLATTEN %s — exchange fallback failed: %s", symbol, exc)
+            return ExecResult(ok=False, error="no_portfolio_reference")
         ok = all(r.ok for r in results) if results else False
         return ExecResult(ok=ok)
 
@@ -311,7 +333,7 @@ class SmartExecution(ExecutionEngine):
             if ob.get("bids"):
                 limit_price = ob["bids"][0][0]
         except Exception as exc:
-            logger.debug("Order book fetch failed, using signal price: %s", exc)
+            logger.warning("Order book fetch failed for %s, using signal price: %s", symbol, exc)
 
         for attempt in range(1 + cfg.max_reprices):
             try:
@@ -404,6 +426,12 @@ class SmartExecution(ExecutionEngine):
             spos = self.portfolio.short_positions.get(symbol)
             if spos and spos.qty > 0:
                 results.append(self.close_short(symbol, price, spos.qty, reason="emergency"))
+        else:
+            logger.error(
+                "SMART_EMERGENCY_FLATTEN %s — no portfolio reference; cannot determine position size",
+                symbol,
+            )
+            return ExecResult(ok=False, error="no_portfolio_reference")
         ok = all(r.ok for r in results) if results else False
         return ExecResult(ok=ok)
 
@@ -498,7 +526,7 @@ class RealisticPaperExecution(ExecutionEngine):
             ts_ms = int(time.time() * 1000)
             pos = self.portfolio.positions.get(symbol)
             if pos:
-                upsert_position(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
+                _safe_upsert(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
 
         if ok:
             logger.debug(
@@ -518,9 +546,9 @@ class RealisticPaperExecution(ExecutionEngine):
             ts_ms = int(time.time() * 1000)
             pos = self.portfolio.positions.get(symbol)
             if pos is None:
-                upsert_position(self.conn, symbol, 0.0, 0.0, ts_ms)
+                _safe_upsert(self.conn, symbol, 0.0, 0.0, ts_ms)
             else:
-                upsert_position(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
+                _safe_upsert(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
 
         if ok:
             logger.debug(
@@ -547,7 +575,7 @@ class RealisticPaperExecution(ExecutionEngine):
             ts_ms = int(time.time() * 1000)
             pos = self.portfolio.short_positions.get(symbol)
             if pos:
-                upsert_position(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
+                _safe_upsert(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
 
         if ok:
             logger.debug(
@@ -567,9 +595,9 @@ class RealisticPaperExecution(ExecutionEngine):
             ts_ms = int(time.time() * 1000)
             pos = self.portfolio.short_positions.get(symbol)
             if pos is None:
-                upsert_position(self.conn, symbol, 0.0, 0.0, ts_ms)
+                _safe_upsert(self.conn, symbol, 0.0, 0.0, ts_ms)
             else:
-                upsert_position(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
+                _safe_upsert(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
 
         if ok:
             logger.debug(
