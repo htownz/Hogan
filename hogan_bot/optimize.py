@@ -664,7 +664,10 @@ def main(argv: list[str] | None = None) -> None:
     if args.from_db:
         from hogan_bot.storage import get_connection, load_candles
         conn = get_connection(args.db)
-        candles = load_candles(conn, args.symbol, args.timeframe, limit=args.limit)
+        try:
+            candles = load_candles(conn, args.symbol, args.timeframe, limit=args.limit)
+        finally:
+            conn.close()
         if candles is None or candles.empty:
             logger.error("No candles found in DB for %s", args.symbol)
             sys.exit(1)

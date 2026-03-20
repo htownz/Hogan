@@ -14,14 +14,20 @@ df = pd.read_sql_query(
 )
 conn.close()
 
+if df.empty:
+    print("No candles found in database.")
+    conn.close()
+    exit(0)
+
 df["timestamp"] = pd.to_datetime(df["ts_ms"], unit="ms", utc=True)
 print(f"Total candles: {len(df)}")
 print(f"Date range: {df['timestamp'].iloc[0]} to {df['timestamp'].iloc[-1]}")
 
 stats = count_sitout_bars(sitout, df)
-print(f"\nSitout stats:")
+print("\nSitout stats:")
+total_bars = stats.get("total_bars", 0) or 1
 for k, v in stats.items():
-    pct = v / stats["total_bars"] * 100 if stats["total_bars"] else 0
+    pct = v / total_bars * 100
     print(f"  {k:<20} {v:>6}  ({pct:.1f}%)")
 
 print("\nPer-window breakdown:")
@@ -39,7 +45,7 @@ for name, start, end in windows:
         print(f"  {name}: no data")
         continue
     ws = count_sitout_bars(sitout, window_df)
-    total = ws["total_bars"]
+    total = ws.get("total_bars", 0) or 1
     print(f"  {name} ({start} to {end}): "
           f"sitout={ws['sitout_bars']} ({ws['sitout_bars']/total*100:.1f}%)  "
           f"scaled={ws['scaled_bars']} ({ws['scaled_bars']/total*100:.1f}%)  "

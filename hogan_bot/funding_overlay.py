@@ -109,11 +109,14 @@ class FundingOverlay:
             penalty = self.extreme_penalty
             boost = self.extreme_boost
         else:
-            t = (abs_rate - self.high_funding_threshold) / (
-                self.extreme_funding_threshold - self.high_funding_threshold
-            )
-            penalty = self.crowd_penalty - t * (self.crowd_penalty - self.extreme_penalty)
-            boost = self.contrarian_boost + t * (self.extreme_boost - self.contrarian_boost)
+            denom = self.extreme_funding_threshold - self.high_funding_threshold
+            if denom <= 0:
+                penalty = self.extreme_penalty
+                boost = self.extreme_boost
+            else:
+                t = (abs_rate - self.high_funding_threshold) / denom
+                penalty = self.crowd_penalty - t * (self.crowd_penalty - self.extreme_penalty)
+                boost = self.contrarian_boost + t * (self.extreme_boost - self.contrarian_boost)
 
         # Positive funding = longs crowded
         if rate > 0:

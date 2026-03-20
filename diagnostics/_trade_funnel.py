@@ -8,6 +8,13 @@ DB = "data/hogan.db"
 
 def main():
     conn = sqlite3.connect(DB)
+    try:
+        _run(conn)
+    finally:
+        conn.close()
+
+
+def _run(conn):
     conn.row_factory = sqlite3.Row
     # 1. Paper trades
     print("=" * 60)
@@ -190,8 +197,6 @@ def main():
     for k in keys:
         v = os.getenv(k, "(not set)")
         print(f"  {k:40s} = {v}")
-
-    conn.close()
 
 
 if __name__ == "__main__":

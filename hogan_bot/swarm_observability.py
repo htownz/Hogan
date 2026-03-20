@@ -191,9 +191,14 @@ def load_veto_ledger(
         conn, params=params,
     )
     if not df.empty:
-        df["reasons"] = df["block_reasons_json"].apply(
-            lambda x: ", ".join(json.loads(x)) if x else ""
-        )
+        def _safe_parse_reasons(x: str | None) -> str:
+            if not x:
+                return ""
+            try:
+                return ", ".join(json.loads(x))
+            except (json.JSONDecodeError, TypeError):
+                return str(x)
+        df["reasons"] = df["block_reasons_json"].apply(_safe_parse_reasons)
     return df
 
 

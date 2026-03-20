@@ -169,59 +169,58 @@ def fetch_all_blockchain(
     results: dict[str, int] = {}
     today = date.today().isoformat()
 
-    # ── Blockchain.com chart series ──────────────────────────────────────────
-    chart_series = [
-        ("hash-rate",         "btc_hashrate_eh",  1.0),      # TH/s → EH/s (÷1e6)
-        ("difficulty",        "btc_difficulty",   1.0),
-        ("n-transactions",    "btc_tx_count",     1.0),
-        ("n-unique-addresses","btc_active_addr",  1.0),
-    ]
+    try:
+        # ── Blockchain.com chart series ──────────────────────────────────────
+        chart_series = [
+            ("hash-rate",         "btc_hashrate_eh",  1.0),
+            ("difficulty",        "btc_difficulty",   1.0),
+            ("n-transactions",    "btc_tx_count",     1.0),
+            ("n-unique-addresses","btc_active_addr",  1.0),
+        ]
 
-    for chart_name, metric_name, _divisor in chart_series:
-        logger.info("blockchain.com: fetching %s ...", chart_name)
-        series = _fetch_blockchain_chart(chart_name, days=days)
-        if not series:
-            results[metric_name] = 0
-            continue
+        for chart_name, metric_name, _divisor in chart_series:
+            logger.info("blockchain.com: fetching %s ...", chart_name)
+            series = _fetch_blockchain_chart(chart_name, days=days)
+            if not series:
+                results[metric_name] = 0
+                continue
 
-        records: list[tuple[str, str, float]] = []
-        for d, v in series:
-            # Convert hash-rate from TH/s to EH/s for normalization
-            if metric_name == "btc_hashrate_eh":
-                v = v / 1_000_000.0
-            records.append((d, metric_name, v))
+            records: list[tuple[str, str, float]] = []
+            for d, v in series:
+                if metric_name == "btc_hashrate_eh":
+                    v = v / 1_000_000.0
+                records.append((d, metric_name, v))
 
-        if records:
-            written = upsert_onchain(conn, symbol, records)
-            results[metric_name] = written
-            logger.info("  wrote %d rows", written)
-        else:
-            results[metric_name] = 0
-        time.sleep(0.3)
+            if records:
+                written = upsert_onchain(conn, symbol, records)
+                results[metric_name] = written
+                logger.info("  wrote %d rows", written)
+            else:
+                results[metric_name] = 0
+            time.sleep(0.3)
 
-    # ── Mempool.space real-time snapshot (stored as today's value) ───────────
-    logger.info("mempool.space: fetching mempool snapshot ...")
-    snapshot = _fetch_mempool_snapshot()
+        # ── Mempool.space real-time snapshot (stored as today's value) ───────
+        logger.info("mempool.space: fetching mempool snapshot ...")
+        snapshot = _fetch_mempool_snapshot()
 
-    mempool_records: list[tuple[str, str, float]] = []
-    if "mempool_mb" in snapshot:
-        mempool_records.append((today, "btc_mempool_mb", snapshot["mempool_mb"]))
-        logger.info("  mempool size: %.2f MB", snapshot["mempool_mb"])
-    if "fee_fastest_sat" in snapshot:
-        # Convert sat/vbyte → estimated USD fee for a 250-vbyte tx
-        btc_price = _fetch_btc_price_for_fee_usd()
-        if btc_price > 0:
-            fee_usd = snapshot["fee_fastest_sat"] * 250 * btc_price / 1e8
-            mempool_records.append((today, "btc_avg_fee_usd", round(fee_usd, 4)))
-            logger.info("  avg fee (fast): $%.2f USD", fee_usd)
-        # Also store raw sat/vbyte
-        mempool_records.append((today, "btc_fee_sat_vbyte", snapshot["fee_fastest_sat"]))
+        mempool_records: list[tuple[str, str, float]] = []
+        if "mempool_mb" in snapshot:
+            mempool_records.append((today, "btc_mempool_mb", snapshot["mempool_mb"]))
+            logger.info("  mempool size: %.2f MB", snapshot["mempool_mb"])
+        if "fee_fastest_sat" in snapshot:
+            btc_price = _fetch_btc_price_for_fee_usd()
+            if btc_price > 0:
+                fee_usd = snapshot["fee_fastest_sat"] * 250 * btc_price / 1e8
+                mempool_records.append((today, "btc_avg_fee_usd", round(fee_usd, 4)))
+                logger.info("  avg fee (fast): $%.2f USD", fee_usd)
+            mempool_records.append((today, "btc_fee_sat_vbyte", snapshot["fee_fastest_sat"]))
 
-    if mempool_records:
-        written = upsert_onchain(conn, symbol, mempool_records)
-        results["btc_mempool"] = written
+        if mempool_records:
+            written = upsert_onchain(conn, symbol, mempool_records)
+            results["btc_mempool"] = written
+    finally:
+        conn.close()
 
-    conn.close()
     return results
 
 

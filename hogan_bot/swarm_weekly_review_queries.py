@@ -503,7 +503,7 @@ def fetch_weekly_replay_candidates(
         if categories_found.get(cat, 0) >= 3:
             continue
 
-        reason = _build_replay_reason(cat, vetoed, action, fwd_bps, label)
+        reason = _build_replay_reason(cat, vetoed, action, fwd_bps, label, conf)
         candidates.append({
             "decision_id": dec_id, "symbol": sym or "", "ts_iso": ts_iso,
             "category": cat, "reason": reason, "priority": priority,
@@ -530,12 +530,12 @@ def _classify_replay_candidate(vetoed, action, conf, fwd_bps, label) -> str:
     return "general"
 
 
-def _build_replay_reason(cat, vetoed, action, fwd_bps, label) -> str:
+def _build_replay_reason(cat, vetoed, action, fwd_bps, label, conf=None) -> str:
     parts = {
         "best_opportunity": f"Strong forward move {fwd_bps:+.0f}bps on {action}" if fwd_bps else f"{action} with outcome",
         "worst_veto": f"Vetoed but market moved {fwd_bps:+.0f}bps" if fwd_bps else "Vetoed with significant move",
         "dominant_agent_case": "Vetoed decision — check dominant agent contribution",
-        "high_confidence_hold": f"Hold at confidence {conf}" if (conf := None) is None else "High-confidence hold",
+        "high_confidence_hold": f"Hold at confidence {conf:.2f}" if conf is not None else "High-confidence hold",
         "strong_divergence": f"Divergent outcome: {label}",
         "general": f"{action} decision",
     }

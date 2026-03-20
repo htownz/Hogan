@@ -141,6 +141,8 @@ def auto_quarantine_check(
 
 
 def get_mode_history(agent_id: str, conn: sqlite3.Connection, limit: int = 20) -> list[dict]:
+    if not _table_exists(conn):
+        return []
     rows = conn.execute(
         "SELECT ts_ms, mode, reason, operator FROM swarm_agent_modes WHERE agent_id = ? ORDER BY ts_ms DESC LIMIT ?",
         (agent_id, limit),

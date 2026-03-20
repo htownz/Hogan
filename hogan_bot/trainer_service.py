@@ -49,6 +49,10 @@ def _eval_auc(artifact, candles: pd.DataFrame) -> float:
 def train_once(from_db: bool = True) -> None:
     cfg = load_config()
     conn = get_connection(cfg.db_path)
+    try:
+        df = load_candles(conn, cfg.symbols[0], cfg.timeframe, limit=cfg.retrain_window_bars)
+    finally:
+        conn.close()
 
     email_cfg = None
     if cfg.email_smtp_host and cfg.email_to and cfg.email_from:
@@ -67,7 +71,6 @@ def train_once(from_db: bool = True) -> None:
     )
 
     symbol = cfg.symbols[0]
-    df = load_candles(conn, symbol, cfg.timeframe, limit=cfg.retrain_window_bars)
     if df.empty or len(df) < 2000:
         logger.warning("Not enough candles in DB to retrain (%s %s)", symbol, cfg.timeframe)
         return

@@ -87,6 +87,13 @@ def evaluate_stall_state(
 def persist_stall_alerts(
     alerts: list[StallAlert], conn: sqlite3.Connection,
 ) -> None:
+    if not alerts:
+        return
+    r = conn.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='swarm_stall_alerts'",
+    ).fetchone()
+    if not (r and r[0]):
+        return
     ts_ms = int(time.time() * 1000)
     rows = [
         (ts_ms, a.code, a.severity, a.metric_name, float(a.actual), float(a.threshold), a.notes)
