@@ -573,6 +573,23 @@ async def run_event_loop(
         raise ValueError(f"Invalid configuration — {len(_cfg_errors)} error(s): {'; '.join(_cfg_errors)}")
 
     conn = get_connection(config.db_path)
+
+    # ── Startup data refresh: populate sentiment/macro/derivatives tables ──
+    _skip_fetch = os.getenv("HOGAN_SKIP_FETCH", "").strip().lower() in ("1", "true", "yes")
+    if not _skip_fetch:
+        try:
+            from hogan_bot.fetch_orchestrator import run_all_fetchers
+            _fetch_results = run_all_fetchers(
+                db_path=config.db_path,
+                symbols=config.symbols,
+                backfill=False,
+            )
+            logger.info("Startup data fetch complete: %s", {k: v for k, v in _fetch_results.items() if not str(v).startswith("SKIPPED")})
+        except Exception as exc:
+            logger.warning("Startup data fetch failed (non-fatal): %s", exc)
+    else:
+        logger.info("Startup data fetch skipped (HOGAN_SKIP_FETCH=true)")
+
     try:
         await _run_event_loop_inner(config, conn, max_events)
     finally:
@@ -685,7 +702,7 @@ async def _run_event_loop_inner(
     evaluator = SignalEvaluator(config, ml_model, conn=conn)
 
     _macro_sitout = None
-    _use_macro_sitout = os.getenv("HOGAN_MACRO_SITOUT", "").strip().lower() in ("1", "true", "yes")
+    _use_macro_sitout = os.getenv("HOGAN_MACRO_SITOUT", "true").strip().lower() in ("1", "true", "yes")
     if _use_macro_sitout:
         try:
             from hogan_bot.macro_sitout import MacroSitout
@@ -695,7 +712,7 @@ async def _run_event_loop_inner(
             logger.warning("Macro sitout init failed: %s", exc)
 
     _funding_overlay = None
-    _use_funding = os.getenv("HOGAN_USE_FUNDING_OVERLAY", "").strip().lower() in ("1", "true", "yes")
+    _use_funding = os.getenv("HOGAN_USE_FUNDING_OVERLAY", "true").strip().lower() in ("1", "true", "yes")
     if _use_funding:
         try:
             from hogan_bot.funding_overlay import FundingOverlay

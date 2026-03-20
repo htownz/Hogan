@@ -33,6 +33,11 @@ class BotConfig:
     trade_weekends: bool = False
     paper_mode: bool = True
 
+    # Paper mode gate relaxation: when True (and paper_mode=True), lower entry
+    # thresholds by 20% to generate more trades for learning.  NEVER affects
+    # live trading — the check is ``paper_mode and paper_relaxed_gates``.
+    paper_relaxed_gates: bool = True
+
     # Persistence
     db_path: str = "data/hogan.db"
 
@@ -211,7 +216,7 @@ class BotConfig:
 
     # Auto-train forecast models on startup if pkl files are missing.
     # Safe to enable: only trains once if models don't exist, then persists.
-    auto_train_forecast: bool = False
+    auto_train_forecast: bool = True
 
     # Regime ensemble: blend per-regime ML models with standard prediction.
     # Requires a trained AdvancedEnsembleArtifact (see ml_advanced.py).
@@ -253,8 +258,8 @@ class BotConfig:
     use_policy_core: bool = True
 
     # Swarm Decision Layer
-    swarm_enabled: bool = False
-    swarm_mode: str = "shadow"
+    swarm_enabled: bool = True
+    swarm_mode: str = "conditional_active"
     swarm_phase: str = "certification"
     swarm_agents: str = "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1"
     swarm_min_agreement: float = 0.60
@@ -790,8 +795,8 @@ def load_config() -> BotConfig:
         macro_equity_ma_period=int(os.getenv("HOGAN_MACRO_EQUITY_MA", "20")),
         use_rl_agent=os.getenv("HOGAN_USE_RL_AGENT", "false").lower() == "true",
         use_policy_core=os.getenv("HOGAN_USE_POLICY_CORE", "true").lower() == "true",
-        swarm_enabled=os.getenv("HOGAN_SWARM_ENABLED", "false").lower() == "true",
-        swarm_mode=os.getenv("HOGAN_SWARM_MODE", "shadow"),
+        swarm_enabled=os.getenv("HOGAN_SWARM_ENABLED", "true").lower() == "true",
+        swarm_mode=os.getenv("HOGAN_SWARM_MODE", "conditional_active"),
         swarm_phase=os.getenv("HOGAN_SWARM_PHASE", "certification"),
         swarm_agents=os.getenv("HOGAN_SWARM_AGENTS", "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1"),
         swarm_min_agreement=float(os.getenv("HOGAN_SWARM_MIN_AGREEMENT", "0.60")),

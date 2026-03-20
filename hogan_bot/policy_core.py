@@ -400,17 +400,22 @@ def decide(
         elif isinstance(_er, (int, float)):
             forecast_ret = abs(float(_er))
 
+    # Paper-mode gate relaxation: lower thresholds by 20% to generate more
+    # trades for learning.  Only active when paper_mode AND paper_relaxed_gates.
+    _paper_relax = getattr(cfg, "paper_relaxed_gates", False) and getattr(cfg, "paper_mode", True)
+
     # Edge gate
+    _edge_relax = 0.70 if _paper_relax else 1.0  # 30% wider edge gate in paper mode
     _edge_gd = edge_gate(
         action,
         atr_pct=atr_pct,
         take_profit_pct=eff_tp,
         fee_rate=cfg.fee_rate,
-        min_edge_multiple=getattr(cfg, "min_edge_multiple", 1.5),
+        min_edge_multiple=getattr(cfg, "min_edge_multiple", 1.5) * _edge_relax,
         forecast_expected_return=forecast_ret,
         estimated_spread=spread_est,
-        atr_friction_multiple=getattr(cfg, "sell_atr_friction_multiple", 0.8),
-        buy_atr_friction_multiple=getattr(cfg, "buy_atr_friction_multiple", 0.25),
+        atr_friction_multiple=getattr(cfg, "sell_atr_friction_multiple", 0.8) * _edge_relax,
+        buy_atr_friction_multiple=getattr(cfg, "buy_atr_friction_multiple", 0.25) * _edge_relax,
     )
     action = _edge_gd.action
     if _edge_gd.blocked_by:
@@ -418,6 +423,7 @@ def decide(
 
     # Quality gate
     _tech_conf = signal.tech.confidence if signal.tech else None
+    _relax_mult = 0.80 if _paper_relax else 1.0
     _quality_gd = entry_quality_gate(
         action,
         final_confidence=signal.confidence,
@@ -425,9 +431,9 @@ def decide(
         regime=regime_name,
         regime_confidence=regime_conf,
         recent_whipsaw_count=recent_whipsaw_count,
-        min_final_confidence=cfg.min_final_confidence,
-        min_tech_confidence=cfg.min_tech_confidence,
-        min_regime_confidence=cfg.min_regime_confidence,
+        min_final_confidence=cfg.min_final_confidence * _relax_mult,
+        min_tech_confidence=cfg.min_tech_confidence * _relax_mult,
+        min_regime_confidence=cfg.min_regime_confidence * _relax_mult,
         max_whipsaws=cfg.max_whipsaws,
     )
     action = _quality_gd.action
