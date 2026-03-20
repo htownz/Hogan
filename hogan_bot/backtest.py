@@ -313,7 +313,7 @@ def evaluate_regimes_by_market(result: "BacktestResult") -> dict[str, dict]:
             }
             continue
 
-        total_ret_pct = sum(rets) * 100 if rets else 0.0
+        total_ret_pct = (eq_slice[-1] / eq_slice[0] - 1) * 100 if eq_slice[0] > 0 else 0.0
         max_dd = _compute_max_drawdown(eq_slice)
         avg_ret = sum(rets) / len(rets) * 100 if rets else 0.0
 
@@ -356,6 +356,8 @@ def evaluate_market_regimes(result: "BacktestResult") -> dict[str, dict]:
     for trade in closed:
         regime = trade.get("entry_regime") or "unknown"
         regime_trades.setdefault(regime, []).append(trade)
+    for trades_list in regime_trades.values():
+        trades_list.sort(key=lambda t: t.get("entry_bar_idx", 0))
 
     fee_rate = 0.0026  # fallback
 

@@ -38,7 +38,7 @@ def run_feature_importance(
     test_ratio: float = 0.30,
     fee_rate: float = 0.0026,
     horizon_bars: int = 6,
-) -> list[FeatureScore]:
+) -> tuple[list[FeatureScore], dict]:
     """Train champion model, run permutation importance, return ranked scores."""
     from sklearn.inspection import permutation_importance
     from sklearn.linear_model import LogisticRegression

@@ -212,8 +212,12 @@ def main() -> None:
             return
         print(f"Loaded {len(candles)} candles from local DB ({args.symbol}/{timeframe})")
     else:
-        client = ExchangeClient(cfg.exchange_id, cfg.kraken_api_key, cfg.kraken_api_secret)
-        candles = client.fetch_ohlcv_df(args.symbol, timeframe=timeframe, limit=limit)
+        try:
+            client = ExchangeClient(cfg.exchange_id, cfg.kraken_api_key, cfg.kraken_api_secret)
+            candles = client.fetch_ohlcv_df(args.symbol, timeframe=timeframe, limit=limit)
+        except Exception as exc:
+            print(f"ERROR: Failed to fetch candles from exchange: {exc}")
+            return
 
     _use_ml = args.use_ml or (cfg.use_ml_filter if args.profile else False) or getattr(cfg, "use_ml_as_sizer", False)
     ml_model = load_model(cfg.ml_model_path) if _use_ml else None

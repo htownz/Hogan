@@ -16,7 +16,6 @@ conn.close()
 
 if df.empty:
     print("No candles found in database.")
-    conn.close()
     exit(0)
 
 df["timestamp"] = pd.to_datetime(df["ts_ms"], unit="ms", utc=True)

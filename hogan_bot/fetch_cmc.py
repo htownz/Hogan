@@ -88,11 +88,18 @@ def fetch_global_metrics(key: str) -> list[tuple[str, str, float]]:
 
     Returns (date_str, metric_name, value) triples for ``onchain_metrics``.
     """
-    data = _get("/v1/global-metrics/quotes/latest", key)["data"]
-    q = data["quote"]["USD"]
+    resp = _get("/v1/global-metrics/quotes/latest", key)
+    data = resp.get("data")
+    if not data:
+        logger.warning("CMC global-metrics: missing 'data' key in response")
+        return []
+    q = (data.get("quote") or {}).get("USD")
+    if not q:
+        logger.warning("CMC global-metrics: missing quote.USD in response")
+        return []
     today = date.today().isoformat()
 
-    total_mcap = q["total_market_cap"]
+    total_mcap = q.get("total_market_cap") or 0.0
     defi_mcap  = q.get("defi_market_cap", 0.0) or 0.0
     stable_mcap = q.get("stablecoin_market_cap", 0.0) or 0.0
     altcoin_mcap = q.get("altcoin_market_cap", 0.0) or 0.0
@@ -118,7 +125,7 @@ def fetch_global_metrics(key: str) -> list[tuple[str, str, float]]:
     ]
     logger.info(
         "CMC global: BTC dom=%.1f%%  ETH dom=%.1f%%  MCap=%.2fT  MCap24h=%.2f%%",
-        btc_dom, eth_dom, total_mcap / 1e12, mcap_chg,
+        btc_dom, eth_dom, total_mcap / 1e12 if total_mcap else 0.0, mcap_chg,
     )
     return records
 
@@ -136,11 +143,15 @@ def fetch_coin_quotes(key: str, symbols: list[str] | None = None) -> list[tuple[
     if symbols is None:
         symbols = ["BTC", "ETH"]
 
-    data = _get(
+    resp = _get(
         "/v2/cryptocurrency/quotes/latest",
         key,
         {"symbol": ",".join(symbols)},
-    )["data"]
+    )
+    data = resp.get("data")
+    if not data:
+        logger.warning("CMC coin-quotes: missing 'data' key in response")
+        return []
 
     today = date.today().isoformat()
     records: list[tuple[str, str, float]] = []
@@ -149,7 +160,9 @@ def fetch_coin_quotes(key: str, symbols: list[str] | None = None) -> list[tuple[
         entries = data.get(sym)
         if not entries:
             continue
-        q = entries[0]["quote"]["USD"]
+        q = (entries[0].get("quote") or {}).get("USD")
+        if not q:
+            continue
         prefix = sym.lower()  # "btc" or "eth"
 
         records.extend([

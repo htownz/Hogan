@@ -291,8 +291,10 @@ def main() -> None:
         records = run_query(args.query, args.name, args.col, api_key, symbol=args.symbol)
         if records:
             conn = get_connection(args.db)
-            written = upsert_onchain(conn, args.symbol, records)
-            conn.close()
+            try:
+                written = upsert_onchain(conn, args.symbol, records)
+            finally:
+                conn.close()
             print(json.dumps({args.name: written}, indent=2))
         else:
             print("No data returned.")

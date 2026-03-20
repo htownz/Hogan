@@ -180,7 +180,7 @@ def main() -> None:
 
     regime_dist = funnel.get("regime_distribution", {})
     if regime_dist:
-        total_r = sum(regime_dist.values())
+        total_r = sum(regime_dist.values()) or 1
         print(f"\n  Regime distribution:")
         for regime, count in sorted(regime_dist.items(), key=lambda x: -x[1]):
             print(f"    {regime:<14s}  {count:>5d} bars ({count/total_r*100:.1f}%)")

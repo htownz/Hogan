@@ -189,18 +189,26 @@ def backfill_historical_tvl(
     defi_eth_tvl_pct, defi_btc_tvl_b, defi_stablecoin_b.
     """
 
-    from hogan_bot.storage import get_connection, upsert_onchain
+    from hogan_bot.storage import get_connection
 
     conn = get_connection(db_path)
     cutoff_ts = int((datetime.now(timezone.utc) - timedelta(days=days)).timestamp())
+
+    try:
+        return _backfill_inner(conn, symbol, cutoff_ts)
+    finally:
+        conn.close()
+
+
+def _backfill_inner(conn, symbol, cutoff_ts):
     total_written = 0
+    from hogan_bot.storage import upsert_onchain
 
     # 1. Total TVL history
     logger.info("Fetching total TVL history...")
     total_data = _get_json(f"{_BASE}/v2/historicalChainTvl")
     if not isinstance(total_data, list):
         logger.warning("historicalChainTvl returned unexpected type")
-        conn.close()
         return 0
 
     total_by_date: dict[str, float] = {}
@@ -299,7 +307,6 @@ def backfill_historical_tvl(
     except Exception as exc:
         logger.warning("Stablecoin mcap backfill failed: %s", exc)
 
-    conn.close()
     logger.info("DeFiLlama backfill complete: %d total records written", total_written)
     return total_written
 
@@ -332,27 +339,26 @@ def fetch_all_defillama(
     today = date.today().isoformat()
     all_metrics: dict[str, float] = {}
 
-    # Fetch each category with brief pauses
-    all_metrics.update(_fetch_global_tvl())
-    time.sleep(0.5)
-    all_metrics.update(_fetch_tvl_change())
-    time.sleep(0.5)
-    all_metrics.update(_fetch_stablecoins())
+    try:
+        all_metrics.update(_fetch_global_tvl())
+        time.sleep(0.5)
+        all_metrics.update(_fetch_tvl_change())
+        time.sleep(0.5)
+        all_metrics.update(_fetch_stablecoins())
 
-    if not all_metrics:
-        logger.warning("DeFiLlama: no metrics returned")
+        if not all_metrics:
+            logger.warning("DeFiLlama: no metrics returned")
+            return {}
+
+        records: list[tuple[str, str, float]] = [
+            (today, metric, value) for metric, value in all_metrics.items()
+        ]
+
+        written = upsert_onchain(conn, symbol, records)
+        logger.info("DeFiLlama: wrote %d rows total", written)
+        return {m: 1 for m in all_metrics}
+    finally:
         conn.close()
-        return {}
-
-    records: list[tuple[str, str, float]] = [
-        (today, metric, value) for metric, value in all_metrics.items()
-    ]
-
-    written = upsert_onchain(conn, symbol, records)
-    conn.close()
-
-    logger.info("DeFiLlama: wrote %d rows total", written)
-    return {m: 1 for m in all_metrics}
 
 
 def _parse_args() -> argparse.Namespace:

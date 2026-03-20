@@ -590,10 +590,10 @@ class RealisticPaperExecution(ExecutionEngine):
                 _safe_upsert(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
 
         if ok:
+            slip_bps = (fill_price / price - 1) * 10_000 if price else 0.0
             logger.debug(
                 "REALISTIC_OPEN_LONG %s fill=%.2f (signal=%.2f, slip=%.1fbps) qty=%.6f",
-                symbol, fill_price, price,
-                (fill_price / price - 1) * 10_000, fill_qty,
+                symbol, fill_price, price, slip_bps, fill_qty,
             )
         return ExecResult(ok=ok)
 
@@ -612,10 +612,10 @@ class RealisticPaperExecution(ExecutionEngine):
                 _safe_upsert(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
 
         if ok:
+            slip_bps = (1 - fill_price / price) * 10_000 if price else 0.0
             logger.debug(
                 "REALISTIC_CLOSE_LONG %s fill=%.2f (signal=%.2f, slip=%.1fbps) qty=%.6f",
-                symbol, fill_price, price,
-                (1 - fill_price / price) * 10_000, fill_qty,
+                symbol, fill_price, price, slip_bps, fill_qty,
             )
         return ExecResult(ok=ok)
 
@@ -639,10 +639,10 @@ class RealisticPaperExecution(ExecutionEngine):
                 _safe_upsert(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
 
         if ok:
+            slip_bps = (1 - fill_price / price) * 10_000 if price else 0.0
             logger.debug(
                 "REALISTIC_OPEN_SHORT %s fill=%.2f (signal=%.2f, slip=%.1fbps) qty=%.6f",
-                symbol, fill_price, price,
-                (1 - fill_price / price) * 10_000, fill_qty,
+                symbol, fill_price, price, slip_bps, fill_qty,
             )
         return ExecResult(ok=ok)
 
