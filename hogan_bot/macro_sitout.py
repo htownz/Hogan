@@ -134,7 +134,7 @@ class MacroSitout:
         try:
             rows = conn.execute(
                 "SELECT ts_ms, close FROM candles "
-                "WHERE symbol = 'VIX/USD' ORDER BY ts_ms"
+                "WHERE symbol = 'VIX/USD' AND timeframe = '1h' ORDER BY ts_ms"
             ).fetchall()
             for ts_ms, close_val in rows:
                 dt = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)

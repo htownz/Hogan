@@ -268,36 +268,52 @@ def _load_onchain_series(
     return df
 
 
-def _load_derivatives_latest(conn: "sqlite3.Connection", metric: str) -> float:
-    """Load the most recent derivatives metric value."""
+def _load_derivatives_latest(conn: "sqlite3.Connection", metric: str, symbol: str = "BTC/USD") -> float:
+    """Load the most recent derivatives metric value for *symbol*."""
     row = conn.execute(
-        "SELECT value FROM derivatives_metrics WHERE metric = ? ORDER BY ts_ms DESC LIMIT 1",
-        (metric,),
+        "SELECT value FROM derivatives_metrics "
+        "WHERE metric = ? AND symbol = ? ORDER BY ts_ms DESC LIMIT 1",
+        (metric, symbol),
     ).fetchone()
+    if row is None:
+        row = conn.execute(
+            "SELECT value FROM derivatives_metrics WHERE metric = ? ORDER BY ts_ms DESC LIMIT 1",
+            (metric,),
+        ).fetchone()
     return float(row[0]) if row else 0.0
 
 
-def _compute_extended_table(conn: "sqlite3.Connection") -> pd.DataFrame | None:
+def _compute_extended_table(conn: "sqlite3.Connection", symbol: str = "BTC/USD") -> pd.DataFrame | None:
     """Build a time-series table of extended features aligned to daily timestamps.
 
     Returns a DataFrame with ``ts_ms`` and one column per extended feature,
     suitable for ``merge_asof`` against 1h candle timestamps.
     """
     try:
-        # Funding rate: stored with ms timestamps in derivatives_metrics
         fr_rows = conn.execute(
             "SELECT ts_ms, value FROM derivatives_metrics "
-            "WHERE metric = 'funding_rate' ORDER BY ts_ms"
+            "WHERE metric = 'funding_rate' AND symbol = ? ORDER BY ts_ms",
+            (symbol,),
         ).fetchall()
+        if not fr_rows:
+            fr_rows = conn.execute(
+                "SELECT ts_ms, value FROM derivatives_metrics "
+                "WHERE metric = 'funding_rate' ORDER BY ts_ms"
+            ).fetchall()
         fr_df = pd.DataFrame(fr_rows, columns=["ts_ms", "deriv_funding_rate"])
         if not fr_df.empty:
             fr_df["deriv_funding_rate"] = fr_df["deriv_funding_rate"].astype(float).clip(-1.0, 1.0)
 
-        # OI change
         oi_rows = conn.execute(
             "SELECT ts_ms, value FROM derivatives_metrics "
-            "WHERE metric = 'open_interest_pct_change' ORDER BY ts_ms"
+            "WHERE metric = 'open_interest_pct_change' AND symbol = ? ORDER BY ts_ms",
+            (symbol,),
         ).fetchall()
+        if not oi_rows:
+            oi_rows = conn.execute(
+                "SELECT ts_ms, value FROM derivatives_metrics "
+                "WHERE metric = 'open_interest_pct_change' ORDER BY ts_ms"
+            ).fetchall()
         oi_df = pd.DataFrame(oi_rows, columns=["ts_ms", "deriv_oi_change"])
         if not oi_df.empty:
             oi_df["deriv_oi_change"] = oi_df["deriv_oi_change"].astype(float).clip(-1.0, 1.0)

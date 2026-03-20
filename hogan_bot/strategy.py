@@ -125,9 +125,11 @@ class MeanRevertFamily:
         delta = close.diff()
         gain = delta.clip(lower=0).rolling(rsi_period).mean()
         loss = (-delta.clip(upper=0)).rolling(rsi_period).mean()
-        rs = gain / loss.replace(0, np.nan)
+        rs = gain / loss.clip(lower=1e-9)
         rsi = 100.0 - (100.0 / (1.0 + rs))
         rsi_val = float(rsi.iloc[-1])
+        if np.isnan(rsi_val):
+            rsi_val = 50.0
 
         bb_period = 20
         bb_ma = close.rolling(bb_period).mean()

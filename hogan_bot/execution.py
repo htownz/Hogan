@@ -381,9 +381,28 @@ class SmartExecution(ExecutionEngine):
                 still_open = any(str(o.get("id")) == order_id for o in open_orders)
 
                 if not still_open:
+                    # Verify the order was actually filled (not cancelled/rejected)
+                    try:
+                        fetched = self.client.fetch_order(order_id, symbol)
+                        _status = str(fetched.get("status", "")).lower()
+                    except Exception as _fo_exc:
+                        logger.warning("SMART_OPEN_LONG: fetch_order failed, assuming filled: %s", _fo_exc)
+                        fetched = order
+                        _status = "closed"
+
+                    if _status not in ("closed", "filled"):
+                        logger.warning(
+                            "SMART_OPEN_LONG order %s status=%s (not filled) — skipping",
+                            order_id, _status,
+                        )
+                        return ExecResult(ok=False, error=f"order_{_status}")
+
                     self._sync_fills(symbol)
-                    fill_price = LiveExecution._extract_fill_price(order, limit_price)
-                    fill_qty = float(order.get("filled", qty))
+                    fill_price = LiveExecution._extract_fill_price(fetched, limit_price)
+                    fill_qty = float(fetched.get("filled", qty))
+                    if fill_qty <= 0:
+                        logger.warning("SMART_OPEN_LONG order %s filled=0 — skipping", order_id)
+                        return ExecResult(ok=False, error="zero_fill")
                     if self.portfolio is not None:
                         self.portfolio.execute_buy(
                             symbol, fill_price, fill_qty,
@@ -392,8 +411,8 @@ class SmartExecution(ExecutionEngine):
                             trail_activation_pct=trail_activation_pct,
                         )
                     logger.info(
-                        "SMART_OPEN_LONG filled %s at %.2f (attempt %d)",
-                        symbol, fill_price, attempt + 1,
+                        "SMART_OPEN_LONG filled %s at %.2f qty=%.6f (attempt %d)",
+                        symbol, fill_price, fill_qty, attempt + 1,
                     )
                     return ExecResult(ok=True, order_id=order_id)
 

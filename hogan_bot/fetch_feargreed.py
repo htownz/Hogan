@@ -112,8 +112,10 @@ def fetch_and_store(
 
     rows = [(r["date"], _METRIC, float(r["value"])) for r in records_raw]
     conn = get_connection(db_path)
-    written = upsert_onchain(conn, symbol, rows)
-    conn.close()
+    try:
+        written = upsert_onchain(conn, symbol, rows)
+    finally:
+        conn.close()
 
     if records_raw:
         latest = max(records_raw, key=lambda r: r["date"])

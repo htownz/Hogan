@@ -129,6 +129,11 @@ def estimate_spread_from_candles(candles: pd.DataFrame, window: int = 20) -> flo
         logger.debug("SPREAD_EST: insufficient data, using default 5bps")
         return 0.0005
 
+    _required = {"high", "low", "close"}
+    if not _required.issubset(candles.columns):
+        logger.debug("SPREAD_EST: missing columns %s, using default 5bps", _required - set(candles.columns))
+        return 0.0005
+
     h = candles["high"].values[-window:]
     lo = candles["low"].values[-window:]
     c = candles["close"].values[-window:]

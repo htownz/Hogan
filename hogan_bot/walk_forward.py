@@ -364,7 +364,12 @@ def _train_and_evaluate_window(
                         regime_labels.append(None)
                 _rr()
 
-                regime_arr = np.array([regime_labels[idx] for idx in X.index])
+                _idx_to_pos = {train_candles.index[i]: i for i in range(len(train_candles))}
+                regime_arr = np.array([
+                    regime_labels[_idx_to_pos[idx]] if idx in _idx_to_pos and _idx_to_pos[idx] < len(regime_labels)
+                    else None
+                    for idx in X.index
+                ])
                 regime_models: dict[str, TrainedModel] = {}
                 for regime_name in ("trending_up", "trending_down", "ranging", "volatile"):
                     mask = regime_arr == regime_name

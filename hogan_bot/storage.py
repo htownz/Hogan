@@ -899,8 +899,12 @@ def normalize_side(side: str) -> str:
     """Normalize trade side to 'long' or 'short'.
 
     Accepts 'buy'/'long'/'sell'/'short' and always returns 'long' or 'short'.
+    Raises ``ValueError`` for unrecognised side strings.
     """
-    return _SIDE_MAP.get(side.lower().strip(), side.lower().strip())
+    normalized = _SIDE_MAP.get(side.lower().strip())
+    if normalized is None:
+        raise ValueError(f"Invalid trade side '{side}'; expected one of {sorted(_SIDE_MAP)}")
+    return normalized
 
 
 def open_paper_trade(

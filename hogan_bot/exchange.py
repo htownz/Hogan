@@ -186,7 +186,7 @@ class ExchangeClient:
         # Step 2 — keep fetching older batches until we have enough
         page = 2
         while len(all_rows) < limit and page <= _MAX_PAGES:
-            oldest_ts: int = all_rows[0][0]
+            oldest_ts: int = min(r[0] for r in all_rows)
             fetch_since = oldest_ts - _MAX_BARS_PER_REQUEST * bar_ms
             batch = _fetch_with_retry(limit=_MAX_BARS_PER_REQUEST, since=fetch_since)
             if not batch:
