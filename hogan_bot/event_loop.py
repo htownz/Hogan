@@ -325,6 +325,7 @@ class SignalEvaluator:
                         candles_15m=mtf_candles.get("15m"),
                         candles_10m=mtf_candles.get("10m"),
                         candles_30m=mtf_candles.get("30m"),
+                        candles_3h=mtf_candles.get("3h"),
                         conn=self.pipeline.conn,
                         symbol=symbol,
                         extended_mtf=True,

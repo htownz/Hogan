@@ -1,15 +1,14 @@
 """Multi-timeframe (MTF) and external feature builder for the Hogan RL agent.
 
-Provides :func:`build_feature_row_extended` which returns a 70-element
-feature vector:
+Provides :func:`build_feature_row_extended` which returns a feature vector:
 
     36 base 5m features  (from :func:`~hogan_bot.ml.build_feature_row`)
-  + 14 MTF features      (7 from 1h + 7 from 15m, see table below)
-  + 20 ext features      (derivatives / on-chain / macro / CoinGecko / sentiment)
-  = 70 ML features
+  + 21 MTF features      (7 from 1h + 7 from 3h + 7 from 15m, see table below)
+  + N ext features       (derivatives / on-chain / macro / CoinGecko / sentiment)
+  = N+57 ML features
 
 Combined with 3 position-state scalars in :class:`~hogan_bot.rl_env.TradingEnv`
-the final observation vector is 73-dimensional.
+the final observation vector is N+60-dimensional.
 
 MTF feature table
 -----------------
@@ -21,6 +20,13 @@ MTF feature table
 | h1_bb_pct_b        | Bollinger %B on 1h                        |
 | h1_vol_ratio       | Volume vs. 20-bar 1h average              |
 | h1_trend_up        | 1h close > 1h 20-bar MA  (0 / 1)         |
+| h3_ret_1           | 3h close-to-close return                  |
+| h3_rsi_14          | RSI(14) on 3h closes (normalised)         |
+| h3_atr_pct         | ATR(14) / close on 3h                     |
+| h3_macd_hist       | MACD histogram / close on 3h              |
+| h3_bb_pct_b        | Bollinger %B on 3h                        |
+| h3_vol_ratio       | Volume ratio on 3h                        |
+| h3_trend_up        | 3h close > 3h 20-bar MA (0 / 1)           |
 | m15_ret_1          | 15m return                                |
 | m15_rsi_14         | RSI(14) on 15m closes (normalised)        |
 | m15_atr_pct        | ATR(14) / close on 15m                   |
@@ -437,6 +443,7 @@ def build_feature_row_extended(
     candles_15m: pd.DataFrame | None = None,
     candles_10m: pd.DataFrame | None = None,
     candles_30m: pd.DataFrame | None = None,
+    candles_3h: pd.DataFrame | None = None,
     conn=None,
     symbol: str = "BTC/USD",
     extended_mtf: bool = False,
@@ -444,11 +451,11 @@ def build_feature_row_extended(
     """Return the extended feature vector for the last bar.
 
     Standard mode (``extended_mtf=False``, default — backward compatible):
-        36 base 5m  +  7 (1h)  +  7 (15m)  +  N ext  =  N+50 features
+        36 base 5m  +  7 (1h)  +  7 (3h)  +  7 (15m)  +  N ext  =  N+57 features
 
     Extended MTF mode (``extended_mtf=True`` — requires retraining):
-        36 base 5m  +  7 (1h)  +  7 (30m)  +  7 (15m)  +  7 (10m)  +  N ext
-        =  N+64 features
+        36 base 5m  +  7 (1h)  +  7 (3h)  +  7 (30m)  +  7 (15m)  +  7 (10m)  +  N ext
+        =  N+71 features
 
     The two modes produce **different-length vectors** and are therefore
     not interchangeable.  Enable ``extended_mtf`` only after retraining
@@ -469,6 +476,8 @@ def build_feature_row_extended(
     candles_30m:
         30-minute OHLCV window up to current bar (or ``None``).
         Only used when ``extended_mtf=True``.
+    candles_3h:
+        3-hour OHLCV window up to current bar (or ``None``).
     conn:
         Open SQLite connection for ext feature lookup (or ``None``).
     symbol:
@@ -486,8 +495,9 @@ def build_feature_row_extended(
     if base is None:
         return None
 
-    # Standard MTF: 1h + 15m
+    # Standard MTF: 1h + 3h + 15m
     h1_feats = _compute_tf_features(candles_1h) or [0.0] * 7
+    h3_feats = _compute_tf_features(candles_3h) or [0.0] * 7
     m15_feats = _compute_tf_features(candles_15m) or [0.0] * 7
 
     # Extended MTF: additionally 30m + 10m
@@ -508,8 +518,8 @@ def build_feature_row_extended(
     )
     ext = build_ext_features(ts, conn=conn, symbol=symbol)
 
-    # Order: base | 1h | 30m | 15m | 10m | ext
-    combined = base + h1_feats + m30_feats + m15_feats + m10_feats + ext
+    # Order: base | 1h | 3h | 30m | 15m | 10m | ext
+    combined = base + h1_feats + h3_feats + m30_feats + m15_feats + m10_feats + ext
     return combined
 
 
@@ -517,18 +527,22 @@ def build_feature_row_extended(
 # Feature column name lists
 # ---------------------------------------------------------------------------
 
-# Standard MTF (1h + 15m only)
+# Standard MTF (1h + 3h + 15m)
 MTF_FEATURE_COLUMNS: list[str] = [
     "h1_ret_1", "h1_rsi_14", "h1_atr_pct", "h1_macd_hist",
     "h1_bb_pct_b", "h1_vol_ratio", "h1_trend_up",
+    "h3_ret_1", "h3_rsi_14", "h3_atr_pct", "h3_macd_hist",
+    "h3_bb_pct_b", "h3_vol_ratio", "h3_trend_up",
     "m15_ret_1", "m15_rsi_14", "m15_atr_pct", "m15_macd_hist",
     "m15_bb_pct_b", "m15_vol_ratio", "m15_trend_up",
 ]
 
-# Extended MTF (1h + 30m + 15m + 10m)
+# Extended MTF (1h + 3h + 30m + 15m + 10m)
 MTF_FEATURE_COLUMNS_EXTENDED: list[str] = [
     "h1_ret_1", "h1_rsi_14", "h1_atr_pct", "h1_macd_hist",
     "h1_bb_pct_b", "h1_vol_ratio", "h1_trend_up",
+    "h3_ret_1", "h3_rsi_14", "h3_atr_pct", "h3_macd_hist",
+    "h3_bb_pct_b", "h3_vol_ratio", "h3_trend_up",
     "m30_ret_1", "m30_rsi_14", "m30_atr_pct", "m30_macd_hist",
     "m30_bb_pct_b", "m30_vol_ratio", "m30_trend_up",
     "m15_ret_1", "m15_rsi_14", "m15_atr_pct", "m15_macd_hist",

@@ -471,6 +471,54 @@ def decide(
             block_reasons.append(_sell_pullback_gd.blocked_by)
 
     # ------------------------------------------------------------------
+    # 5b. MTF signal confirmation (soft adjustments, not hard blocks)
+    # ------------------------------------------------------------------
+    mtf_conf_scale = 1.0
+    mtf_size_scale = 1.0
+    if mtf_candles and action != "hold":
+        # 3h trend alignment: penalise signals that disagree with 3h trend
+        _candles_3h = mtf_candles.get("3h")
+        if _candles_3h is not None and len(_candles_3h) >= 20:
+            try:
+                _h3_close = _candles_3h["close"].astype(float)
+                _h3_ma20 = float(_h3_close.rolling(20).mean().iloc[-1])
+                _h3_trend_up = float(_h3_close.iloc[-1]) > _h3_ma20
+                if action == "buy" and not _h3_trend_up:
+                    mtf_conf_scale *= 0.70
+                    logger.debug("MTF: 3h trend DOWN disagrees with BUY, conf -30%%")
+                elif action == "sell" and _h3_trend_up:
+                    mtf_conf_scale *= 0.70
+                    logger.debug("MTF: 3h trend UP disagrees with SELL, conf -30%%")
+                else:
+                    logger.debug("MTF: 3h trend aligned with %s", action)
+            except Exception as _h3_exc:
+                logger.debug("MTF 3h trend check error: %s", _h3_exc)
+
+        # 15m momentum: penalise when MACD histogram opposes signal direction
+        _candles_15m = mtf_candles.get("15m")
+        if _candles_15m is not None and len(_candles_15m) >= 26:
+            try:
+                _m15_close = _candles_15m["close"].astype(float)
+                _ema12 = _m15_close.ewm(span=12, adjust=False).mean()
+                _ema26 = _m15_close.ewm(span=26, adjust=False).mean()
+                _macd_line = _ema12 - _ema26
+                _signal_line = _macd_line.ewm(span=9, adjust=False).mean()
+                _m15_macd_hist = float((_macd_line - _signal_line).iloc[-1])
+                if action == "buy" and _m15_macd_hist < 0:
+                    mtf_size_scale *= 0.85
+                    logger.debug("MTF: 15m MACD hist negative (%.6f), size -15%%", _m15_macd_hist)
+                elif action == "sell" and _m15_macd_hist > 0:
+                    mtf_size_scale *= 0.85
+                    logger.debug("MTF: 15m MACD hist positive (%.6f), size -15%%", _m15_macd_hist)
+                else:
+                    logger.debug("MTF: 15m MACD hist aligned with %s (%.6f)", action, _m15_macd_hist)
+            except Exception as _m15_exc:
+                logger.debug("MTF 15m momentum check error: %s", _m15_exc)
+
+    # Apply MTF confirmation scale to conf_scale
+    conf_scale *= mtf_conf_scale
+
+    # ------------------------------------------------------------------
     # 6. Feature freshness (live-only by default)
     # ------------------------------------------------------------------
     freshness_scale = 1.0
@@ -540,7 +588,8 @@ def decide(
         * eff_position_scale
         * freshness_scale
         * momentum_scale
-        * macro_filter_scale,
+        * macro_filter_scale
+        * mtf_size_scale,
     )
 
     # Compute average ATR for volatility-adjusted sizing

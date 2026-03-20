@@ -231,7 +231,7 @@ class BotConfig:
 
     # Multi-timeframe ensemble: daily bias + primary signal + 30m confirmation
     use_mtf_ensemble: bool = False
-    mtf_timeframes: list[str] | None = None  # sub-hourly context frames e.g. ["15m", "30m"]
+    mtf_timeframes: list[str] | None = field(default_factory=lambda: ["15m", "30m", "3h"])  # sub-hourly context frames
     mtf_use_daily_filter: bool = False   # enable after daily is Optuna-optimised
     mtf_daily_timeframe: str = "1d"
     mtf_m30_timeframe: str = "30m"
@@ -779,7 +779,7 @@ def load_config() -> BotConfig:
         ),
         use_mtf_extended=os.getenv("HOGAN_USE_MTF_EXTENDED", "true").lower() == "true",
         use_mtf_ensemble=os.getenv("HOGAN_USE_MTF_ENSEMBLE", "false").lower() == "true",
-        mtf_timeframes=os.getenv("HOGAN_MTF_TIMEFRAMES", "").split(",") if os.getenv("HOGAN_MTF_TIMEFRAMES") else None,
+        mtf_timeframes=os.getenv("HOGAN_MTF_TIMEFRAMES", "15m,30m,3h").split(","),
         mtf_use_daily_filter=os.getenv("HOGAN_MTF_USE_DAILY_FILTER", "false").lower() == "true",
         mtf_daily_timeframe=os.getenv("HOGAN_MTF_DAILY_TF", "1d"),
         mtf_m30_timeframe=os.getenv("HOGAN_MTF_M30_TF", "30m"),
