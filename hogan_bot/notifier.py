@@ -26,6 +26,14 @@ from datetime import datetime, timezone
 logger = logging.getLogger(__name__)
 
 
+def _safe_int(value: str, default: int) -> int:
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        logger.warning("Invalid integer '%s', using default %d", value, default)
+        return default
+
+
 class NullNotifier:
     """A no-op notifier used when notifications are disabled."""
 
@@ -256,7 +264,7 @@ def make_notifier(
             notifiers.append(
                 EmailNotifier(
                     smtp_host=smtp_host,
-                    smtp_port=int(os.getenv("HOGAN_EMAIL_SMTP_PORT", "587")),
+                    smtp_port=_safe_int(os.getenv("HOGAN_EMAIL_SMTP_PORT", "587"), 587),
                     username=os.getenv("HOGAN_EMAIL_USERNAME", ""),
                     password=os.getenv("HOGAN_EMAIL_PASSWORD", ""),
                     from_addr=os.getenv("HOGAN_EMAIL_FROM", "hogan@localhost"),

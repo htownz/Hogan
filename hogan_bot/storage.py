@@ -970,7 +970,7 @@ def close_paper_trade(
     # the SELECT and UPDATE (FIFO close safety).
     try:
         conn.execute("BEGIN IMMEDIATE")
-    except Exception:
+    except sqlite3.OperationalError:
         pass  # already in a transaction or autocommit mode
     row = conn.execute(
         """
@@ -985,7 +985,7 @@ def close_paper_trade(
     if not row:
         try:
             conn.execute("ROLLBACK")
-        except Exception:
+        except sqlite3.OperationalError:
             pass
         return None
 

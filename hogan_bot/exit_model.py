@@ -322,7 +322,7 @@ class ExitEvaluator:
         delta = close.diff()
         gain = delta.clip(lower=0).rolling(_window).mean()
         loss = (-delta.clip(upper=0)).rolling(_window).mean()
-        rs = gain / loss.replace(0, 1e-9)
+        rs = gain / loss.clip(lower=1e-9)
         rsi = 100 - (100 / (1 + rs))
 
         rsi_vals = rsi.iloc[-8:].dropna()

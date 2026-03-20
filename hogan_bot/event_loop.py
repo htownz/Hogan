@@ -1007,7 +1007,7 @@ async def _run_event_loop_inner(
                             if notifier:
                                 notifier.notify("error", {"msg": f"Cannot flatten {_flat_sym} — no price"})
                             continue
-                        res = executor.emergency_flatten(_flat_sym, _flat_px)
+                        res = await _safe_exec(executor.emergency_flatten, _flat_sym, _flat_px)
                         logger.warning("FLATTEN %s px=%.2f ok=%s", _flat_sym, _flat_px, res.ok)
                     except Exception as _flat_exc:
                         logger.error("Failed to flatten %s: %s", _flat_sym, _flat_exc, exc_info=True)
@@ -1028,7 +1028,7 @@ async def _run_event_loop_inner(
                 ep = mark_prices.get(exit_symbol, 0.0)
                 now_ms = int(time.time() * 1000)
 
-                if reason in ("trailing_stop", "take_profit", "max_hold_time"):
+                if reason in ("trailing_stop", "take_profit", "max_hold_time", "breakeven_stop"):
                     pos = portfolio.positions.get(exit_symbol)
                     if pos is None:
                         continue
@@ -1089,7 +1089,7 @@ async def _run_event_loop_inner(
                                                       "price": sell_px, "qty": qty})
                     logger.info("AUTO_EXIT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, sell_px, qty)
 
-                elif reason in ("short_trailing_stop", "short_take_profit", "short_max_hold_time", "short_max_loss"):
+                elif reason in ("short_trailing_stop", "short_take_profit", "short_max_hold_time", "short_max_loss", "short_breakeven_stop"):
                     pos = portfolio.short_positions.get(exit_symbol)
                     if pos is None:
                         continue
@@ -1658,7 +1658,7 @@ async def _run_event_loop_inner(
                             and hasattr(proposal, "trade_count")
                             and proposal.trade_count >= _min_trades
                         )
-                        if _should_apply and hasattr(proposal, "regime_weights"):
+                        if _should_apply and getattr(proposal, "regime_weights", None) is not None:
                             # Apply proposed weights to MetaWeigher, bounded ±0.05 per agent
                             _old_w = dict(evaluator.pipeline.meta_weigher._weights)
                             for regime, rw in proposal.regime_weights.items():
@@ -1689,7 +1689,7 @@ async def _run_event_loop_inner(
                             logger.info(
                                 "PERF_TRACKER weight proposal (shadow): %s",
                                 {r: {k: round(v, 3) for k, v in w.items()} for r, w in proposal.regime_weights.items()}
-                                if hasattr(proposal, "regime_weights") else str(proposal),
+                                if getattr(proposal, "regime_weights", None) is not None else str(proposal),
                             )
                     _perf_tracker.save_to_db()
                 except Exception as exc:

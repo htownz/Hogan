@@ -123,8 +123,8 @@ class MeanRevertFamily:
 
         rsi_period = 14
         delta = close.diff()
-        gain = delta.clip(lower=0).rolling(rsi_period).mean()
-        loss = (-delta.clip(upper=0)).rolling(rsi_period).mean()
+        gain = delta.clip(lower=0).ewm(com=rsi_period - 1, min_periods=rsi_period, adjust=False).mean()
+        loss = (-delta.clip(upper=0)).ewm(com=rsi_period - 1, min_periods=rsi_period, adjust=False).mean()
         rs = gain / loss.clip(lower=1e-9)
         rsi = 100.0 - (100.0 / (1.0 + rs))
         rsi_val = float(rsi.iloc[-1])
@@ -253,12 +253,14 @@ class SqueezeFamily:
         bb_upper = bb_ma + 2 * bb_std
         bb_lower = bb_ma - 2 * bb_std
         bb_width = (bb_upper - bb_lower) / bb_ma.replace(0, np.nan)
+        bb_width = bb_width.replace([np.inf, -np.inf], np.nan)
 
         kc_period = 20
         kc_ma = close.rolling(kc_period).mean()
         kc_upper = kc_ma + 1.5 * atr_series
         kc_lower = kc_ma - 1.5 * atr_series
         kc_width = (kc_upper - kc_lower) / kc_ma.replace(0, np.nan)
+        kc_width = kc_width.replace([np.inf, -np.inf], np.nan)
 
         if bb_width.isna().iloc[-1] or kc_width.isna().iloc[-1]:
             return StrategySignal("hold", 0.01, 0.0, vol_ratio)

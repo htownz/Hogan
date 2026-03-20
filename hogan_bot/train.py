@@ -105,7 +105,10 @@ def main() -> None:
     if getattr(args, "from_db", False):
         from hogan_bot.storage import get_connection, load_candles
         conn = get_connection(args.db)
-        candles = load_candles(conn, args.symbol, args.timeframe, limit=args.limit)
+        try:
+            candles = load_candles(conn, args.symbol, args.timeframe, limit=args.limit)
+        finally:
+            conn.close()
         if candles.empty:
             print(f"No candles in DB for {args.symbol}/{args.timeframe}")
             return
@@ -116,6 +119,15 @@ def main() -> None:
 
     label_mode = getattr(args, "label_mode", "fee_threshold")
 
+    try:
+        _main_train(args, candles, train_db_conn, label_mode)
+    finally:
+        if train_db_conn is not None:
+            train_db_conn.close()
+
+
+def _main_train(args, candles, train_db_conn, label_mode: str) -> None:
+    """Inner training logic — separated so the caller can close DB connections."""
     if args.forecast:
         from hogan_bot.forecast import train_forecast_models
         db_conn = None
@@ -201,9 +213,6 @@ def main() -> None:
         if cal_db is not None:
             cal_db.close()
         metrics["calibration"] = cal_meta
-
-    if train_db_conn is not None:
-        train_db_conn.close()
 
     if not args.no_registry:
         registry = ModelRegistry(registry_path=args.registry_path)

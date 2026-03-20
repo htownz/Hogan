@@ -253,12 +253,20 @@ def _compute_macro_table(conn: "sqlite3.Connection") -> pd.DataFrame:
 
 def _load_onchain_series(
     conn: "sqlite3.Connection", metric: str, limit: int = 365,
+    symbol: str = "BTC/USD",
 ) -> pd.DataFrame:
-    """Load a time series from the onchain_metrics table."""
+    """Load a time series from the onchain_metrics table for *symbol*."""
     rows = conn.execute(
-        "SELECT date, value FROM onchain_metrics WHERE metric = ? ORDER BY date DESC LIMIT ?",
-        (metric, limit),
+        "SELECT date, value FROM onchain_metrics "
+        "WHERE metric = ? AND symbol = ? ORDER BY date DESC LIMIT ?",
+        (metric, symbol, limit),
     ).fetchall()
+    if not rows:
+        rows = conn.execute(
+            "SELECT date, value FROM onchain_metrics "
+            "WHERE metric = ? ORDER BY date DESC LIMIT ?",
+            (metric, limit),
+        ).fetchall()
     if not rows:
         return pd.DataFrame(columns=["date", "value"])
     df = pd.DataFrame(rows, columns=["date", "value"])
