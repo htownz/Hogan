@@ -6,6 +6,10 @@ Hogan's blessed production baseline — every comparison should start here.
 """
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 CANONICAL_PROFILE: dict[str, object] = {
     # ── Instrument & timeframe ────────────────────────────────────────
     "symbol": "BTC/USD",
@@ -75,4 +79,8 @@ def apply_profile(cfg, profile: dict[str, object]):
             cli_overrides[key] = value
         elif hasattr(cfg, key):
             setattr(cfg, key, value)
+        else:
+            logger.warning(
+                "apply_profile: key '%s' not found in BotConfig or cli_keys — ignored", key,
+            )
     return cfg, cli_overrides

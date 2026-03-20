@@ -129,23 +129,36 @@ def compute_sharpe(equity_curve: list[float], bars_per_year: float = _BARS_PER_Y
 def compute_sortino(equity_curve: list[float], bars_per_year: float = _BARS_PER_YEAR_DEFAULT) -> float | None:
     """Annualised Sortino ratio (zero target return, only downside deviation)."""
     rets = _equity_returns(equity_curve)
-    if len(rets) < 2:
+    n = len(rets)
+    if n < 2:
         return None
-    mean = sum(rets) / len(rets)
+    mean = sum(rets) / n
     downside_sq = [r ** 2 for r in rets if r < 0]
     if not downside_sq:
         return None
-    downside_dev = math.sqrt(sum(downside_sq) / len(downside_sq))
+    downside_dev = math.sqrt(sum(downside_sq) / n)
     if downside_dev < 1e-12:
         return None
     return mean / downside_dev * math.sqrt(bars_per_year)
 
 
-def compute_calmar(total_return_pct: float, max_drawdown_pct: float) -> float | None:
-    """Calmar ratio = total return / max drawdown (both as percentages)."""
+def compute_calmar(
+    total_return_pct: float,
+    max_drawdown_pct: float,
+    n_bars: int = 0,
+    bars_per_year: float = _BARS_PER_YEAR_DEFAULT,
+) -> float | None:
+    """Calmar ratio = annualized return / max drawdown (both as percentages).
+
+    When *n_bars* > 0 the total return is annualized before dividing.
+    """
     if max_drawdown_pct <= 0:
         return None
-    return total_return_pct / max_drawdown_pct
+    if n_bars > 0 and bars_per_year > 0:
+        ann_return = total_return_pct * (bars_per_year / n_bars)
+    else:
+        ann_return = total_return_pct
+    return ann_return / max_drawdown_pct
 
 
 # ---------------------------------------------------------------------------
@@ -362,9 +375,9 @@ def evaluate_market_regimes(result: "BacktestResult") -> dict[str, dict]:
 
         ret = np.diff(np.array([0.0] + [t.get("pnl_pct", 0.0) for t in trades]))
         sharpe = None
-        if len(ret) > 1 and np.std(ret) > 0:
+        if len(ret) > 1 and np.std(ret, ddof=1) > 0:
             bpy = getattr(result, "bars_per_year", _BARS_PER_YEAR_DEFAULT)
-            sharpe = float(np.mean(ret) / np.std(ret) * np.sqrt(bpy))
+            sharpe = float(np.mean(ret) / np.std(ret, ddof=1) * np.sqrt(bpy))
 
         report[regime] = {
             "trade_count": n,

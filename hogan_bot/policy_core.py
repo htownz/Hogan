@@ -36,26 +36,33 @@ from hogan_bot.swarm_decision.types import DecisionIntent
 logger = logging.getLogger(__name__)
 
 
+_DATA_AGE_TABLES: dict[str, str] = {
+    "onchain_metrics": "onchain_db",
+    "derivatives_metrics": "derivatives_db",
+    "sentiment_scores": "sentiment_db",
+    "macro_indicators": "macro_db",
+    "intermarket_prices": "intermarket_db",
+}
+
 def _compute_data_ages(conn) -> dict[str, float]:
     """Hours since last update for each data source (PIT-safe utility)."""
     if conn is None:
         return {}
     ages: dict[str, float] = {}
     now_s = time.time()
-    for table, source_key in (
-        ("onchain_metrics", "onchain_db"),
-        ("derivatives_metrics", "derivatives_db"),
-        ("sentiment_scores", "sentiment_db"),
-        ("macro_indicators", "macro_db"),
-        ("intermarket_prices", "intermarket_db"),
-    ):
+    for table, source_key in _DATA_AGE_TABLES.items():
         try:
-            row = conn.execute(f"SELECT MAX(ts_ms) FROM {table}").fetchone()
+            row = conn.execute(
+                f"SELECT MAX(ts_ms) FROM {table}"  # noqa: S608 — table names from hardcoded whitelist
+            ).fetchone()
             if row and row[0]:
                 age_h = (now_s - row[0] / 1000.0) / 3600.0
                 ages[source_key] = max(0.0, age_h)
         except Exception as exc:
-            logger.debug("_compute_data_ages %s: %s", table, exc)
+            if "no such table" in str(exc).lower():
+                logger.debug("_compute_data_ages: table %s not created yet", table)
+            else:
+                logger.warning("_compute_data_ages %s error: %s", table, exc)
     return ages
 
 

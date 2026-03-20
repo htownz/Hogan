@@ -137,28 +137,28 @@ def evaluate_macro(
         if spy_candles is None:
             try:
                 spy_candles = load_candles(conn, "SPY/USD", "1h", limit=50)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("macro_filter: failed to load SPY candles: %s", exc)
         if qqq_candles is None:
             try:
                 qqq_candles = load_candles(conn, "QQQ/USD", "1h", limit=50)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("macro_filter: failed to load QQQ candles: %s", exc)
         if uup_candles is None:
             try:
                 uup_candles = load_candles(conn, "UUP/USD", "1h", limit=50)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("macro_filter: failed to load UUP candles: %s", exc)
         if vix_candles is None:
             try:
                 vix_candles = load_candles(conn, "VIX/USD", "1h", limit=50)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("macro_filter: failed to load VIX candles: %s", exc)
         if gld_candles is None:
             try:
                 gld_candles = load_candles(conn, "GLD/USD", "1h", limit=50)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("macro_filter: failed to load GLD candles: %s", exc)
 
     stale_feeds: list[str] = []
     for _name, _df in [("SPY", spy_candles), ("QQQ", qqq_candles),

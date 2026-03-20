@@ -3,6 +3,7 @@
 Runs the walk-forward validation with different TS/TP combinations to find
 the optimal exit parameters.  Uses no-ML + macro-sitout as the baseline.
 """
+import os
 import sqlite3
 import sys
 import time
@@ -44,6 +45,9 @@ def main():
     total = len(TRAILING_STOP_VALUES) * len(TAKE_PROFIT_VALUES)
     idx = 0
 
+    _orig_ts = os.environ.get("HOGAN_TRAILING_STOP_PCT")
+    _orig_tp = os.environ.get("HOGAN_TAKE_PROFIT_PCT")
+
     for ts_pct in TRAILING_STOP_VALUES:
         for tp_pct in TAKE_PROFIT_VALUES:
             idx += 1
@@ -54,7 +58,6 @@ def main():
             )
             sys.stdout.flush()
 
-            import os
             os.environ["HOGAN_TRAILING_STOP_PCT"] = str(ts_pct)
             os.environ["HOGAN_TAKE_PROFIT_PCT"] = str(tp_pct)
 
@@ -95,6 +98,16 @@ def main():
                 s["total_trades"], s["n_positive"], elapsed,
             )
             sys.stdout.flush()
+
+    # Restore original environment
+    if _orig_ts is None:
+        os.environ.pop("HOGAN_TRAILING_STOP_PCT", None)
+    else:
+        os.environ["HOGAN_TRAILING_STOP_PCT"] = _orig_ts
+    if _orig_tp is None:
+        os.environ.pop("HOGAN_TAKE_PROFIT_PCT", None)
+    else:
+        os.environ["HOGAN_TAKE_PROFIT_PCT"] = _orig_tp
 
     results.sort(key=lambda r: r["mean_return_pct"], reverse=True)
 

@@ -72,10 +72,14 @@ Alternative / Sentiment / Geopolitical  (8 — fetch with respective modules)
 """
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pandas as pd
 
 from hogan_bot.ml import build_feature_row
+
+logger = logging.getLogger(__name__)
 
 # Names for the 20 extended (external) features — order determines obs indices
 EXT_FEATURE_NAMES: list[str] = [
@@ -429,7 +433,8 @@ def build_ext_features(
 
         return result
 
-    except Exception:
+    except Exception as exc:
+        logger.warning("build_ext_features failed (returning zeros): %s", exc, exc_info=True)
         return zeros
 
 

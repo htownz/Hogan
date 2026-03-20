@@ -618,8 +618,7 @@ def load_candles(
         df = pd.read_sql_query(query, conn, params=(symbol, timeframe))
 
     df["timestamp"] = pd.to_datetime(df["ts_ms"], unit="ms", utc=True)
-    df = df.drop(columns=["ts_ms"])
-    return df[["timestamp", "open", "high", "low", "close", "volume"]]
+    return df[["ts_ms", "timestamp", "open", "high", "low", "close", "volume"]]
 
 
 def candle_count(conn: sqlite3.Connection, symbol: str, timeframe: str) -> int:

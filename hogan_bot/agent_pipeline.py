@@ -779,6 +779,7 @@ class AgentPipeline:
             Used by backtest to prevent future data leakage.
             ``None`` means "now" (live mode).
         """
+        import copy as _copy
         agent = self.tech_agent
         _effective_cfg = config_override
         if _effective_cfg is not None and regime is not None:
@@ -786,7 +787,8 @@ class AgentPipeline:
             _overrides = _REGIME_OVERRIDES.get(regime, {})
             vol_mult = _overrides.get("volume_threshold_mult")
             if vol_mult is not None and hasattr(_effective_cfg, "volume_threshold"):
-                _effective_cfg.volume_threshold = _effective_cfg.volume_threshold * vol_mult
+                _effective_cfg = _copy.copy(_effective_cfg)
+                _effective_cfg.volume_threshold = config_override.volume_threshold * vol_mult
         if _effective_cfg is not None:
             agent = TechnicalAgent(_effective_cfg)
         tech = agent.analyze(candles, regime_state=regime_state, **runtime_state)

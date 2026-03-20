@@ -66,7 +66,10 @@ class PaperPortfolio:
     short_max_loss_pct: float = 0.10  # configurable short max-loss guardrail
 
     def total_equity(self, mark_prices: dict[str, float]) -> float:
-        long_value = sum(pos.qty * mark_prices.get(symbol, 0.0) for symbol, pos in self.positions.items())
+        long_value = sum(
+            pos.qty * mark_prices.get(symbol, pos.avg_entry)
+            for symbol, pos in self.positions.items()
+        )
         short_pnl = sum(
             (pos.avg_entry - mark_prices.get(symbol, pos.avg_entry)) * pos.qty
             for symbol, pos in self.short_positions.items()
