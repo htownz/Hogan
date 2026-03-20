@@ -127,7 +127,7 @@ The ML pipeline uses **8 champion features** in production (59 available for exp
 python -m hogan_bot.train --symbol BTC/USD --timeframe 1h --limit 5000 --cv --cv-splits 5
 ```
 
-Output includes per-fold accuracy and ROC-AUC, plus mean values across folds.
+Output includes per-fold accuracy, ROC-AUC, and Brier score (probability calibration quality), plus mean values across folds.
 
 ### 2. Train a model
 
@@ -201,6 +201,7 @@ HOGAN_EMA_SLOW_LONG=50
 HOGAN_USE_FVG=false
 HOGAN_FVG_MIN_GAP_PCT=0.001
 HOGAN_SIGNAL_MODE=any
+HOGAN_SIGNAL_MIN_VOTE_MARGIN=1
 ```
 
 ### Short selling & position management env vars
@@ -223,6 +224,7 @@ HOGAN_SIGNAL_MODE=any
 | `HOGAN_USE_FVG` | `false` | *(Experimental)* Enable ICT Fair-Value Gap signal |
 | `HOGAN_FVG_MIN_GAP_PCT` | `0.001` | Minimum gap size (fraction of price) to record an FVG |
 | `HOGAN_SIGNAL_MODE` | `any` | `ma_only` / `any` / `all` — legacy signal combinator (secondary to AgentPipeline) |
+| `HOGAN_SIGNAL_MIN_VOTE_MARGIN` | `1` | In `any` mode, minimum buy-vs-sell vote edge required to act; otherwise hold |
 
 ## EMA Clouds Workflow
 
@@ -230,6 +232,9 @@ Enable EMA clouds in `.env` and backtest before paper-trading:
 
 ```env
 HOGAN_USE_EMA_CLOUDS=true
+HOGAN_USE_FVG=true
+HOGAN_SIGNAL_MODE=any
+HOGAN_SIGNAL_MIN_VOTE_MARGIN=1
 ```
 
 Backtest with clouds enabled:

@@ -144,6 +144,7 @@ def main() -> None:
                 "cv_folds": folds,
                 "mean_accuracy": statistics.mean(f["accuracy"] for f in folds),
                 "mean_roc_auc": statistics.mean(f["roc_auc"] for f in folds),
+                "mean_brier": statistics.mean(f.get("brier", 0.25) for f in folds),
             }
             if folds
             else {"cv_folds": [], "error": "No folds could be evaluated"}

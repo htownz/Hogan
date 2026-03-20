@@ -523,6 +523,7 @@ def generate_signal(
         else:
             action = "hold"
 
+        # Penalize confidence when there is disagreement between enabled signals.
         directional_votes = buy_votes + sell_votes
         if directional_votes > 0:
             consensus_ratio = max(buy_votes, sell_votes) / directional_votes

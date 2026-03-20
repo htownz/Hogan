@@ -878,6 +878,7 @@ def train_logistic_regression(
             precision_score,
             recall_score,
             roc_auc_score,
+            brier_score_loss,
         )
         from sklearn.preprocessing import StandardScaler
     except ModuleNotFoundError as exc:
