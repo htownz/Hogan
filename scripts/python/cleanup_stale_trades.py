@@ -17,7 +17,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 DB = os.path.join(PROJECT_ROOT, "data", "hogan.db")
 
-from hogan_bot.storage import get_connection, close_paper_trade
+from hogan_bot.storage import get_connection, close_paper_trade  # noqa: E402
 
 
 def main():

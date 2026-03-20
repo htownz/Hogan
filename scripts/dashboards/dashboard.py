@@ -12,7 +12,6 @@ import json
 import pickle
 import sqlite3
 import sys
-import time
 from pathlib import Path
 
 # Ensure the project root is on sys.path so ``hogan_bot`` is importable
@@ -21,12 +20,12 @@ _project_root = str(Path(__file__).resolve().parents[2])
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-import streamlit as st
-import streamlit.components.v1 as components
-from streamlit_autorefresh import st_autorefresh  # type: ignore[import]
+import pandas as pd  # noqa: E402
+import plotly.express as px  # noqa: E402
+import plotly.graph_objects as go  # noqa: E402
+import streamlit as st  # noqa: E402
+import streamlit.components.v1 as components  # noqa: E402
+from streamlit_autorefresh import st_autorefresh  # type: ignore[import]  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -903,7 +902,6 @@ with tab_signals:
         )])
 
         # Overlay EMA cloud (fast 8/9, slow 34/50)
-        import numpy as np
         for period, color, name in [(8, "#f39c12", "EMA8"), (9, "#e67e22", "EMA9"),
                                      (34, "#9b59b6", "EMA34"), (50, "#8e44ad", "EMA50")]:
             ema = candles["close"].ewm(span=period, adjust=False).mean()
@@ -1744,7 +1742,7 @@ with tab_swarm:
 
                 # Panel 5 — Threshold Bundle History
                 try:
-                    from hogan_bot.threshold_registry import list_bundles, get_change_history
+                    from hogan_bot.threshold_registry import list_bundles
                     _tb_agents = _sw_conn.execute(
                         "SELECT DISTINCT agent_id FROM swarm_threshold_bundles ORDER BY agent_id",
                     ).fetchall()
@@ -1810,7 +1808,7 @@ with tab_replay:
                 pass
 
             from hogan_bot.swarm_replay_queries import ReplayFilter, list_replay_decisions, get_replay_decision
-            from hogan_bot.swarm_attribution import classify_outcome, compute_full_attribution, build_learning_note
+            from hogan_bot.swarm_attribution import compute_full_attribution, build_learning_note
             from hogan_bot.swarm_replay import render_decision_story
 
             # ── Zone A: Replay Selector ───────────────────────────

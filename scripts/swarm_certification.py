@@ -124,7 +124,7 @@ def main():
     _symbol = args.symbol
 
     print(f"\n{'=' * 60}")
-    print(f"SWARM CERTIFICATION BACKTEST")
+    print("SWARM CERTIFICATION BACKTEST")
     print(f"  {len(candles)} bars | {args.symbol} | ML: {config.ml_model_path}")
     print(f"{'=' * 60}\n")
 
@@ -153,7 +153,7 @@ def main():
     a_wr = active.win_rate
 
     print(f"\n{'=' * 70}")
-    print(f"CERTIFICATION RESULTS")
+    print("CERTIFICATION RESULTS")
     print(f"{'=' * 70}")
     print(f"{'Metric':<22} {'Shadow (baseline)':>18} {'Active (swarm)':>18} {'Delta':>12}")
     print(f"{'-' * 70}")

@@ -41,7 +41,7 @@ def main() -> None:
         td_pnls = [t.get("pnl_pct", 0) for t in td_shorts]
         td_avg = sum(td_pnls) / td_n if td_n else 0
 
-        long_pnls = [t.get("pnl_pct", 0) for t in longs]
+        [t.get("pnl_pct", 0) for t in longs]
         long_wins = sum(1 for t in longs if t.get("pnl_usd", 0) > 0)
 
         winner_pnls = [p for p in short_pnls if p > 0]
@@ -99,7 +99,7 @@ def main() -> None:
     print(hdr)
     print("-" * 110)
     for row in rows:
-        td_wr = round(row["td_wins"] / row["td_n"], 3) if row["td_n"] else 0
+        round(row["td_wins"] / row["td_n"], 3) if row["td_n"] else 0
         print(
             f"{row['hold_h']:>6d}  {row['total_return']:>+8.4f}  "
             f"{row['max_dd']:>8.4f}  {row['sharpe']:>7.3f}  "

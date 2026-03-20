@@ -389,7 +389,11 @@ def train_forecast_models(
         base.fit(X_train_sc, y_train)
 
         # Step 2: Calibrate on separate held-out calibration window
-        cal = CalibratedClassifierCV(base, cv="prefit", method="isotonic")
+        try:
+            from sklearn.frozen import FrozenEstimator  # type: ignore[import-untyped]
+            cal = CalibratedClassifierCV(FrozenEstimator(base), method="isotonic")
+        except (ImportError, ModuleNotFoundError):
+            cal = CalibratedClassifierCV(base, cv="prefit", method="isotonic")
         cal.fit(X_cal_sc, y_cal)
 
         # Step 3: Evaluate on unseen test window
@@ -447,7 +451,7 @@ def train_forecast_models(
             },
             "metrics": h_metrics,
             "features": len(_FEATURE_COLUMNS),
-            "calibration_method": "isotonic (CalibratedClassifierCV, cv=prefit)",
+            "calibration_method": "isotonic (CalibratedClassifierCV, FrozenEstimator)",
         }
         card_path = out / f"forecast_{horizon_name}_card.json"
         with open(card_path, "w", encoding="utf-8") as fh:

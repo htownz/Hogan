@@ -44,7 +44,7 @@ from hogan_bot.execution import RealisticPaperExecution, FillSimConfig
 from hogan_bot.expectancy import ExpectancyTracker
 from hogan_bot.fx_utils import (
     SessionFilter, current_session, fx_position_size,
-    pip_stop_loss, pip_take_profit, pip_size, is_weekend,
+    pip_take_profit, pip_size, is_weekend,
 )
 from hogan_bot.instrument_profiles import get_profile, spread_cost_bps
 from hogan_bot.oanda_client import OandaClient
@@ -156,7 +156,6 @@ def _run_once(
                 continue
 
             now_ms = int(time.time() * 1000)
-            side = "long" if action == "buy" else "short"
 
             if action == "buy":
                 if symbol in portfolio.positions:
@@ -212,8 +211,8 @@ def _run_once(
                 # Open a short if allowed
                 if config.allow_shorts and symbol not in portfolio.short_positions:
                     tp = pip_take_profit(symbol, px, "short", tp_pips)
-                    sl_offset = stop_pips * pip_size(symbol) / px
-                    tp_offset = (px - tp) / px
+                    stop_pips * pip_size(symbol) / px
+                    (px - tp) / px
                     portfolio.execute_short(symbol, px, size)
                     open_paper_trade(conn, symbol, "short", px, size, size * px * fee_rate, now_ms,
                                      strategy_conf=signal.confidence)

@@ -1,7 +1,6 @@
 """Run backtests on 1m, 15m, 45m for BTC/USD and ETH/USD and print results."""
 from __future__ import annotations
 
-import json
 import sys
 import time
 from pathlib import Path
@@ -106,7 +105,7 @@ for sym, tf, lim in CONFIGS:
         label_dist = bt_labels[1].value_counts().to_dict()
         print(f"  BT labels:  {len(bt_labels[0])} rows  (1={label_dist.get(1,0)} / 0={label_dist.get(0,0)})")
     else:
-        print(f"  BT labels:  too few trades for labels")
+        print("  BT labels:  too few trades for labels")
 
     all_results.append(s)
 

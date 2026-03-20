@@ -1,5 +1,6 @@
 """Quick analysis of paper trade history and signal behavior."""
-import sqlite3, datetime, sys
+import sqlite3
+import sys
 sys.path.insert(0, ".")
 
 conn = sqlite3.connect("data/hogan.db")

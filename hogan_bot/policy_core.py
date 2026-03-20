@@ -36,12 +36,12 @@ from hogan_bot.swarm_decision.types import DecisionIntent
 logger = logging.getLogger(__name__)
 
 
-_DATA_AGE_TABLES: dict[str, str] = {
-    "onchain_metrics": "onchain_db",
-    "derivatives_metrics": "derivatives_db",
-    "sentiment_scores": "sentiment_db",
-    "macro_indicators": "macro_db",
-    "intermarket_prices": "intermarket_db",
+_DATA_AGE_TABLES: dict[str, tuple[str, str]] = {
+    "onchain_metrics": ("onchain_db", "date"),
+    "derivatives_metrics": ("derivatives_db", "ts_ms"),
+    "sentiment_scores": ("sentiment_db", "ts_ms"),
+    "macro_indicators": ("macro_db", "ts_ms"),
+    "intermarket_prices": ("intermarket_db", "ts_ms"),
 }
 
 def _compute_data_ages(conn) -> dict[str, float]:
@@ -50,13 +50,20 @@ def _compute_data_ages(conn) -> dict[str, float]:
         return {}
     ages: dict[str, float] = {}
     now_s = time.time()
-    for table, source_key in _DATA_AGE_TABLES.items():
+    for table, (source_key, col) in _DATA_AGE_TABLES.items():
         try:
             row = conn.execute(
-                f"SELECT MAX(ts_ms) FROM {table}"  # noqa: S608 — table names from hardcoded whitelist
+                f"SELECT MAX({col}) FROM {table}"  # noqa: S608 — table/col from hardcoded whitelist
             ).fetchone()
             if row and row[0]:
-                age_h = (now_s - row[0] / 1000.0) / 3600.0
+                if col == "date":
+                    from datetime import datetime, timezone
+                    dt = datetime.fromisoformat(str(row[0]))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    age_h = (now_s - dt.timestamp()) / 3600.0
+                else:
+                    age_h = (now_s - row[0] / 1000.0) / 3600.0
                 ages[source_key] = max(0.0, age_h)
         except Exception as exc:
             if "no such table" in str(exc).lower():

@@ -120,7 +120,7 @@ def main():
             f"{r['worst_drawdown_pct']:>5.1f}%"
         )
 
-    print(f"\nPer-window detail for top 3:")
+    print("\nPer-window detail for top 3:")
     top3 = sorted(results, key=lambda x: x["mean_return_pct"], reverse=True)[:3]
     for r in top3:
         print(f"\n  Hold={r['short_max_hold_hours']:.0f}h (ret={r['mean_return_pct']:+.2f}%):")

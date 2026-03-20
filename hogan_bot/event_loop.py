@@ -100,25 +100,35 @@ async def _safe_exec(fn, *args, **kwargs):
         return _FailedResult(str(exc))
 
 
+_DATA_AGE_TABLES: dict[str, tuple[str, str]] = {
+    "onchain_metrics": ("onchain_db", "date"),
+    "derivatives_metrics": ("derivatives_db", "ts_ms"),
+    "sentiment_scores": ("sentiment_db", "ts_ms"),
+    "macro_indicators": ("macro_db", "ts_ms"),
+    "intermarket_prices": ("intermarket_db", "ts_ms"),
+}
+
+
 def _compute_data_ages(conn) -> dict[str, float]:
     """Compute hours since last update for each data source in the DB."""
     if conn is None:
         return {}
     ages: dict[str, float] = {}
     now_s = time.time()
-    for table, source_key in (
-        ("onchain_metrics", "onchain_db"),
-        ("derivatives_metrics", "derivatives_db"),
-        ("sentiment_scores", "sentiment_db"),
-        ("macro_indicators", "macro_db"),
-        ("intermarket_prices", "intermarket_db"),
-    ):
+    for table, (source_key, col) in _DATA_AGE_TABLES.items():
         try:
             row = conn.execute(
-                f"SELECT MAX(ts_ms) FROM {table}"
+                f"SELECT MAX({col}) FROM {table}"
             ).fetchone()
             if row and row[0]:
-                age_h = (now_s - row[0] / 1000.0) / 3600.0
+                if col == "date":
+                    from datetime import datetime, timezone
+                    dt = datetime.fromisoformat(str(row[0]))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    age_h = (now_s - dt.timestamp()) / 3600.0
+                else:
+                    age_h = (now_s - row[0] / 1000.0) / 3600.0
                 ages[source_key] = max(0.0, age_h)
         except Exception as exc:
             logger.debug("_compute_data_ages %s: %s", table, exc)

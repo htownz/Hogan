@@ -14,19 +14,16 @@ import time
 
 sys.stdout.reconfigure(line_buffering=True)
 
-from hogan_bot.backtest import (
-    diagnose_exits,
-    diagnose_long_entries,
+from hogan_bot.backtest import (  # noqa: E402
     diagnose_longs_by_confidence,
     diagnose_shorts_by_confidence,
-    evaluate_market_regimes,
     evaluate_trades_by_regime_side,
     run_backtest_on_candles,
 )
-from hogan_bot.champion import apply_champion_mode, is_champion_mode
-from hogan_bot.config import load_config
-from hogan_bot.ml import load_model
-from hogan_bot.storage import get_connection, load_candles
+from hogan_bot.champion import apply_champion_mode, is_champion_mode  # noqa: E402
+from hogan_bot.config import load_config  # noqa: E402
+from hogan_bot.ml import load_model  # noqa: E402
+from hogan_bot.storage import get_connection, load_candles  # noqa: E402
 
 SYMBOL = "BTC/USD"
 DB_PATH = "data/hogan.db"
@@ -58,7 +55,7 @@ def main() -> None:
     else:
         print("ML filter is OFF (use_ml_filter=False)")
 
-    print(f"\nKey thresholds:")
+    print("\nKey thresholds:")
     print(f"  ml_buy_threshold:     {cfg.ml_buy_threshold}")
     print(f"  min_final_confidence: {cfg.min_final_confidence}")
     print(f"  min_tech_confidence:  {cfg.min_tech_confidence}")
@@ -181,13 +178,13 @@ def main() -> None:
     regime_dist = funnel.get("regime_distribution", {})
     if regime_dist:
         total_r = sum(regime_dist.values()) or 1
-        print(f"\n  Regime distribution:")
+        print("\n  Regime distribution:")
         for regime, count in sorted(regime_dist.items(), key=lambda x: -x[1]):
             print(f"    {regime:<14s}  {count:>5d} bars ({count/total_r*100:.1f}%)")
 
     # ── Summary ───────────────────────────────────────────────────────
     print(f"\n{'='*70}")
-    print(f"BACKTEST SUMMARY")
+    print("BACKTEST SUMMARY")
     print(f"{'='*70}")
     print(f"  return:   {summary['total_return_pct']:.4f}%")
     print(f"  maxdd:    {summary['max_drawdown_pct']:.4f}%")
@@ -201,19 +198,19 @@ def main() -> None:
     short_conf = diagnose_shorts_by_confidence(result.closed_trades)
 
     if by_regime_side:
-        print(f"\n  Trades by regime x side:")
+        print("\n  Trades by regime x side:")
         print(f"  {'bucket':<22s}  {'n':>3s}  {'win%':>5s}  {'avg%':>7s}  {'tot%':>7s}")
         for key, m in by_regime_side.items():
             print(f"  {key:<22s}  {m['count']:>3d}  {m['win_rate']:>5.1%}  {m['avg_pnl_pct']:>+7.2f}  {m['total_pnl_pct']:>+7.2f}")
 
     if long_conf and long_conf.get("by_regime_confidence"):
-        print(f"\n  Longs by regime x confidence:")
+        print("\n  Longs by regime x confidence:")
         print(f"  {'bucket':<26s}  {'n':>3s}  {'win%':>5s}  {'avg%':>7s}  {'tot%':>7s}")
         for key, m in long_conf["by_regime_confidence"].items():
             print(f"  {key:<26s}  {m['count']:>3d}  {m['win_rate']:>5.1%}  {m['avg_pnl_pct']:>+7.2f}  {m['total_pnl_pct']:>+7.2f}")
 
     if short_conf and short_conf.get("by_regime_confidence"):
-        print(f"\n  Shorts by regime x confidence:")
+        print("\n  Shorts by regime x confidence:")
         print(f"  {'bucket':<26s}  {'n':>3s}  {'win%':>5s}  {'avg%':>7s}  {'tot%':>7s}")
         for key, m in short_conf["by_regime_confidence"].items():
             print(f"  {key:<26s}  {m['count']:>3d}  {m['win_rate']:>5.1%}  {m['avg_pnl_pct']:>+7.2f}  {m['total_pnl_pct']:>+7.2f}")

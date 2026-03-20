@@ -17,8 +17,8 @@ print(f"Fetched {len(raw)} candles")
 
 rows = []
 for ohlcv in raw:
-    ts_ms, o, h, l, c, v = ohlcv
-    rows.append({"ts_ms": ts_ms, "open": o, "high": h, "low": l, "close": c, "volume": v})
+    ts_ms, o, h, lo, c, v = ohlcv
+    rows.append({"ts_ms": ts_ms, "open": o, "high": h, "low": lo, "close": c, "volume": v})
 
 candles = pd.DataFrame(rows).sort_values("ts_ms").reset_index(drop=True)
 print(f"DataFrame: {len(candles)} rows, columns: {list(candles.columns)}")
@@ -36,8 +36,8 @@ except Exception as e:
     ml_model = None
     print(f"ML model load failed: {e}")
 
-from hogan_bot.event_loop import SignalEvaluator
-from hogan_bot.storage import get_connection
+from hogan_bot.event_loop import SignalEvaluator  # noqa: E402
+from hogan_bot.storage import get_connection  # noqa: E402
 
 conn = get_connection()
 try:
@@ -53,7 +53,7 @@ try:
             mtf_candles=None,
             peak_equity=equity,
         )
-        print(f"\nSignal evaluation SUCCESS:")
+        print("\nSignal evaluation SUCCESS:")
         print(f"  action={sig.action}")
         print(f"  tech_action={sig.raw_tech_action}")
         print(f"  pipeline_action={sig.pipeline_action}")
@@ -65,7 +65,7 @@ try:
         print(f"  eff_allow_shorts={sig.eff_allow_shorts}")
     except Exception:
         import traceback
-        print(f"\nSignal evaluation FAILED:")
+        print("\nSignal evaluation FAILED:")
         traceback.print_exc()
 finally:
     conn.close()

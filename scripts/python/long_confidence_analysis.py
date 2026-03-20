@@ -143,11 +143,11 @@ def main() -> None:
             f"avg={avg_pnl:+.3f}%, total={total_pnl:+.3f}%"
         )
         if total_pnl > 0:
-            print(f"    -> KEEP: positive long contribution")
+            print("    -> KEEP: positive long contribution")
         elif total_pnl > -0.5:
-            print(f"    -> BORDERLINE: tiny drag, might keep at reduced size")
+            print("    -> BORDERLINE: tiny drag, might keep at reduced size")
         else:
-            print(f"    -> CONSIDER BLOCKING: material drag on portfolio")
+            print("    -> CONSIDER BLOCKING: material drag on portfolio")
 
 
 if __name__ == "__main__":
