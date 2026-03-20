@@ -196,7 +196,8 @@ class TechnicalAgent:
 # ---------------------------------------------------------------------------
 
 class SentimentAgent:
-    """Weighs fear/greed, news sentiment, funding rate, and social volume."""
+    """Weighs fear/greed, news sentiment, funding rate, social volume,
+    sentiment velocity (F&G rate of change), and funding rate regime."""
 
     def __init__(self, conn=None, symbol: str = "BTC/USD") -> None:
         self.conn = conn
@@ -239,6 +240,24 @@ class SentimentAgent:
                 except Exception:
                     pass
 
+            # ── 3A: Sentiment Velocity (F&G rate of change over 3 days) ──
+            # Rapidly improving F&G (>5 pts/day avg) → bullish boost
+            # Rapidly deteriorating (<-5 pts/day avg) → bearish bias
+            fg_rows = self.conn.execute(
+                "SELECT value, date FROM onchain_metrics WHERE symbol=? AND metric='fear_greed_value' "
+                "AND date<=? ORDER BY date DESC LIMIT 4",
+                (self.symbol, cutoff_date),
+            ).fetchall()
+            if len(fg_rows) >= 2:
+                fg_today = float(fg_rows[0][0])
+                fg_oldest = float(fg_rows[-1][0])
+                n_days = max(1, len(fg_rows) - 1)
+                fg_velocity = (fg_today - fg_oldest) / n_days  # pts per day
+                # Normalise: ±15 pts/day → ±1.0
+                scores["fg_velocity"] = max(-1.0, min(1.0, fg_velocity / 15.0))
+                logger.debug("SentimentAgent: F&G velocity=%.1f pts/day (norm=%.3f)",
+                             fg_velocity, scores["fg_velocity"])
+
             # News sentiment [-1, 1]
             row = self.conn.execute(
                 "SELECT value FROM onchain_metrics WHERE symbol=? AND metric='news_sentiment_score' "
@@ -267,15 +286,51 @@ class SentimentAgent:
                 raw_funding = float(row[0])
                 scores["funding"] = max(-1.0, min(1.0, -raw_funding * 0.5))
 
+            # ── 3B: Funding Rate Regime Detection (30-day percentile) ──
+            # Extreme positive (>95th pctile) → crowded longs, contrarian short
+            # Extreme negative (<5th pctile) → capitulation, contrarian long
+            funding_rows = self.conn.execute(
+                "SELECT value FROM derivatives_metrics WHERE symbol=? AND metric='funding_rate' "
+                "AND ts_ms<=? ORDER BY ts_ms DESC LIMIT 720",
+                (self.symbol, cutoff_ts),
+            ).fetchall()
+            if len(funding_rows) >= 20:
+                _fr_vals = sorted(float(r[0]) for r in funding_rows)
+                _current_fr = float(funding_rows[0][0])
+                # Percentile rank of current funding within recent history
+                _rank = sum(1 for v in _fr_vals if v <= _current_fr) / len(_fr_vals)
+                if _rank > 0.95:
+                    # Extremely crowded longs → contrarian bearish signal
+                    scores["funding_regime"] = -0.8
+                    logger.debug("SentimentAgent: funding at %.0f%% pctile (crowded longs)", _rank * 100)
+                elif _rank < 0.05:
+                    # Capitulation shorts → contrarian bullish signal
+                    scores["funding_regime"] = 0.8
+                    logger.debug("SentimentAgent: funding at %.0f%% pctile (capitulation)", _rank * 100)
+                elif _rank > 0.80:
+                    scores["funding_regime"] = -0.3
+                elif _rank < 0.20:
+                    scores["funding_regime"] = 0.3
+                else:
+                    scores["funding_regime"] = 0.0
+
         except Exception as exc:
             logger.warning("SentimentAgent data lookup failed: %s", exc)
 
         if not scores:
             return SentimentSignal(bias="neutral", strength=0.0)
 
-        all_keys = ["fear_greed", "news_sentiment", "social_vol", "funding"]
-        weights = {"fear_greed": 0.35, "news_sentiment": 0.30,
-                   "social_vol": 0.20, "funding": 0.15}
+        # Updated weights including new signals
+        all_keys = ["fear_greed", "news_sentiment", "social_vol", "funding",
+                    "fg_velocity", "funding_regime"]
+        weights = {
+            "fear_greed": 0.25,
+            "news_sentiment": 0.25,
+            "social_vol": 0.10,
+            "funding": 0.10,
+            "fg_velocity": 0.15,         # Phase 3A: sentiment momentum
+            "funding_regime": 0.15,       # Phase 3B: contrarian funding signal
+        }
 
         available_weights = {k: w for k, w in weights.items() if k in scores}
         total_w = sum(available_weights.values())
@@ -315,7 +370,11 @@ class SentimentAgent:
 # ---------------------------------------------------------------------------
 
 class MacroAgent:
-    """Reads GPR, VIX, DXY, Fed calendar, SPY return to determine regime."""
+    """Reads GPR, VIX, DXY, Fed calendar, SPY return to determine regime.
+
+    Phase 4A: Also integrates ``macro_filter.evaluate_macro()`` as a
+    secondary input when candle data is available via the DB connection.
+    """
 
     def __init__(self, conn=None, symbol: str = "BTC/USD") -> None:
         self.conn = conn
@@ -379,6 +438,34 @@ class MacroAgent:
 
         spy_ret = indicators.get("spy_return_pct", 0.0)
         risk_score += 0.5 * np.sign(spy_ret) * min(abs(spy_ret) / 2.0, 1.0)
+
+        # ── Phase 4A: Integrate macro_filter as secondary input ──────────
+        # evaluate_macro() reads SPY/VIX/DXY/Gold candles from the DB and
+        # produces a confidence multiplier + risk-on/off environment.
+        # We blend its signal into the risk_score at 30% weight.
+        _mf_score = 0.0
+        try:
+            from hogan_bot.macro_filter import evaluate_macro
+            mf_result = evaluate_macro(conn=self.conn)
+            if mf_result is not None:
+                # confidence_mult is [0, 1]; map to [-1, 1] risk contribution
+                # 1.0 = fully risk-on → +1.0; 0.0 = blocked → -1.0
+                _mf_score = (mf_result.confidence_mult - 0.5) * 2.0
+                if mf_result.block_longs:
+                    _mf_score = -1.5  # strong risk-off override
+                indicators["macro_filter_env"] = mf_result.macro_environment
+                indicators["macro_filter_conf"] = mf_result.confidence_mult
+                logger.debug(
+                    "MacroAgent: macro_filter env=%s conf=%.2f → score=%.2f",
+                    mf_result.macro_environment, mf_result.confidence_mult, _mf_score,
+                )
+        except ImportError:
+            pass  # macro_filter not available
+        except Exception as exc:
+            logger.debug("MacroAgent: macro_filter integration failed: %s", exc)
+
+        # Blend: 70% DB indicators + 30% macro_filter
+        risk_score = risk_score * 0.70 + _mf_score * 0.30
 
         # Freshness discount: pull score toward neutral when data is stale
         if data_age_hours > 48:
