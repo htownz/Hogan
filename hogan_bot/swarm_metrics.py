@@ -133,7 +133,9 @@ def compute_agent_leaderboard(
     agg["veto_rate"] = (agg["veto_count"] / agg["vote_count"]).round(4)
     agg["mean_confidence"] = agg["mean_confidence"].round(4)
 
-    if outcomes is not None and not outcomes.empty and "decision_id" in votes.columns:
+    if (outcomes is not None and not outcomes.empty
+            and "decision_id" in votes.columns
+            and "forward_60m_bps" in outcomes.columns):
         merged = votes.merge(
             outcomes[["decision_id", "forward_60m_bps"]],
             on="decision_id", how="left",

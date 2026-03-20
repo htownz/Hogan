@@ -45,16 +45,20 @@ def main():
         logger.info("Short max hold = %.0fh ...", hold_h)
         sys.stdout.flush()
 
-        cfg = WFConfig(
-            n_splits=5,
-            use_ml_filter=False,
-            use_ml_as_sizer=True,
-            use_macro_sitout=True,
-            short_max_hold_hours=hold_h,
-        )
+        try:
+            cfg = WFConfig(
+                n_splits=5,
+                use_ml_filter=False,
+                use_ml_as_sizer=True,
+                use_macro_sitout=True,
+                short_max_hold_hours=hold_h,
+            )
 
-        report = walk_forward_validate(df, cfg, macro_sitout=sitout)
-        s = report.summary()
+            report = walk_forward_validate(df, cfg, macro_sitout=sitout)
+            s = report.summary()
+        except Exception as exc:
+            logger.error("  hold_h=%.0f FAILED: %s", hold_h, exc)
+            continue
         elapsed = time.perf_counter() - t0
 
         per_window = []

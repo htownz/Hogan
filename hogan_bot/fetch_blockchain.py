@@ -133,8 +133,8 @@ def _fetch_btc_price_for_fee_usd() -> float:
         if isinstance(data, dict):
             usd = data.get("USD", {})
             return float(usd.get("last", 0))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("BTC price fetch failed (fee conversion will be skipped): %s", exc)
     return 0.0
 
 

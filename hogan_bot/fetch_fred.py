@@ -183,41 +183,41 @@ def fetch_all_fred(
     conn = get_connection(db_path)
     results: dict[str, int] = {}
 
-    for series_id, metric_name, description in _SERIES:
-        logger.info("FRED: fetching %s (%s) ...", series_id, description)
-        try:
-            raw = _fetch_series(series_id, api_key, start_date, end_date)
-            if not raw:
-                logger.info("  no data returned")
+    try:
+        for series_id, metric_name, description in _SERIES:
+            logger.info("FRED: fetching %s (%s) ...", series_id, description)
+            try:
+                raw = _fetch_series(series_id, api_key, start_date, end_date)
+                if not raw:
+                    logger.info("  no data returned")
+                    results[metric_name] = 0
+                    continue
+
+                if metric_name in ("fred_m2_yoy", "fred_cpi_yoy"):
+                    observations = _yoy_pct_change(raw)
+                    cutoff = (date.today() - timedelta(days=days)).isoformat()
+                    observations = [(d, v) for d, v in observations if d >= cutoff]
+                else:
+                    observations = raw
+
+                records: list[tuple[str, str, float]] = [
+                    (d, metric_name, v) for d, v in observations
+                ]
+                if records:
+                    written = upsert_onchain(conn, symbol, records)
+                    results[metric_name] = written
+                    logger.info("  wrote %d rows", written)
+                else:
+                    results[metric_name] = 0
+
+            except Exception as exc:
+                logger.warning("  %s failed: %s", series_id, exc)
                 results[metric_name] = 0
-                continue
 
-            # M2 and CPI: convert level → YoY % change
-            if metric_name in ("fred_m2_yoy", "fred_cpi_yoy"):
-                observations = _yoy_pct_change(raw)
-                # Trim to requested window after YoY calc
-                cutoff = (date.today() - timedelta(days=days)).isoformat()
-                observations = [(d, v) for d, v in observations if d >= cutoff]
-            else:
-                observations = raw
+            time.sleep(0.2)
+    finally:
+        conn.close()
 
-            records: list[tuple[str, str, float]] = [
-                (d, metric_name, v) for d, v in observations
-            ]
-            if records:
-                written = upsert_onchain(conn, symbol, records)
-                results[metric_name] = written
-                logger.info("  wrote %d rows", written)
-            else:
-                results[metric_name] = 0
-
-        except Exception as exc:
-            logger.warning("  %s failed: %s", series_id, exc)
-            results[metric_name] = 0
-
-        time.sleep(0.2)  # FRED rate limit: 120 req/min, this is very conservative
-
-    conn.close()
     return results
 
 

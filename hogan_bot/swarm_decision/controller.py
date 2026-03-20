@@ -114,6 +114,19 @@ class SwarmController:
                     block_reasons=[f"agent_error:{type(exc).__name__}"],
                 ))
 
+        if not votes:
+            return SwarmDecision(
+                final_action="hold",
+                final_confidence=0.0,
+                final_size_scale=0.0,
+                agreement=1.0,
+                entropy=0.0,
+                weights_used=dict(self._weights),
+                votes=[],
+                vetoed=False,
+                block_reasons=["no_agents_voted"],
+            )
+
         # Determine advisory-only agents (excluded from fusion weights)
         advisory_ids = {a.agent_id for a in self.agents if _modes.get(a.agent_id) == "advisory_only"}
 

@@ -947,8 +947,14 @@ def shadow_eval_cycle(args) -> dict:
                 if cand_path.exists():
                     shutil.copy2(str(cand_path), args.model_path)
                     reg = ModelRegistry(registry_path=args.registry_path)
+                    shadow_metrics = {
+                        k: v for k, v in entry.items()
+                        if isinstance(v, (int, float)) and k not in ("ts",)
+                    }
+                    shadow_metrics["model_type"] = args.model_type
+                    shadow_metrics["shadow_promoted"] = True
                     reg.log(
-                        {**metrics, "model_type": args.model_type, "shadow_promoted": True},
+                        shadow_metrics,
                         model_path=args.model_path,
                         symbol=args.symbol,
                         timeframe=args.timeframe,

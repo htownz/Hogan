@@ -86,6 +86,9 @@ def log_agent_votes(
     decision_id: int | None = None,
 ) -> None:
     """Persist individual agent votes for a single bar."""
+    if decision_id is not None and decision_id < 0:
+        logger.warning("log_agent_votes skipped: invalid decision_id=%d for %s at %d", decision_id, symbol, ts_ms)
+        return
     try:
         return _log_agent_votes_inner(conn, ts_ms, symbol, timeframe, votes, as_of_ms, decision_id)
     except Exception as exc:

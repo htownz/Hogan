@@ -337,8 +337,8 @@ def _train_and_evaluate_window(
                 y_prob = model.predict_proba(X_score)[:, 1]
                 result.train_auc = float(roc_auc_score(y, y_prob))
                 logger.info("    [W%d] Train AUC: %.4f", window_idx, result.train_auc)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("    [W%d] Train AUC computation failed: %s", window_idx, exc)
 
             global_trained = TrainedModel(
                 model=model,

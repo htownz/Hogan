@@ -214,29 +214,30 @@ def fetch_all_messari(
     results: dict[str, int] = {}
 
     total_written = 0
-    for group_name, fetch_fn in [
-        ("market_metrics", fetch_market_metrics),
-        ("roi_metrics", fetch_roi_metrics),
-        ("developer_activity", fetch_developer_activity),
-    ]:
-        logger.info("Messari: fetching %s for %s ...", group_name, symbol)
-        try:
-            records = fetch_fn(api_key, symbol=symbol)
-            if records:
-                written = upsert_onchain(conn, symbol, records)
-                results[group_name] = written
-                total_written += written
-                logger.info("  wrote %d rows", written)
-            else:
+    try:
+        for group_name, fetch_fn in [
+            ("market_metrics", fetch_market_metrics),
+            ("roi_metrics", fetch_roi_metrics),
+            ("developer_activity", fetch_developer_activity),
+        ]:
+            logger.info("Messari: fetching %s for %s ...", group_name, symbol)
+            try:
+                records = fetch_fn(api_key, symbol=symbol)
+                if records:
+                    written = upsert_onchain(conn, symbol, records)
+                    results[group_name] = written
+                    total_written += written
+                    logger.info("  wrote %d rows", written)
+                else:
+                    results[group_name] = 0
+                    logger.info("  no data returned")
+            except Exception as exc:
+                logger.warning("  %s failed: %s", group_name, exc)
                 results[group_name] = 0
-                logger.info("  no data returned")
-        except Exception as exc:
-            logger.warning("  %s failed: %s", group_name, exc)
-            results[group_name] = 0
 
-        time.sleep(0.3)  # be polite to the free-tier rate limit
-
-    conn.close()
+            time.sleep(0.3)
+    finally:
+        conn.close()
 
     if total_written == 0:
         raise RuntimeError(

@@ -238,8 +238,8 @@ class SentimentAgent:
                     _d = pd.Timestamp(row[1], tz="UTC")
                     _age = (pd.Timestamp(cutoff_date, tz="UTC") - _d).total_seconds() / 3600.0
                     _sent_ages.append(_age)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("SentimentAgent: fear_greed age parse failed: %s", exc)
 
             # ── 3A: Sentiment Velocity (F&G rate of change over 3 days) ──
             # Rapidly improving F&G (>5 pts/day avg) → bullish boost
@@ -413,8 +413,8 @@ class MacroAgent:
                         _d = pd.Timestamp(row[1], tz="UTC")
                         _age = (pd.Timestamp(cutoff_date, tz="UTC") - _d).total_seconds() / 3600.0
                         _metric_ages.append(_age)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("MacroAgent: %s age parse failed: %s", metric, exc)
         except Exception as exc:
             logger.warning("MacroAgent data lookup failed: %s", exc)
 
