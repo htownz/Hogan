@@ -39,6 +39,10 @@ class BotConfig:
     # Live trading safety latch (must be true AND HOGAN_LIVE_ACK set)
     live_mode: bool = False
 
+    # Short max-loss guardrail %: emergency exit if unrealized short loss
+    # exceeds this fraction of entry value.  Default 10%.
+    short_max_loss_pct: float = 0.10
+
     use_ml_filter: bool = False
     ml_model_path: str = "models/hogan_logreg.pkl"
     champion_ml_model_path: str = "models/hogan_champion.pkl"
@@ -340,6 +344,33 @@ class BotConfig:
 
     kraken_api_key: str | None = None
     kraken_api_secret: str | None = None
+
+    # ── Startup validation ───────────────────────────────────────────────
+    def validate(self) -> list[str]:
+        """Validate config values and return a list of error messages (empty = OK)."""
+        errors: list[str] = []
+        if self.starting_balance_usd <= 0:
+            errors.append(f"starting_balance_usd must be > 0, got {self.starting_balance_usd}")
+        if not self.symbols:
+            errors.append("symbols list is empty — at least one trading pair required")
+        for sym in self.symbols:
+            if "/" not in sym:
+                errors.append(f"symbol '{sym}' missing '/' separator (expected format: BTC/USD)")
+        if self.max_drawdown <= 0 or self.max_drawdown > 1.0:
+            errors.append(f"max_drawdown must be in (0, 1.0], got {self.max_drawdown}")
+        if self.max_risk_per_trade <= 0 or self.max_risk_per_trade > 1.0:
+            errors.append(f"max_risk_per_trade must be in (0, 1.0], got {self.max_risk_per_trade}")
+        if self.trailing_stop_pct <= 0 or self.trailing_stop_pct > 0.5:
+            errors.append(f"trailing_stop_pct must be in (0, 0.5], got {self.trailing_stop_pct}")
+        if self.take_profit_pct <= 0 or self.take_profit_pct > 1.0:
+            errors.append(f"take_profit_pct must be in (0, 1.0], got {self.take_profit_pct}")
+        if self.fee_rate < 0:
+            errors.append(f"fee_rate must be >= 0, got {self.fee_rate}")
+        if self.ohlcv_limit < 50:
+            errors.append(f"ohlcv_limit must be >= 50, got {self.ohlcv_limit}")
+        if self.aggressive_allocation <= 0 or self.aggressive_allocation > 1.0:
+            errors.append(f"aggressive_allocation must be in (0, 1.0], got {self.aggressive_allocation}")
+        return errors
 
 
 @dataclass
@@ -655,6 +686,7 @@ def load_config() -> BotConfig:
         paper_mode=os.getenv("HOGAN_PAPER_MODE", "true").lower() == "true",
         db_path=os.getenv("HOGAN_DB_PATH", "data/hogan.db"),
         live_mode=os.getenv("HOGAN_LIVE_MODE", "false").lower() == "true",
+        short_max_loss_pct=_env_float("HOGAN_SHORT_MAX_LOSS_PCT", "0.10"),
         use_ml_filter=os.getenv("HOGAN_USE_ML_FILTER", "false").lower() == "true",
         ml_model_path=os.getenv("HOGAN_ML_MODEL_PATH", "models/hogan_logreg.pkl"),
         champion_ml_model_path=os.getenv("HOGAN_CHAMPION_ML_MODEL_PATH", "models/hogan_champion.pkl"),

@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import math
 import os
 import sqlite3
 import time
@@ -564,6 +565,13 @@ async def run_event_loop(
     from hogan_bot.config import apply_sweep_results
     apply_sweep_results(config)
 
+    # ── Startup config validation ────────────────────────────────────────
+    _cfg_errors = config.validate()
+    if _cfg_errors:
+        for _ce in _cfg_errors:
+            logger.error("CONFIG VALIDATION: %s", _ce)
+        raise ValueError(f"Invalid configuration — {len(_cfg_errors)} error(s): {'; '.join(_cfg_errors)}")
+
     conn = get_connection(config.db_path)
     try:
         await _run_event_loop_inner(config, conn, max_events)
@@ -586,7 +594,11 @@ async def _run_event_loop_inner(
         and live_ack == "I_UNDERSTAND_LIVE_TRADING"
     )
 
-    portfolio = PaperPortfolio(cash_usd=config.starting_balance_usd, fee_rate=config.fee_rate)
+    portfolio = PaperPortfolio(
+        cash_usd=config.starting_balance_usd,
+        fee_rate=config.fee_rate,
+        short_max_loss_pct=getattr(config, "short_max_loss_pct", 0.10),
+    )
     guard = DrawdownGuard(config.starting_balance_usd, config.max_drawdown)
 
     use_oanda = (
@@ -662,9 +674,13 @@ async def _run_event_loop_inner(
             ml_model = load_model(config.ml_model_path)
             logger.info("Loaded ML model from %s", config.ml_model_path)
         except FileNotFoundError:
-            logger.warning("ML model not found at %s; running without ML.", config.ml_model_path)
+            logger.warning(
+                "ML model not found at %s — running in DEGRADED mode (no ML filter/sizer). "
+                "Train a model or set HOGAN_USE_ML_FILTER=false and HOGAN_ML_AS_SIZER=false.",
+                config.ml_model_path,
+            )
         except Exception as exc:
-            logger.warning("ML model load error: %s", exc)
+            logger.warning("ML model load error: %s — running without ML.", exc)
 
     evaluator = SignalEvaluator(config, ml_model, conn=conn)
 
@@ -777,6 +793,9 @@ async def _run_event_loop_inner(
     enable_shorts = os.getenv("HOGAN_ENABLE_SHORTS", "").strip().lower() in ("1", "true", "yes")
     enable_close_and_reverse = os.getenv("HOGAN_CLOSE_AND_REVERSE", "").strip().lower() in ("1", "true", "yes")
     _consecutive_short_exit_signals: dict[str, int] = defaultdict(int)
+    _consecutive_eval_failures: dict[str, int] = {}
+    _heartbeat_count = 0
+    _HEARTBEAT_INTERVAL = 100  # log a heartbeat every N events
 
     try:
         from hogan_bot.metrics import (
@@ -857,6 +876,21 @@ async def _run_event_loop_inner(
         ",".join(config.symbols),
         config.timeframe,
     )
+    logger.info(
+        "STARTUP SUMMARY: balance=%.2f max_dd=%.1f%% risk/trade=%.1f%% "
+        "trailing_stop=%.1f%% take_profit=%.1f%% ML=%s swarm=%s regime=%s "
+        "policy_core=%s online_learn=%s",
+        config.starting_balance_usd,
+        config.max_drawdown * 100,
+        config.max_risk_per_trade * 100,
+        config.trailing_stop_pct * 100,
+        config.take_profit_pct * 100,
+        "ON" if (config.use_ml_filter or config.use_ml_as_sizer) else "OFF",
+        "ON" if config.swarm_enabled else "OFF",
+        "ON" if config.use_regime_detection else "OFF",
+        "ON" if config.use_policy_core else "OFF",
+        "ON" if getattr(config, "use_online_learning", False) else "OFF",
+    )
 
     async with engine:
         async for event in engine.stream():
@@ -887,12 +921,21 @@ async def _run_event_loop_inner(
                 _candle_age_h = (time.time() * 1000 - _latest_candle_ms) / 3_600_000
                 if _candle_age_h > 4.0:
                     logger.warning("GAP_GUARD %s — latest candle is %.1fh old, skipping trading", symbol, _candle_age_h)
+                    if notifier and _candle_age_h > 8.0:
+                        notifier.notify("warning", {"msg": f"GAP_GUARD {symbol} — candle {_candle_age_h:.1f}h stale"})
                     event_count += 1
                     continue
 
-            mark_prices = {s: float(buffer.to_df(s, tf)["close"].iloc[-1])
-                           for s in config.symbols
-                           if not buffer.to_df(s, tf).empty}
+            mark_prices = {}
+            for s in config.symbols:
+                _s_df = buffer.to_df(s, tf)
+                if _s_df.empty:
+                    continue
+                _s_px = float(_s_df["close"].iloc[-1])
+                if not math.isfinite(_s_px) or _s_px <= 0:
+                    logger.error("PRICE_INVALID %s — close=%.6f (NaN/Inf/zero), skipping", s, _s_px)
+                    continue
+                mark_prices[s] = _s_px
             if not mark_prices:
                 event_count += 1
                 continue
@@ -924,12 +967,21 @@ async def _run_event_loop_inner(
                 for _flat_sym in _flat_syms:
                     try:
                         _flat_px = mark_prices.get(_flat_sym, 0.0)
+                        # Fallback: use position entry price if mark price unavailable
                         if _flat_px <= 0:
+                            _flat_pos = portfolio.positions.get(_flat_sym) or portfolio.short_positions.get(_flat_sym)
+                            if _flat_pos is not None and _flat_pos.avg_entry > 0:
+                                _flat_px = _flat_pos.avg_entry
+                                logger.warning("FLATTEN %s — no mark price, using entry price %.2f as fallback", _flat_sym, _flat_px)
+                        if _flat_px <= 0:
+                            logger.error("FLATTEN_FAILED %s — no price available, cannot flatten!", _flat_sym)
+                            if notifier:
+                                notifier.notify("error", {"msg": f"Cannot flatten {_flat_sym} — no price"})
                             continue
                         res = executor.emergency_flatten(_flat_sym, _flat_px)
                         logger.warning("FLATTEN %s px=%.2f ok=%s", _flat_sym, _flat_px, res.ok)
                     except Exception as _flat_exc:
-                        logger.error("Failed to flatten %s: %s", _flat_sym, _flat_exc)
+                        logger.error("Failed to flatten %s: %s", _flat_sym, _flat_exc, exc_info=True)
                 break
 
             # Decrement loss cooldown each iteration
@@ -1108,12 +1160,16 @@ async def _run_event_loop_inner(
                 if _sym_regime:
                     _current_regime[symbol] = _sym_regime
             except Exception as exc:
-                logger.error("Signal eval error for %s: %s", symbol, exc)
+                logger.error("Signal eval error for %s: %s", symbol, exc, exc_info=True)
+                _consecutive_eval_failures[symbol] = _consecutive_eval_failures.get(symbol, 0) + 1
+                if _consecutive_eval_failures[symbol] >= 5 and notifier:
+                    notifier.notify("error", {"msg": f"Signal eval failing repeatedly for {symbol} ({_consecutive_eval_failures[symbol]}x)"})
                 if _has_metrics:
                     EXCEPTIONS.inc()
                 event_count += 1
                 continue
 
+            _consecutive_eval_failures.pop(symbol, None)  # clear on success
             _signal_counts[symbol][action] += 1
 
             # Whipsaw tracking: count rapid direction reversals
@@ -1384,68 +1440,67 @@ async def _run_event_loop_inner(
                                 "EXIT_MODEL %s — thesis intact, holding despite sell signal",
                                 symbol,
                             )
-                            event_count += 1
-                            continue
-                        sell_qty = pos.qty if size <= 0 else min(pos.qty, size)
-                        sell_px = px if _executor_owns_fill else px * (1.0 - slip_mult)
-                        avg_entry = pos.avg_entry
-                        res = await _safe_exec(executor.close_long, symbol, sell_px, sell_qty, reason="signal")
-                        executed = bool(res.ok)
-                        _sig_entry_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
-                        if executed:
-                            _closed_long_this_bar = True
-                            now_ms = int(time.time() * 1000)
-                            exit_fee = sell_qty * sell_px * config.fee_rate
-                            if not allow_live:
-                                _sig_bars = getattr(pos, "bars_held", 0)
-                                close_paper_trade(
-                                    conn, symbol, "long", sell_px, exit_fee, now_ms, close_reason="signal",
-                                    max_adverse_pct=getattr(pos, "max_adverse_pct", None),
-                                    max_favorable_pct=getattr(pos, "max_favorable_pct", None),
-                                    bars_held=_sig_bars,
-                                    exit_regime=_sig_entry_regime,
-                                    entry_atr_pct=getattr(pos, "entry_atr_pct", None),
-                                )
-                            evaluator._trade_outcomes.append(sell_px > avg_entry)
-                            gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
-                            net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
-                            bars_held = getattr(pos, "bars_held", 0)
-                            _expectancy.record_trade(
-                                symbol=symbol,
-                                regime=_sig_entry_regime,
-                                gross_pnl_pct=gross_pnl_pct,
-                                net_pnl_pct=net_pnl_pct,
-                                mae_pct=getattr(pos, "max_adverse_pct", 0.0),
-                                mfe_pct=getattr(pos, "max_favorable_pct", 0.0),
-                                hold_bars=bars_held,
-                                close_reason="signal",
-                            )
-                            _record_outcome(symbol, _sig_entry_regime, gross_pnl_pct, _entry_up_prob.pop(symbol, None))
-                            if _perf_tracker:
-                                try:
-                                    _perf_tracker.record_trade_outcome(
-                                        symbol=symbol,
-                                        regime=_sig_entry_regime,
-                                        tech_action=action, tech_confidence=sig.tech_confidence or 0.0,
-                                        sent_bias="neutral", sent_strength=0.0,
-                                        macro_regime="unknown",
-                                        realized_pnl=gross_pnl_pct,
+                        else:
+                            sell_qty = pos.qty if size <= 0 else min(pos.qty, size)
+                            sell_px = px if _executor_owns_fill else px * (1.0 - slip_mult)
+                            avg_entry = pos.avg_entry
+                            res = await _safe_exec(executor.close_long, symbol, sell_px, sell_qty, reason="signal")
+                            executed = bool(res.ok)
+                            _sig_entry_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
+                            if executed:
+                                _closed_long_this_bar = True
+                                now_ms = int(time.time() * 1000)
+                                exit_fee = sell_qty * sell_px * config.fee_rate
+                                if not allow_live:
+                                    _sig_bars = getattr(pos, "bars_held", 0)
+                                    close_paper_trade(
+                                        conn, symbol, "long", sell_px, exit_fee, now_ms, close_reason="signal",
+                                        max_adverse_pct=getattr(pos, "max_adverse_pct", None),
+                                        max_favorable_pct=getattr(pos, "max_favorable_pct", None),
+                                        bars_held=_sig_bars,
+                                        exit_regime=_sig_entry_regime,
+                                        entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                                     )
-                                    _perf_trade_count += 1
-                                except Exception as exc:
-                                    logger.debug("PerfTracker record error: %s", exc)
-                            _consecutive_exit_signals[symbol] = 0
-                            is_loss = sell_px < avg_entry
-                            if is_loss and loss_cooldown_bars > 0:
-                                _cooldown_remaining = loss_cooldown_bars
-                            if notifier:
-                                notifier.notify("sell", {"symbol": symbol, "price": sell_px,
-                                                         "qty": sell_qty, "ml_up_prob": up_prob})
-                        if not executed:
-                            logger.error("SELL_FAILED %s px=%.2f qty=%.6f — %s",
-                                         symbol, sell_px, sell_qty, getattr(res, "error", "unknown"))
-                        logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f ok=%s",
-                                    symbol, sell_px, sell_qty, up_prob or -1, equity, executed)
+                                evaluator._trade_outcomes.append(sell_px > avg_entry)
+                                gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
+                                net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
+                                bars_held = getattr(pos, "bars_held", 0)
+                                _expectancy.record_trade(
+                                    symbol=symbol,
+                                    regime=_sig_entry_regime,
+                                    gross_pnl_pct=gross_pnl_pct,
+                                    net_pnl_pct=net_pnl_pct,
+                                    mae_pct=getattr(pos, "max_adverse_pct", 0.0),
+                                    mfe_pct=getattr(pos, "max_favorable_pct", 0.0),
+                                    hold_bars=bars_held,
+                                    close_reason="signal",
+                                )
+                                _record_outcome(symbol, _sig_entry_regime, gross_pnl_pct, _entry_up_prob.pop(symbol, None))
+                                if _perf_tracker:
+                                    try:
+                                        _perf_tracker.record_trade_outcome(
+                                            symbol=symbol,
+                                            regime=_sig_entry_regime,
+                                            tech_action=action, tech_confidence=sig.tech_confidence or 0.0,
+                                            sent_bias="neutral", sent_strength=0.0,
+                                            macro_regime="unknown",
+                                            realized_pnl=gross_pnl_pct,
+                                        )
+                                        _perf_trade_count += 1
+                                    except Exception as exc:
+                                        logger.debug("PerfTracker record error: %s", exc)
+                                _consecutive_exit_signals[symbol] = 0
+                                is_loss = sell_px < avg_entry
+                                if is_loss and loss_cooldown_bars > 0:
+                                    _cooldown_remaining = loss_cooldown_bars
+                                if notifier:
+                                    notifier.notify("sell", {"symbol": symbol, "price": sell_px,
+                                                             "qty": sell_qty, "ml_up_prob": up_prob})
+                            if not executed:
+                                logger.error("SELL_FAILED %s px=%.2f qty=%.6f — %s",
+                                             symbol, sell_px, sell_qty, getattr(res, "error", "unknown"))
+                            logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f ok=%s",
+                                        symbol, sell_px, sell_qty, up_prob or -1, equity, executed)
 
                 # ── Open short when flat and shorts enabled ───────────
                 _allow_short_entry = (
@@ -1598,7 +1653,18 @@ async def _run_event_loop_inner(
                     except Exception as exc:
                         logger.debug("OnlineLearner update error: %s", exc)
 
+            # Heartbeat: periodic health log
             event_count += 1
+            _heartbeat_count += 1
+            if _heartbeat_count >= _HEARTBEAT_INTERVAL:
+                _heartbeat_count = 0
+                _n_longs = len(portfolio.positions)
+                _n_shorts = len(portfolio.short_positions)
+                logger.info(
+                    "HEARTBEAT [%d events] equity=%.2f cash=%.2f longs=%d shorts=%d regime=%s",
+                    event_count, equity, portfolio.cash_usd, _n_longs, _n_shorts,
+                    _current_regime.get(symbol, "unknown"),
+                )
 
     # Final expectancy report
     if _expectancy._trades:

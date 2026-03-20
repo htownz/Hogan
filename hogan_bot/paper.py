@@ -57,6 +57,7 @@ class PaperPortfolio:
     fee_rate: float
     positions: dict[str, Position] = field(default_factory=dict)
     short_positions: dict[str, ShortPosition] = field(default_factory=dict)
+    short_max_loss_pct: float = 0.10  # configurable short max-loss guardrail
 
     def total_equity(self, mark_prices: dict[str, float]) -> float:
         long_value = sum(pos.qty * mark_prices.get(symbol, 0.0) for symbol, pos in self.positions.items())
@@ -210,7 +211,7 @@ class PaperPortfolio:
                 logger.debug("check_exits: skipping long %s — no valid price", symbol)
                 continue
             pos.bars_held += 1
-            if pos.avg_entry > 0:
+            if pos.avg_entry > 0 and px > 0:
                 move_pct = (px - pos.avg_entry) / pos.avg_entry
                 if move_pct < 0:
                     pos.max_adverse_pct = max(pos.max_adverse_pct, abs(move_pct))
@@ -252,12 +253,13 @@ class PaperPortfolio:
                 else:
                     pos.max_favorable_pct = max(pos.max_favorable_pct, move_pct)
             # Short max-loss guardrail: emergency exit if unrealized loss
-            # exceeds 10% of entry value (shorts have unlimited upside risk).
-            if pos.avg_entry > 0 and px > pos.avg_entry * 1.10:
+            # exceeds configured % of entry value (shorts have unlimited upside risk).
+            _sml_thresh = 1.0 + self.short_max_loss_pct
+            if pos.avg_entry > 0 and px > pos.avg_entry * _sml_thresh:
                 _short_loss_pct = (px - pos.avg_entry) / pos.avg_entry
                 logger.warning(
-                    "SHORT_MAX_LOSS %s — unrealized loss %.1f%% exceeds 10%% guardrail",
-                    symbol, _short_loss_pct * 100,
+                    "SHORT_MAX_LOSS %s — unrealized loss %.1f%% exceeds %.0f%% guardrail",
+                    symbol, _short_loss_pct * 100, self.short_max_loss_pct * 100,
                 )
                 exits.append((symbol, "short_max_loss"))
                 continue
