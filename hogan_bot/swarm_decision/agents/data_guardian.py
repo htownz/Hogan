@@ -60,9 +60,18 @@ class DataGuardianAgent:
                 if median_gap > 0:
                     max_gap = diffs.max()
                     gap_ratio = max_gap / median_gap
-                    if gap_ratio > self._max_gap:
+                    if gap_ratio > self._max_gap * 3:
+                        # Catastrophic gap (9x+): hard veto
                         veto = True
-                        reasons.append(f"candle_gap:{gap_ratio:.1f}x")
+                        reasons.append(f"candle_gap_severe:{gap_ratio:.1f}x")
+                    elif gap_ratio > self._max_gap * 2:
+                        # Major gap (6-9x): heavy size reduction
+                        size_scale *= 0.25
+                        reasons.append(f"candle_gap_major:{gap_ratio:.1f}x")
+                    elif gap_ratio > self._max_gap:
+                        # Minor gap (3-6x): moderate size reduction
+                        size_scale *= 0.50
+                        reasons.append(f"candle_gap_minor:{gap_ratio:.1f}x")
 
                     non_mono = (diffs <= 0).sum()
                     if non_mono > 0:

@@ -396,7 +396,7 @@ def ranging_gate(
     ml_separation_min: float = 0.06,
     whipsaw_block_threshold: int = 2,
     soft_mode: bool = True,
-    buy_ml_separation_min: float = 0.03,
+    buy_ml_separation_min: float = 0.045,
     buy_whipsaw_block_threshold: int = 3,
 ) -> GateDecision:
     """Extra protections for ranging markets.
@@ -473,7 +473,7 @@ def pullback_gate(
     candles: pd.DataFrame,
     *,
     lookback: int = 12,
-    max_range_position: float = 0.55,
+    max_range_position: float = 0.45,
     max_run_up_pct: float = 2.0,
     regime: str | None = None,
 ) -> GateDecision:
@@ -508,7 +508,7 @@ def pullback_gate(
     run_up_pct = (close - close_lookback) / max(close_lookback, 1e-9) * 100
 
     _strict_regimes = ("ranging", "trending_up")
-    _strict_thresh = 0.40 if regime in _strict_regimes else max_range_position
+    _strict_thresh = 0.35 if regime in _strict_regimes else max_range_position
     near_top = range_pos > _strict_thresh
     chasing = run_up_pct > max_run_up_pct
 
@@ -641,8 +641,8 @@ def ml_confidence(up_prob: float) -> float:
 def ml_probability_sizer(
     action: str,
     up_prob: float,
-    sensitivity: float = 3.0,
-    floor: float = 0.30,
+    sensitivity: float = 4.0,
+    floor: float = 0.40,
     ceiling: float = 1.50,
 ) -> float:
     """Map ML probability to a continuous position-size scale.
@@ -655,9 +655,9 @@ def ml_probability_sizer(
     For sell: scale = 1.0 + (0.50 - up_prob) * sensitivity
     Clamped to [floor, ceiling].
 
-    With sensitivity=3.0:
-      buy  @ prob=0.40 → 0.70x     buy  @ prob=0.55 → 1.15x
-      sell @ prob=0.60 → 0.70x     sell @ prob=0.45 → 1.15x
+    With sensitivity=4.0:
+      buy  @ prob=0.40 → 0.60x     buy  @ prob=0.55 → 1.20x
+      sell @ prob=0.60 → 0.60x     sell @ prob=0.45 → 1.20x
     """
     if up_prob is None or np.isnan(up_prob):
         return 1.0
@@ -675,7 +675,7 @@ def ml_blind_scale(
     recent_probs: list[float] | np.ndarray,
     *,
     window: int = 24,
-    std_threshold: float = 0.02,
+    std_threshold: float = 0.015,
     floor_scale: float = 0.50,
 ) -> float:
     """Detect when the ML model is 'blind' and scale down accordingly.
@@ -704,7 +704,7 @@ def ml_blind_blocks_shorts(
     recent_probs: list[float] | np.ndarray,
     *,
     window: int = 24,
-    block_threshold: float = 0.015,
+    block_threshold: float = 0.010,
 ) -> bool:
     """Return True when the ML model is so indecisive that shorts should be blocked.
 

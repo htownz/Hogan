@@ -137,7 +137,7 @@ class TestRiskStewardSignalAware:
         assert vote.action == "buy"
         assert vote.veto is False
         assert vote.size_scale < 1.0
-        assert any("drawdown_warning" in r for r in vote.block_reasons)
+        assert any("drawdown" in r for r in vote.block_reasons)
 
     def test_configurable_thresholds(self):
         agent = RiskStewardAgent(

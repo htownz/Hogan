@@ -33,11 +33,20 @@ class BotConfig:
     trade_weekends: bool = False
     paper_mode: bool = True
 
+    # Paper mode gate relaxation: when True (and paper_mode=True), lower entry
+    # thresholds by 20% to generate more trades for learning.  NEVER affects
+    # live trading — the check is ``paper_mode and paper_relaxed_gates``.
+    paper_relaxed_gates: bool = True
+
     # Persistence
     db_path: str = "data/hogan.db"
 
     # Live trading safety latch (must be true AND HOGAN_LIVE_ACK set)
     live_mode: bool = False
+
+    # Short max-loss guardrail %: emergency exit if unrealized short loss
+    # exceeds this fraction of entry value.  Default 10%.
+    short_max_loss_pct: float = 0.10
 
     use_ml_filter: bool = False
     ml_model_path: str = "models/hogan_logreg.pkl"
@@ -65,11 +74,14 @@ class BotConfig:
     signal_min_vote_margin: int = 1
 
     # Exit management (0 = disabled)
-    trailing_stop_pct: float = 0.025
+    trailing_stop_pct: float = 0.030
     take_profit_pct: float = 0.054
     # Trailing stop activation: only start trailing after MFE reaches this %.
     # Prevents noise-triggered stops in the first bars after entry.
     trail_activation_pct: float = 0.005
+    # Break-even stop: once MFE reaches this %, stop cannot fall below entry.
+    # Protects winning trades from reversing into losses. 0 = disabled.
+    breakeven_stop_pct: float = 0.015
 
     # ATR stop-distance multiplier (strategy.py line: ATR × multiplier)
     atr_stop_multiplier: float = 2.5
@@ -197,6 +209,40 @@ class BotConfig:
     # Set HOGAN_USE_MTF_EXTENDED=true in .env after retraining.
     use_mtf_extended: bool = True
 
+    # Portfolio correlation: when holding a position in one symbol and entering
+    # another highly correlated symbol, scale down the new position to avoid
+    # doubling effective exposure (BTC/ETH ~0.85 correlation).
+    portfolio_correlation_scale: float = 0.60
+
+    # Auto-train forecast models on startup if pkl files are missing.
+    # Safe to enable: only trains once if models don't exist, then persists.
+    auto_train_forecast: bool = True
+
+    # Phase 5A: Auto-apply weight proposals from PerformanceTracker.
+    # After every 50 trades, if propose_weight_update() returns a proposal
+    # with sufficient evidence, apply it to the MetaWeigher.  Bounded to
+    # ±0.05 per agent per cycle as a safety guardrail.
+    auto_apply_weights: bool = True
+    auto_apply_min_trades: int = 30  # min trades in proposal evidence
+
+    # Phase 5D: Forecast-driven position sizing.
+    # Scale position size by forecast conviction relative to take profit target.
+    # expected_return > 2× TP → 1.2× size; < 0.5× TP → 0.7× size.
+    # Direction conflict → 0.5× size.
+    forecast_driven_sizing: bool = True
+
+    # Phase 5E: Walk-forward auto-retrain on schedule.
+    # When True, checks model staleness every 4h of runtime and retrains
+    # if model is older than retrain_schedule_hours and enough new candles.
+    auto_retrain: bool = True
+    auto_retrain_min_candles: int = 1000  # new candles since last retrain
+
+    # Regime ensemble: blend per-regime ML models with standard prediction.
+    # Requires a trained AdvancedEnsembleArtifact (see ml_advanced.py).
+    use_regime_ensemble: bool = False
+    regime_ensemble_blend: float = 0.30  # weight of regime-ensemble prediction
+    regime_ensemble_path: str = "models/advanced_ensemble.pkl"
+
     # Online learning
     use_online_learning: bool = False
     online_learning_interval: int = 50
@@ -204,7 +250,7 @@ class BotConfig:
 
     # Multi-timeframe ensemble: daily bias + primary signal + 30m confirmation
     use_mtf_ensemble: bool = False
-    mtf_timeframes: list[str] | None = None  # sub-hourly context frames e.g. ["15m", "30m"]
+    mtf_timeframes: list[str] | None = field(default_factory=lambda: ["15m", "30m", "3h"])  # sub-hourly context frames
     mtf_use_daily_filter: bool = False   # enable after daily is Optuna-optimised
     mtf_daily_timeframe: str = "1d"
     mtf_m30_timeframe: str = "30m"
@@ -231,8 +277,8 @@ class BotConfig:
     use_policy_core: bool = True
 
     # Swarm Decision Layer
-    swarm_enabled: bool = False
-    swarm_mode: str = "shadow"
+    swarm_enabled: bool = True
+    swarm_mode: str = "conditional_active"
     swarm_phase: str = "certification"
     swarm_agents: str = "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1"
     swarm_min_agreement: float = 0.60
@@ -244,9 +290,9 @@ class BotConfig:
     swarm_weight_max_daily_shift: float = 0.05
     swarm_log_full_votes: bool = True
     swarm_use_regime_weights: bool = False
-    swarm_weight_learning_enabled: bool = False
+    swarm_weight_learning_enabled: bool = True   # Phase 5B: auto-learn swarm weights
     swarm_weight_learning_interval_bars: int = 24
-    swarm_weight_auto_promote: bool = False
+    swarm_weight_auto_promote: bool = True       # Phase 5B: auto-promote when evidence sufficient
     swarm_conditional_min_agreement: float = 0.70
     swarm_conditional_min_confidence: float = 0.60
 
@@ -326,6 +372,33 @@ class BotConfig:
     kraken_api_key: str | None = None
     kraken_api_secret: str | None = None
 
+    # ── Startup validation ───────────────────────────────────────────────
+    def validate(self) -> list[str]:
+        """Validate config values and return a list of error messages (empty = OK)."""
+        errors: list[str] = []
+        if self.starting_balance_usd <= 0:
+            errors.append(f"starting_balance_usd must be > 0, got {self.starting_balance_usd}")
+        if not self.symbols:
+            errors.append("symbols list is empty — at least one trading pair required")
+        for sym in self.symbols:
+            if "/" not in sym:
+                errors.append(f"symbol '{sym}' missing '/' separator (expected format: BTC/USD)")
+        if self.max_drawdown <= 0 or self.max_drawdown > 1.0:
+            errors.append(f"max_drawdown must be in (0, 1.0], got {self.max_drawdown}")
+        if self.max_risk_per_trade <= 0 or self.max_risk_per_trade > 1.0:
+            errors.append(f"max_risk_per_trade must be in (0, 1.0], got {self.max_risk_per_trade}")
+        if self.trailing_stop_pct <= 0 or self.trailing_stop_pct > 0.5:
+            errors.append(f"trailing_stop_pct must be in (0, 0.5], got {self.trailing_stop_pct}")
+        if self.take_profit_pct <= 0 or self.take_profit_pct > 1.0:
+            errors.append(f"take_profit_pct must be in (0, 1.0], got {self.take_profit_pct}")
+        if self.fee_rate < 0:
+            errors.append(f"fee_rate must be >= 0, got {self.fee_rate}")
+        if self.ohlcv_limit < 50:
+            errors.append(f"ohlcv_limit must be >= 50, got {self.ohlcv_limit}")
+        if self.aggressive_allocation <= 0 or self.aggressive_allocation > 1.0:
+            errors.append(f"aggressive_allocation must be in (0, 1.0], got {self.aggressive_allocation}")
+        return errors
+
 
 @dataclass
 class RegimeConfig:
@@ -403,13 +476,13 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         allow_longs=True,
         allow_shorts=True,
         long_size_scale=0.40,
-        short_size_scale=1.50,
+        short_size_scale=1.00,
     ),
     "ranging": RegimeConfig(
         volume_threshold_mult=1.10,
         ml_buy_threshold=0.58,
         ml_sell_threshold=0.42,
-        trailing_stop_mult=1.20,
+        trailing_stop_mult=0.90,
         take_profit_mult=0.85,
         position_scale=0.85,
         strategy_family="mean_revert",
@@ -441,9 +514,9 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         quality_final_mult=1.20,
         quality_tech_mult=1.10,
         allow_longs=True,
-        allow_shorts=True,
+        allow_shorts=False,
         long_size_scale=0.50,
-        short_size_scale=0.50,
+        short_size_scale=0.0,
     ),
 }
 
@@ -640,6 +713,7 @@ def load_config() -> BotConfig:
         paper_mode=os.getenv("HOGAN_PAPER_MODE", "true").lower() == "true",
         db_path=os.getenv("HOGAN_DB_PATH", "data/hogan.db"),
         live_mode=os.getenv("HOGAN_LIVE_MODE", "false").lower() == "true",
+        short_max_loss_pct=_env_float("HOGAN_SHORT_MAX_LOSS_PCT", "0.10"),
         use_ml_filter=os.getenv("HOGAN_USE_ML_FILTER", "false").lower() == "true",
         ml_model_path=os.getenv("HOGAN_ML_MODEL_PATH", "models/hogan_logreg.pkl"),
         champion_ml_model_path=os.getenv("HOGAN_CHAMPION_ML_MODEL_PATH", "models/hogan_champion.pkl"),
@@ -654,9 +728,10 @@ def load_config() -> BotConfig:
         fvg_min_gap_pct=float(os.getenv("HOGAN_FVG_MIN_GAP_PCT", "0.001")),
         signal_mode=os.getenv("HOGAN_SIGNAL_MODE", "any"),
         signal_min_vote_margin=max(1, int(os.getenv("HOGAN_SIGNAL_MIN_VOTE_MARGIN", "1"))),
-        trailing_stop_pct=_env_float("HOGAN_TRAILING_STOP_PCT", "0.025"),
+        trailing_stop_pct=_env_float("HOGAN_TRAILING_STOP_PCT", "0.030"),
         take_profit_pct=_env_float("HOGAN_TAKE_PROFIT_PCT", "0.054"),
         trail_activation_pct=_env_float("HOGAN_TRAIL_ACTIVATION_PCT", "0.005"),
+        breakeven_stop_pct=_env_float("HOGAN_BREAKEVEN_STOP_PCT", "0.015"),
         atr_stop_multiplier=float(os.getenv("HOGAN_ATR_STOP_MULTIPLIER", "2.5")),
         exit_drawdown_pct=float(os.getenv("HOGAN_EXIT_DRAWDOWN_PCT", "0.03")),
         exit_time_decay=float(os.getenv("HOGAN_EXIT_TIME_DECAY", "0.75")),
@@ -718,12 +793,17 @@ def load_config() -> BotConfig:
         retrain_min_improvement=float(os.getenv("HOGAN_RETRAIN_MIN_IMPROVEMENT", "0.005")),
         retrain_promotion_metric=os.getenv("HOGAN_RETRAIN_PROMOTION_METRIC", "roc_auc"),
         retrain_schedule_hours=float(os.getenv("HOGAN_RETRAIN_SCHEDULE_HOURS", "24.0")),
+        auto_apply_weights=os.getenv("HOGAN_AUTO_APPLY_WEIGHTS", "true").lower() == "true",
+        auto_apply_min_trades=int(os.getenv("HOGAN_AUTO_APPLY_MIN_TRADES", "30")),
+        forecast_driven_sizing=os.getenv("HOGAN_FORECAST_DRIVEN_SIZING", "true").lower() == "true",
+        auto_retrain=os.getenv("HOGAN_AUTO_RETRAIN", "true").lower() == "true",
+        auto_retrain_min_candles=int(os.getenv("HOGAN_AUTO_RETRAIN_MIN_CANDLES", "1000")),
         training_symbols=_split_symbols(
             os.getenv("HOGAN_TRAINING_SYMBOLS", "BTC/USD,ETH/USD,SOL/USD")
         ),
         use_mtf_extended=os.getenv("HOGAN_USE_MTF_EXTENDED", "true").lower() == "true",
         use_mtf_ensemble=os.getenv("HOGAN_USE_MTF_ENSEMBLE", "false").lower() == "true",
-        mtf_timeframes=os.getenv("HOGAN_MTF_TIMEFRAMES", "").split(",") if os.getenv("HOGAN_MTF_TIMEFRAMES") else None,
+        mtf_timeframes=os.getenv("HOGAN_MTF_TIMEFRAMES", "15m,30m,3h").split(","),
         mtf_use_daily_filter=os.getenv("HOGAN_MTF_USE_DAILY_FILTER", "false").lower() == "true",
         mtf_daily_timeframe=os.getenv("HOGAN_MTF_DAILY_TF", "1d"),
         mtf_m30_timeframe=os.getenv("HOGAN_MTF_M30_TF", "30m"),
@@ -739,8 +819,8 @@ def load_config() -> BotConfig:
         macro_equity_ma_period=int(os.getenv("HOGAN_MACRO_EQUITY_MA", "20")),
         use_rl_agent=os.getenv("HOGAN_USE_RL_AGENT", "false").lower() == "true",
         use_policy_core=os.getenv("HOGAN_USE_POLICY_CORE", "true").lower() == "true",
-        swarm_enabled=os.getenv("HOGAN_SWARM_ENABLED", "false").lower() == "true",
-        swarm_mode=os.getenv("HOGAN_SWARM_MODE", "shadow"),
+        swarm_enabled=os.getenv("HOGAN_SWARM_ENABLED", "true").lower() == "true",
+        swarm_mode=os.getenv("HOGAN_SWARM_MODE", "conditional_active"),
         swarm_phase=os.getenv("HOGAN_SWARM_PHASE", "certification"),
         swarm_agents=os.getenv("HOGAN_SWARM_AGENTS", "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1"),
         swarm_min_agreement=float(os.getenv("HOGAN_SWARM_MIN_AGREEMENT", "0.60")),
@@ -752,9 +832,9 @@ def load_config() -> BotConfig:
         swarm_weight_max_daily_shift=float(os.getenv("HOGAN_SWARM_WEIGHT_MAX_DAILY_SHIFT", "0.05")),
         swarm_log_full_votes=os.getenv("HOGAN_SWARM_LOG_FULL_VOTES", "true").lower() == "true",
         swarm_use_regime_weights=os.getenv("HOGAN_SWARM_USE_REGIME_WEIGHTS", "false").lower() == "true",
-        swarm_weight_learning_enabled=os.getenv("HOGAN_SWARM_WEIGHT_LEARNING", "false").lower() == "true",
+        swarm_weight_learning_enabled=os.getenv("HOGAN_SWARM_WEIGHT_LEARNING", "true").lower() == "true",
         swarm_weight_learning_interval_bars=int(os.getenv("HOGAN_SWARM_WEIGHT_LEARNING_INTERVAL", "24")),
-        swarm_weight_auto_promote=os.getenv("HOGAN_SWARM_WEIGHT_AUTO_PROMOTE", "false").lower() == "true",
+        swarm_weight_auto_promote=os.getenv("HOGAN_SWARM_WEIGHT_AUTO_PROMOTE", "true").lower() == "true",
         swarm_conditional_min_agreement=float(os.getenv("HOGAN_SWARM_CONDITIONAL_MIN_AGREEMENT", "0.70")),
         swarm_conditional_min_confidence=float(os.getenv("HOGAN_SWARM_CONDITIONAL_MIN_CONFIDENCE", "0.60")),
         rl_model_path=os.getenv("HOGAN_RL_MODEL_PATH", "models/hogan_rl_policy.zip"),

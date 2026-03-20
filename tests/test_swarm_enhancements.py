@@ -222,7 +222,7 @@ class TestWeightLearner:
         )
 
         for k, d in proposal.deltas.items():
-            assert abs(d) <= 0.10  # renormalization can amplify shifts slightly
+            assert abs(d) <= 0.25  # adaptive shift (up to 3x base) + renormalization can amplify
         conn.close()
 
     def test_log_weight_proposal(self):

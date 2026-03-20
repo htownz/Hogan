@@ -73,8 +73,9 @@ class TestExitEvaluator:
             "close": close, "volume": np.full(n, 500.0),
         })
         ev = ExitEvaluator()
+        # entry_price slightly above current so upnl < 0, triggering time decay
         result = ev.should_exit(
-            candles, entry_price=100, current_price=float(close[-1]),
+            candles, entry_price=float(close[-1]) + 0.5, current_price=float(close[-1]),
             bars_held=20, side="long", max_hold_bars=24,
         )
         assert result.should_exit is True

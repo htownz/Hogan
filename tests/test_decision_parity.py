@@ -256,7 +256,7 @@ class TestRangingGateAsymmetric:
 
     def test_buy_passes_with_low_ml_separation(self):
         gd = ranging_gate("buy", regime="ranging", tech_action="buy",
-                          up_prob=0.52, recent_whipsaw_count=0)
+                          up_prob=0.53, recent_whipsaw_count=0)
         assert gd.action == "buy"
 
     def test_sell_blocked_with_low_ml_separation(self):
@@ -429,7 +429,10 @@ class TestPolicyCoreEquivalence:
         assert intent.action in ("buy", "sell", "hold")
         assert 0.0 <= intent.confidence <= 1.0
         assert intent.size_usd >= 0.0
-        assert intent.swarm is None
+        # Swarm is now enabled by default (conditional_active mode),
+        # so intent.swarm may be non-None.  Just check it's valid if present.
+        if intent.swarm is not None:
+            assert hasattr(intent.swarm, "final_action")
 
     def test_decide_with_mock_ml_model(self, core_inputs):
         """decide() with a mock ML model still produces deterministic output."""

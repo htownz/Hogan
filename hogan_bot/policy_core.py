@@ -344,6 +344,25 @@ def decide(
             block_reasons.append("ml_blind_blocks_shorts")
 
     # ------------------------------------------------------------------
+    # 3b. Optional regime-ensemble blend
+    # ------------------------------------------------------------------
+    if up_prob is not None and getattr(cfg, "use_regime_ensemble", False):
+        try:
+            from hogan_bot.ml_advanced import load_artifact, predict_up_probability as regime_predict
+            _ensemble_path = getattr(cfg, "regime_ensemble_path", "models/advanced_ensemble.pkl")
+            _artifact = load_artifact(_ensemble_path)
+            if _artifact is not None:
+                _regime_prob = regime_predict(_artifact, candles)
+                _blend = getattr(cfg, "regime_ensemble_blend", 0.30)
+                up_prob = up_prob * (1.0 - _blend) + _regime_prob * _blend
+                logger.debug(
+                    "REGIME_ENSEMBLE: blended prob=%.4f (standard=%.4f, regime=%.4f, blend=%.2f)",
+                    up_prob, up_prob, _regime_prob, _blend,
+                )
+        except Exception as exc:
+            logger.debug("Regime ensemble unavailable: %s", exc)
+
+    # ------------------------------------------------------------------
     # 4. Loss-streak dampener
     # ------------------------------------------------------------------
     _ls_scale = loss_streak_scale(state.trade_outcomes)
@@ -355,6 +374,22 @@ def decide(
     # ------------------------------------------------------------------
     _atr_series = compute_atr(candles, window=14)
     atr_pct = float(_atr_series.iloc[-1]) / max(px, 1e-9)
+    # ATR-adaptive trailing stop floor: never tighter than 1.5× current ATR
+    eff_ts = max(eff_ts, atr_pct * 1.5)
+
+    # Adaptive stop widening via RiskHead MAE: if the model predicts a high
+    # probability of hitting the stop, widen by the MAE ratio (capped at 1.5×).
+    _risk_est = signal.risk_estimate
+    if _risk_est is not None and _risk_est.stop_hit_prob > 0.65:
+        _stop_pct_bps = signal.stop_distance_pct * 100  # convert to bps-like
+        if _stop_pct_bps > 0:
+            _mae_scale = max(1.0, _risk_est.max_adverse_pct / _stop_pct_bps)
+            signal.stop_distance_pct *= min(1.5, _mae_scale)
+            logger.debug(
+                "POLICY: adaptive stop widened (stop_hit_prob=%.2f, mae_scale=%.2f, new_stop=%.4f)",
+                _risk_est.stop_hit_prob, _mae_scale, signal.stop_distance_pct,
+            )
+
     spread_est = estimate_spread_from_candles(candles)
 
     forecast_ret: float | None = None
@@ -365,17 +400,22 @@ def decide(
         elif isinstance(_er, (int, float)):
             forecast_ret = abs(float(_er))
 
+    # Paper-mode gate relaxation: lower thresholds by 20% to generate more
+    # trades for learning.  Only active when paper_mode AND paper_relaxed_gates.
+    _paper_relax = getattr(cfg, "paper_relaxed_gates", False) and getattr(cfg, "paper_mode", True)
+
     # Edge gate
+    _edge_relax = 0.70 if _paper_relax else 1.0  # 30% wider edge gate in paper mode
     _edge_gd = edge_gate(
         action,
         atr_pct=atr_pct,
         take_profit_pct=eff_tp,
         fee_rate=cfg.fee_rate,
-        min_edge_multiple=getattr(cfg, "min_edge_multiple", 1.5),
+        min_edge_multiple=getattr(cfg, "min_edge_multiple", 1.5) * _edge_relax,
         forecast_expected_return=forecast_ret,
         estimated_spread=spread_est,
-        atr_friction_multiple=getattr(cfg, "sell_atr_friction_multiple", 0.8),
-        buy_atr_friction_multiple=getattr(cfg, "buy_atr_friction_multiple", 0.25),
+        atr_friction_multiple=getattr(cfg, "sell_atr_friction_multiple", 0.8) * _edge_relax,
+        buy_atr_friction_multiple=getattr(cfg, "buy_atr_friction_multiple", 0.25) * _edge_relax,
     )
     action = _edge_gd.action
     if _edge_gd.blocked_by:
@@ -383,6 +423,7 @@ def decide(
 
     # Quality gate
     _tech_conf = signal.tech.confidence if signal.tech else None
+    _relax_mult = 0.80 if _paper_relax else 1.0
     _quality_gd = entry_quality_gate(
         action,
         final_confidence=signal.confidence,
@@ -390,9 +431,9 @@ def decide(
         regime=regime_name,
         regime_confidence=regime_conf,
         recent_whipsaw_count=recent_whipsaw_count,
-        min_final_confidence=cfg.min_final_confidence,
-        min_tech_confidence=cfg.min_tech_confidence,
-        min_regime_confidence=cfg.min_regime_confidence,
+        min_final_confidence=cfg.min_final_confidence * _relax_mult,
+        min_tech_confidence=cfg.min_tech_confidence * _relax_mult,
+        min_regime_confidence=cfg.min_regime_confidence * _relax_mult,
         max_whipsaws=cfg.max_whipsaws,
     )
     action = _quality_gd.action
@@ -428,6 +469,54 @@ def decide(
         pullback_scale = min(pullback_scale, _sell_pullback_gd.size_scale)
         if _sell_pullback_gd.blocked_by:
             block_reasons.append(_sell_pullback_gd.blocked_by)
+
+    # ------------------------------------------------------------------
+    # 5b. MTF signal confirmation (soft adjustments, not hard blocks)
+    # ------------------------------------------------------------------
+    mtf_conf_scale = 1.0
+    mtf_size_scale = 1.0
+    if mtf_candles and action != "hold":
+        # 3h trend alignment: penalise signals that disagree with 3h trend
+        _candles_3h = mtf_candles.get("3h")
+        if _candles_3h is not None and len(_candles_3h) >= 20:
+            try:
+                _h3_close = _candles_3h["close"].astype(float)
+                _h3_ma20 = float(_h3_close.rolling(20).mean().iloc[-1])
+                _h3_trend_up = float(_h3_close.iloc[-1]) > _h3_ma20
+                if action == "buy" and not _h3_trend_up:
+                    mtf_conf_scale *= 0.70
+                    logger.debug("MTF: 3h trend DOWN disagrees with BUY, conf -30%%")
+                elif action == "sell" and _h3_trend_up:
+                    mtf_conf_scale *= 0.70
+                    logger.debug("MTF: 3h trend UP disagrees with SELL, conf -30%%")
+                else:
+                    logger.debug("MTF: 3h trend aligned with %s", action)
+            except Exception as _h3_exc:
+                logger.debug("MTF 3h trend check error: %s", _h3_exc)
+
+        # 15m momentum: penalise when MACD histogram opposes signal direction
+        _candles_15m = mtf_candles.get("15m")
+        if _candles_15m is not None and len(_candles_15m) >= 26:
+            try:
+                _m15_close = _candles_15m["close"].astype(float)
+                _ema12 = _m15_close.ewm(span=12, adjust=False).mean()
+                _ema26 = _m15_close.ewm(span=26, adjust=False).mean()
+                _macd_line = _ema12 - _ema26
+                _signal_line = _macd_line.ewm(span=9, adjust=False).mean()
+                _m15_macd_hist = float((_macd_line - _signal_line).iloc[-1])
+                if action == "buy" and _m15_macd_hist < 0:
+                    mtf_size_scale *= 0.85
+                    logger.debug("MTF: 15m MACD hist negative (%.6f), size -15%%", _m15_macd_hist)
+                elif action == "sell" and _m15_macd_hist > 0:
+                    mtf_size_scale *= 0.85
+                    logger.debug("MTF: 15m MACD hist positive (%.6f), size -15%%", _m15_macd_hist)
+                else:
+                    logger.debug("MTF: 15m MACD hist aligned with %s (%.6f)", action, _m15_macd_hist)
+            except Exception as _m15_exc:
+                logger.debug("MTF 15m momentum check error: %s", _m15_exc)
+
+    # Apply MTF confirmation scale to conf_scale
+    conf_scale *= mtf_conf_scale
 
     # ------------------------------------------------------------------
     # 6. Feature freshness (live-only by default)
@@ -487,6 +576,43 @@ def decide(
             momentum_scale = max(0.40, 1.0 - _pct_below * 20.0)
 
     # ------------------------------------------------------------------
+    # 7b. Forecast-driven position sizing (Phase 5D)
+    # ------------------------------------------------------------------
+    forecast_size_scale = 1.0
+    if (
+        getattr(cfg, "forecast_driven_sizing", False)
+        and action != "hold"
+        and signal.forecast is not None
+        and getattr(signal.forecast, "confidence", 0) > 0.2
+    ):
+        try:
+            _fc = signal.forecast
+            _fc_er = _fc.expected_return
+            # Resolve expected_return (may be dict or scalar)
+            if isinstance(_fc_er, dict) and _fc_er:
+                _fc_ret = max(_fc_er.values()) if action == "buy" else min(_fc_er.values())
+            elif isinstance(_fc_er, (int, float)):
+                _fc_ret = float(_fc_er)
+            else:
+                _fc_ret = None
+
+            if _fc_ret is not None and eff_tp > 0:
+                _fc_ratio = abs(_fc_ret) / eff_tp
+                # Direction check: forecast should agree with action
+                _fc_agrees = (action == "buy" and _fc_ret > 0) or (action == "sell" and _fc_ret < 0)
+                if not _fc_agrees:
+                    forecast_size_scale = 0.50
+                    logger.debug("FORECAST_SIZING: direction conflict (fc=%.4f, action=%s) → 0.50×", _fc_ret, action)
+                elif _fc_ratio > 2.0:
+                    forecast_size_scale = 1.20
+                    logger.debug("FORECAST_SIZING: strong conviction (ratio=%.2f) → 1.20×", _fc_ratio)
+                elif _fc_ratio < 0.5:
+                    forecast_size_scale = 0.70
+                    logger.debug("FORECAST_SIZING: weak conviction (ratio=%.2f) → 0.70×", _fc_ratio)
+        except Exception as _fc_exc:
+            logger.debug("Forecast-driven sizing error: %s", _fc_exc)
+
+    # ------------------------------------------------------------------
     # 8. Position sizing
     # ------------------------------------------------------------------
     _MIN_COMPOSITE_SCALE = 0.15
@@ -499,8 +625,15 @@ def decide(
         * eff_position_scale
         * freshness_scale
         * momentum_scale
-        * macro_filter_scale,
+        * macro_filter_scale
+        * mtf_size_scale
+        * forecast_size_scale,
     )
+
+    # Compute average ATR for volatility-adjusted sizing
+    _avg_atr_pct = 0.0
+    if len(_atr_series) >= 50:
+        _avg_atr_pct = float(_atr_series.iloc[-50:].mean()) / max(px, 1e-9)
 
     size = calculate_position_size(
         equity_usd=equity_usd,
@@ -510,6 +643,8 @@ def decide(
         max_allocation_pct=cfg.aggressive_allocation,
         confidence_scale=composite_scale,
         fee_rate=cfg.fee_rate,
+        atr_pct=atr_pct,
+        avg_atr_pct=_avg_atr_pct,
     )
 
     # ------------------------------------------------------------------

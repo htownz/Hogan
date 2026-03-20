@@ -24,9 +24,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import math
 import os
+import sqlite3
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -323,6 +325,7 @@ class SignalEvaluator:
                         candles_15m=mtf_candles.get("15m"),
                         candles_10m=mtf_candles.get("10m"),
                         candles_30m=mtf_candles.get("30m"),
+                        candles_3h=mtf_candles.get("3h"),
                         conn=self.pipeline.conn,
                         symbol=symbol,
                         extended_mtf=True,
@@ -563,7 +566,31 @@ async def run_event_loop(
     from hogan_bot.config import apply_sweep_results
     apply_sweep_results(config)
 
+    # ── Startup config validation ────────────────────────────────────────
+    _cfg_errors = config.validate()
+    if _cfg_errors:
+        for _ce in _cfg_errors:
+            logger.error("CONFIG VALIDATION: %s", _ce)
+        raise ValueError(f"Invalid configuration — {len(_cfg_errors)} error(s): {'; '.join(_cfg_errors)}")
+
     conn = get_connection(config.db_path)
+
+    # ── Startup data refresh: populate sentiment/macro/derivatives tables ──
+    _skip_fetch = os.getenv("HOGAN_SKIP_FETCH", "").strip().lower() in ("1", "true", "yes")
+    if not _skip_fetch:
+        try:
+            from hogan_bot.fetch_orchestrator import run_all_fetchers
+            _fetch_results = run_all_fetchers(
+                db_path=config.db_path,
+                symbols=config.symbols,
+                backfill=False,
+            )
+            logger.info("Startup data fetch complete: %s", {k: v for k, v in _fetch_results.items() if not str(v).startswith("SKIPPED")})
+        except Exception as exc:
+            logger.warning("Startup data fetch failed (non-fatal): %s", exc)
+    else:
+        logger.info("Startup data fetch skipped (HOGAN_SKIP_FETCH=true)")
+
     try:
         await _run_event_loop_inner(config, conn, max_events)
     finally:
@@ -585,7 +612,11 @@ async def _run_event_loop_inner(
         and live_ack == "I_UNDERSTAND_LIVE_TRADING"
     )
 
-    portfolio = PaperPortfolio(cash_usd=config.starting_balance_usd, fee_rate=config.fee_rate)
+    portfolio = PaperPortfolio(
+        cash_usd=config.starting_balance_usd,
+        fee_rate=config.fee_rate,
+        short_max_loss_pct=getattr(config, "short_max_loss_pct", 0.10),
+    )
     guard = DrawdownGuard(config.starting_balance_usd, config.max_drawdown)
 
     use_oanda = (
@@ -636,20 +667,43 @@ async def _run_event_loop_inner(
         else:
             executor = PaperExecution(portfolio=portfolio, conn=conn, exchange_id="paper")
 
+    # Reconcile portfolio with DB: restore open paper trades from prior session
+    try:
+        _open_trades = conn.execute(
+            "SELECT symbol, side, entry_price, qty FROM paper_trades WHERE exit_price IS NULL"
+        ).fetchall()
+        for _ot_symbol, _ot_side, _ot_entry, _ot_qty in _open_trades:
+            _ot_entry = float(_ot_entry)
+            _ot_qty = float(_ot_qty)
+            if _ot_side == "long" and _ot_symbol not in portfolio.positions:
+                portfolio.execute_buy(_ot_symbol, _ot_entry, _ot_qty)
+                logger.info("RECONCILE: restored open long %s qty=%.6f entry=%.2f", _ot_symbol, _ot_qty, _ot_entry)
+            elif _ot_side == "short" and _ot_symbol not in portfolio.short_positions:
+                portfolio.execute_short(_ot_symbol, _ot_entry, _ot_qty)
+                logger.info("RECONCILE: restored open short %s qty=%.6f entry=%.2f", _ot_symbol, _ot_qty, _ot_entry)
+        if _open_trades:
+            logger.info("RECONCILE: restored %d open position(s) from DB", len(_open_trades))
+    except Exception as exc:
+        logger.warning("Position reconciliation failed: %s", exc)
+
     ml_model: TrainedModel | None = None
     if config.use_ml_filter or config.use_ml_as_sizer:
         try:
             ml_model = load_model(config.ml_model_path)
             logger.info("Loaded ML model from %s", config.ml_model_path)
         except FileNotFoundError:
-            logger.warning("ML model not found at %s; running without ML.", config.ml_model_path)
+            logger.warning(
+                "ML model not found at %s — running in DEGRADED mode (no ML filter/sizer). "
+                "Train a model or set HOGAN_USE_ML_FILTER=false and HOGAN_ML_AS_SIZER=false.",
+                config.ml_model_path,
+            )
         except Exception as exc:
-            logger.warning("ML model load error: %s", exc)
+            logger.warning("ML model load error: %s — running without ML.", exc)
 
     evaluator = SignalEvaluator(config, ml_model, conn=conn)
 
     _macro_sitout = None
-    _use_macro_sitout = os.getenv("HOGAN_MACRO_SITOUT", "").strip().lower() in ("1", "true", "yes")
+    _use_macro_sitout = os.getenv("HOGAN_MACRO_SITOUT", "true").strip().lower() in ("1", "true", "yes")
     if _use_macro_sitout:
         try:
             from hogan_bot.macro_sitout import MacroSitout
@@ -659,7 +713,7 @@ async def _run_event_loop_inner(
             logger.warning("Macro sitout init failed: %s", exc)
 
     _funding_overlay = None
-    _use_funding = os.getenv("HOGAN_USE_FUNDING_OVERLAY", "").strip().lower() in ("1", "true", "yes")
+    _use_funding = os.getenv("HOGAN_USE_FUNDING_OVERLAY", "true").strip().lower() in ("1", "true", "yes")
     if _use_funding:
         try:
             from hogan_bot.funding_overlay import FundingOverlay
@@ -676,6 +730,19 @@ async def _run_event_loop_inner(
         max_consolidation_bars=config.exit_stagnation_bars,
     )
     _expectancy = ExpectancyTracker()
+
+    # Online learner (behind config flag)
+    _online_learner = None
+    _online_learner_bar_count = 0
+    _online_drift_scale = 1.0  # reduced when feature drift detected
+    if getattr(config, "use_online_learning", False):
+        try:
+            from hogan_bot.online_learner import OnlineLearner
+            _online_learner = OnlineLearner(db_path=config.db_path)
+            logger.info("OnlineLearner initialized (interval=%d bars)",
+                        getattr(config, "online_learning_interval", 50))
+        except Exception as exc:
+            logger.warning("OnlineLearner unavailable: %s", exc)
 
     _perf_tracker = None
     try:
@@ -700,6 +767,33 @@ async def _run_event_loop_inner(
     except Exception as exc:
         logger.debug("wf_failure_scale error: %s", exc)
 
+    # Auto-train forecast models if missing and flag is set
+    if getattr(config, "auto_train_forecast", False):
+        import glob as _glob
+        _forecast_files = _glob.glob("models/forecast_*.pkl")
+        if not _forecast_files:
+            logger.info("AUTO_TRAIN_FORECAST: no forecast models found — training from historical data")
+            try:
+                from hogan_bot.forecast import train_forecast_models
+                _train_conn = sqlite3.connect(config.db_path)
+                # Fetch historical candles for the primary symbol
+                _hist_candles = pd.read_sql_query(
+                    "SELECT * FROM candles WHERE symbol = ? ORDER BY ts_ms",
+                    _train_conn,
+                    params=[config.symbols[0] if config.symbols else "BTC/USD"],
+                )
+                if len(_hist_candles) >= 500:
+                    _fc_result = train_forecast_models(_hist_candles, db_conn=_train_conn)
+                    logger.info("AUTO_TRAIN_FORECAST: trained %d models: %s",
+                                len(_fc_result), list(_fc_result.keys()))
+                else:
+                    logger.warning("AUTO_TRAIN_FORECAST: insufficient historical candles (%d < 500)", len(_hist_candles))
+                _train_conn.close()
+            except Exception as exc:
+                logger.warning("AUTO_TRAIN_FORECAST failed: %s", exc)
+        else:
+            logger.debug("AUTO_TRAIN_FORECAST: %d forecast models already exist", len(_forecast_files))
+
     # Parity with backtest: max_hold_bars, loss_cooldown, slippage
     max_hold_bars, loss_cooldown_bars = effective_hold_cooldown_bars(config, config.timeframe)
     short_max_hold_bars = effective_short_max_hold_bars(config, config.timeframe)
@@ -717,6 +811,9 @@ async def _run_event_loop_inner(
     enable_shorts = os.getenv("HOGAN_ENABLE_SHORTS", "").strip().lower() in ("1", "true", "yes")
     enable_close_and_reverse = os.getenv("HOGAN_CLOSE_AND_REVERSE", "").strip().lower() in ("1", "true", "yes")
     _consecutive_short_exit_signals: dict[str, int] = defaultdict(int)
+    _consecutive_eval_failures: dict[str, int] = {}
+    _heartbeat_count = 0
+    _HEARTBEAT_INTERVAL = 100  # log a heartbeat every N events
 
     try:
         from hogan_bot.metrics import (
@@ -797,6 +894,21 @@ async def _run_event_loop_inner(
         ",".join(config.symbols),
         config.timeframe,
     )
+    logger.info(
+        "STARTUP SUMMARY: balance=%.2f max_dd=%.1f%% risk/trade=%.1f%% "
+        "trailing_stop=%.1f%% take_profit=%.1f%% ML=%s swarm=%s regime=%s "
+        "policy_core=%s online_learn=%s",
+        config.starting_balance_usd,
+        config.max_drawdown * 100,
+        config.max_risk_per_trade * 100,
+        config.trailing_stop_pct * 100,
+        config.take_profit_pct * 100,
+        "ON" if (config.use_ml_filter or config.use_ml_as_sizer) else "OFF",
+        "ON" if config.swarm_enabled else "OFF",
+        "ON" if config.use_regime_detection else "OFF",
+        "ON" if config.use_policy_core else "OFF",
+        "ON" if getattr(config, "use_online_learning", False) else "OFF",
+    )
 
     async with engine:
         async for event in engine.stream():
@@ -819,9 +931,29 @@ async def _run_event_loop_inner(
                 event_count += 1
                 continue
 
-            mark_prices = {s: float(buffer.to_df(s, tf)["close"].iloc[-1])
-                           for s in config.symbols
-                           if not buffer.to_df(s, tf).empty}
+            # Gap staleness guard: skip trading if most recent candle is too old
+            # (e.g., after weekend gaps or exchange outages).  Indicators need
+            # fresh data to produce reliable signals.
+            if "ts_ms" in candles.columns:
+                _latest_candle_ms = int(candles["ts_ms"].iloc[-1])
+                _candle_age_h = (time.time() * 1000 - _latest_candle_ms) / 3_600_000
+                if _candle_age_h > 4.0:
+                    logger.warning("GAP_GUARD %s — latest candle is %.1fh old, skipping trading", symbol, _candle_age_h)
+                    if notifier and _candle_age_h > 8.0:
+                        notifier.notify("warning", {"msg": f"GAP_GUARD {symbol} — candle {_candle_age_h:.1f}h stale"})
+                    event_count += 1
+                    continue
+
+            mark_prices = {}
+            for s in config.symbols:
+                _s_df = buffer.to_df(s, tf)
+                if _s_df.empty:
+                    continue
+                _s_px = float(_s_df["close"].iloc[-1])
+                if not math.isfinite(_s_px) or _s_px <= 0:
+                    logger.error("PRICE_INVALID %s — close=%.6f (NaN/Inf/zero), skipping", s, _s_px)
+                    continue
+                mark_prices[s] = _s_px
             if not mark_prices:
                 event_count += 1
                 continue
@@ -853,12 +985,21 @@ async def _run_event_loop_inner(
                 for _flat_sym in _flat_syms:
                     try:
                         _flat_px = mark_prices.get(_flat_sym, 0.0)
+                        # Fallback: use position entry price if mark price unavailable
                         if _flat_px <= 0:
+                            _flat_pos = portfolio.positions.get(_flat_sym) or portfolio.short_positions.get(_flat_sym)
+                            if _flat_pos is not None and _flat_pos.avg_entry > 0:
+                                _flat_px = _flat_pos.avg_entry
+                                logger.warning("FLATTEN %s — no mark price, using entry price %.2f as fallback", _flat_sym, _flat_px)
+                        if _flat_px <= 0:
+                            logger.error("FLATTEN_FAILED %s — no price available, cannot flatten!", _flat_sym)
+                            if notifier:
+                                notifier.notify("error", {"msg": f"Cannot flatten {_flat_sym} — no price"})
                             continue
                         res = executor.emergency_flatten(_flat_sym, _flat_px)
                         logger.warning("FLATTEN %s px=%.2f ok=%s", _flat_sym, _flat_px, res.ok)
                     except Exception as _flat_exc:
-                        logger.error("Failed to flatten %s: %s", _flat_sym, _flat_exc)
+                        logger.error("Failed to flatten %s: %s", _flat_sym, _flat_exc, exc_info=True)
                 break
 
             # Decrement loss cooldown each iteration
@@ -937,7 +1078,7 @@ async def _run_event_loop_inner(
                                                       "price": sell_px, "qty": qty})
                     logger.info("AUTO_EXIT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, sell_px, qty)
 
-                elif reason in ("short_trailing_stop", "short_take_profit", "short_max_hold_time"):
+                elif reason in ("short_trailing_stop", "short_take_profit", "short_max_hold_time", "short_max_loss"):
                     pos = portfolio.short_positions.get(exit_symbol)
                     if pos is None:
                         continue
@@ -1030,19 +1171,23 @@ async def _run_event_loop_inner(
                     peak_equity=guard.peak_equity,
                 )
                 action = sig.action
-                size = sig.size
+                size = sig.size * _online_drift_scale
                 up_prob = sig.up_prob
                 _sym_regime = sig.regime
                 _sym_atr_pct = sig.atr_pct
                 if _sym_regime:
                     _current_regime[symbol] = _sym_regime
             except Exception as exc:
-                logger.error("Signal eval error for %s: %s", symbol, exc)
+                logger.error("Signal eval error for %s: %s", symbol, exc, exc_info=True)
+                _consecutive_eval_failures[symbol] = _consecutive_eval_failures.get(symbol, 0) + 1
+                if _consecutive_eval_failures[symbol] >= 5 and notifier:
+                    notifier.notify("error", {"msg": f"Signal eval failing repeatedly for {symbol} ({_consecutive_eval_failures[symbol]}x)"})
                 if _has_metrics:
                     EXCEPTIONS.inc()
                 event_count += 1
                 continue
 
+            _consecutive_eval_failures.pop(symbol, None)  # clear on success
             _signal_counts[symbol][action] += 1
 
             # Whipsaw tracking: count rapid direction reversals
@@ -1231,7 +1376,14 @@ async def _run_event_loop_inner(
                     if _funding_overlay is not None:
                         _funding_scale = _funding_overlay.position_scale("buy", datetime.now(tz=timezone.utc))
                     _exp_scale = _expectancy.expectancy_size_scale(regime=_sym_regime or "unknown")
-                    _long_size = size * sig.eff_long_size_scale * _macro_scale * _momentum_scale * _funding_scale * _wf_scale * _exp_scale
+                    # Portfolio correlation: reduce size if already holding another symbol
+                    _corr_scale = 1.0
+                    _other_syms = set(portfolio.positions) | set(portfolio.short_positions)
+                    _other_syms.discard(symbol)
+                    if _other_syms and config.portfolio_correlation_scale < 1.0:
+                        _corr_scale = config.portfolio_correlation_scale
+                        logger.debug("CORR_SCALE %s — other positions %s, scale=%.2f", symbol, _other_syms, _corr_scale)
+                    _long_size = size * sig.eff_long_size_scale * _macro_scale * _momentum_scale * _funding_scale * _wf_scale * _exp_scale * _corr_scale
                     if _long_size <= 0:
                         logger.info("BUY_BLOCK %s — size scaled to zero (base=%.6f eff_scale=%.2f macro=%.2f mom=%.2f fund=%.2f)",
                                     symbol, size, sig.eff_long_size_scale, _macro_scale, _momentum_scale, _funding_scale)
@@ -1249,6 +1401,7 @@ async def _run_event_loop_inner(
                             pos = portfolio.positions.get(symbol)
                             if pos is not None:
                                 pos.entry_atr_pct = _sym_atr_pct
+                                pos.breakeven_pct = getattr(config, "breakeven_stop_pct", 0.0)
                             now_ms = int(time.time() * 1000)
                             fee = _long_size * buy_px * config.fee_rate
                             if not allow_live:
@@ -1306,68 +1459,67 @@ async def _run_event_loop_inner(
                                 "EXIT_MODEL %s — thesis intact, holding despite sell signal",
                                 symbol,
                             )
-                            event_count += 1
-                            continue
-                        sell_qty = pos.qty if size <= 0 else min(pos.qty, size)
-                        sell_px = px if _executor_owns_fill else px * (1.0 - slip_mult)
-                        avg_entry = pos.avg_entry
-                        res = await _safe_exec(executor.close_long, symbol, sell_px, sell_qty, reason="signal")
-                        executed = bool(res.ok)
-                        _sig_entry_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
-                        if executed:
-                            _closed_long_this_bar = True
-                            now_ms = int(time.time() * 1000)
-                            exit_fee = sell_qty * sell_px * config.fee_rate
-                            if not allow_live:
-                                _sig_bars = getattr(pos, "bars_held", 0)
-                                close_paper_trade(
-                                    conn, symbol, "long", sell_px, exit_fee, now_ms, close_reason="signal",
-                                    max_adverse_pct=getattr(pos, "max_adverse_pct", None),
-                                    max_favorable_pct=getattr(pos, "max_favorable_pct", None),
-                                    bars_held=_sig_bars,
-                                    exit_regime=_sig_entry_regime,
-                                    entry_atr_pct=getattr(pos, "entry_atr_pct", None),
-                                )
-                            evaluator._trade_outcomes.append(sell_px > avg_entry)
-                            gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
-                            net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
-                            bars_held = getattr(pos, "bars_held", 0)
-                            _expectancy.record_trade(
-                                symbol=symbol,
-                                regime=_sig_entry_regime,
-                                gross_pnl_pct=gross_pnl_pct,
-                                net_pnl_pct=net_pnl_pct,
-                                mae_pct=getattr(pos, "max_adverse_pct", 0.0),
-                                mfe_pct=getattr(pos, "max_favorable_pct", 0.0),
-                                hold_bars=bars_held,
-                                close_reason="signal",
-                            )
-                            _record_outcome(symbol, _sig_entry_regime, gross_pnl_pct, _entry_up_prob.pop(symbol, None))
-                            if _perf_tracker:
-                                try:
-                                    _perf_tracker.record_trade_outcome(
-                                        symbol=symbol,
-                                        regime=_sig_entry_regime,
-                                        tech_action=action, tech_confidence=sig.tech_confidence or 0.0,
-                                        sent_bias="neutral", sent_strength=0.0,
-                                        macro_regime="unknown",
-                                        realized_pnl=gross_pnl_pct,
+                        else:
+                            sell_qty = pos.qty if size <= 0 else min(pos.qty, size)
+                            sell_px = px if _executor_owns_fill else px * (1.0 - slip_mult)
+                            avg_entry = pos.avg_entry
+                            res = await _safe_exec(executor.close_long, symbol, sell_px, sell_qty, reason="signal")
+                            executed = bool(res.ok)
+                            _sig_entry_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
+                            if executed:
+                                _closed_long_this_bar = True
+                                now_ms = int(time.time() * 1000)
+                                exit_fee = sell_qty * sell_px * config.fee_rate
+                                if not allow_live:
+                                    _sig_bars = getattr(pos, "bars_held", 0)
+                                    close_paper_trade(
+                                        conn, symbol, "long", sell_px, exit_fee, now_ms, close_reason="signal",
+                                        max_adverse_pct=getattr(pos, "max_adverse_pct", None),
+                                        max_favorable_pct=getattr(pos, "max_favorable_pct", None),
+                                        bars_held=_sig_bars,
+                                        exit_regime=_sig_entry_regime,
+                                        entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                                     )
-                                    _perf_trade_count += 1
-                                except Exception as exc:
-                                    logger.debug("PerfTracker record error: %s", exc)
-                            _consecutive_exit_signals[symbol] = 0
-                            is_loss = sell_px < avg_entry
-                            if is_loss and loss_cooldown_bars > 0:
-                                _cooldown_remaining = loss_cooldown_bars
-                            if notifier:
-                                notifier.notify("sell", {"symbol": symbol, "price": sell_px,
-                                                         "qty": sell_qty, "ml_up_prob": up_prob})
-                        if not executed:
-                            logger.error("SELL_FAILED %s px=%.2f qty=%.6f — %s",
-                                         symbol, sell_px, sell_qty, getattr(res, "error", "unknown"))
-                        logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f ok=%s",
-                                    symbol, sell_px, sell_qty, up_prob or -1, equity, executed)
+                                evaluator._trade_outcomes.append(sell_px > avg_entry)
+                                gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
+                                net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
+                                bars_held = getattr(pos, "bars_held", 0)
+                                _expectancy.record_trade(
+                                    symbol=symbol,
+                                    regime=_sig_entry_regime,
+                                    gross_pnl_pct=gross_pnl_pct,
+                                    net_pnl_pct=net_pnl_pct,
+                                    mae_pct=getattr(pos, "max_adverse_pct", 0.0),
+                                    mfe_pct=getattr(pos, "max_favorable_pct", 0.0),
+                                    hold_bars=bars_held,
+                                    close_reason="signal",
+                                )
+                                _record_outcome(symbol, _sig_entry_regime, gross_pnl_pct, _entry_up_prob.pop(symbol, None))
+                                if _perf_tracker:
+                                    try:
+                                        _perf_tracker.record_trade_outcome(
+                                            symbol=symbol,
+                                            regime=_sig_entry_regime,
+                                            tech_action=action, tech_confidence=sig.tech_confidence or 0.0,
+                                            sent_bias="neutral", sent_strength=0.0,
+                                            macro_regime="unknown",
+                                            realized_pnl=gross_pnl_pct,
+                                        )
+                                        _perf_trade_count += 1
+                                    except Exception as exc:
+                                        logger.debug("PerfTracker record error: %s", exc)
+                                _consecutive_exit_signals[symbol] = 0
+                                is_loss = sell_px < avg_entry
+                                if is_loss and loss_cooldown_bars > 0:
+                                    _cooldown_remaining = loss_cooldown_bars
+                                if notifier:
+                                    notifier.notify("sell", {"symbol": symbol, "price": sell_px,
+                                                             "qty": sell_qty, "ml_up_prob": up_prob})
+                            if not executed:
+                                logger.error("SELL_FAILED %s px=%.2f qty=%.6f — %s",
+                                             symbol, sell_px, sell_qty, getattr(res, "error", "unknown"))
+                            logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f ok=%s",
+                                        symbol, sell_px, sell_qty, up_prob or -1, equity, executed)
 
                 # ── Open short when flat and shorts enabled ───────────
                 _allow_short_entry = (
@@ -1385,7 +1537,14 @@ async def _run_event_loop_inner(
                     if _funding_overlay is not None:
                         _funding_short_scale = _funding_overlay.position_scale("sell", datetime.now(tz=timezone.utc))
                     _exp_short_scale = _expectancy.expectancy_size_scale(regime=_sym_regime or "unknown")
-                    _short_size = size * sig.eff_short_size_scale * _macro_scale * _funding_short_scale * _wf_scale * _exp_short_scale
+                    # Portfolio correlation: reduce size if already holding another symbol
+                    _corr_short_scale = 1.0
+                    _other_short_syms = set(portfolio.positions) | set(portfolio.short_positions)
+                    _other_short_syms.discard(symbol)
+                    if _other_short_syms and config.portfolio_correlation_scale < 1.0:
+                        _corr_short_scale = config.portfolio_correlation_scale
+                        logger.debug("CORR_SCALE_SHORT %s — other positions %s, scale=%.2f", symbol, _other_short_syms, _corr_short_scale)
+                    _short_size = size * sig.eff_short_size_scale * _macro_scale * _funding_short_scale * _wf_scale * _exp_short_scale * _corr_short_scale
                     if not sig.eff_allow_shorts:
                         logger.info("SHORT_BLOCK %s — regime %s disallows shorts (eff_allow_shorts=False)", symbol, _sym_regime)
                     elif ml_blind_blocks_shorts(evaluator._ml_probs):
@@ -1411,6 +1570,7 @@ async def _run_event_loop_inner(
                             spos = portfolio.short_positions.get(symbol)
                             if spos is not None:
                                 spos.entry_atr_pct = _sym_atr_pct
+                                spos.breakeven_pct = getattr(config, "breakeven_stop_pct", 0.0)
                             now_ms = int(time.time() * 1000)
                             fee = _short_size * short_px * config.fee_rate
                             if not allow_live:
@@ -1469,7 +1629,7 @@ async def _run_event_loop_inner(
                         regime, stats["n"], stats["win_rate"] * 100, stats["expectancy_pct"],
                     )
 
-            # Shadow-mode weight proposals from PerformanceTracker
+            # Weight proposals from PerformanceTracker — auto-apply or shadow
             if (
                 _perf_tracker
                 and _perf_trade_count > 0
@@ -1478,16 +1638,137 @@ async def _run_event_loop_inner(
                 try:
                     proposal = _perf_tracker.propose_weight_update()
                     if proposal is not None:
-                        logger.info(
-                            "PERF_TRACKER weight proposal (shadow): %s",
-                            {r: {k: round(v, 3) for k, v in w.items()} for r, w in proposal.regime_weights.items()}
-                            if hasattr(proposal, "regime_weights") else str(proposal),
+                        _auto_apply = getattr(config, "auto_apply_weights", False)
+                        _min_trades = getattr(config, "auto_apply_min_trades", 30)
+                        _should_apply = (
+                            _auto_apply
+                            and hasattr(proposal, "should_update")
+                            and proposal.should_update
+                            and hasattr(proposal, "trade_count")
+                            and proposal.trade_count >= _min_trades
                         )
+                        if _should_apply and hasattr(proposal, "regime_weights"):
+                            # Apply proposed weights to MetaWeigher, bounded ±0.05 per agent
+                            _old_w = dict(evaluator.pipeline.meta_weigher._weights)
+                            for regime, rw in proposal.regime_weights.items():
+                                for agent_key in ("technical", "sentiment", "macro"):
+                                    if agent_key in rw and agent_key in _old_w:
+                                        delta = rw[agent_key] - _old_w[agent_key]
+                                        delta = max(-0.05, min(0.05, delta))
+                                        rw[agent_key] = _old_w[agent_key] + delta
+                            # Apply the default (non-regime) weights
+                            _new_w = proposal.regime_weights.get("default", proposal.regime_weights.get(
+                                next(iter(proposal.regime_weights), "default"), {}
+                            ))
+                            if _new_w:
+                                _bounded = {}
+                                for k in ("technical", "sentiment", "macro"):
+                                    if k in _new_w:
+                                        _bounded[k] = max(0.10, _new_w[k])
+                                if _bounded:
+                                    evaluator.pipeline.meta_weigher.update_weights(_bounded)
+                                    logger.info(
+                                        "AUTO_APPLY_WEIGHTS: applied proposal (%d trades evidence) "
+                                        "old=%s new=%s",
+                                        getattr(proposal, "trade_count", 0),
+                                        {k: round(v, 3) for k, v in _old_w.items()},
+                                        {k: round(v, 3) for k, v in _bounded.items()},
+                                    )
+                        else:
+                            logger.info(
+                                "PERF_TRACKER weight proposal (shadow): %s",
+                                {r: {k: round(v, 3) for k, v in w.items()} for r, w in proposal.regime_weights.items()}
+                                if hasattr(proposal, "regime_weights") else str(proposal),
+                            )
                     _perf_tracker.save_to_db()
                 except Exception as exc:
                     logger.debug("PerformanceTracker proposal error: %s", exc)
 
+            # Online learner periodic update
+            if _online_learner is not None:
+                _online_learner_bar_count += 1
+                _ol_interval = getattr(config, "online_learning_interval", 50)
+                if _online_learner_bar_count % _ol_interval == 0:
+                    try:
+                        _ol_result = _online_learner.update()
+                        _drift_features = _ol_result.get("drift_features", [])
+                        if len(_drift_features) >= 5:
+                            _online_drift_scale = 0.70
+                            logger.warning(
+                                "ONLINE_DRIFT: %d features drifted — reducing ML confidence to 0.70x",
+                                len(_drift_features),
+                            )
+                        elif len(_drift_features) >= 2:
+                            _online_drift_scale = 0.85
+                            logger.info(
+                                "ONLINE_DRIFT: %d features drifted — reducing ML confidence to 0.85x",
+                                len(_drift_features),
+                            )
+                        else:
+                            _online_drift_scale = 1.0
+                        logger.debug("ONLINE_LEARNER update: %s", _ol_result)
+                    except Exception as exc:
+                        logger.debug("OnlineLearner update error: %s", exc)
+
+            # Phase 5E: Walk-forward auto-retrain trigger
+            # Check every 240 events (~4h of 1h bars) whether model is stale
+            if (
+                getattr(config, "auto_retrain", False)
+                and event_count > 0
+                and event_count % 240 == 0
+            ):
+                try:
+                    import glob as _retrain_glob
+                    _model_files = _retrain_glob.glob(config.ml_model_path)
+                    _model_age_h = 999.0
+                    if _model_files:
+                        _model_mtime = os.path.getmtime(_model_files[0])
+                        _model_age_h = (time.time() - _model_mtime) / 3600.0
+                    _schedule_h = getattr(config, "retrain_schedule_hours", 24.0)
+                    if _model_age_h > _schedule_h:
+                        # Check if we have enough new candles
+                        _retrain_conn = sqlite3.connect(config.db_path)
+                        _candle_count = _retrain_conn.execute(
+                            "SELECT COUNT(*) FROM candles WHERE symbol = ?",
+                            (config.symbols[0] if config.symbols else "BTC/USD",),
+                        ).fetchone()[0]
+                        _min_candles = getattr(config, "auto_retrain_min_candles", 1000)
+                        if _candle_count >= _min_candles:
+                            logger.info(
+                                "AUTO_RETRAIN: model age %.1fh > %.1fh schedule, %d candles available — triggering retrain",
+                                _model_age_h, _schedule_h, _candle_count,
+                            )
+                            from hogan_bot.retrain import retrain_once
+                            _retrain_result = retrain_once(
+                                db_path=config.db_path,
+                                symbol=config.symbols[0] if config.symbols else "BTC/USD",
+                                model_type=getattr(config, "retrain_model_type", "logreg"),
+                                window_bars=getattr(config, "retrain_window_bars", 50000),
+                                min_improvement=getattr(config, "retrain_min_improvement", 0.005),
+                                promotion_metric=getattr(config, "retrain_promotion_metric", "roc_auc"),
+                            )
+                            logger.info("AUTO_RETRAIN result: %s", _retrain_result)
+                        else:
+                            logger.debug(
+                                "AUTO_RETRAIN: insufficient candles (%d < %d), skipping",
+                                _candle_count, _min_candles,
+                            )
+                        _retrain_conn.close()
+                except Exception as _retrain_exc:
+                    logger.warning("AUTO_RETRAIN error: %s", _retrain_exc)
+
+            # Heartbeat: periodic health log
             event_count += 1
+            _heartbeat_count += 1
+            if _heartbeat_count >= _HEARTBEAT_INTERVAL:
+                _heartbeat_count = 0
+                _n_longs = len(portfolio.positions)
+                _n_shorts = len(portfolio.short_positions)
+                logger.info(
+                    "HEARTBEAT [%d events] equity=%.2f cash=%.2f longs=%d shorts=%d regime=%s",
+                    event_count, equity, portfolio.cash_usd, _n_longs, _n_shorts,
+                    _current_regime.get(symbol, "unknown"),
+                )
 
     # Final expectancy report
     if _expectancy._trades:

@@ -963,6 +963,12 @@ def close_paper_trade(
     decision that opened the position.
     """
     side = normalize_side(side)
+    # Use BEGIN IMMEDIATE to prevent another writer from inserting between
+    # the SELECT and UPDATE (FIFO close safety).
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+    except Exception:
+        pass  # already in a transaction or autocommit mode
     row = conn.execute(
         """
         SELECT trade_id, entry_price, qty, entry_fee, entry_decision_id
@@ -974,6 +980,10 @@ def close_paper_trade(
         (symbol, side),
     ).fetchone()
     if not row:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
         return None
 
     trade_id, entry_price, qty, entry_fee, entry_dec_id = row

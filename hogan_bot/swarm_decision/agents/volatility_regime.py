@@ -63,7 +63,7 @@ class VolatilityRegimeAgent:
 
         bw_now = float(bandwidth.iloc[-1]) if not np.isnan(bandwidth.iloc[-1]) else 0.0
         atr_now = float(atr.iloc[-1]) if not np.isnan(atr.iloc[-1]) else 0.0
-        atr_prev = float(atr.iloc[-6]) if len(atr) > 5 and not np.isnan(atr.iloc[-6]) else atr_now
+        atr_prev = float(atr.iloc[-13]) if len(atr) > 12 and not np.isnan(atr.iloc[-13]) else atr_now
         px = float(close.iloc[-1])
 
         atr_pct = atr_now / max(px, 1e-9)
@@ -75,8 +75,8 @@ class VolatilityRegimeAgent:
 
         is_squeeze = bw_now < self._squeeze_bw
         is_expansion = bw_now > self._expansion_bw
-        atr_rising = atr_trend > 0.10
-        atr_falling = atr_trend < -0.10
+        atr_rising = atr_trend > 0.15
+        atr_falling = atr_trend < -0.15
 
         if is_squeeze and atr_falling:
             action = get_baseline_action(shared_context)
