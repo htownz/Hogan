@@ -42,7 +42,7 @@ jobs:
           HOGAN_CHAMPION_MODE: "true"
           HOGAN_PAPER_MODE: "true"
         run: |
-          python -m pytest tests/ -v --tb=short -x -q 2>&1 | head -200
+          python -m pytest tests/ -v --tb=short -x -q
 
   lint:
     runs-on: ubuntu-latest

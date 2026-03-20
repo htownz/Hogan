@@ -216,7 +216,8 @@ class LiveDataEngine(DataEngineBase):
                     for tf in self.timeframes
                 ]
                 await asyncio.gather(*tasks)
-                ws_fail_count = 0  # success — reset
+                ws_fail_count = 0
+                backoff = _RECONNECT_BASE
             except Exception as exc:
                 ws_fail_count += 1
                 logger.warning(
@@ -245,7 +246,6 @@ class LiveDataEngine(DataEngineBase):
                     await exchange.close()
                 except Exception as exc:
                     logger.debug("Exchange close error during teardown: %s", exc)
-            backoff = _RECONNECT_BASE  # reset after clean reconnect
 
     async def _watch_symbol(self, exchange, symbol: str, timeframe: str) -> None:
         """Persistent WS subscription for one (symbol, timeframe) pair."""

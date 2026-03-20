@@ -612,8 +612,22 @@ async def _run_event_loop_inner(
         and live_ack == "I_UNDERSTAND_LIVE_TRADING"
     )
 
+    # Restore cash balance from the last equity snapshot if available,
+    # so restarts don't reset P&L to starting_balance_usd.
+    _initial_cash = config.starting_balance_usd
+    try:
+        _eq_row = conn.execute(
+            "SELECT cash_usd FROM equity_snapshots ORDER BY ts_ms DESC LIMIT 1"
+        ).fetchone()
+        if _eq_row and _eq_row[0] is not None and float(_eq_row[0]) > 0:
+            _initial_cash = float(_eq_row[0])
+            logger.info("RESTORE: loaded last cash balance %.2f from DB (seed was %.2f)",
+                        _initial_cash, config.starting_balance_usd)
+    except Exception as exc:
+        logger.debug("Could not restore cash from DB (using seed balance): %s", exc)
+
     portfolio = PaperPortfolio(
-        cash_usd=config.starting_balance_usd,
+        cash_usd=_initial_cash,
         fee_rate=config.fee_rate,
         short_max_loss_pct=getattr(config, "short_max_loss_pct", 0.10),
     )
@@ -775,20 +789,18 @@ async def _run_event_loop_inner(
             logger.info("AUTO_TRAIN_FORECAST: no forecast models found — training from historical data")
             try:
                 from hogan_bot.forecast import train_forecast_models
-                _train_conn = sqlite3.connect(config.db_path)
-                # Fetch historical candles for the primary symbol
-                _hist_candles = pd.read_sql_query(
-                    "SELECT * FROM candles WHERE symbol = ? ORDER BY ts_ms",
-                    _train_conn,
-                    params=[config.symbols[0] if config.symbols else "BTC/USD"],
-                )
-                if len(_hist_candles) >= 500:
-                    _fc_result = train_forecast_models(_hist_candles, db_conn=_train_conn)
-                    logger.info("AUTO_TRAIN_FORECAST: trained %d models: %s",
-                                len(_fc_result), list(_fc_result.keys()))
-                else:
-                    logger.warning("AUTO_TRAIN_FORECAST: insufficient historical candles (%d < 500)", len(_hist_candles))
-                _train_conn.close()
+                with sqlite3.connect(config.db_path) as _train_conn:
+                    _hist_candles = pd.read_sql_query(
+                        "SELECT * FROM candles WHERE symbol = ? ORDER BY ts_ms",
+                        _train_conn,
+                        params=[config.symbols[0] if config.symbols else "BTC/USD"],
+                    )
+                    if len(_hist_candles) >= 500:
+                        _fc_result = train_forecast_models(_hist_candles, db_conn=_train_conn)
+                        logger.info("AUTO_TRAIN_FORECAST: trained %d models: %s",
+                                    len(_fc_result), list(_fc_result.keys()))
+                    else:
+                        logger.warning("AUTO_TRAIN_FORECAST: insufficient historical candles (%d < 500)", len(_hist_candles))
             except Exception as exc:
                 logger.warning("AUTO_TRAIN_FORECAST failed: %s", exc)
         else:
@@ -1726,12 +1738,11 @@ async def _run_event_loop_inner(
                         _model_age_h = (time.time() - _model_mtime) / 3600.0
                     _schedule_h = getattr(config, "retrain_schedule_hours", 24.0)
                     if _model_age_h > _schedule_h:
-                        # Check if we have enough new candles
-                        _retrain_conn = sqlite3.connect(config.db_path)
-                        _candle_count = _retrain_conn.execute(
-                            "SELECT COUNT(*) FROM candles WHERE symbol = ?",
-                            (config.symbols[0] if config.symbols else "BTC/USD",),
-                        ).fetchone()[0]
+                        with sqlite3.connect(config.db_path) as _retrain_conn:
+                            _candle_count = _retrain_conn.execute(
+                                "SELECT COUNT(*) FROM candles WHERE symbol = ?",
+                                (config.symbols[0] if config.symbols else "BTC/USD",),
+                            ).fetchone()[0]
                         _min_candles = getattr(config, "auto_retrain_min_candles", 1000)
                         if _candle_count >= _min_candles:
                             logger.info(
@@ -1753,7 +1764,6 @@ async def _run_event_loop_inner(
                                 "AUTO_RETRAIN: insufficient candles (%d < %d), skipping",
                                 _candle_count, _min_candles,
                             )
-                        _retrain_conn.close()
                 except Exception as _retrain_exc:
                     logger.warning("AUTO_RETRAIN error: %s", _retrain_exc)
 

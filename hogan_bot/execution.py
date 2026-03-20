@@ -382,16 +382,18 @@ class SmartExecution(ExecutionEngine):
 
                 if not still_open:
                     self._sync_fills(symbol)
+                    fill_price = LiveExecution._extract_fill_price(order, limit_price)
+                    fill_qty = float(order.get("filled", qty))
                     if self.portfolio is not None:
                         self.portfolio.execute_buy(
-                            symbol, limit_price, qty,
+                            symbol, fill_price, fill_qty,
                             trailing_stop_pct=trailing_stop_pct,
                             take_profit_pct=take_profit_pct,
                             trail_activation_pct=trail_activation_pct,
                         )
                     logger.info(
                         "SMART_OPEN_LONG filled %s at %.2f (attempt %d)",
-                        symbol, limit_price, attempt + 1,
+                        symbol, fill_price, attempt + 1,
                     )
                     return ExecResult(ok=True, order_id=order_id)
 
@@ -419,9 +421,11 @@ class SmartExecution(ExecutionEngine):
             order["exchange"] = self.exchange_id
             record_order(self.conn, order)
             self._sync_fills(symbol)
+            fill_price = LiveExecution._extract_fill_price(order, price)
+            fill_qty = float(order.get("filled", qty))
             if self.portfolio is not None:
-                self.portfolio.execute_sell(symbol, price, qty)
-            logger.info("TAKER_SELL %s qty=%.6f", symbol, qty)
+                self.portfolio.execute_sell(symbol, fill_price, fill_qty)
+            logger.info("TAKER_SELL %s qty=%.6f fill=%.2f", symbol, fill_qty, fill_price)
             return ExecResult(ok=True, order_id=str(order.get("id")))
         except Exception as exc:
             logger.exception("Market sell failed: %s", exc)
@@ -440,9 +444,11 @@ class SmartExecution(ExecutionEngine):
             order["exchange"] = self.exchange_id
             record_order(self.conn, order)
             self._sync_fills(symbol)
+            fill_price = LiveExecution._extract_fill_price(order, price)
+            fill_qty = float(order.get("filled", qty))
             if self.portfolio is not None:
-                self.portfolio.execute_cover(symbol, price, qty)
-            logger.info("TAKER_COVER %s qty=%.6f reason=%s", symbol, qty, reason)
+                self.portfolio.execute_cover(symbol, fill_price, fill_qty)
+            logger.info("TAKER_COVER %s qty=%.6f fill=%.2f reason=%s", symbol, fill_qty, fill_price, reason)
             return ExecResult(ok=True, order_id=str(order.get("id")))
         except Exception as exc:
             logger.exception("Smart cover failed: %s", exc)

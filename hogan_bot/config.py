@@ -514,9 +514,9 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         quality_final_mult=1.20,
         quality_tech_mult=1.10,
         allow_longs=True,
-        allow_shorts=False,
+        allow_shorts=True,
         long_size_scale=0.50,
-        short_size_scale=0.0,
+        short_size_scale=0.50,
     ),
 }
 

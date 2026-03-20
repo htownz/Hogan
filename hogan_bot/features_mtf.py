@@ -508,14 +508,14 @@ def build_feature_row_extended(
         m30_feats = []
         m10_feats = []
 
-    # External features from DB
-    ts = (
-        candles_5m["ts_ms"].iloc[-1]
-        if "ts_ms" in candles_5m.columns
-        else candles_5m["timestamp"].iloc[-1]
-        if "timestamp" in candles_5m.columns
-        else None
-    )
+    # External features from DB — convert raw ts_ms (milliseconds) to a
+    # proper Timestamp so pd.Timestamp() inside build_ext_features doesn't
+    # misinterpret the integer as nanoseconds.
+    ts = None
+    if "ts_ms" in candles_5m.columns:
+        ts = pd.Timestamp(candles_5m["ts_ms"].iloc[-1], unit="ms", tz="UTC")
+    elif "timestamp" in candles_5m.columns:
+        ts = candles_5m["timestamp"].iloc[-1]
     ext = build_ext_features(ts, conn=conn, symbol=symbol)
 
     # Order: base | 1h | 3h | 30m | 15m | 10m | ext

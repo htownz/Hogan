@@ -34,8 +34,10 @@ schema so AnythingLLM can add Hogan as a custom MCP server.
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -256,6 +258,9 @@ def tool_get_data_coverage(db_path: str | None = None) -> dict:
         return {"ok": False, "error": str(exc)}
 
 
+_ALLOWED_MODEL_TYPES = frozenset({"logreg", "random_forest", "xgboost", "lightgbm", "hist_gb"})
+
+
 def tool_trigger_retrain(
     symbol: str = "BTC/USD",
     timeframe: str = "1h",
@@ -263,6 +268,8 @@ def tool_trigger_retrain(
     db_path: str | None = None,
 ) -> dict:
     """Kick off a walk-forward retrain cycle (runs in subprocess)."""
+    if model_type not in _ALLOWED_MODEL_TYPES:
+        return {"ok": False, "error": f"Invalid model_type '{model_type}'. Allowed: {sorted(_ALLOWED_MODEL_TYPES)}"}
     db = db_path or _get_db_path()
     try:
         cmd = [
@@ -418,6 +425,15 @@ _TOOL_DISPATCH: dict[str, Any] = {
 # ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
+def _filter_params(fn, body: dict) -> dict:
+    """Filter request body to only include valid function parameters."""
+    valid_params = set(inspect.signature(fn).parameters.keys())
+    return {k: v for k, v in body.items() if k in valid_params}
+
+
+_MCP_API_KEY = os.getenv("HOGAN_MCP_API_KEY", "")
+
+
 def create_app(db_path: str | None = None):
     try:
         from fastapi import FastAPI, Request
@@ -431,18 +447,33 @@ def create_app(db_path: str | None = None):
         version="1.0.0",
     )
 
+    def _check_auth(request: Request) -> JSONResponse | None:
+        """Return an error response if API key auth is configured but missing/wrong."""
+        if not _MCP_API_KEY:
+            return None
+        token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+        if token != _MCP_API_KEY:
+            return JSONResponse(status_code=401, content={"error": "Invalid or missing API key"})
+        return None
+
     @app.get("/health")
     async def health():
         return {"status": "ok", "server": "hogan-mcp", "timestamp": time.time()}
 
     @app.get("/tools")
-    async def list_tools():
+    async def list_tools(request: Request):
         """MCP tool discovery endpoint."""
+        auth_err = _check_auth(request)
+        if auth_err:
+            return auth_err
         return {"tools": _TOOLS}
 
     @app.post("/tools/{tool_name}")
     async def call_tool(tool_name: str, request: Request):
         """MCP tool call endpoint."""
+        auth_err = _check_auth(request)
+        if auth_err:
+            return auth_err
         fn = _TOOL_DISPATCH.get(tool_name)
         if fn is None:
             return JSONResponse(status_code=404, content={"error": f"Unknown tool: {tool_name}"})
@@ -451,21 +482,22 @@ def create_app(db_path: str | None = None):
         except Exception:
             body = {}
 
-        # Inject db_path if configured
         if db_path and "db_path" not in body:
             body["db_path"] = db_path
 
         try:
-            result = fn(**{k: v for k, v in body.items() if k in fn.__code__.co_varnames})
+            result = fn(**_filter_params(fn, body))
             return result
         except Exception as exc:
             logger.exception("Tool %s failed", tool_name)
             return JSONResponse(status_code=500, content={"ok": False, "error": str(exc)})
 
-    # MCP protocol endpoint (POST /mcp for AnythingLLM / Cursor compatibility)
     @app.post("/mcp")
     async def mcp_endpoint(request: Request):
         """Unified MCP JSON-RPC endpoint."""
+        auth_err = _check_auth(request)
+        if auth_err:
+            return auth_err
         try:
             body = await request.json()
         except Exception:
@@ -488,8 +520,7 @@ def create_app(db_path: str | None = None):
                     "error": {"code": -32601, "message": f"Unknown tool: {tool_name}"}
                 })
             try:
-                result = fn(**{k: v for k, v in arguments.items()
-                               if k in fn.__code__.co_varnames})
+                result = fn(**_filter_params(fn, arguments))
                 return {
                     "jsonrpc": "2.0",
                     "id": req_id,
@@ -516,7 +547,7 @@ def create_app(db_path: str | None = None):
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Hogan MCP Server")
     p.add_argument("--port", type=int, default=8080)
-    p.add_argument("--host", default="0.0.0.0")
+    p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--db", default=None, help="Override DB path")
     return p.parse_args()
 

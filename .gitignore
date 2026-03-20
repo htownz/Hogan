@@ -4,9 +4,15 @@
 __pycache__/
 *.pyc
 .env
-models/hogan_rl_policy.zip
+.env.local
+
+# ML models — binary, large, machine-specific
+models/*.pkl
+models/*.zip
+models/registry.jsonl
 
 # SQLite databases — large, machine-specific runtime data
+*.db
 data/*.db
 hogan_trades.db
 
@@ -38,3 +44,6 @@ secrets.txt
 logs/*.log
 .pytest_cache
 mlruns/
+
+# Diagnostics output
+diagnostics/*.json
