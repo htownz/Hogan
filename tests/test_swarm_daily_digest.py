@@ -12,8 +12,8 @@ from hogan_bot.swarm_daily_digest import (
     build_operator_actions,
     compute_severity_and_flags,
 )
-from hogan_bot.swarm_digest_types import DailyDigest, DigestFlag
-from hogan_bot.swarm_digest_render import render_json, render_markdown
+from hogan_bot.swarm_digest_render import render_json
+from hogan_bot.swarm_digest_types import DailyDigest
 
 
 def _create_schema(conn: sqlite3.Connection) -> None:

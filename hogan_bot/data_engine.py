@@ -326,12 +326,12 @@ class LiveDataEngine(DataEngineBase):
                     raw = exchange.fetch_ohlcv(symbol, tf, limit=_warmup_limit)
                     _seen: set[int] = set()
                     for ohlcv in raw:
-                        ts_ms, o, h, l, c, v = ohlcv
+                        ts_ms, o, h, lo, c, v = ohlcv
                         if ts_ms in _seen:
                             continue
                         _seen.add(ts_ms)
                         row = {"ts_ms": ts_ms, "open": o, "high": h,
-                               "low": l, "close": c, "volume": v}
+                               "low": lo, "close": c, "volume": v}
                         self.buffer.push(symbol, tf, row)
                     logger.info(
                         "REST warmup: %s/%s loaded %d candles",

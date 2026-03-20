@@ -269,7 +269,7 @@ def print_ict_report(results: dict) -> None:
     ict_imps = ict_r.get("feature_importances", {})
     ict_feats = {k: v for k, v in ict_imps.items() if k in results.get("ict_features_tested", [])}
     if ict_feats:
-        print(f"\n  ICT Feature Importances (in combined model):")
+        print("\n  ICT Feature Importances (in combined model):")
         for name, v in sorted(ict_feats.items(), key=lambda x: x[1]["importance"], reverse=True):
             print(f"    {name:<25} {v['importance']:>+.6f} +/-{v['std']:.6f}")
     print(f"{'=' * 72}\n")

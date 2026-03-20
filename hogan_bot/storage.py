@@ -26,9 +26,9 @@ import sqlite3
 import uuid as _uuid
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def get_connection(db_path: str = "data/hogan.db") -> sqlite3.Connection:

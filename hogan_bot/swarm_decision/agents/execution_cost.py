@@ -30,7 +30,6 @@ def _corwin_schultz_spread(candles: pd.DataFrame, window: int = 20) -> float:
 
     high = candles["high"].values[-window:]
     low = candles["low"].values[-window:]
-    close = candles["close"].values[-window:]
 
     with np.errstate(divide="ignore", invalid="ignore"):
         log_hl = np.log(high / np.maximum(low, 1e-12))

@@ -1,10 +1,7 @@
 """Tests for threshold_apply — bundle creation, activation, dry-run, ack gating."""
 from __future__ import annotations
 
-import json
 import sqlite3
-
-import pytest
 
 from hogan_bot.threshold_apply import apply_threshold
 from hogan_bot.threshold_registry import get_active_bundle, save_bundle

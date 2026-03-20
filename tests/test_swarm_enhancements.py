@@ -6,10 +6,8 @@ import sqlite3
 import time
 
 import pandas as pd
-import pytest
 
 from hogan_bot.storage import _create_schema
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -107,7 +105,7 @@ class TestOutcomeWriter:
     def test_backfill_writes_outcomes(self):
         from hogan_bot.swarm_decision.outcome_writer import backfill_outcomes
         conn = _db()
-        ids = _seed_decisions_and_candles(conn, n=10)
+        _seed_decisions_and_candles(conn, n=10)
         count = backfill_outcomes(conn, symbol="BTC/USD", lookback_hours=0)
         assert count > 0
 
@@ -227,7 +225,10 @@ class TestWeightLearner:
 
     def test_log_weight_proposal(self):
         from hogan_bot.swarm_decision.outcome_writer import backfill_outcomes
-        from hogan_bot.swarm_decision.weight_learner import propose_weights, log_weight_proposal
+        from hogan_bot.swarm_decision.weight_learner import (
+            log_weight_proposal,
+            propose_weights,
+        )
 
         conn = _db()
         _seed_decisions_and_candles(conn, n=20)

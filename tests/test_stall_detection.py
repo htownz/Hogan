@@ -3,13 +3,11 @@ from __future__ import annotations
 
 import sqlite3
 
-import pytest
-
 from hogan_bot.stall_detection import (
-    evaluate_stall_state,
-    persist_stall_alerts,
-    get_latest_stall_alerts,
     compute_stall_summary,
+    evaluate_stall_state,
+    get_latest_stall_alerts,
+    persist_stall_alerts,
 )
 from hogan_bot.threshold_types import StallAlert
 

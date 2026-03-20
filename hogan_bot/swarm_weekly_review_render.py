@@ -58,10 +58,8 @@ def render_markdown(
     L.append("## Executive Summary")
     L.append("")
     dec = metrics.get("decision_count", 0)
-    wt = metrics.get("would_trade_count", 0)
     vc = metrics.get("veto_count", 0)
     vr = metrics.get("veto_ratio", 0.0)
-    regs = metrics.get("distinct_regimes", 0)
 
     improved = []
     regressed = []

@@ -436,9 +436,9 @@ class TestPolicyCoreEquivalence:
 
     def test_decide_with_mock_ml_model(self, core_inputs):
         """decide() with a mock ML model still produces deterministic output."""
-        from hogan_bot.policy_core import PolicyState, decide
-
         from dataclasses import replace as dc_replace
+
+        from hogan_bot.policy_core import PolicyState, decide
         candles, cfg, pipeline = core_inputs
         cfg_ml = dc_replace(
             cfg,

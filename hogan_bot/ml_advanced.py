@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import logging
 import pickle
-
-logger = logging.getLogger(__name__)
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -17,6 +15,8 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import roc_auc_score
 
 from hogan_bot.ml import build_feature_frame
+
+logger = logging.getLogger(__name__)
 
 # ----------------------------
 # Triple-barrier labeling

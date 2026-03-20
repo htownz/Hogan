@@ -7,14 +7,12 @@ import sqlite3
 import pytest
 
 from hogan_bot.swarm_digest_queries import (
-    fetch_digest_window,
-    fetch_swarm_counts,
-    fetch_opportunity_stats,
-    fetch_veto_stats,
     fetch_agent_vote_stats,
-    fetch_divergence_stats,
-    fetch_learning_drift_stats,
+    fetch_digest_window,
+    fetch_opportunity_stats,
     fetch_replay_candidates,
+    fetch_swarm_counts,
+    fetch_veto_stats,
 )
 
 

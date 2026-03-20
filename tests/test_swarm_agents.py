@@ -177,6 +177,7 @@ class TestPipelineAgent:
 
     def test_returns_valid_vote(self):
         from unittest.mock import MagicMock
+
         from hogan_bot.swarm_decision.agents.pipeline_agent import PipelineAgent
 
         mock_pipeline = MagicMock()
@@ -202,6 +203,7 @@ class TestPipelineAgent:
 
     def test_hold_signal_maps_correctly(self):
         from unittest.mock import MagicMock
+
         from hogan_bot.swarm_decision.agents.pipeline_agent import PipelineAgent
 
         mock_pipeline = MagicMock()

@@ -20,14 +20,6 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from hogan_bot.swarm_weekly_review_types import (
-    AgentWeeklyScore,
-    ReviewRecommendation,
-    ReviewSeverity,
-    WeeklyFlag,
-    WeeklyReplayCandidate,
-    WeeklyReview,
-)
 from hogan_bot.swarm_weekly_review_queries import (
     fetch_review_window,
     fetch_week_over_week_stats,
@@ -39,7 +31,14 @@ from hogan_bot.swarm_weekly_review_queries import (
     fetch_weekly_replay_candidates,
     fetch_weekly_swarm_counts,
     fetch_weekly_veto_stats,
-    _ts_range,
+)
+from hogan_bot.swarm_weekly_review_types import (
+    AgentWeeklyScore,
+    ReviewRecommendation,
+    ReviewSeverity,
+    WeeklyFlag,
+    WeeklyReplayCandidate,
+    WeeklyReview,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,7 +77,6 @@ def compute_severity_and_flags(
     mean_ent = metrics.get("mean_entropy")
     opp_top = metrics.get("opportunity_score_top_decile_markout_bps")
     opp_bot = metrics.get("opportunity_score_bottom_decile_markout_bps")
-    regime_missing = metrics.get("regime_missing", False)
 
     # --- Critical ---
     if dec >= stall_min and wt == 0:
@@ -474,11 +472,11 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Recommendation: {review.recommendation}")
     print(f"Headline: {review.headline}")
     if review.operator_actions:
-        print(f"\nOperator actions:")
+        print("\nOperator actions:")
         for i, a in enumerate(review.operator_actions, 1):
             print(f"  {i}. {a}")
     if review.cursor_actions:
-        print(f"\nCursor actions:")
+        print("\nCursor actions:")
         for i, a in enumerate(review.cursor_actions, 1):
             print(f"  {i}. {a}")
     print(f"{'='*60}\n")

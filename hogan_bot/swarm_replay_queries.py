@@ -6,13 +6,11 @@ similar-event logic.  Every function accepts a raw ``sqlite3.Connection``.
 from __future__ import annotations
 
 import json
-import math
 import sqlite3
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import pandas as pd
-
 
 # ---------------------------------------------------------------------------
 # Filter contract
@@ -225,7 +223,6 @@ def get_replay_similar_events(
 
     symbol = dec["symbol"]
     timeframe = dec["timeframe"]
-    ts_ms = dec["ts_ms"]
 
     # Parse decision_json for regime
     try:

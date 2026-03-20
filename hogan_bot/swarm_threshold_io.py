@@ -6,7 +6,6 @@ agents get quarantined, or threshold bundles are activated.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from hogan_bot.threshold_types import StallAlert
 

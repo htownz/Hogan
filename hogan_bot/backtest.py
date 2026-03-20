@@ -8,7 +8,6 @@ import pandas as pd
 
 from hogan_bot.agent_pipeline import AgentPipeline
 from hogan_bot.decision import (
-    GateDecision,
     apply_ml_filter,
     edge_gate,
     entry_quality_gate,
@@ -26,7 +25,11 @@ from hogan_bot.expectancy import ExpectancyTracker
 from hogan_bot.indicators import compute_atr
 from hogan_bot.ml import TrainedModel, predict_up_probability
 from hogan_bot.paper import PaperPortfolio
-from hogan_bot.regime import detect_regime, reset_regime_history, RegimeTransitionTracker
+from hogan_bot.regime import (
+    RegimeTransitionTracker,
+    detect_regime,
+    reset_regime_history,
+)
 from hogan_bot.risk import DrawdownGuard, calculate_position_size
 from hogan_bot.timeframe_utils import bars_per_year as tf_bars_per_year
 from hogan_bot.timeframe_utils import infer_timeframe_from_candles
@@ -1142,7 +1145,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
 
     _pc_state = None
     if use_policy_core:
-        from hogan_bot.policy_core import PolicyState, decide as _pc_decide
+        from hogan_bot.policy_core import PolicyState
+        from hogan_bot.policy_core import decide as _pc_decide
         _pc_state = PolicyState()
 
     min_rows = max(long_ma_window, volume_window) + 2

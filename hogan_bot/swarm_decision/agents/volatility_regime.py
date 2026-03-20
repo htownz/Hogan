@@ -66,7 +66,6 @@ class VolatilityRegimeAgent:
         atr_prev = float(atr.iloc[-13]) if len(atr) > 12 and not np.isnan(atr.iloc[-13]) else atr_now
         px = float(close.iloc[-1])
 
-        atr_pct = atr_now / max(px, 1e-9)
         atr_trend = (atr_now - atr_prev) / max(atr_prev, 1e-9)
 
         reasons: list[str] = []

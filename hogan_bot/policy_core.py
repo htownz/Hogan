@@ -236,24 +236,23 @@ def decide(
         When ``None``, defaults to ``equity_usd`` (no drawdown signal).
     """
     from hogan_bot.config import symbol_config
-    from hogan_bot.indicators import compute_atr
-    from hogan_bot.risk import calculate_position_size
     from hogan_bot.decision import (
         apply_ml_filter,
         edge_gate,
         entry_quality_gate,
-        ranging_gate,
-        pullback_gate,
-        sell_pullback_gate,
+        estimate_spread_from_candles,
+        loss_streak_scale,
+        ml_blind_blocks_shorts,
+        ml_blind_scale,
         ml_confidence,
         ml_probability_sizer,
-        ml_blind_scale,
-        ml_blind_blocks_shorts,
-        loss_streak_scale,
-        estimate_spread_from_candles,
-        compute_quality_components,
+        pullback_gate,
+        ranging_gate,
+        sell_pullback_gate,
     )
+    from hogan_bot.indicators import compute_atr
     from hogan_bot.ml import predict_up_probability
+    from hogan_bot.risk import calculate_position_size
 
     cfg = symbol_config(config, symbol)
     px = float(candles["close"].iloc[-1])
@@ -355,7 +354,8 @@ def decide(
     # ------------------------------------------------------------------
     if up_prob is not None and getattr(cfg, "use_regime_ensemble", False):
         try:
-            from hogan_bot.ml_advanced import load_artifact, predict_up_probability as regime_predict
+            from hogan_bot.ml_advanced import load_artifact
+            from hogan_bot.ml_advanced import predict_up_probability as regime_predict
             _ensemble_path = getattr(cfg, "regime_ensemble_path", "models/advanced_ensemble.pkl")
             _artifact = load_artifact(_ensemble_path)
             if _artifact is not None:
@@ -676,12 +676,16 @@ def decide(
 
     if getattr(config, "swarm_enabled", False):
         try:
-            from hogan_bot.swarm_decision.controller import SwarmController
+            from hogan_bot.swarm_decision.agents.data_guardian import DataGuardianAgent
+            from hogan_bot.swarm_decision.agents.execution_cost import (
+                ExecutionCostAgent,
+            )
             from hogan_bot.swarm_decision.agents.pipeline_agent import PipelineAgent
             from hogan_bot.swarm_decision.agents.risk_steward import RiskStewardAgent
-            from hogan_bot.swarm_decision.agents.data_guardian import DataGuardianAgent
-            from hogan_bot.swarm_decision.agents.execution_cost import ExecutionCostAgent
-            from hogan_bot.swarm_decision.agents.volatility_regime import VolatilityRegimeAgent
+            from hogan_bot.swarm_decision.agents.volatility_regime import (
+                VolatilityRegimeAgent,
+            )
+            from hogan_bot.swarm_decision.controller import SwarmController
 
             _agents_str = getattr(config, "swarm_agents", "")
             _agent_ids = [a.strip() for a in _agents_str.split(",") if a.strip()]
@@ -712,7 +716,7 @@ def decide(
 
             if agents:
                 import math as _math_sw
-                from hogan_bot.indicators import compute_atr as _sw_atr
+
                 _hist_vol = float(candles["close"].pct_change().rolling(20).std().iloc[-1]) if len(candles) >= 21 else 0.0
                 if _math_sw.isnan(_hist_vol) or _math_sw.isinf(_hist_vol):
                     _hist_vol = 0.0
@@ -793,8 +797,8 @@ def decide(
                     try:
                         _bar_ts_ms = int(candles["ts_ms"].iloc[-1]) if "ts_ms" in candles.columns else 0
                         from hogan_bot.swarm_decision.logging import (
-                            log_swarm_decision,
                             log_agent_votes,
+                            log_swarm_decision,
                         )
                         _swarm_decision_id = log_swarm_decision(
                             conn, _bar_ts_ms, symbol,
@@ -813,7 +817,9 @@ def decide(
                             )
                         # Backfill outcomes for prior decisions
                         try:
-                            from hogan_bot.swarm_decision.outcome_writer import backfill_outcomes
+                            from hogan_bot.swarm_decision.outcome_writer import (
+                                backfill_outcomes,
+                            )
                             backfill_outcomes(conn, symbol=symbol, lookback_hours=72)
                         except Exception as exc:
                             logger.debug("Swarm outcome backfill error: %s", exc)
@@ -829,9 +835,15 @@ def decide(
                             try:
                                 from hogan_bot.swarm_decision.weight_learner import (
                                     WeightProposal,
-                                    propose_weights as _propose_w,
+                                )
+                                from hogan_bot.swarm_decision.weight_learner import (
                                     log_weight_proposal as _log_w_proposal,
+                                )
+                                from hogan_bot.swarm_decision.weight_learner import (
                                     promote_weights as _promote_w,
+                                )
+                                from hogan_bot.swarm_decision.weight_learner import (
+                                    propose_weights as _propose_w,
                                 )
                                 _tf = getattr(config, "timeframe", "1h")
                                 _min_t = getattr(config, "swarm_weight_min_trades", 50)
@@ -889,7 +901,9 @@ def decide(
                                         )
                                 # Auto-quarantine underperformers
                                 try:
-                                    from hogan_bot.agent_quarantine import auto_quarantine_check
+                                    from hogan_bot.agent_quarantine import (
+                                        auto_quarantine_check,
+                                    )
                                     _quarantined = auto_quarantine_check(conn, symbol=symbol)
                                     if _quarantined:
                                         logger.info("SWARM auto-quarantined: %s", _quarantined)

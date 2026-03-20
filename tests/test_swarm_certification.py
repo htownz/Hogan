@@ -14,7 +14,6 @@ Groups:
 from __future__ import annotations
 
 import sqlite3
-import types
 from dataclasses import replace as dc_replace
 from unittest.mock import MagicMock
 
@@ -23,7 +22,7 @@ import pandas as pd
 import pytest
 
 from hogan_bot.config import BotConfig
-from hogan_bot.swarm_decision.types import AgentVote, SwarmDecision, DecisionIntent
+from hogan_bot.swarm_decision.types import AgentVote, DecisionIntent, SwarmDecision
 
 
 @pytest.fixture(autouse=False)
@@ -88,7 +87,6 @@ def _make_pipeline(config):
 
 
 def _in_memory_db() -> sqlite3.Connection:
-    from hogan_bot.storage import get_connection
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     conn.execute("PRAGMA journal_mode=WAL")
     from hogan_bot.storage import _create_schema
@@ -490,8 +488,8 @@ class TestChampionProtection:
         Uses a single shared pipeline to eliminate pipeline non-determinism.
         This mirrors production where one pipeline serves all calls.
         """
-        from hogan_bot.policy_core import PolicyState, decide
         from hogan_bot.champion import apply_champion_mode
+        from hogan_bot.policy_core import PolicyState, decide
 
         candles = _synthetic_candles(200, seed=42)
 
@@ -651,7 +649,7 @@ class TestDBIntegrity:
 
     def test_log_swarm_decision_returns_id(self):
         from hogan_bot.swarm_decision.logging import log_swarm_decision
-        from hogan_bot.swarm_decision.types import SwarmDecision, AgentVote
+        from hogan_bot.swarm_decision.types import AgentVote, SwarmDecision
 
         conn = _in_memory_db()
         decision = SwarmDecision(
@@ -673,8 +671,8 @@ class TestDBIntegrity:
         assert row_id > 0
 
     def test_log_agent_votes_with_decision_id(self):
-        from hogan_bot.swarm_decision.logging import log_swarm_decision, log_agent_votes
-        from hogan_bot.swarm_decision.types import SwarmDecision, AgentVote
+        from hogan_bot.swarm_decision.logging import log_agent_votes, log_swarm_decision
+        from hogan_bot.swarm_decision.types import AgentVote, SwarmDecision
 
         conn = _in_memory_db()
         votes = [

@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from hogan_bot.swarm_decision.types import AgentVote, SwarmDecision
 from hogan_bot.swarm_decision.controller import SwarmController
+from hogan_bot.swarm_decision.types import AgentVote, SwarmDecision
 
 
 class _StubAgent:

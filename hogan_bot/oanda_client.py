@@ -21,7 +21,7 @@ from urllib.request import Request, urlopen
 
 import pandas as pd
 
-from hogan_bot.retry import retry, URLLIB_TRANSIENT
+from hogan_bot.retry import URLLIB_TRANSIENT, retry
 
 logger = logging.getLogger(__name__)
 

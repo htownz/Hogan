@@ -6,18 +6,14 @@ they have no objection.
 """
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pandas as pd
-import pytest
 
 from hogan_bot.swarm_decision.agents._utils import get_baseline_action
-from hogan_bot.swarm_decision.agents.risk_steward import RiskStewardAgent
 from hogan_bot.swarm_decision.agents.data_guardian import DataGuardianAgent
 from hogan_bot.swarm_decision.agents.execution_cost import ExecutionCostAgent
+from hogan_bot.swarm_decision.agents.risk_steward import RiskStewardAgent
 from hogan_bot.swarm_decision.controller import SwarmController
 from hogan_bot.swarm_decision.types import AgentVote
 

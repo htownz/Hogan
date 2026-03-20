@@ -9,14 +9,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-logger = logging.getLogger(__name__)
-
 from hogan_bot.indicators import (
     cloud_signal,
     compute_atr,
     fvg_features_frame,
     ripster_ema_clouds,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -391,7 +391,9 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
 
 
 # Single source of truth: feature_registry owns the canonical 59-column list.
-from hogan_bot.feature_registry import _FULL_FEATURE_COLUMNS as _FEATURE_COLUMNS  # noqa: E402
+from hogan_bot.feature_registry import (  # noqa: E402
+    _FULL_FEATURE_COLUMNS as _FEATURE_COLUMNS,
+)
 
 # EXPERIMENTAL: ICT structural features — quarantined from champion path.
 # Still computed in _feature_frame() but not included in default training/inference.
@@ -878,7 +880,6 @@ def train_logistic_regression(
             precision_score,
             recall_score,
             roc_auc_score,
-            brier_score_loss,
         )
         from sklearn.preprocessing import StandardScaler
     except ModuleNotFoundError as exc:

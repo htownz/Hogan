@@ -43,7 +43,7 @@ from datetime import datetime, timezone
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from hogan_bot.retry import retry, URLLIB_TRANSIENT
+from hogan_bot.retry import URLLIB_TRANSIENT, retry
 
 logger = logging.getLogger(__name__)
 

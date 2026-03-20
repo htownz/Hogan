@@ -4,8 +4,6 @@ from __future__ import annotations
 import json
 import sqlite3
 
-import pytest
-
 from hogan_bot.threshold_review import (
     render_review_json,
     render_review_md,

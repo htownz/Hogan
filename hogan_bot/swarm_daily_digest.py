@@ -20,21 +20,21 @@ import sqlite3
 import sys
 from pathlib import Path
 
+from hogan_bot.swarm_digest_queries import (
+    fetch_agent_vote_stats,
+    fetch_digest_window,
+    fetch_divergence_stats,
+    fetch_learning_drift_stats,
+    fetch_opportunity_stats,
+    fetch_replay_candidates,
+    fetch_swarm_counts,
+    fetch_veto_stats,
+)
 from hogan_bot.swarm_digest_types import (
     DailyDigest,
     DigestFlag,
     DigestSeverity,
     ReplayCandidate,
-)
-from hogan_bot.swarm_digest_queries import (
-    fetch_digest_window,
-    fetch_swarm_counts,
-    fetch_opportunity_stats,
-    fetch_veto_stats,
-    fetch_agent_vote_stats,
-    fetch_divergence_stats,
-    fetch_learning_drift_stats,
-    fetch_replay_candidates,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,12 +66,10 @@ def compute_severity_and_flags(
     mean_agr = metrics.get("mean_agreement")
     mean_ent = metrics.get("mean_entropy")
     bl_miss = metrics.get("baseline_miss_count", 0)
-    bl_total = metrics.get("baseline_match_count", 0) + bl_miss
     import_err = metrics.get("learning_import_error_count", 0)
     top_veto_share = metrics.get("top_veto_reason_share", 0.0)
     opp_top = metrics.get("opportunity_score_top_decile_markout_bps")
     opp_bot = metrics.get("opportunity_score_bottom_decile_markout_bps")
-    hold_dom = metrics.get("agent_hold_dominance_ratio", 0.0)
     weight_updates = metrics.get("weight_update_count", 0)
 
     # --- Critical flags ---
@@ -408,7 +406,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Severity: {digest.severity.upper()}")
     print(f"Headline: {digest.headline}")
     if digest.operator_actions:
-        print(f"\nOperator actions:")
+        print("\nOperator actions:")
         for i, a in enumerate(digest.operator_actions, 1):
             print(f"  {i}. {a}")
     print(f"{'='*60}\n")

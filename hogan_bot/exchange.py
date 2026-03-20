@@ -30,7 +30,7 @@ try:
 except ImportError:
     ccxt = None  # type: ignore[assignment]
 
-from hogan_bot.retry import ccxt_retry, retry, CCXT_TRANSIENT
+from hogan_bot.retry import CCXT_TRANSIENT, ccxt_retry, retry
 
 logger = logging.getLogger(__name__)
 

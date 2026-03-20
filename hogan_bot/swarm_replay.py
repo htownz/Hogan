@@ -11,7 +11,6 @@ from typing import Any
 
 import pandas as pd
 
-
 # ---------------------------------------------------------------------------
 # Decision story — plain-English summary of a swarm decision
 # ---------------------------------------------------------------------------

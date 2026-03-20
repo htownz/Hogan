@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import sqlite3
 
-import pytest
-
 from hogan_bot.agent_quarantine import (
     get_agent_mode,
     get_agent_state,
@@ -16,7 +14,7 @@ from hogan_bot.agent_quarantine import (
     set_agent_mode,
 )
 from hogan_bot.swarm_decision.controller import SwarmController
-from hogan_bot.swarm_decision.types import AgentVote, SwarmDecision
+from hogan_bot.swarm_decision.types import AgentVote
 
 
 def _make_conn():

@@ -9,10 +9,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-import pytest
-
 from hogan_bot.storage import _create_schema
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -81,7 +78,10 @@ def _seed_shadow_data(conn: sqlite3.Connection, n: int = 20) -> None:
 
 class TestShadowReport:
     def test_import(self):
-        from scripts.shadow_report import build_shadow_report, ShadowReport  # noqa: F401
+        from scripts.shadow_report import (  # noqa: F401
+            ShadowReport,
+            build_shadow_report,
+        )
 
     def test_empty_db(self):
         from scripts.shadow_report import build_shadow_report
@@ -161,7 +161,10 @@ class TestShadowReport:
 
 class TestPromotionCheck:
     def test_import(self):
-        from scripts.promotion_check import build_promotion_report, detect_phase  # noqa: F401
+        from scripts.promotion_check import (  # noqa: F401
+            build_promotion_report,
+            detect_phase,
+        )
 
     def test_empty_db_phase0(self):
         from scripts.promotion_check import build_promotion_report

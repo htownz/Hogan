@@ -11,7 +11,6 @@ from hogan_bot.swarm_digest_types import (
     ReplayCandidate,
 )
 
-
 _SEVERITY_BADGE = {
     "healthy": "HEALTHY",
     "watch": "WATCH",

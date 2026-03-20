@@ -18,11 +18,15 @@ import logging
 import os
 import sqlite3
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
-from hogan_bot.threshold_types import StallAlert, ThresholdReviewResult, TuningRecommendation
 from hogan_bot.stall_detection import evaluate_stall_state
+from hogan_bot.threshold_types import (
+    StallAlert,
+    ThresholdReviewResult,
+    TuningRecommendation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +53,6 @@ def review_agent(
     veto_count = 0
     distinct_regimes = 0
     pre_veto_wt = 0
-    post_veto_wt = 0
     pre_veto_agr_sum = 0.0
     post_veto_agr_sum = 0.0
     pre_veto_conf_sum = 0.0

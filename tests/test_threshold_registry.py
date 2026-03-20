@@ -3,9 +3,6 @@ from __future__ import annotations
 
 import sqlite3
 
-import pytest
-
-from hogan_bot.threshold_types import ThresholdBundle
 from hogan_bot.threshold_registry import (
     activate_bundle,
     diff_bundles,
@@ -15,6 +12,7 @@ from hogan_bot.threshold_registry import (
     log_threshold_changes,
     save_bundle,
 )
+from hogan_bot.threshold_types import ThresholdBundle
 
 
 def _make_conn():

@@ -9,10 +9,8 @@ import json
 import sqlite3
 
 import pandas as pd
-import pytest
 
 from hogan_bot.storage import _create_schema
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

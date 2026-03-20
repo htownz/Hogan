@@ -17,8 +17,10 @@ from __future__ import annotations
 import functools
 import logging
 import random
+import socket
 import time
 from typing import Any, Callable, TypeVar
+from urllib.error import URLError
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +36,6 @@ try:
     )
 except ImportError:
     CCXT_TRANSIENT = ()
-
-# ── urllib / socket transient exceptions ──────────────────────────────────
-import socket
-from urllib.error import URLError
 
 URLLIB_TRANSIENT: tuple[type[Exception], ...] = (
     URLError,

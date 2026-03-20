@@ -7,7 +7,6 @@ import sqlite3
 
 import pytest
 
-from hogan_bot.swarm_weekly_review_types import WeeklyFlag, WeeklyReview
 from hogan_bot.swarm_weekly_review import (
     build_cursor_actions,
     build_headline,
@@ -17,6 +16,7 @@ from hogan_bot.swarm_weekly_review import (
     compute_severity_and_flags,
 )
 from hogan_bot.swarm_weekly_review_render import render_json, render_markdown
+from hogan_bot.swarm_weekly_review_types import WeeklyFlag, WeeklyReview
 
 
 def _schema(conn: sqlite3.Connection) -> None:

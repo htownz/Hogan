@@ -6,7 +6,6 @@ the data.
 """
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import pandas as pd

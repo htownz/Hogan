@@ -17,12 +17,10 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import sqlite3
 import sys
 from pathlib import Path
 
-from hogan_bot.threshold_types import ThresholdBundle, ThresholdChange
 from hogan_bot.threshold_registry import (
     activate_bundle,
     diff_bundles,
@@ -30,6 +28,7 @@ from hogan_bot.threshold_registry import (
     log_threshold_changes,
     save_bundle,
 )
+from hogan_bot.threshold_types import ThresholdBundle, ThresholdChange
 
 logger = logging.getLogger(__name__)
 

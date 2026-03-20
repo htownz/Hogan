@@ -349,7 +349,8 @@ def _train_and_evaluate_window(
             # Regime-specific models: train per-regime when enabled and enough data
             if cfg.use_regime_models:
                 from hogan_bot.ml import RegimeModelRouter
-                from hogan_bot.regime import detect_regime, reset_regime_history as _rr
+                from hogan_bot.regime import detect_regime
+                from hogan_bot.regime import reset_regime_history as _rr
                 _rr()
                 _MIN_REGIME_SAMPLES = 50
                 regime_labels: list[str | None] = []
@@ -615,7 +616,7 @@ def _print_funnel_comparison(report: WalkForwardReport) -> None:
             print(f"  Post-ML filter:     buy={post_ml_buy}  sell={post_ml_sell}  "
                   f"(ML killed {ml_kill_pct:.0f}% of buys)")
         else:
-            print(f"  Post-ML filter:     (ML disabled)")
+            print("  Post-ML filter:     (ML disabled)")
 
         _pre_edge_buy = post_ml_buy if _ml_active else pipe_buy
         edge_kill = _pre_edge_buy - post_edge_buy
@@ -643,7 +644,7 @@ def _print_funnel_comparison(report: WalkForwardReport) -> None:
         regime = w.regime_distribution
         if regime:
             total_regime_bars = sum(regime.values())
-            print(f"  Regime distribution:")
+            print("  Regime distribution:")
             for r, cnt in sorted(regime.items(), key=lambda x: -x[1]):
                 pct = cnt / total_regime_bars * 100 if total_regime_bars else 0
                 print(f"    {r:<16} {cnt:>5} bars ({pct:.1f}%)")
