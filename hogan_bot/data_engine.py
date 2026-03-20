@@ -302,14 +302,16 @@ class LiveDataEngine(DataEngineBase):
         if self.api_secret:
             cfg["secret"] = self.api_secret
 
-        exchange = exchange_cls(cfg)
+        exchange = None
         try:
+            exchange = exchange_cls(cfg)
             await self._run_rest_loop(exchange)
         finally:
-            try:
-                exchange.close()
-            except Exception as _close_exc:
-                logger.debug("REST exchange close error: %s", _close_exc)
+            if exchange is not None:
+                try:
+                    exchange.close()
+                except Exception as _close_exc:
+                    logger.debug("REST exchange close error: %s", _close_exc)
 
     async def _run_rest_loop(self, exchange) -> None:
         """Inner REST loop extracted for resource-safe cleanup."""

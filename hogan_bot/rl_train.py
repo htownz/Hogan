@@ -216,8 +216,6 @@ def train(
     dict
         Evaluation metrics from the held-out 20 % window.
     """
-    from hogan_bot.rl_env import N_OBS, N_OBS_EXTENDED, TradingEnv
-
     split = int(len(candles) * 0.8)
     train_candles = candles.iloc[:split].reset_index(drop=True)
     eval_candles = candles.iloc[split:].reset_index(drop=True)
@@ -242,7 +240,6 @@ def train(
             "Accumulate more data or reduce the train/eval split."
         )
 
-    # Open a DB connection for ext features (derivatives / on-chain / SPY)
     _db_conn = None
     if use_ext_features:
         try:
@@ -250,6 +247,33 @@ def train(
             _db_conn = get_connection()
         except Exception:
             pass
+
+    try:
+        return _train_with_conn(
+            _db_conn, train_candles, eval_candles,
+            train_1h, eval_1h, train_15m, eval_15m,
+            use_ext_features, starting_balance, fee_rate,
+            slippage_pct, reward_type, min_trades, seed,
+            symbol, timesteps, model_path, verbose, device,
+            checkpoint_freq, eval_freq, min_bars,
+        )
+    finally:
+        if _db_conn is not None:
+            try:
+                _db_conn.close()
+            except Exception:
+                pass
+
+
+def _train_with_conn(
+    _db_conn, train_candles, eval_candles,
+    train_1h, eval_1h, train_15m, eval_15m,
+    use_ext_features, starting_balance, fee_rate,
+    slippage_pct, reward_type, min_trades, seed,
+    symbol, timesteps, model_path, verbose, device,
+    checkpoint_freq, eval_freq, min_bars,
+):
+    from hogan_bot.rl_env import N_OBS, N_OBS_EXTENDED, TradingEnv
 
     env_kwargs = dict(
         starting_balance=starting_balance,
@@ -353,12 +377,6 @@ def train(
     else:
         print("Eval window too small — skipping evaluation.")
         metrics = {}
-
-    if _db_conn is not None:
-        try:
-            _db_conn.close()
-        except Exception:
-            pass
 
     obs_dims = N_OBS_EXTENDED if use_ext_features else N_OBS
     print(f"Observation space: {obs_dims}-dim ({'extended' if use_ext_features else 'base'})")

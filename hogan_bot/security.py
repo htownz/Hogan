@@ -168,6 +168,7 @@ class KeyVault:
         Falls back to the env var named *fallback_env* (or ``key_name.upper()``)
         if no encrypted value is found.
         """
+        row = None
         try:
             conn = sqlite3.connect(self.db_path)
             cur = conn.execute(
@@ -175,19 +176,25 @@ class KeyVault:
             )
             row = cur.fetchone()
             conn.close()
-
-            if row:
-                if not self._password:
-                    logger.warning(
-                        "KeyVault: encrypted key '%s' found but HOGAN_VAULT_PASSWORD not set.",
-                        key_name,
-                    )
-                    return None
-                return decrypt_aes256(row[0], self._password)
         except Exception as exc:
-            logger.warning("KeyVault.get('%s') failed: %s — using env fallback", key_name, exc)
+            logger.warning("KeyVault.get('%s') DB lookup failed: %s", key_name, exc)
 
-        # Env var fallback
+        if row:
+            if not self._password:
+                logger.warning(
+                    "KeyVault: encrypted key '%s' found but HOGAN_VAULT_PASSWORD not set.",
+                    key_name,
+                )
+                return None
+            try:
+                return decrypt_aes256(row[0], self._password)
+            except Exception as exc:
+                logger.error(
+                    "KeyVault: decryption failed for '%s': %s — NOT falling back to env",
+                    key_name, exc,
+                )
+                return None
+
         env_name = fallback_env or key_name.upper()
         return os.getenv(env_name, None)
 

@@ -48,66 +48,66 @@ def main():
     _orig_ts = os.environ.get("HOGAN_TRAILING_STOP_PCT")
     _orig_tp = os.environ.get("HOGAN_TAKE_PROFIT_PCT")
 
-    for ts_pct in TRAILING_STOP_VALUES:
-        for tp_pct in TAKE_PROFIT_VALUES:
-            idx += 1
-            t0 = time.perf_counter()
-            logger.info(
-                "[%d/%d] TS=%.1f%% TP=%.1f%% ...",
-                idx, total, ts_pct * 100, tp_pct * 100,
-            )
-            sys.stdout.flush()
+    try:
+        for ts_pct in TRAILING_STOP_VALUES:
+            for tp_pct in TAKE_PROFIT_VALUES:
+                idx += 1
+                t0 = time.perf_counter()
+                logger.info(
+                    "[%d/%d] TS=%.1f%% TP=%.1f%% ...",
+                    idx, total, ts_pct * 100, tp_pct * 100,
+                )
+                sys.stdout.flush()
 
-            os.environ["HOGAN_TRAILING_STOP_PCT"] = str(ts_pct)
-            os.environ["HOGAN_TAKE_PROFIT_PCT"] = str(tp_pct)
+                os.environ["HOGAN_TRAILING_STOP_PCT"] = str(ts_pct)
+                os.environ["HOGAN_TAKE_PROFIT_PCT"] = str(tp_pct)
 
-            cfg = WFConfig(
-                n_splits=5,
-                use_ml_filter=False,
-                use_macro_sitout=True,
-            )
+                cfg = WFConfig(
+                    n_splits=5,
+                    use_ml_filter=False,
+                    use_macro_sitout=True,
+                )
 
-            report = walk_forward_validate(df, cfg, macro_sitout=sitout)
-            s = report.summary()
-            elapsed = time.perf_counter() - t0
+                report = walk_forward_validate(df, cfg, macro_sitout=sitout)
+                s = report.summary()
+                elapsed = time.perf_counter() - t0
 
-            row = {
-                "trailing_stop_pct": ts_pct,
-                "take_profit_pct": tp_pct,
-                "mean_return_pct": s["mean_return_pct"],
-                "mean_sharpe": s["mean_sharpe"],
-                "total_trades": s["total_trades"],
-                "n_positive": s["n_positive"],
-                "worst_drawdown_pct": s["worst_drawdown_pct"],
-                "passes_gate": s["passes_gate"],
-                "per_window": [
-                    {
-                        "idx": w.window_idx,
-                        "ret": round(w.total_return_pct, 4),
-                        "sharpe": round(w.sharpe, 4) if w.sharpe else None,
-                        "trades": w.trades,
-                        "win_rate": round(w.win_rate, 4),
-                    }
-                    for w in report.windows
-                ],
-            }
-            results.append(row)
-            logger.info(
-                "  -> ret=%+.2f%%  sharpe=%.2f  trades=%d  pos=%d/5  (%.0fs)",
-                s["mean_return_pct"], s["mean_sharpe"],
-                s["total_trades"], s["n_positive"], elapsed,
-            )
-            sys.stdout.flush()
-
-    # Restore original environment
-    if _orig_ts is None:
-        os.environ.pop("HOGAN_TRAILING_STOP_PCT", None)
-    else:
-        os.environ["HOGAN_TRAILING_STOP_PCT"] = _orig_ts
-    if _orig_tp is None:
-        os.environ.pop("HOGAN_TAKE_PROFIT_PCT", None)
-    else:
-        os.environ["HOGAN_TAKE_PROFIT_PCT"] = _orig_tp
+                row = {
+                    "trailing_stop_pct": ts_pct,
+                    "take_profit_pct": tp_pct,
+                    "mean_return_pct": s["mean_return_pct"],
+                    "mean_sharpe": s["mean_sharpe"],
+                    "total_trades": s["total_trades"],
+                    "n_positive": s["n_positive"],
+                    "worst_drawdown_pct": s["worst_drawdown_pct"],
+                    "passes_gate": s["passes_gate"],
+                    "per_window": [
+                        {
+                            "idx": w.window_idx,
+                            "ret": round(w.total_return_pct, 4),
+                            "sharpe": round(w.sharpe, 4) if w.sharpe else None,
+                            "trades": w.trades,
+                            "win_rate": round(w.win_rate, 4),
+                        }
+                        for w in report.windows
+                    ],
+                }
+                results.append(row)
+                logger.info(
+                    "  -> ret=%+.2f%%  sharpe=%.2f  trades=%d  pos=%d/5  (%.0fs)",
+                    s["mean_return_pct"], s["mean_sharpe"],
+                    s["total_trades"], s["n_positive"], elapsed,
+                )
+                sys.stdout.flush()
+    finally:
+        if _orig_ts is None:
+            os.environ.pop("HOGAN_TRAILING_STOP_PCT", None)
+        else:
+            os.environ["HOGAN_TRAILING_STOP_PCT"] = _orig_ts
+        if _orig_tp is None:
+            os.environ.pop("HOGAN_TAKE_PROFIT_PCT", None)
+        else:
+            os.environ["HOGAN_TAKE_PROFIT_PCT"] = _orig_tp
 
     results.sort(key=lambda r: r["mean_return_pct"], reverse=True)
 

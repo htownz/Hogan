@@ -21,8 +21,9 @@ from hogan_bot.swarm_decision.types import AgentVote
 def _make_candles(n: int = 100, price: float = 50_000.0) -> pd.DataFrame:
     """Generate synthetic candle data for testing."""
     import numpy as np
+    rng = np.random.RandomState(42)
     ts = [1_700_000_000_000 + i * 3_600_000 for i in range(n)]
-    closes = [price + np.random.normal(0, price * 0.001) for _ in range(n)]
+    closes = [price + rng.normal(0, price * 0.001) for _ in range(n)]
     return pd.DataFrame({
         "ts_ms": ts,
         "open": closes,

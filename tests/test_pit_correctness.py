@@ -119,12 +119,13 @@ class TestSentimentPIT:
         ts_13h = int(pd.Timestamp("2024-01-02 13:00", tz="UTC").timestamp() * 1000)
         sig = agent.analyze(as_of_ms=ts_13h)
 
+        assert sig is not None, "analyze() should return a signal object"
         if sig.details and "funding" in sig.details:
-            # Most recent funding at ts_ms <= 13:00 on Jan 2 is the 13:00 row (0.0003)
-            # The Jan 3 row (-0.0002) must NOT be visible
-            pass  # Presence of a value proves the query ran; absence of crash proves cutoff
+            funding_val = sig.details["funding"]
+            assert funding_val != -0.0002, (
+                "Funding cutoff violated: Jan 3 row (-0.0002) should not be visible at Jan 2 13:00"
+            )
 
-        # Now try with cutoff BEFORE any derivatives data
         early_ts = int(pd.Timestamp("2024-01-02 11:00", tz="UTC").timestamp() * 1000)
         sig_early = agent.analyze(as_of_ms=early_ts)
         if sig_early.details and "funding" in sig_early.details:

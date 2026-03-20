@@ -242,7 +242,8 @@ def tool_get_data_coverage(db_path: str | None = None) -> dict:
                 )
                 cnt, latest = cur.fetchone()
                 ext_check[metric] = {"rows": cnt or 0, "latest": latest or "—"}
-            except Exception:
+            except Exception as exc:
+                logger.debug("data_coverage check failed for %s: %s", metric, exc)
                 ext_check[metric] = {"rows": 0, "latest": "—"}
         raw.close()
 
@@ -323,8 +324,8 @@ def tool_get_recent_trades(
                 raw,
             )
             df = df.merge(expl_df, on="fill_id", how="left")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("trade_explanations join failed: %s", exc)
         finally:
             raw.close()
 

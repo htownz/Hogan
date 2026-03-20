@@ -198,9 +198,10 @@ class TestEffectiveThresholds:
         })
         state = detect_regime(df, adx_trending_threshold=20.0)
         eff = effective_thresholds(state, cfg)
-        if state.regime == "trending_up":
-            expected = cfg.volume_threshold * 0.55
-            assert abs(eff["volume_threshold"] - expected) < 1e-6
+        if state.regime != "trending_up":
+            pytest.skip(f"Regime detected as '{state.regime}', not 'trending_up' — data-dependent")
+        expected = cfg.volume_threshold * 0.55
+        assert abs(eff["volume_threshold"] - expected) < 1e-6
 
     def test_volatile_halves_position_scale(self):
         cfg = _FakeConfig()

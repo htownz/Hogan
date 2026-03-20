@@ -430,8 +430,8 @@ class TestInTimeWindow(unittest.TestCase):
         try:
             result = in_time_window(ts, [])
             self.assertFalse(result)
-        except Exception:
-            pass  # acceptable to raise on empty windows
+        except (ValueError, TypeError):
+            pass  # acceptable to raise ValueError/TypeError on empty windows
 
 
 class TestParseTimeWindows(unittest.TestCase):
