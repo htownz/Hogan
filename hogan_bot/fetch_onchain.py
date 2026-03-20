@@ -238,17 +238,19 @@ def fetch_onchain(
         addr_records = []
 
     conn = get_connection(db_path)
-    for metric, records in [
-        ("mvrv_zscore", mvrv_records),
-        ("sopr", sopr_records),
-        ("active_addr_ma7_pct_change", addr_records),
-    ]:
-        if records:
-            written = upsert_onchain(conn, symbol, records)
-        else:
-            written = 0
-        results[metric] = written
-    conn.close()
+    try:
+        for metric, records in [
+            ("mvrv_zscore", mvrv_records),
+            ("sopr", sopr_records),
+            ("active_addr_ma7_pct_change", addr_records),
+        ]:
+            if records:
+                written = upsert_onchain(conn, symbol, records)
+            else:
+                written = 0
+            results[metric] = written
+    finally:
+        conn.close()
 
     return results
 

@@ -160,7 +160,7 @@ def propose_weights(
     # Include agents in current_weights that have no outcome data yet
     for aid in current_weights:
         if aid not in ideal_weights:
-            ideal_weights[aid] = current_weights.get(aid, 1.0 / len(current_weights))
+            ideal_weights[aid] = current_weights.get(aid, 1.0 / max(1, len(current_weights)))
 
     # Re-normalize
     total_ideal = sum(ideal_weights.values()) or 1.0

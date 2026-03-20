@@ -118,34 +118,34 @@ def fetch_derivatives(
     print(f"  openInterest   = {open_interest:.4f} BTC")
 
     conn = get_connection(db_path)
-
-    # Store funding rate
-    fr_records = [(now_ms, "funding_rate", funding_rate)]
-    fr_written = upsert_derivatives(conn, symbol, fr_records)
-
-    # Store raw OI (BTC)
-    oi_raw_records = [(now_ms, "open_interest_btc", open_interest)]
-    upsert_derivatives(conn, symbol, oi_raw_records)
-
-    # Compute OI % change from previous stored raw value
-    oi_written = 0
     try:
-        prev_raw = load_derivatives(conn, symbol, "open_interest_btc")
-        prev_raw = prev_raw.sort_values("ts_ms")
-        if len(prev_raw) >= 2:
-            oi_prev = float(prev_raw.iloc[-2]["value"])
-            oi_now = float(prev_raw.iloc[-1]["value"])
-            pct = (oi_now - oi_prev) / max(abs(oi_prev), 1e-9)
-            pct = float(np.clip(pct, -1.0, 1.0))
-        else:
-            pct = 0.0
-        oi_records = [(now_ms, "open_interest_pct_change", pct)]
-        oi_written = upsert_derivatives(conn, symbol, oi_records)
-        print(f"  OI pct change  = {pct:+.4f}")
-    except Exception as exc:
-        print(f"  Warning: could not compute OI pct change: {exc}")
+        # Store funding rate
+        fr_records = [(now_ms, "funding_rate", funding_rate)]
+        fr_written = upsert_derivatives(conn, symbol, fr_records)
 
-    conn.close()
+        # Store raw OI (BTC)
+        oi_raw_records = [(now_ms, "open_interest_btc", open_interest)]
+        upsert_derivatives(conn, symbol, oi_raw_records)
+
+        # Compute OI % change from previous stored raw value
+        oi_written = 0
+        try:
+            prev_raw = load_derivatives(conn, symbol, "open_interest_btc")
+            prev_raw = prev_raw.sort_values("ts_ms")
+            if len(prev_raw) >= 2:
+                oi_prev = float(prev_raw.iloc[-2]["value"])
+                oi_now = float(prev_raw.iloc[-1]["value"])
+                pct = (oi_now - oi_prev) / max(abs(oi_prev), 1e-9)
+                pct = float(np.clip(pct, -1.0, 1.0))
+            else:
+                pct = 0.0
+            oi_records = [(now_ms, "open_interest_pct_change", pct)]
+            oi_written = upsert_derivatives(conn, symbol, oi_records)
+            print(f"  OI pct change  = {pct:+.4f}")
+        except Exception as exc:
+            print(f"  Warning: could not compute OI pct change: {exc}")
+    finally:
+        conn.close()
     return {"funding_rate": fr_written, "open_interest_pct_change": oi_written}
 
 

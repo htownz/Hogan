@@ -250,7 +250,8 @@ class TradingEnv(_GymBase):
         -------
         obs, reward, terminated, truncated, info
         """
-        assert 0 <= action <= 2, f"Invalid action {action}"
+        if not (0 <= action <= 2):
+            raise ValueError(f"Invalid action {action}; expected 0, 1, or 2")
 
         price = float(self.candles["close"].iloc[self._cursor])
         prev_equity = self._total_equity(price)

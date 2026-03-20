@@ -33,6 +33,7 @@ Usage
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -155,6 +156,8 @@ def _mean_reversion_score(close: pd.Series, lookback: int = 24) -> float:
     if shifted.std() < 1e-9 or current.std() < 1e-9:
         return 0.0
     autocorr = float(current.corr(shifted))
+    if not math.isfinite(autocorr):
+        return 0.0
     return max(-1.0, min(1.0, -autocorr))
 
 

@@ -220,8 +220,9 @@ class SentimentAgent:
             cutoff_date = pd.Timestamp(as_of_ms, unit="ms", tz="UTC").strftime("%Y-%m-%d")
             cutoff_ts = int(as_of_ms)
         else:
-            cutoff_date = pd.Timestamp.utcnow().strftime("%Y-%m-%d")
-            cutoff_ts = int(pd.Timestamp.utcnow().timestamp() * 1000)
+            _now = pd.Timestamp.now(tz="UTC")
+            cutoff_date = _now.strftime("%Y-%m-%d")
+            cutoff_ts = int(_now.timestamp() * 1000)
         scores: dict[str, float] = {}
         _sent_ages: list[float] = []
         try:
@@ -394,7 +395,7 @@ class MacroAgent:
         if as_of_ms is not None:
             cutoff_date = pd.Timestamp(as_of_ms, unit="ms", tz="UTC").strftime("%Y-%m-%d")
         else:
-            cutoff_date = pd.Timestamp.utcnow().strftime("%Y-%m-%d")
+            cutoff_date = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d")
 
         indicators: dict[str, float] = {}
         _metric_ages: list[float] = []

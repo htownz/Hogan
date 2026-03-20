@@ -464,7 +464,7 @@ class OandaDataEngine(DataEngineBase):
             for symbol in self.symbols:
                 for tf in self.timeframes:
                     try:
-                        df = await asyncio.get_event_loop().run_in_executor(
+                        df = await asyncio.get_running_loop().run_in_executor(
                             None, self._client.fetch_candles, symbol, tf, 2,
                         )
                         if df.empty:

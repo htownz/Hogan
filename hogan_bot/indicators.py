@@ -16,6 +16,11 @@ def compute_atr(df: pd.DataFrame, window: int = 14) -> pd.Series:
     Smoothed with an EWM whose span equals *window* (Wilder's method).
     Returns a Series aligned to *df*'s index.
     """
+    if df is None or df.empty:
+        return pd.Series(dtype=float)
+    _missing = {"high", "low", "close"} - set(df.columns)
+    if _missing:
+        raise KeyError(f"compute_atr requires columns {{'high', 'low', 'close'}}; missing {_missing}")
     high = df["high"].astype(float)
     low = df["low"].astype(float)
     close = df["close"].astype(float)

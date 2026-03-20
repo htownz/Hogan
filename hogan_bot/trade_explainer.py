@@ -265,21 +265,24 @@ def explain_trade(
     signal_details: dict = {}
     if agent_signal is not None:
         if hasattr(agent_signal, "__dict__"):
+            _tech = getattr(agent_signal, "tech", None)
+            _sent = getattr(agent_signal, "sentiment", None)
+            _macro = getattr(agent_signal, "macro", None)
             signal_details = {
                 "action": getattr(agent_signal, "action", action),
                 "confidence": getattr(agent_signal, "confidence", 0.0),
                 "explanation": getattr(agent_signal, "explanation", ""),
                 "tech": {
-                    "action": getattr(agent_signal.tech, "action", "hold"),
-                    "confidence": getattr(agent_signal.tech, "confidence", 0.0),
-                } if agent_signal.tech else {},
+                    "action": getattr(_tech, "action", "hold"),
+                    "confidence": getattr(_tech, "confidence", 0.0),
+                } if _tech else {},
                 "sentiment": {
-                    "bias": getattr(agent_signal.sentiment, "bias", "neutral"),
-                    "strength": getattr(agent_signal.sentiment, "strength", 0.0),
-                } if agent_signal.sentiment else {},
+                    "bias": getattr(_sent, "bias", "neutral"),
+                    "strength": getattr(_sent, "strength", 0.0),
+                } if _sent else {},
                 "macro": {
-                    "regime": getattr(agent_signal.macro, "regime", "neutral"),
-                } if agent_signal.macro else {},
+                    "regime": getattr(_macro, "regime", "neutral"),
+                } if _macro else {},
             }
         elif isinstance(agent_signal, dict):
             signal_details = agent_signal

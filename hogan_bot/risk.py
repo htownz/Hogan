@@ -38,7 +38,7 @@ def calculate_position_size(
     """
     if any(math.isnan(v) or math.isinf(v) for v in
            (equity_usd, price, stop_distance_pct, max_risk_per_trade,
-            max_allocation_pct, confidence_scale)):
+            max_allocation_pct, confidence_scale, fee_rate, atr_pct, avg_atr_pct)):
         logger.error(
             "NaN/Inf in position sizing inputs: equity=%.2f price=%.2f "
             "stop=%.4f risk=%.4f alloc=%.4f conf=%.4f",
