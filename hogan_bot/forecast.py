@@ -232,7 +232,8 @@ def _heuristic_forecast(candles: pd.DataFrame) -> ForecastResult:
     expected_return = {}
 
     for horizon_name, horizon_bars in [("4h", 4), ("12h", 12), ("24h", 24)]:
-        recent_ret = float(close.pct_change(min(horizon_bars, len(close) - 1)).iloc[-1])
+        _pct = close.pct_change(min(horizon_bars, len(close) - 1)).iloc[-1]
+        recent_ret = float(_pct) if pd.notna(_pct) else 0.0
         mr_pressure = -(bb_pct_b - 0.5) * 0.3
         trend_component = ma_spread * 20.0
         vol_boost = min(0.3, max(-0.1, (vol_ratio - 1.0) * 0.15))

@@ -2140,7 +2140,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         win_rate=win_rate,
         sharpe_ratio=compute_sharpe(equity_curve, bars_per_year=_bars_per_year),
         sortino_ratio=compute_sortino(equity_curve, bars_per_year=_bars_per_year),
-        calmar_ratio=compute_calmar(total_return_pct, max_dd_pct),
+        calmar_ratio=compute_calmar(total_return_pct, max_dd_pct, n_bars=len(equity_curve), bars_per_year=_bars_per_year),
         bars_per_year=_bars_per_year,
         equity_curve=equity_curve,
         trade_log=trade_log,

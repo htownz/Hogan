@@ -137,7 +137,7 @@ def auto_quarantine_check(
                     )
     except Exception as exc:
         import logging as _logging
-        _logging.getLogger(__name__).debug("auto_quarantine_check error: %s", exc)
+        _logging.getLogger(__name__).warning("auto_quarantine_check error: %s", exc)
     return quarantined
 
 

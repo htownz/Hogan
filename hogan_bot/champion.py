@@ -104,8 +104,11 @@ def apply_champion_mode(config):
 
     overrides = {}
     for field_name in ChampionLocks.__dataclass_fields__:
+        if not hasattr(config, field_name):
+            logger.debug("CHAMPION_MODE: skipping %s (not in BotConfig)", field_name)
+            continue
         champion_val = getattr(CHAMPION_LOCKS, field_name)
-        current_val = getattr(config, field_name, None)
+        current_val = getattr(config, field_name)
         if current_val != champion_val:
             logger.info(
                 "CHAMPION_MODE: overriding %s = %r -> %r",

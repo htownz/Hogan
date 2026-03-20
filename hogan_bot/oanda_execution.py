@@ -162,8 +162,8 @@ class OandaExecution(ExecutionEngine):
                     }
                     try:
                         record_order(self.conn, order_record)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Oanda short order journal failed: %s", exc)
                     ts_ms = int(time.time() * 1000)
                     upsert_position(self.conn, symbol, -fill_units, fill_price, ts_ms)
                 self._journal_fill(fill, symbol, "sell")
@@ -172,6 +172,17 @@ class OandaExecution(ExecutionEngine):
 
             reject = result.get("orderRejectTransaction", {})
             reason = reject.get("rejectReason", "unknown")
+            if self.conn is not None:
+                order_record = {
+                    "id": reject.get("id", ""),
+                    "symbol": symbol, "side": "sell", "type": "market",
+                    "amount": abs(qty), "price": price, "exchange": "oanda",
+                    "status": "rejected",
+                }
+                try:
+                    record_order(self.conn, order_record)
+                except Exception as exc:
+                    logger.debug("Rejected short order journal failed: %s", exc)
             logger.warning("OANDA_OPEN_SHORT rejected: %s", reason)
             return ExecResult(ok=False, error=reason)
 

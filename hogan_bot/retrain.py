@@ -911,13 +911,23 @@ def shadow_eval_cycle(args) -> dict:
         with open(shadow_reg_path, encoding="utf-8") as fh:
             entries = [json.loads(line) for line in fh if line.strip()]
 
-        now_ts = time.time()
+        # De-duplicate: keep only the latest entry per challenger_path
+        _seen_paths: dict[str, dict] = {}
         for entry in entries:
-            if entry.get("status") != "challenger":
-                continue
+            cp = entry.get("challenger_path", "")
+            if cp:
+                _seen_paths[cp] = entry
+        active_entries = [e for e in _seen_paths.values() if e.get("status") == "challenger"]
+
+        now_ts = time.time()
+        for entry in active_entries:
             if entry.get("symbol") != args.symbol:
                 continue
-            created = datetime.fromisoformat(entry["timestamp"]).timestamp()
+            try:
+                created = datetime.fromisoformat(entry["timestamp"]).timestamp()
+            except (ValueError, KeyError):
+                logger.debug("Shadow registry: skipping entry with bad timestamp")
+                continue
             age_days = (now_ts - created) / 86400.0
             if age_days < entry.get("window_days", args.shadow_window_days):
                 logger.info(

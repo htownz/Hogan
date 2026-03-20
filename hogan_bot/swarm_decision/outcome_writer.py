@@ -208,15 +208,17 @@ def _write_one_outcome(
 
 
 def _tf_to_minutes(tf: str) -> int:
-    """Convert timeframe string to minutes."""
+    """Convert timeframe string to minutes (minimum 1)."""
     tf = tf.lower().strip()
     if tf.endswith("m"):
-        return int(tf[:-1])
+        val = int(tf[:-1])
     elif tf.endswith("h"):
-        return int(tf[:-1]) * 60
+        val = int(tf[:-1]) * 60
     elif tf.endswith("d"):
-        return int(tf[:-1]) * 1440
-    return 60
+        val = int(tf[:-1]) * 1440
+    else:
+        val = 60
+    return max(1, val)
 
 
 def _forward_bps(

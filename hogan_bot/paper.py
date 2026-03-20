@@ -242,9 +242,7 @@ class PaperPortfolio:
                     "BREAKEVEN_LOCK %s — MFE %.2f%% >= %.2f%%, stop floor at entry %.2f",
                     symbol, pos.max_favorable_pct * 100, pos.breakeven_pct * 100, pos.avg_entry,
                 )
-            if pos.breakeven_active and px <= pos.avg_entry and pos.trail_active:
-                # Only fire if trail hasn't already moved below entry
-                # (ratcheting trail may be tighter than break-even)
+            if pos.breakeven_active and px <= pos.avg_entry:
                 exits.append((symbol, "breakeven_stop"))
                 continue
 
@@ -318,7 +316,7 @@ class PaperPortfolio:
                     "BREAKEVEN_LOCK SHORT %s — MFE %.2f%% >= %.2f%%, stop floor at entry %.2f",
                     symbol, pos.max_favorable_pct * 100, pos.breakeven_pct * 100, pos.avg_entry,
                 )
-            if pos.breakeven_active and px >= pos.avg_entry and pos.trail_active:
+            if pos.breakeven_active and px >= pos.avg_entry:
                 exits.append((symbol, "short_breakeven_stop"))
                 continue
 

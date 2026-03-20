@@ -251,7 +251,8 @@ def make_notifier(
             logger.warning("EmailNotifier setup failed: %s", exc)
     else:
         smtp_host = os.getenv("HOGAN_EMAIL_SMTP_HOST", "")
-        if smtp_host:
+        to_addr = os.getenv("HOGAN_EMAIL_TO", "")
+        if smtp_host and to_addr:
             notifiers.append(
                 EmailNotifier(
                     smtp_host=smtp_host,
@@ -259,7 +260,7 @@ def make_notifier(
                     username=os.getenv("HOGAN_EMAIL_USERNAME", ""),
                     password=os.getenv("HOGAN_EMAIL_PASSWORD", ""),
                     from_addr=os.getenv("HOGAN_EMAIL_FROM", "hogan@localhost"),
-                    to_addr=os.getenv("HOGAN_EMAIL_TO", ""),
+                    to_addr=to_addr,
                     use_tls=os.getenv("HOGAN_EMAIL_TLS", "true").lower() != "false",
                 )
             )

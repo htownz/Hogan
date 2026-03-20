@@ -1,7 +1,10 @@
 
 from __future__ import annotations
 
+import logging
 import pickle
+
+logger = logging.getLogger(__name__)
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -309,6 +312,16 @@ def train_advanced_ensemble(
         if len(yr) < 500 or len(np.unique(yr)) < 2:
             Xr = feat.values
             yr = y.values
+
+        if len(np.unique(yr)) < 2:
+            logger.warning(
+                "Regime %d: single-class data even after full-dataset fallback — using dummy model", r,
+            )
+            from sklearn.dummy import DummyClassifier
+            dummy = DummyClassifier(strategy="prior")
+            dummy.fit(Xr, yr)
+            models[int(r)] = dummy
+            continue
 
         base = HistGradientBoostingClassifier(
             random_state=seed,
