@@ -1629,7 +1629,7 @@ async def _run_event_loop_inner(
                         regime, stats["n"], stats["win_rate"] * 100, stats["expectancy_pct"],
                     )
 
-            # Shadow-mode weight proposals from PerformanceTracker
+            # Weight proposals from PerformanceTracker — auto-apply or shadow
             if (
                 _perf_tracker
                 and _perf_trade_count > 0
@@ -1638,11 +1638,48 @@ async def _run_event_loop_inner(
                 try:
                     proposal = _perf_tracker.propose_weight_update()
                     if proposal is not None:
-                        logger.info(
-                            "PERF_TRACKER weight proposal (shadow): %s",
-                            {r: {k: round(v, 3) for k, v in w.items()} for r, w in proposal.regime_weights.items()}
-                            if hasattr(proposal, "regime_weights") else str(proposal),
+                        _auto_apply = getattr(config, "auto_apply_weights", False)
+                        _min_trades = getattr(config, "auto_apply_min_trades", 30)
+                        _should_apply = (
+                            _auto_apply
+                            and hasattr(proposal, "should_update")
+                            and proposal.should_update
+                            and hasattr(proposal, "trade_count")
+                            and proposal.trade_count >= _min_trades
                         )
+                        if _should_apply and hasattr(proposal, "regime_weights"):
+                            # Apply proposed weights to MetaWeigher, bounded ±0.05 per agent
+                            _old_w = dict(evaluator.pipeline.meta_weigher._weights)
+                            for regime, rw in proposal.regime_weights.items():
+                                for agent_key in ("technical", "sentiment", "macro"):
+                                    if agent_key in rw and agent_key in _old_w:
+                                        delta = rw[agent_key] - _old_w[agent_key]
+                                        delta = max(-0.05, min(0.05, delta))
+                                        rw[agent_key] = _old_w[agent_key] + delta
+                            # Apply the default (non-regime) weights
+                            _new_w = proposal.regime_weights.get("default", proposal.regime_weights.get(
+                                next(iter(proposal.regime_weights), "default"), {}
+                            ))
+                            if _new_w:
+                                _bounded = {}
+                                for k in ("technical", "sentiment", "macro"):
+                                    if k in _new_w:
+                                        _bounded[k] = max(0.10, _new_w[k])
+                                if _bounded:
+                                    evaluator.pipeline.meta_weigher.update_weights(_bounded)
+                                    logger.info(
+                                        "AUTO_APPLY_WEIGHTS: applied proposal (%d trades evidence) "
+                                        "old=%s new=%s",
+                                        getattr(proposal, "trade_count", 0),
+                                        {k: round(v, 3) for k, v in _old_w.items()},
+                                        {k: round(v, 3) for k, v in _bounded.items()},
+                                    )
+                        else:
+                            logger.info(
+                                "PERF_TRACKER weight proposal (shadow): %s",
+                                {r: {k: round(v, 3) for k, v in w.items()} for r, w in proposal.regime_weights.items()}
+                                if hasattr(proposal, "regime_weights") else str(proposal),
+                            )
                     _perf_tracker.save_to_db()
                 except Exception as exc:
                     logger.debug("PerformanceTracker proposal error: %s", exc)
@@ -1672,6 +1709,53 @@ async def _run_event_loop_inner(
                         logger.debug("ONLINE_LEARNER update: %s", _ol_result)
                     except Exception as exc:
                         logger.debug("OnlineLearner update error: %s", exc)
+
+            # Phase 5E: Walk-forward auto-retrain trigger
+            # Check every 240 events (~4h of 1h bars) whether model is stale
+            if (
+                getattr(config, "auto_retrain", False)
+                and event_count > 0
+                and event_count % 240 == 0
+            ):
+                try:
+                    import glob as _retrain_glob
+                    _model_files = _retrain_glob.glob(config.ml_model_path)
+                    _model_age_h = 999.0
+                    if _model_files:
+                        _model_mtime = os.path.getmtime(_model_files[0])
+                        _model_age_h = (time.time() - _model_mtime) / 3600.0
+                    _schedule_h = getattr(config, "retrain_schedule_hours", 24.0)
+                    if _model_age_h > _schedule_h:
+                        # Check if we have enough new candles
+                        _retrain_conn = sqlite3.connect(config.db_path)
+                        _candle_count = _retrain_conn.execute(
+                            "SELECT COUNT(*) FROM candles WHERE symbol = ?",
+                            (config.symbols[0] if config.symbols else "BTC/USD",),
+                        ).fetchone()[0]
+                        _min_candles = getattr(config, "auto_retrain_min_candles", 1000)
+                        if _candle_count >= _min_candles:
+                            logger.info(
+                                "AUTO_RETRAIN: model age %.1fh > %.1fh schedule, %d candles available — triggering retrain",
+                                _model_age_h, _schedule_h, _candle_count,
+                            )
+                            from hogan_bot.retrain import retrain_once
+                            _retrain_result = retrain_once(
+                                db_path=config.db_path,
+                                symbol=config.symbols[0] if config.symbols else "BTC/USD",
+                                model_type=getattr(config, "retrain_model_type", "logreg"),
+                                window_bars=getattr(config, "retrain_window_bars", 50000),
+                                min_improvement=getattr(config, "retrain_min_improvement", 0.005),
+                                promotion_metric=getattr(config, "retrain_promotion_metric", "roc_auc"),
+                            )
+                            logger.info("AUTO_RETRAIN result: %s", _retrain_result)
+                        else:
+                            logger.debug(
+                                "AUTO_RETRAIN: insufficient candles (%d < %d), skipping",
+                                _candle_count, _min_candles,
+                            )
+                        _retrain_conn.close()
+                except Exception as _retrain_exc:
+                    logger.warning("AUTO_RETRAIN error: %s", _retrain_exc)
 
             # Heartbeat: periodic health log
             event_count += 1

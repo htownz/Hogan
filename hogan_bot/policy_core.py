@@ -576,6 +576,43 @@ def decide(
             momentum_scale = max(0.40, 1.0 - _pct_below * 20.0)
 
     # ------------------------------------------------------------------
+    # 7b. Forecast-driven position sizing (Phase 5D)
+    # ------------------------------------------------------------------
+    forecast_size_scale = 1.0
+    if (
+        getattr(cfg, "forecast_driven_sizing", False)
+        and action != "hold"
+        and signal.forecast is not None
+        and getattr(signal.forecast, "confidence", 0) > 0.2
+    ):
+        try:
+            _fc = signal.forecast
+            _fc_er = _fc.expected_return
+            # Resolve expected_return (may be dict or scalar)
+            if isinstance(_fc_er, dict) and _fc_er:
+                _fc_ret = max(_fc_er.values()) if action == "buy" else min(_fc_er.values())
+            elif isinstance(_fc_er, (int, float)):
+                _fc_ret = float(_fc_er)
+            else:
+                _fc_ret = None
+
+            if _fc_ret is not None and eff_tp > 0:
+                _fc_ratio = abs(_fc_ret) / eff_tp
+                # Direction check: forecast should agree with action
+                _fc_agrees = (action == "buy" and _fc_ret > 0) or (action == "sell" and _fc_ret < 0)
+                if not _fc_agrees:
+                    forecast_size_scale = 0.50
+                    logger.debug("FORECAST_SIZING: direction conflict (fc=%.4f, action=%s) → 0.50×", _fc_ret, action)
+                elif _fc_ratio > 2.0:
+                    forecast_size_scale = 1.20
+                    logger.debug("FORECAST_SIZING: strong conviction (ratio=%.2f) → 1.20×", _fc_ratio)
+                elif _fc_ratio < 0.5:
+                    forecast_size_scale = 0.70
+                    logger.debug("FORECAST_SIZING: weak conviction (ratio=%.2f) → 0.70×", _fc_ratio)
+        except Exception as _fc_exc:
+            logger.debug("Forecast-driven sizing error: %s", _fc_exc)
+
+    # ------------------------------------------------------------------
     # 8. Position sizing
     # ------------------------------------------------------------------
     _MIN_COMPOSITE_SCALE = 0.15
@@ -589,7 +626,8 @@ def decide(
         * freshness_scale
         * momentum_scale
         * macro_filter_scale
-        * mtf_size_scale,
+        * mtf_size_scale
+        * forecast_size_scale,
     )
 
     # Compute average ATR for volatility-adjusted sizing

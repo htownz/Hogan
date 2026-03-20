@@ -218,6 +218,25 @@ class BotConfig:
     # Safe to enable: only trains once if models don't exist, then persists.
     auto_train_forecast: bool = True
 
+    # Phase 5A: Auto-apply weight proposals from PerformanceTracker.
+    # After every 50 trades, if propose_weight_update() returns a proposal
+    # with sufficient evidence, apply it to the MetaWeigher.  Bounded to
+    # ±0.05 per agent per cycle as a safety guardrail.
+    auto_apply_weights: bool = True
+    auto_apply_min_trades: int = 30  # min trades in proposal evidence
+
+    # Phase 5D: Forecast-driven position sizing.
+    # Scale position size by forecast conviction relative to take profit target.
+    # expected_return > 2× TP → 1.2× size; < 0.5× TP → 0.7× size.
+    # Direction conflict → 0.5× size.
+    forecast_driven_sizing: bool = True
+
+    # Phase 5E: Walk-forward auto-retrain on schedule.
+    # When True, checks model staleness every 4h of runtime and retrains
+    # if model is older than retrain_schedule_hours and enough new candles.
+    auto_retrain: bool = True
+    auto_retrain_min_candles: int = 1000  # new candles since last retrain
+
     # Regime ensemble: blend per-regime ML models with standard prediction.
     # Requires a trained AdvancedEnsembleArtifact (see ml_advanced.py).
     use_regime_ensemble: bool = False
@@ -271,9 +290,9 @@ class BotConfig:
     swarm_weight_max_daily_shift: float = 0.05
     swarm_log_full_votes: bool = True
     swarm_use_regime_weights: bool = False
-    swarm_weight_learning_enabled: bool = False
+    swarm_weight_learning_enabled: bool = True   # Phase 5B: auto-learn swarm weights
     swarm_weight_learning_interval_bars: int = 24
-    swarm_weight_auto_promote: bool = False
+    swarm_weight_auto_promote: bool = True       # Phase 5B: auto-promote when evidence sufficient
     swarm_conditional_min_agreement: float = 0.70
     swarm_conditional_min_confidence: float = 0.60
 
@@ -774,6 +793,11 @@ def load_config() -> BotConfig:
         retrain_min_improvement=float(os.getenv("HOGAN_RETRAIN_MIN_IMPROVEMENT", "0.005")),
         retrain_promotion_metric=os.getenv("HOGAN_RETRAIN_PROMOTION_METRIC", "roc_auc"),
         retrain_schedule_hours=float(os.getenv("HOGAN_RETRAIN_SCHEDULE_HOURS", "24.0")),
+        auto_apply_weights=os.getenv("HOGAN_AUTO_APPLY_WEIGHTS", "true").lower() == "true",
+        auto_apply_min_trades=int(os.getenv("HOGAN_AUTO_APPLY_MIN_TRADES", "30")),
+        forecast_driven_sizing=os.getenv("HOGAN_FORECAST_DRIVEN_SIZING", "true").lower() == "true",
+        auto_retrain=os.getenv("HOGAN_AUTO_RETRAIN", "true").lower() == "true",
+        auto_retrain_min_candles=int(os.getenv("HOGAN_AUTO_RETRAIN_MIN_CANDLES", "1000")),
         training_symbols=_split_symbols(
             os.getenv("HOGAN_TRAINING_SYMBOLS", "BTC/USD,ETH/USD,SOL/USD")
         ),
@@ -808,9 +832,9 @@ def load_config() -> BotConfig:
         swarm_weight_max_daily_shift=float(os.getenv("HOGAN_SWARM_WEIGHT_MAX_DAILY_SHIFT", "0.05")),
         swarm_log_full_votes=os.getenv("HOGAN_SWARM_LOG_FULL_VOTES", "true").lower() == "true",
         swarm_use_regime_weights=os.getenv("HOGAN_SWARM_USE_REGIME_WEIGHTS", "false").lower() == "true",
-        swarm_weight_learning_enabled=os.getenv("HOGAN_SWARM_WEIGHT_LEARNING", "false").lower() == "true",
+        swarm_weight_learning_enabled=os.getenv("HOGAN_SWARM_WEIGHT_LEARNING", "true").lower() == "true",
         swarm_weight_learning_interval_bars=int(os.getenv("HOGAN_SWARM_WEIGHT_LEARNING_INTERVAL", "24")),
-        swarm_weight_auto_promote=os.getenv("HOGAN_SWARM_WEIGHT_AUTO_PROMOTE", "false").lower() == "true",
+        swarm_weight_auto_promote=os.getenv("HOGAN_SWARM_WEIGHT_AUTO_PROMOTE", "true").lower() == "true",
         swarm_conditional_min_agreement=float(os.getenv("HOGAN_SWARM_CONDITIONAL_MIN_AGREEMENT", "0.70")),
         swarm_conditional_min_confidence=float(os.getenv("HOGAN_SWARM_CONDITIONAL_MIN_CONFIDENCE", "0.60")),
         rl_model_path=os.getenv("HOGAN_RL_MODEL_PATH", "models/hogan_rl_policy.zip"),
