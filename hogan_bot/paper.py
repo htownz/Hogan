@@ -28,6 +28,10 @@ class Position:
     # Prevents noise-triggered stops in the initial bars after entry.
     trail_activation_pct: float = 0.0
     trail_active: bool = False
+    # Break-even stop: once MFE exceeds this %, move stop to entry price.
+    # 0 = disabled.  Typical: 0.015 (1.5% gain locks in break-even).
+    breakeven_pct: float = 0.0
+    breakeven_active: bool = False
 
 
 @dataclass
@@ -49,6 +53,8 @@ class ShortPosition:
     entry_atr_pct: float = 0.0
     trail_activation_pct: float = 0.0
     trail_active: bool = False
+    breakeven_pct: float = 0.0
+    breakeven_active: bool = False
 
 
 @dataclass
@@ -220,6 +226,25 @@ class PaperPortfolio:
             if max_hold_bars > 0 and pos.bars_held >= max_hold_bars:
                 exits.append((symbol, "max_hold_time"))
                 continue
+            # Break-even stop: once MFE exceeds breakeven_pct, set a floor
+            # at entry price so the trade can never turn into a loss.
+            if (
+                pos.breakeven_pct > 0
+                and not pos.breakeven_active
+                and pos.avg_entry > 0
+                and pos.max_favorable_pct >= pos.breakeven_pct
+            ):
+                pos.breakeven_active = True
+                logger.info(
+                    "BREAKEVEN_LOCK %s — MFE %.2f%% >= %.2f%%, stop floor at entry %.2f",
+                    symbol, pos.max_favorable_pct * 100, pos.breakeven_pct * 100, pos.avg_entry,
+                )
+            if pos.breakeven_active and px <= pos.avg_entry and pos.trail_active:
+                # Only fire if trail hasn't already moved below entry
+                # (ratcheting trail may be tighter than break-even)
+                exits.append((symbol, "breakeven_stop"))
+                continue
+
             if pos.trailing_stop_pct > 0:
                 if not pos.trail_active and pos.trail_activation_pct > 0:
                     if pos.avg_entry > 0 and pos.max_favorable_pct >= pos.trail_activation_pct:
@@ -230,7 +255,18 @@ class PaperPortfolio:
                 if pos.trail_active:
                     if px > pos.peak_price:
                         pos.peak_price = px
-                    stop_level = pos.peak_price * (1.0 - pos.trailing_stop_pct)
+                    # Ratcheting trail: tighten stop as profit grows.
+                    # At 0% profit → base trail%.  At 5%+ profit → trail
+                    # tightens by up to 40% (e.g. 3.0% → 1.8%).
+                    _eff_trail = pos.trailing_stop_pct
+                    if pos.max_favorable_pct > 0.01 and pos.avg_entry > 0:
+                        _ratchet = min(0.40, pos.max_favorable_pct * 4.0)
+                        _eff_trail = pos.trailing_stop_pct * (1.0 - _ratchet)
+                        _eff_trail = max(_eff_trail, 0.008)  # floor: 0.8%
+                    stop_level = pos.peak_price * (1.0 - _eff_trail)
+                    # Break-even floor: stop never below entry price once activated
+                    if pos.breakeven_active:
+                        stop_level = max(stop_level, pos.avg_entry)
                     if px <= stop_level:
                         exits.append((symbol, "trailing_stop"))
                         continue
@@ -267,6 +303,22 @@ class PaperPortfolio:
             if _s_max > 0 and pos.bars_held >= _s_max:
                 exits.append((symbol, "short_max_hold_time"))
                 continue
+            # Break-even stop for shorts
+            if (
+                pos.breakeven_pct > 0
+                and not pos.breakeven_active
+                and pos.avg_entry > 0
+                and pos.max_favorable_pct >= pos.breakeven_pct
+            ):
+                pos.breakeven_active = True
+                logger.info(
+                    "BREAKEVEN_LOCK SHORT %s — MFE %.2f%% >= %.2f%%, stop floor at entry %.2f",
+                    symbol, pos.max_favorable_pct * 100, pos.breakeven_pct * 100, pos.avg_entry,
+                )
+            if pos.breakeven_active and px >= pos.avg_entry and pos.trail_active:
+                exits.append((symbol, "short_breakeven_stop"))
+                continue
+
             if pos.trailing_stop_pct > 0:
                 if not pos.trail_active and pos.trail_activation_pct > 0:
                     if pos.avg_entry > 0 and pos.max_favorable_pct >= pos.trail_activation_pct:
@@ -277,7 +329,16 @@ class PaperPortfolio:
                 if pos.trail_active:
                     if pos.trough_price <= 0 or px < pos.trough_price:
                         pos.trough_price = px
-                    stop_level = pos.trough_price * (1.0 + pos.trailing_stop_pct)
+                    # Ratcheting trail for shorts
+                    _eff_trail = pos.trailing_stop_pct
+                    if pos.max_favorable_pct > 0.01 and pos.avg_entry > 0:
+                        _ratchet = min(0.40, pos.max_favorable_pct * 4.0)
+                        _eff_trail = pos.trailing_stop_pct * (1.0 - _ratchet)
+                        _eff_trail = max(_eff_trail, 0.008)
+                    stop_level = pos.trough_price * (1.0 + _eff_trail)
+                    # Break-even ceiling for shorts
+                    if pos.breakeven_active:
+                        stop_level = min(stop_level, pos.avg_entry)
                     if px >= stop_level:
                         exits.append((symbol, "short_trailing_stop"))
                         continue

@@ -537,6 +537,11 @@ def decide(
         * macro_filter_scale,
     )
 
+    # Compute average ATR for volatility-adjusted sizing
+    _avg_atr_pct = 0.0
+    if len(_atr_series) >= 50:
+        _avg_atr_pct = float(_atr_series.iloc[-50:].mean()) / max(px, 1e-9)
+
     size = calculate_position_size(
         equity_usd=equity_usd,
         price=px,
@@ -545,6 +550,8 @@ def decide(
         max_allocation_pct=cfg.aggressive_allocation,
         confidence_scale=composite_scale,
         fee_rate=cfg.fee_rate,
+        atr_pct=atr_pct,
+        avg_atr_pct=_avg_atr_pct,
     )
 
     # ------------------------------------------------------------------

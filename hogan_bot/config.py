@@ -74,6 +74,9 @@ class BotConfig:
     # Trailing stop activation: only start trailing after MFE reaches this %.
     # Prevents noise-triggered stops in the first bars after entry.
     trail_activation_pct: float = 0.005
+    # Break-even stop: once MFE reaches this %, stop cannot fall below entry.
+    # Protects winning trades from reversing into losses. 0 = disabled.
+    breakeven_stop_pct: float = 0.015
 
     # ATR stop-distance multiplier (strategy.py line: ATR × multiplier)
     atr_stop_multiplier: float = 2.5
@@ -704,6 +707,7 @@ def load_config() -> BotConfig:
         trailing_stop_pct=_env_float("HOGAN_TRAILING_STOP_PCT", "0.030"),
         take_profit_pct=_env_float("HOGAN_TAKE_PROFIT_PCT", "0.054"),
         trail_activation_pct=_env_float("HOGAN_TRAIL_ACTIVATION_PCT", "0.005"),
+        breakeven_stop_pct=_env_float("HOGAN_BREAKEVEN_STOP_PCT", "0.015"),
         atr_stop_multiplier=float(os.getenv("HOGAN_ATR_STOP_MULTIPLIER", "2.5")),
         exit_drawdown_pct=float(os.getenv("HOGAN_EXIT_DRAWDOWN_PCT", "0.03")),
         exit_time_decay=float(os.getenv("HOGAN_EXIT_TIME_DECAY", "0.75")),

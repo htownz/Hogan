@@ -1383,6 +1383,7 @@ async def _run_event_loop_inner(
                             pos = portfolio.positions.get(symbol)
                             if pos is not None:
                                 pos.entry_atr_pct = _sym_atr_pct
+                                pos.breakeven_pct = getattr(config, "breakeven_stop_pct", 0.0)
                             now_ms = int(time.time() * 1000)
                             fee = _long_size * buy_px * config.fee_rate
                             if not allow_live:
@@ -1551,6 +1552,7 @@ async def _run_event_loop_inner(
                             spos = portfolio.short_positions.get(symbol)
                             if spos is not None:
                                 spos.entry_atr_pct = _sym_atr_pct
+                                spos.breakeven_pct = getattr(config, "breakeven_stop_pct", 0.0)
                             now_ms = int(time.time() * 1000)
                             fee = _short_size * short_px * config.fee_rate
                             if not allow_live:

@@ -16,6 +16,8 @@ def calculate_position_size(
     max_allocation_pct: float,
     confidence_scale: float = 1.0,
     fee_rate: float = 0.0,
+    atr_pct: float = 0.0,
+    avg_atr_pct: float = 0.0,
 ) -> float:
     """Return coin amount based on risk and allocation constraints.
 
@@ -27,6 +29,12 @@ def calculate_position_size(
     *fee_rate* — when provided, reduces size proportionally when the stop
     distance is tight relative to fees. When stop_distance_pct < 3 * fee_rate,
     fees eat a large share of the expected move so we scale down to limit damage.
+
+    *atr_pct* / *avg_atr_pct* — when both are positive, apply volatility-
+    adjusted sizing.  In high-vol regimes the position shrinks (inverse
+    scaling) to keep dollar-risk constant; in low-vol periods it can grow
+    slightly (up to 1.30x).  This keeps the *dollar volatility* of each
+    position roughly constant regardless of market conditions.
     """
     if any(math.isnan(v) or math.isinf(v) for v in
            (equity_usd, price, stop_distance_pct, max_risk_per_trade,
@@ -57,6 +65,22 @@ def calculate_position_size(
         if stop_distance_pct < fee_floor:
             fee_scale = stop_distance_pct / fee_floor
             raw *= max(0.1, fee_scale)
+
+    # Volatility-adjusted sizing: inverse-scale by current vs average ATR.
+    # When volatility spikes (atr_pct >> avg_atr_pct), shrink position to
+    # maintain roughly constant dollar-risk.  When volatility is low, allow
+    # a modest increase (capped at 1.30x) to capture more upside in calm
+    # markets without excessive leverage.
+    if atr_pct > 0 and avg_atr_pct > 0:
+        vol_ratio = atr_pct / avg_atr_pct
+        # Inverse square-root scaling: smooths out spikes
+        vol_scale = max(0.40, min(1.30, vol_ratio ** -0.5))
+        raw *= vol_scale
+        if vol_scale < 0.80 or vol_scale > 1.10:
+            logger.debug(
+                "VOL_SIZE_ADJUST: atr=%.4f avg=%.4f ratio=%.2f scale=%.2f",
+                atr_pct, avg_atr_pct, vol_ratio, vol_scale,
+            )
 
     return raw * max(0.0, min(_MAX_CONFIDENCE_SCALE, confidence_scale))
 
