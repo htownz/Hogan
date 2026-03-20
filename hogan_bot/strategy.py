@@ -94,11 +94,12 @@ class TrendFollowFamily:
 # ---------------------------------------------------------------------------
 
 class MeanRevertFamily:
-    """RSI extremes + Bollinger Band confirmation for ranging markets.
+    """RSI + Bollinger Band mean-reversion for ranging markets.
 
-    Buys when RSI < 30 and price is near the lower BB.
-    Sells when RSI > 70 and price is near the upper BB.
-    Uses tighter stops and targets than trend-following.
+    Tiered signal generation:
+    - Strong: RSI < 30 / > 70 with BB confirmation → high confidence
+    - Standard: RSI < 40 / > 60 with BB confirmation → moderate confidence
+    - Stochastic RSI crossover as secondary signal source
     """
     name: str = "mean_revert"
 
@@ -140,21 +141,43 @@ class MeanRevertFamily:
         bb_pct_b = (close - bb_lower) / bb_range.replace(0, np.nan)
         bb_val = float(bb_pct_b.iloc[-1]) if not np.isnan(float(bb_pct_b.iloc[-1])) else 0.5
 
-        # Safety: don't trade if ADX suggests trending
         adx_check = True
         if regime_state is not None and hasattr(regime_state, "adx"):
-            adx_check = regime_state.adx < 25
+            adx_check = regime_state.adx < 30
 
         action = "hold"
         confidence = 0.0
 
         if adx_check:
-            if rsi_val < 30 and bb_val < 0.15:
+            # Tier 1 — strong extremes (high confidence)
+            if rsi_val < 30 and bb_val < 0.20:
                 action = "buy"
-                confidence = min(1.0, (30 - rsi_val) / 20.0 + (0.15 - bb_val))
-            elif rsi_val > 70 and bb_val > 0.85:
+                confidence = min(1.0, 0.50 + (30 - rsi_val) / 30.0 + (0.20 - bb_val))
+            elif rsi_val > 70 and bb_val > 0.80:
                 action = "sell"
-                confidence = min(1.0, (rsi_val - 70) / 20.0 + (bb_val - 0.85))
+                confidence = min(1.0, 0.50 + (rsi_val - 70) / 30.0 + (bb_val - 0.80))
+            # Tier 2 — moderate oversold/overbought (moderate confidence)
+            elif rsi_val < 40 and bb_val < 0.30:
+                action = "buy"
+                confidence = min(0.60, 0.20 + (40 - rsi_val) / 40.0 + (0.30 - bb_val) * 0.5)
+            elif rsi_val > 60 and bb_val > 0.70:
+                action = "sell"
+                confidence = min(0.60, 0.20 + (rsi_val - 60) / 40.0 + (bb_val - 0.70) * 0.5)
+
+        # Tier 3 — Stochastic RSI crossover (low confidence, catches more setups)
+        if action == "hold" and adx_check and len(candles) >= 20:
+            stoch_k = (rsi - rsi.rolling(14).min()) / (rsi.rolling(14).max() - rsi.rolling(14).min()).replace(0, np.nan)
+            stoch_d = stoch_k.rolling(3).mean()
+            k_val = float(stoch_k.iloc[-1]) if not np.isnan(float(stoch_k.iloc[-1])) else 0.5
+            d_val = float(stoch_d.iloc[-1]) if not np.isnan(float(stoch_d.iloc[-1])) else 0.5
+            k_prev = float(stoch_k.iloc[-2]) if not np.isnan(float(stoch_k.iloc[-2])) else 0.5
+
+            if k_val < 0.25 and k_val > k_prev and k_val > d_val:
+                action = "buy"
+                confidence = 0.20
+            elif k_val > 0.75 and k_val < k_prev and k_val < d_val:
+                action = "sell"
+                confidence = 0.20
 
         return StrategySignal(action, stop_distance_pct, confidence, vol_ratio)
 

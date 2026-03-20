@@ -167,7 +167,7 @@ class TestEntryQualityGate:
 
     def test_low_tech_confidence_blocks(self):
         gd = entry_quality_gate("buy", final_confidence=0.8,
-                                tech_confidence=0.2)
+                                tech_confidence=0.05)
         assert gd.action == "hold"
         assert gd.blocked_by == "quality_gate_tech_conf"
 

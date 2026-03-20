@@ -66,10 +66,14 @@ class StrategyRouter:
 
         if confidence < min_conf:
             logger.debug(
-                "Regime %s confidence %.2f below threshold %.2f — hold",
+                "Regime %s confidence %.2f below threshold %.2f — using default family",
                 regime, confidence, min_conf,
             )
-            return StrategySignal("hold", 0.01, 0.0, 0.0)
+            family = self.families.get(regime, self.families.get("trending_up"))
+            sig = family.generate_signal(candles, config, regime_state)
+            sig = StrategySignal(sig.action, sig.stop_distance_pct,
+                                sig.confidence * 0.7, sig.volume_ratio)
+            return sig
 
         family = self.families.get(regime)
         if family is None:

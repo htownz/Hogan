@@ -292,10 +292,10 @@ def edge_gate(
 
 
 _REGIME_QUALITY_ADJUSTMENTS: dict[str, dict[str, float]] = {
-    "trending_up":   {"final_mult": 0.80, "tech_mult": 1.00},
-    "trending_down": {"final_mult": 0.80, "tech_mult": 1.00},
-    "volatile":      {"final_mult": 1.20, "tech_mult": 1.10},
-    "ranging":       {"final_mult": 1.00, "tech_mult": 1.25},
+    "trending_up":   {"final_mult": 0.80, "tech_mult": 0.80},
+    "trending_down": {"final_mult": 0.80, "tech_mult": 0.80},
+    "volatile":      {"final_mult": 1.10, "tech_mult": 1.00},
+    "ranging":       {"final_mult": 1.00, "tech_mult": 1.00},
 }
 
 
@@ -327,16 +327,20 @@ def entry_quality_gate(
     regime_confidence: float | None = None,
     recent_whipsaw_count: int = 0,
     min_final_confidence: float = 0.3,
-    min_tech_confidence: float = 0.4,
+    min_tech_confidence: float = 0.10,
     min_regime_confidence: float = 0.5,
     max_whipsaws: int = 3,
+    swarm_agreement: float | None = None,
 ) -> GateDecision:
     """Block entries that don't meet quality thresholds.
 
     Thresholds are adjusted by regime:
     - Trending: relax final_confidence by 20% (trend-following needs less confirmation)
     - Volatile: tighten final_confidence by 20% (require stronger conviction)
-    - Ranging: tighten tech_confidence by 25% (mean-revert needs stronger tech signal)
+    - Ranging: no tech tightening (mean-revert signals are naturally weaker)
+
+    When swarm agreement is high (>= 0.80), tech confidence gate is bypassed —
+    the collective intelligence of the swarm overrides weak technical signals.
     """
     if action == "hold":
         return GateDecision(action=action)
@@ -355,7 +359,8 @@ def entry_quality_gate(
             detail={"value": final_confidence, "required": eff_min_final, "regime": regime},
         )
 
-    if tech_confidence is not None and tech_confidence < eff_min_tech:
+    swarm_bypass = swarm_agreement is not None and swarm_agreement >= 0.80
+    if tech_confidence is not None and tech_confidence < eff_min_tech and not swarm_bypass:
         logger.debug(
             "QUALITY_GATE: tech_conf %.3f < %.3f (regime=%s) -> hold",
             tech_confidence, eff_min_tech, regime or "none",
@@ -363,6 +368,11 @@ def entry_quality_gate(
         return GateDecision(
             action="hold", blocked_by="quality_gate_tech_conf",
             detail={"value": tech_confidence, "required": eff_min_tech, "regime": regime},
+        )
+    if swarm_bypass and tech_confidence is not None and tech_confidence < eff_min_tech:
+        logger.info(
+            "QUALITY_GATE: swarm_agreement=%.2f bypasses tech_conf %.3f < %.3f",
+            swarm_agreement, tech_confidence, eff_min_tech,
         )
 
     if regime_confidence is not None and regime_confidence < min_regime_confidence:

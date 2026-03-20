@@ -492,10 +492,10 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         meta_buy_threshold=0.15,
         meta_sell_threshold=-0.15,
         quality_final_mult=1.00,
-        quality_tech_mult=1.25,
+        quality_tech_mult=1.00,
         allow_longs=True,
         allow_shorts=False,
-        long_size_scale=0.50,
+        long_size_scale=0.70,
         short_size_scale=0.0,
     ),
     "volatile": RegimeConfig(
