@@ -463,20 +463,13 @@ def ranging_gate(
     if up_prob is not None:
         separation = abs(up_prob - 0.5)
         if separation < _eff_ml_sep:
-            if _eff_soft and separation >= _eff_ml_sep * 0.6:
-                _scale = 0.70 if _is_buy else 0.50
-                logger.debug("RANGING_GATE: ML separation %.3f marginal -> size %.1fx", separation, _scale)
-                return GateDecision(
-                    action=action, size_scale=_scale,
-                    detail={"separation": separation, "required": _eff_ml_sep, "soft": True},
-                )
-            logger.debug(
-                "RANGING_GATE: ML separation %.3f < %.3f -> hold",
-                separation, _eff_ml_sep,
-            )
+            # Always use soft mode — hard blocking with a weak model (~AUC 0.52)
+            # kills all trades. Scale down sizing instead.
+            _scale = max(0.30, separation / max(_eff_ml_sep, 1e-9))
+            logger.debug("RANGING_GATE: ML separation %.3f < %.3f -> size %.2fx (soft)", separation, _eff_ml_sep, _scale)
             return GateDecision(
-                action="hold", blocked_by="ranging_gate_ml_indifference",
-                detail={"separation": separation, "required": _eff_ml_sep},
+                action=action, size_scale=_scale,
+                detail={"separation": separation, "required": _eff_ml_sep, "soft": True},
             )
 
     if recent_whipsaw_count >= _eff_whip:

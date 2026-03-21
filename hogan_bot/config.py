@@ -123,9 +123,9 @@ class BotConfig:
     sell_atr_friction_multiple: float = 0.8
 
     # Entry quality gate thresholds (hard pre-trade filter)
-    min_final_confidence: float = 0.25
-    min_tech_confidence: float = 0.15
-    min_regime_confidence: float = 0.30
+    min_final_confidence: float = 0.15
+    min_tech_confidence: float = 0.10
+    min_regime_confidence: float = 0.20
     max_whipsaws: int = 3
 
     # Signal-exit reversal asymmetry: require this multiple of entry confidence
@@ -454,9 +454,9 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         quality_final_mult=0.80,
         quality_tech_mult=1.00,
         allow_longs=True,
-        allow_shorts=False,
+        allow_shorts=True,
         long_size_scale=1.00,
-        short_size_scale=0.0,
+        short_size_scale=0.25,
     ),
     "trending_down": RegimeConfig(
         volume_threshold_mult=0.55,
@@ -480,8 +480,8 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
     ),
     "ranging": RegimeConfig(
         volume_threshold_mult=1.10,
-        ml_buy_threshold=0.58,
-        ml_sell_threshold=0.42,
+        ml_buy_threshold=0.53,
+        ml_sell_threshold=0.47,
         trailing_stop_mult=1.20,
         take_profit_mult=0.85,
         position_scale=0.85,
@@ -489,14 +489,14 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         meta_tech_delta=-0.05,
         meta_sent_delta=+0.00,
         meta_macro_delta=+0.05,
-        meta_buy_threshold=0.15,
-        meta_sell_threshold=-0.15,
+        meta_buy_threshold=0.10,
+        meta_sell_threshold=-0.10,
         quality_final_mult=1.00,
         quality_tech_mult=1.00,
         allow_longs=True,
-        allow_shorts=False,
+        allow_shorts=True,
         long_size_scale=0.70,
-        short_size_scale=0.0,
+        short_size_scale=0.40,
     ),
     "volatile": RegimeConfig(
         volume_threshold_mult=0.70,
@@ -747,9 +747,9 @@ def load_config() -> BotConfig:
         min_edge_multiple=_env_float("HOGAN_MIN_EDGE_MULTIPLE", "1.5"),
         buy_atr_friction_multiple=_env_float("HOGAN_BUY_ATR_FRICTION_MULT", "0.25"),
         sell_atr_friction_multiple=_env_float("HOGAN_SELL_ATR_FRICTION_MULT", "0.8"),
-        min_final_confidence=_env_float("HOGAN_MIN_FINAL_CONFIDENCE", "0.25"),
-        min_tech_confidence=_env_float("HOGAN_MIN_TECH_CONFIDENCE", "0.15"),
-        min_regime_confidence=_env_float("HOGAN_MIN_REGIME_CONFIDENCE", "0.30"),
+        min_final_confidence=_env_float("HOGAN_MIN_FINAL_CONFIDENCE", "0.15"),
+        min_tech_confidence=_env_float("HOGAN_MIN_TECH_CONFIDENCE", "0.10"),
+        min_regime_confidence=_env_float("HOGAN_MIN_REGIME_CONFIDENCE", "0.20"),
         max_whipsaws=_env_int("HOGAN_MAX_WHIPSAWS", "3"),
         reversal_confidence_multiplier=_env_float("HOGAN_REVERSAL_CONFIDENCE_MULT", "1.3"),
         use_ict=os.getenv("HOGAN_USE_ICT", "false").lower() == "true",
