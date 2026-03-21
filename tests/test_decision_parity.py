@@ -259,10 +259,11 @@ class TestRangingGateAsymmetric:
                           up_prob=0.53, recent_whipsaw_count=0)
         assert gd.action == "buy"
 
-    def test_sell_blocked_with_low_ml_separation(self):
+    def test_sell_soft_scaled_with_low_ml_separation(self):
         gd = ranging_gate("sell", regime="ranging", tech_action="sell",
                           up_prob=0.48, recent_whipsaw_count=0)
-        assert gd.action == "hold"
+        assert gd.action == "sell"
+        assert gd.size_scale < 1.0
 
     def test_buy_survives_whipsaws_that_block_sell(self):
         gd_buy = ranging_gate("buy", regime="ranging", tech_action="buy",
@@ -270,7 +271,7 @@ class TestRangingGateAsymmetric:
         gd_sell = ranging_gate("sell", regime="ranging", tech_action="sell",
                                up_prob=0.25, recent_whipsaw_count=2)
         assert gd_buy.action == "buy"
-        assert gd_sell.action == "hold"
+        assert gd_sell.action == "hold"  # whipsaw threshold 2 still blocks sells
 
     def test_buy_tech_disagree_scales_not_blocks(self):
         gd = ranging_gate("buy", regime="ranging", tech_action="sell",
