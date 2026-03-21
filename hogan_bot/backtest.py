@@ -971,6 +971,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     exit_time_decay: float = 0.75,
     exit_vol_expansion: float = 2.0,
     exit_stagnation_bars: int = 12,
+    breakeven_stop_pct: float = 0.015,
 ) -> BacktestResult:
     """Run bar-by-bar paper backtest for a single symbol dataframe."""
 
@@ -1165,10 +1166,17 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
 
         # Process pending next_open fills at this bar's open (we have "next bar" data)
         if use_next_open:
-            for sym, size in list(_pending_buys.items()):
+            for sym, _pb_val in list(_pending_buys.items()):
                 _pending_buys.pop(sym, None)
+                if isinstance(_pb_val, tuple):
+                    size, _pb_ts, _pb_tp, _pb_ta, _pb_rm = _pb_val
+                else:
+                    size, _pb_ts, _pb_tp, _pb_ta, _pb_rm = _pb_val, trailing_stop_pct, take_profit_pct, trail_activation_pct, 0.40
                 buy_px = open_px * (1.0 + slip_mult)
-                if portfolio.execute_buy(sym, buy_px, size, trailing_stop_pct=trailing_stop_pct, take_profit_pct=take_profit_pct, trail_activation_pct=trail_activation_pct):
+                if portfolio.execute_buy(sym, buy_px, size, trailing_stop_pct=_pb_ts, take_profit_pct=_pb_tp, trail_activation_pct=_pb_ta, ratchet_max=_pb_rm):
+                    _ppos = portfolio.positions.get(sym)
+                    if _ppos is not None:
+                        _ppos.breakeven_pct = breakeven_stop_pct
                     trades += 1
                     _entry_bar[sym] = i - 1
                     _entry_regime[sym] = _current_regime
@@ -1218,15 +1226,21 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         })
             for sym, _ps_val in list(_pending_shorts.items()):
                 _pending_shorts.pop(sym, None)
-                if isinstance(_ps_val, tuple):
+                if isinstance(_ps_val, tuple) and len(_ps_val) >= 6:
+                    size, _ps_atr, _ps_ts, _ps_tp, _ps_ta, _ps_rm = _ps_val
+                elif isinstance(_ps_val, tuple) and len(_ps_val) == 2:
                     size, _ps_atr = _ps_val
+                    _ps_ts, _ps_tp, _ps_ta, _ps_rm = trailing_stop_pct, take_profit_pct, trail_activation_pct, 0.40
                 else:
                     size, _ps_atr = _ps_val, None
+                    _ps_ts, _ps_tp, _ps_ta, _ps_rm = trailing_stop_pct, take_profit_pct, trail_activation_pct, 0.40
                 short_px = open_px * (1.0 - slip_mult)
-                if portfolio.execute_short(sym, short_px, size, trailing_stop_pct=trailing_stop_pct, take_profit_pct=take_profit_pct, trail_activation_pct=trail_activation_pct):
+                if portfolio.execute_short(sym, short_px, size, trailing_stop_pct=_ps_ts, take_profit_pct=_ps_tp, trail_activation_pct=_ps_ta, ratchet_max=_ps_rm):
                     spos = portfolio.short_positions.get(sym)
-                    if spos is not None and _ps_atr is not None:
-                        spos.entry_atr_pct = _ps_atr
+                    if spos is not None:
+                        if _ps_atr is not None:
+                            spos.entry_atr_pct = _ps_atr
+                        spos.breakeven_pct = breakeven_stop_pct
                     trades += 1
                     _short_entry_bar[sym] = i - 1
                     _short_entry_regime[sym] = _current_regime
@@ -1454,6 +1468,16 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         _eff_allow_shorts = _eff.get("allow_shorts", True)
         _eff_long_size_scale = _eff.get("long_size_scale", 1.0)
         _eff_short_size_scale = _eff.get("short_size_scale", 1.0)
+
+        # Regime-aware ratcheting: no ratchet for mean-reversion (ranging),
+        # softer ratchet for volatile; full ratchet for trending.
+        _eff_ratchet_max = 0.40
+        _eff_trail_act = trail_activation_pct
+        if _current_regime == "ranging":
+            _eff_ratchet_max = 0.0
+            _eff_trail_act = max(trail_activation_pct, 0.012)
+        elif _current_regime == "volatile":
+            _eff_ratchet_max = 0.25
 
         _as_of = _bar_ts_ms(candles, i - 1) if _bt_conn is not None else None
 
@@ -1771,11 +1795,13 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                 symbol, _mtf_px, _mtf_size,
                                 trailing_stop_pct=_eff_ts,
                                 take_profit_pct=_eff_tp,
-                                trail_activation_pct=trail_activation_pct,
+                                trail_activation_pct=_eff_trail_act,
+                                ratchet_max=_eff_ratchet_max,
                             ):
                                 _pos = portfolio.positions.get(symbol)
                                 if _pos is not None:
                                     _pos.entry_atr_pct = _atr_pct
+                                    _pos.breakeven_pct = breakeven_stop_pct
                                 trades += 1
                                 _funnel["executed_buy"] += 1
                                 _funnel["mtf_15m_entry_used"] += 1
@@ -1929,18 +1955,20 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             elif _long_size <= 0:
                 _funnel["blocked_regime_no_longs"] += 1
             elif use_next_open and i < len(candles):
-                _pending_buys[symbol] = _long_size
+                _pending_buys[symbol] = (_long_size, _eff_ts, _eff_tp, _eff_trail_act, _eff_ratchet_max)
             else:
                 buy_px = px * (1.0 + slip_mult)
                 if portfolio.execute_buy(
                     symbol, buy_px, _long_size,
                     trailing_stop_pct=_eff_ts,
                     take_profit_pct=_eff_tp,
-                    trail_activation_pct=trail_activation_pct,
+                    trail_activation_pct=_eff_trail_act,
+                    ratchet_max=_eff_ratchet_max,
                 ):
                     _pos = portfolio.positions.get(symbol)
                     if _pos is not None:
                         _pos.entry_atr_pct = _atr_pct
+                        _pos.breakeven_pct = breakeven_stop_pct
                     trades += 1
                     _funnel["executed_buy"] += 1
                     _entry_bar[symbol] = i - 1
@@ -2069,18 +2097,20 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 elif _short_size <= 0:
                     _funnel["blocked_regime_no_shorts"] += 1
                 elif use_next_open and i < len(candles):
-                    _pending_shorts[symbol] = (_short_size, _atr_pct)
+                    _pending_shorts[symbol] = (_short_size, _atr_pct, _eff_ts, _eff_tp, _eff_trail_act, _eff_ratchet_max)
                 else:
                     short_px = px * (1.0 - slip_mult)
                     if portfolio.execute_short(
                         symbol, short_px, _short_size,
                         trailing_stop_pct=_eff_ts,
                         take_profit_pct=_eff_tp,
-                        trail_activation_pct=trail_activation_pct,
+                        trail_activation_pct=_eff_trail_act,
+                        ratchet_max=_eff_ratchet_max,
                     ):
                         spos = portfolio.short_positions.get(symbol)
                         if spos is not None:
                             spos.entry_atr_pct = _atr_pct
+                            spos.breakeven_pct = breakeven_stop_pct
                         trades += 1
                         _funnel["executed_short_entry"] += 1
                         _short_entry_bar[symbol] = i - 1

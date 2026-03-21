@@ -77,29 +77,39 @@ class VolatilityRegimeAgent:
         atr_rising = atr_trend > 0.15
         atr_falling = atr_trend < -0.15
 
+        sma_val = float(sma.iloc[-1]) if not np.isnan(sma.iloc[-1]) else px
+        price_above_sma = px > sma_val
+        bb_pctile = (px - (sma_val - self._bb_std * float(std.iloc[-1]))) / max(
+            2 * self._bb_std * float(std.iloc[-1]), 1e-9
+        ) if not np.isnan(std.iloc[-1]) else 0.5
+
         if is_squeeze and atr_falling:
-            action = get_baseline_action(shared_context)
+            action = "buy" if price_above_sma else "sell"
             confidence = 0.65
             size_scale = 0.70
             reasons.append(f"vol_squeeze_bw={bw_now:.3f}")
         elif is_expansion and atr_rising:
-            baseline = get_baseline_action(shared_context)
-            price_above_sma = px > float(sma.iloc[-1]) if not np.isnan(sma.iloc[-1]) else True
-            if baseline == "hold":
-                action = "buy" if price_above_sma else "sell"
-            else:
-                action = baseline
+            action = "buy" if price_above_sma else "sell"
             confidence = 0.60
             size_scale = 0.80
             reasons.append(f"vol_expansion_bw={bw_now:.3f}")
         elif is_expansion and atr_falling:
-            action = get_baseline_action(shared_context)
+            action = "buy" if bb_pctile < 0.30 else ("sell" if bb_pctile > 0.70 else "hold")
             confidence = 0.55
             size_scale = 0.60
             reasons.append("vol_exhaustion")
         else:
-            action = get_baseline_action(shared_context)
-            confidence = 0.50
+            if bb_pctile < 0.20:
+                action = "buy"
+                confidence = 0.55
+                reasons.append(f"mean_revert_oversold_bb={bb_pctile:.2f}")
+            elif bb_pctile > 0.80:
+                action = "sell"
+                confidence = 0.55
+                reasons.append(f"mean_revert_overbought_bb={bb_pctile:.2f}")
+            else:
+                action = get_baseline_action(shared_context)
+                confidence = 0.45
             size_scale = 1.0
 
         return AgentVote(

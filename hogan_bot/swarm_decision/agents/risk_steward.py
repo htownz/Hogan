@@ -78,11 +78,32 @@ class RiskStewardAgent:
                 block_reasons=reasons,
             )
 
+        recent_outcomes = shared_context.get("trade_outcomes", [])
+        consecutive_losses = 0
+        for outcome in reversed(recent_outcomes):
+            if not outcome:
+                consecutive_losses += 1
+            else:
+                break
+
         baseline = get_baseline_action(shared_context)
-        confidence = 0.5 + 0.5 * size_scale
+        if consecutive_losses >= 3:
+            action = "hold"
+            size_scale *= 0.50
+            confidence = 0.40
+            reasons.append(f"loss_streak_{consecutive_losses}")
+        elif consecutive_losses >= 2:
+            action = baseline
+            size_scale *= 0.70
+            confidence = 0.45
+            reasons.append(f"recent_losses_{consecutive_losses}")
+        else:
+            action = baseline
+            confidence = 0.5 + 0.5 * size_scale
+
         return AgentVote(
             agent_id=self.agent_id,
-            action=baseline,
+            action=action,
             confidence=max(0.0, min(1.0, confidence)),
             size_scale=max(0.0, min(1.0, size_scale)),
             veto=False,

@@ -309,7 +309,8 @@ class TestConfigDefaults:
         assert cfg.swarm_phase == "certification"
 
     def test_load_config_policy_core_true(self):
-        from unittest.mock import patch
+        from unittest.mock import patch  # isort: skip
+
         from hogan_bot.config import load_config
         with patch.dict("os.environ", {"HOGAN_USE_POLICY_CORE": "true"}, clear=False):
             cfg = load_config()

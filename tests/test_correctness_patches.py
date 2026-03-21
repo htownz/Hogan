@@ -548,7 +548,7 @@ class TestRegimeMultipliers:
         )
         eff = effective_thresholds(self._make_regime("ranging"), cfg)
         assert abs(eff["volume_threshold"] - 1.84 * 1.10) < 1e-6
-        assert abs(eff["trailing_stop_pct"] - 0.03 * 0.90) < 1e-6
+        assert abs(eff["trailing_stop_pct"] - 0.03 * 1.20) < 1e-6
         assert abs(eff["take_profit_pct"] - 0.055 * 0.85) < 1e-6
         assert eff["position_scale"] == 0.85
 

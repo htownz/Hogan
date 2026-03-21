@@ -70,15 +70,19 @@ def compute_agent_accuracy(
     if df.empty:
         return pd.DataFrame()
 
-    # Hold is correct only when the market stayed flat (within scratch
-    # territory).  Unconditionally treating hold as correct inflates
-    # accuracy for passive agents and biases weight proposals.
-    _HOLD_CORRECT_BPS = 10
-    df["direction_correct"] = (
-        ((df["agent_action"] == "buy") & (df["forward_60m_bps"] > 0)) |
-        ((df["agent_action"] == "sell") & (df["forward_60m_bps"] < 0)) |
-        ((df["agent_action"] == "hold") & (df["forward_60m_bps"].abs() < _HOLD_CORRECT_BPS))
-    ).astype(int)
+    # Hold is only correct when the market stayed truly flat (within 5 bps).
+    # Holds get partial credit (0.5) to avoid inflating passive agent accuracy
+    # in ranging markets where most bars are flat.  Directional calls that
+    # match the move get full credit (1.0).
+    _HOLD_CORRECT_BPS = 5
+    _hold_mask = df["agent_action"] == "hold"
+    _hold_correct = _hold_mask & (df["forward_60m_bps"].abs() < _HOLD_CORRECT_BPS)
+    _buy_correct = (df["agent_action"] == "buy") & (df["forward_60m_bps"] > 0)
+    _sell_correct = (df["agent_action"] == "sell") & (df["forward_60m_bps"] < 0)
+    df["direction_correct"] = 0.0
+    df.loc[_buy_correct, "direction_correct"] = 1.0
+    df.loc[_sell_correct, "direction_correct"] = 1.0
+    df.loc[_hold_correct, "direction_correct"] = 0.5
 
     agg = df.groupby("agent_id").agg(
         total_votes=("agent_action", "count"),

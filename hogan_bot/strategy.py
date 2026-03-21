@@ -174,10 +174,10 @@ class MeanRevertFamily:
 
             if k_val < 0.25 and k_val > k_prev and k_val > d_val:
                 action = "buy"
-                confidence = 0.20
+                confidence = 0.28
             elif k_val > 0.75 and k_val < k_prev and k_val < d_val:
                 action = "sell"
-                confidence = 0.20
+                confidence = 0.28
 
         return StrategySignal(action, stop_distance_pct, confidence, vol_ratio)
 

@@ -110,6 +110,15 @@ class DataGuardianAgent:
                 freshness=freshness,
             )
 
+        data_ages = shared_context.get("data_ages", {})
+        for source, age_h in data_ages.items():
+            if age_h > 48.0:
+                size_scale *= 0.50
+                reasons.append(f"stale_{source}:{age_h:.0f}h")
+            elif age_h > 24.0:
+                size_scale *= 0.75
+                reasons.append(f"aging_{source}:{age_h:.0f}h")
+
         baseline = get_baseline_action(shared_context)
         confidence = 0.5 + 0.5 * size_scale
         return AgentVote(

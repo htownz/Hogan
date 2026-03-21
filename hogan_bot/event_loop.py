@@ -78,6 +78,7 @@ from hogan_bot.storage import (
     log_decision,
     open_paper_trade,
     record_equity,
+    upsert_candles,
 )
 
 logger = logging.getLogger(__name__)
@@ -945,6 +946,21 @@ async def _run_event_loop_inner(
                 continue
 
             buffer.push(symbol, tf, event.candle.to_dict())
+
+            _candle_dict = event.candle.to_dict()
+            try:
+                _persist_row = {
+                    "timestamp": _candle_dict.get("ts_ms", 0),
+                    "open": _candle_dict.get("open", 0),
+                    "high": _candle_dict.get("high", 0),
+                    "low": _candle_dict.get("low", 0),
+                    "close": _candle_dict.get("close", 0),
+                    "volume": _candle_dict.get("volume", 0),
+                }
+                upsert_candles(conn, symbol, tf, pd.DataFrame([_persist_row]))
+            except Exception as _persist_err:
+                logger.debug("candle persist %s/%s: %s", symbol, tf, _persist_err)
+
             candles = buffer.to_df(symbol, tf)
             _min_candles = max(config.long_ma_window, 20)
 

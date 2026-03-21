@@ -182,6 +182,8 @@ def _run_single(cfg, candles, symbol, ml_model, timeframe: str | None = None, ov
         exit_time_decay=cfg.exit_time_decay,
         exit_vol_expansion=cfg.exit_vol_expansion,
         exit_stagnation_bars=cfg.exit_stagnation_bars,
+        trail_activation_pct=cfg.trail_activation_pct,
+        breakeven_stop_pct=cfg.breakeven_stop_pct,
     )
 
 

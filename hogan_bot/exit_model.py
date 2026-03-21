@@ -105,10 +105,10 @@ class ExitEvaluator:
             "trend_reversal_threshold": 0.54,  # easier trigger
         },
         "ranging": {
-            "drawdown_panic_pct": 0.025,       # tight: mean reversion
-            "time_decay_threshold": 0.70,      # patient: let mean-reversion thesis develop
-            "stagnation_bars_mult": 1.00,      # full stagnation window for ranging trades
-            "trend_reversal_threshold": 0.66,  # harder to call reversal in noise
+            "drawdown_panic_pct": 0.038,       # wider: mean-reversion needs room for pullbacks
+            "time_decay_threshold": 0.80,      # patient: let mean-reversion thesis fully develop
+            "stagnation_bars_mult": 1.20,      # extended stagnation window for ranging trades
+            "trend_reversal_threshold": 0.70,  # harder to call reversal in noise
         },
     }
 
