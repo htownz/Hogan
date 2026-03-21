@@ -120,7 +120,7 @@ class BotConfig:
     # low-vol periods.  Lowered from 0.5 after observing 100% buy-signal block
     # rate at 26 bps fee tier.
     buy_atr_friction_multiple: float = 0.25
-    sell_atr_friction_multiple: float = 0.8
+    sell_atr_friction_multiple: float = 0.40
 
     # Entry quality gate thresholds (hard pre-trade filter)
     min_final_confidence: float = 0.15
@@ -746,7 +746,7 @@ def load_config() -> BotConfig:
         exit_confirmation_bars=_env_int("HOGAN_EXIT_CONFIRM_BARS", "2"),
         min_edge_multiple=_env_float("HOGAN_MIN_EDGE_MULTIPLE", "1.5"),
         buy_atr_friction_multiple=_env_float("HOGAN_BUY_ATR_FRICTION_MULT", "0.25"),
-        sell_atr_friction_multiple=_env_float("HOGAN_SELL_ATR_FRICTION_MULT", "0.8"),
+        sell_atr_friction_multiple=_env_float("HOGAN_SELL_ATR_FRICTION_MULT", "0.40"),
         min_final_confidence=_env_float("HOGAN_MIN_FINAL_CONFIDENCE", "0.15"),
         min_tech_confidence=_env_float("HOGAN_MIN_TECH_CONFIDENCE", "0.10"),
         min_regime_confidence=_env_float("HOGAN_MIN_REGIME_CONFIDENCE", "0.20"),
