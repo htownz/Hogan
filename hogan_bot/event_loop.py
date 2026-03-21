@@ -940,7 +940,7 @@ async def _run_event_loop_inner(
             symbol = event.symbol
             tf = event.timeframe
 
-            # Non-primary timeframes: buffer + persist, but don't evaluate signals
+            # Non-primary timeframes: buffer + persist
             if tf != config.timeframe:
                 buffer.push(symbol, tf, event.candle.to_dict())
                 _mtf_cd = event.candle.to_dict()
@@ -956,25 +956,37 @@ async def _run_event_loop_inner(
                     upsert_candles(conn, symbol, tf, pd.DataFrame([_mtf_row]))
                 except Exception:
                     pass
-                continue
+                # 15m and 30m candles trigger a re-evaluation using the
+                # buffered 1h data so the bot can react faster than once/hour
+                if tf not in ("15m", "30m"):
+                    continue
+                _primary_df = buffer.to_df(symbol, config.timeframe)
+                if _primary_df.empty or len(_primary_df) < max(config.long_ma_window, 20):
+                    continue
+                candles = _primary_df
+                _is_mtf_eval = True
+                # fall through to the signal evaluation below
+            else:
+                _is_mtf_eval = False
 
-            buffer.push(symbol, tf, event.candle.to_dict())
+            if not _is_mtf_eval:
+                buffer.push(symbol, tf, event.candle.to_dict())
 
-            _candle_dict = event.candle.to_dict()
-            try:
-                _persist_row = {
-                    "timestamp": _candle_dict.get("ts_ms", 0),
-                    "open": _candle_dict.get("open", 0),
-                    "high": _candle_dict.get("high", 0),
-                    "low": _candle_dict.get("low", 0),
-                    "close": _candle_dict.get("close", 0),
-                    "volume": _candle_dict.get("volume", 0),
-                }
-                upsert_candles(conn, symbol, tf, pd.DataFrame([_persist_row]))
-            except Exception as _persist_err:
-                logger.debug("candle persist %s/%s: %s", symbol, tf, _persist_err)
+                _candle_dict = event.candle.to_dict()
+                try:
+                    _persist_row = {
+                        "timestamp": _candle_dict.get("ts_ms", 0),
+                        "open": _candle_dict.get("open", 0),
+                        "high": _candle_dict.get("high", 0),
+                        "low": _candle_dict.get("low", 0),
+                        "close": _candle_dict.get("close", 0),
+                        "volume": _candle_dict.get("volume", 0),
+                    }
+                    upsert_candles(conn, symbol, tf, pd.DataFrame([_persist_row]))
+                except Exception as _persist_err:
+                    logger.debug("candle persist %s/%s: %s", symbol, tf, _persist_err)
 
-            candles = buffer.to_df(symbol, tf)
+                candles = buffer.to_df(symbol, tf)
             _min_candles = max(config.long_ma_window, 20)
 
             if candles.empty or len(candles) < _min_candles:
@@ -1225,6 +1237,9 @@ async def _run_event_loop_inner(
                 up_prob = sig.up_prob
                 _sym_regime = sig.regime
                 _sym_atr_pct = sig.atr_pct
+                if _is_mtf_eval:
+                    size *= 0.70
+                    logger.info("MTF_EVAL %s/%s → %s (size scaled 0.70x for sub-hour eval)", symbol, tf, action)
                 if _sym_regime:
                     _current_regime[symbol] = _sym_regime
             except Exception as exc:
