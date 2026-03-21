@@ -111,6 +111,8 @@ class MeanRevertFamily:
             return StrategySignal("hold", 0.01, 0.0, 0.0)
 
         close = candles["close"].astype(float)
+        high = candles["high"].astype(float)
+        low = candles["low"].astype(float)
         volume = candles["volume"].astype(float)
 
         atr_series = compute_atr(candles, window=14)
@@ -164,7 +166,54 @@ class MeanRevertFamily:
                 action = "sell"
                 confidence = min(0.60, 0.20 + (rsi_val - 60) / 40.0 + (bb_val - 0.70) * 0.5)
 
-        # Tier 3 — Stochastic RSI crossover (low confidence, catches more setups)
+        # Tier 3 — Keltner Channel mean-reversion (wider bands, catches more setups)
+        if action == "hold" and adx_check:
+            kc_ema = close.ewm(span=20, adjust=False).mean()
+            kc_upper = kc_ema + 2.0 * atr_series
+            kc_lower = kc_ema - 2.0 * atr_series
+            kc_up = float(kc_upper.iloc[-1])
+            kc_lo = float(kc_lower.iloc[-1])
+
+            if px <= kc_lo and rsi_val < 45:
+                action = "buy"
+                deviation = (kc_lo - px) / max(atr_val, 1e-9)
+                confidence = min(0.45, 0.25 + deviation * 0.10)
+            elif px >= kc_up and rsi_val > 55:
+                action = "sell"
+                deviation = (px - kc_up) / max(atr_val, 1e-9)
+                confidence = min(0.45, 0.25 + deviation * 0.10)
+
+        # Tier 4 — VWAP reversion (fires in normal conditions)
+        if action == "hold" and adx_check and len(candles) >= 20:
+            typical = (high + low + close) / 3.0
+            cum_vol = volume.rolling(20).sum()
+            cum_tp_vol = (typical * volume).rolling(20).sum()
+            vwap = cum_tp_vol / cum_vol.replace(0, np.nan)
+            vwap_val = float(vwap.iloc[-1]) if not np.isnan(float(vwap.iloc[-1])) else px
+
+            vwap_dev = (px - vwap_val) / max(atr_val, 1e-9)
+
+            if vwap_dev < -0.6 and rsi_val < 50:
+                action = "buy"
+                confidence = min(0.35, 0.15 + abs(vwap_dev) * 0.08)
+            elif vwap_dev > 0.6 and rsi_val > 50:
+                action = "sell"
+                confidence = min(0.35, 0.15 + abs(vwap_dev) * 0.08)
+
+        # Tier 5 — ROC momentum crossover (catches early reversals)
+        if action == "hold" and adx_check and len(candles) >= 10:
+            roc_5 = close.pct_change(5)
+            roc_now = float(roc_5.iloc[-1]) if not np.isnan(float(roc_5.iloc[-1])) else 0.0
+            roc_prev = float(roc_5.iloc[-2]) if not np.isnan(float(roc_5.iloc[-2])) else 0.0
+
+            if roc_prev < 0 and roc_now > 0 and rsi_val < 55:
+                action = "buy"
+                confidence = 0.20
+            elif roc_prev > 0 and roc_now < 0 and rsi_val > 45:
+                action = "sell"
+                confidence = 0.20
+
+        # Tier 6 — Stochastic RSI crossover (lowest confidence fallback)
         if action == "hold" and adx_check and len(candles) >= 20:
             stoch_k = (rsi - rsi.rolling(14).min()) / (rsi.rolling(14).max() - rsi.rolling(14).min()).replace(0, np.nan)
             stoch_d = stoch_k.rolling(3).mean()

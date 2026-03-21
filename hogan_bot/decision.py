@@ -331,6 +331,7 @@ def entry_quality_gate(
     min_regime_confidence: float = 0.5,
     max_whipsaws: int = 3,
     swarm_agreement: float | None = None,
+    tech_source: str | None = None,
 ) -> GateDecision:
     """Block entries that don't meet quality thresholds.
 
@@ -341,6 +342,10 @@ def entry_quality_gate(
 
     When swarm agreement is high (>= 0.80), tech confidence gate is bypassed —
     the collective intelligence of the swarm overrides weak technical signals.
+
+    When tech_source is "mtf_bias" or "cross_family", the tech confidence
+    requirement is halved — these signals already incorporate multiple
+    confirmation sources.
     """
     if action == "hold":
         return GateDecision(action=action)
@@ -348,6 +353,10 @@ def entry_quality_gate(
     adj = get_regime_quality_adjustments(regime)
     eff_min_final = min_final_confidence * adj.get("final_mult", 1.0)
     eff_min_tech = min_tech_confidence * adj.get("tech_mult", 1.0)
+
+    # MTF bias and cross-family signals get a relaxed tech gate
+    if tech_source in ("mtf_bias", "cross_family", "router/mean_revert", "router/breakout"):
+        eff_min_tech *= 0.5
 
     if final_confidence is not None and final_confidence < eff_min_final:
         logger.debug(

@@ -250,7 +250,7 @@ class BotConfig:
 
     # Multi-timeframe ensemble: daily bias + primary signal + 30m confirmation
     use_mtf_ensemble: bool = False
-    mtf_timeframes: list[str] | None = field(default_factory=lambda: ["15m", "30m", "3h"])  # sub-hourly context frames
+    mtf_timeframes: list[str] | None = field(default_factory=lambda: ["5m", "15m", "30m", "3h"])
     mtf_use_daily_filter: bool = False   # enable after daily is Optuna-optimised
     mtf_daily_timeframe: str = "1d"
     mtf_m30_timeframe: str = "30m"
@@ -280,7 +280,7 @@ class BotConfig:
     swarm_enabled: bool = True
     swarm_mode: str = "conditional_active"
     swarm_phase: str = "certification"
-    swarm_agents: str = "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1"
+    swarm_agents: str = "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1,volatility_regime_v1"
     swarm_min_agreement: float = 0.60
     swarm_min_vote_margin: float = 0.10
     swarm_max_entropy: float = 0.95
@@ -822,7 +822,7 @@ def load_config() -> BotConfig:
         swarm_enabled=os.getenv("HOGAN_SWARM_ENABLED", "true").lower() == "true",
         swarm_mode=os.getenv("HOGAN_SWARM_MODE", "conditional_active"),
         swarm_phase=os.getenv("HOGAN_SWARM_PHASE", "certification"),
-        swarm_agents=os.getenv("HOGAN_SWARM_AGENTS", "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1"),
+        swarm_agents=os.getenv("HOGAN_SWARM_AGENTS", "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1,volatility_regime_v1"),
         swarm_min_agreement=_env_float("HOGAN_SWARM_MIN_AGREEMENT", "0.60"),
         swarm_min_vote_margin=_env_float("HOGAN_SWARM_MIN_VOTE_MARGIN", "0.10"),
         swarm_max_entropy=_env_float("HOGAN_SWARM_MAX_ENTROPY", "0.95"),

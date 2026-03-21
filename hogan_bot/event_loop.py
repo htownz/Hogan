@@ -940,9 +940,22 @@ async def _run_event_loop_inner(
             symbol = event.symbol
             tf = event.timeframe
 
-            # Only process the primary timeframe for signals
+            # Non-primary timeframes: buffer + persist, but don't evaluate signals
             if tf != config.timeframe:
                 buffer.push(symbol, tf, event.candle.to_dict())
+                _mtf_cd = event.candle.to_dict()
+                try:
+                    _mtf_row = {
+                        "timestamp": _mtf_cd.get("ts_ms", 0),
+                        "open": _mtf_cd.get("open", 0),
+                        "high": _mtf_cd.get("high", 0),
+                        "low": _mtf_cd.get("low", 0),
+                        "close": _mtf_cd.get("close", 0),
+                        "volume": _mtf_cd.get("volume", 0),
+                    }
+                    upsert_candles(conn, symbol, tf, pd.DataFrame([_mtf_row]))
+                except Exception:
+                    pass
                 continue
 
             buffer.push(symbol, tf, event.candle.to_dict())

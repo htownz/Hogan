@@ -81,7 +81,24 @@ class StrategyRouter:
             return StrategySignal("hold", 0.01, 0.0, 0.0)
 
         logger.debug("Routing to %s for regime=%s (conf=%.2f)", family.name, regime, confidence)
-        return family.generate_signal(candles, config, regime_state)
+        sig = family.generate_signal(candles, config, regime_state)
+
+        # Cross-family fallback: if primary family returns hold, try others
+        if sig.action == "hold":
+            _fallback_order = [f for r, f in self.families.items() if r != regime]
+            for alt_family in _fallback_order:
+                alt_sig = alt_family.generate_signal(candles, config, regime_state)
+                if alt_sig.action != "hold" and alt_sig.confidence > 0.15:
+                    logger.debug(
+                        "Cross-family fallback: %s produced %s (conf=%.2f)",
+                        alt_family.name, alt_sig.action, alt_sig.confidence,
+                    )
+                    return StrategySignal(
+                        alt_sig.action, alt_sig.stop_distance_pct,
+                        alt_sig.confidence * 0.6, alt_sig.volume_ratio,
+                    )
+
+        return sig
 
     @property
     def family_names(self) -> dict[str, str]:

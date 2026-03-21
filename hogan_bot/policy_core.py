@@ -319,6 +319,7 @@ def decide(
         regime=regime_name,
         regime_state=_rstate,
         as_of_ms=as_of_ms,
+        mtf_candles=mtf_candles,
     )
 
     _raw_tech_action = signal.tech.action if signal.tech else None
@@ -438,6 +439,7 @@ def decide(
     # Quality gate
     _tech_conf = signal.tech.confidence if signal.tech else None
     _relax_mult = 0.80 if _paper_relax else 1.0
+    _tech_source = signal.tech.details.get("source") if signal.tech and signal.tech.details else None
     _quality_gd = entry_quality_gate(
         action,
         final_confidence=signal.confidence,
@@ -449,6 +451,7 @@ def decide(
         min_tech_confidence=cfg.min_tech_confidence * _relax_mult,
         min_regime_confidence=cfg.min_regime_confidence * _relax_mult,
         max_whipsaws=cfg.max_whipsaws,
+        tech_source=_tech_source,
     )
     action = _quality_gd.action
     quality_scale = _quality_gd.size_scale
@@ -737,6 +740,8 @@ def decide(
                     "take_profit_pct": eff_tp,
                     "pipeline_signal": signal,
                     "up_prob": up_prob,
+                    "trade_outcomes": list(state.trade_outcomes),
+                    "data_ages": _data_ages if "_data_ages" in locals() else {},
                 }
 
                 # Resolve weights: config string → regime DB lookup → uniform

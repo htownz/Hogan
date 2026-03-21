@@ -109,6 +109,89 @@ class TechnicalAgent:
             except Exception as exc:
                 logger.warning("StrategyRouter unavailable, using classic signal path: %s", exc)
 
+    def _compute_mtf_bias(
+        self,
+        candles_1h: pd.DataFrame,
+        mtf_candles: dict[str, pd.DataFrame] | None,
+    ) -> TechSignal | None:
+        """Derive directional bias from multi-timeframe data.
+
+        Uses 3h SMA slope for trend + 15m RSI for momentum. When both
+        agree on direction, returns a low-confidence signal so the system
+        can trade even when the 1h strategy family returns hold.
+        """
+        if not mtf_candles:
+            return None
+        import numpy as np
+
+        bias_votes = 0  # +1 bullish, -1 bearish
+        total_votes = 0
+        atr_pct = 0.01
+
+        # 3h trend: SMA(10) slope
+        c3h = mtf_candles.get("3h")
+        if c3h is not None and len(c3h) >= 12:
+            close_3h = c3h["close"].astype(float)
+            sma_3h = close_3h.rolling(10).mean()
+            slope = (float(sma_3h.iloc[-1]) - float(sma_3h.iloc[-3])) / max(float(sma_3h.iloc[-3]), 1)
+            if slope > 0.002:
+                bias_votes += 1
+            elif slope < -0.002:
+                bias_votes -= 1
+            total_votes += 1
+
+        # 15m RSI direction
+        c15 = mtf_candles.get("15m")
+        if c15 is not None and len(c15) >= 20:
+            close_15 = c15["close"].astype(float)
+            delta_15 = close_15.diff()
+            g15 = delta_15.clip(lower=0).ewm(com=13, min_periods=14, adjust=False).mean()
+            l15 = (-delta_15.clip(upper=0)).ewm(com=13, min_periods=14, adjust=False).mean()
+            rs15 = g15 / l15.clip(lower=1e-9)
+            rsi_15 = 100.0 - (100.0 / (1.0 + rs15))
+            rsi_val = float(rsi_15.iloc[-1]) if not np.isnan(float(rsi_15.iloc[-1])) else 50.0
+            if rsi_val < 40:
+                bias_votes += 1
+            elif rsi_val > 60:
+                bias_votes -= 1
+            total_votes += 1
+
+        # 30m close vs EMA(20) for mean-reversion bias
+        c30 = mtf_candles.get("30m")
+        if c30 is not None and len(c30) >= 22:
+            close_30 = c30["close"].astype(float)
+            ema_30 = close_30.ewm(span=20, adjust=False).mean()
+            dev = (float(close_30.iloc[-1]) - float(ema_30.iloc[-1])) / max(float(ema_30.iloc[-1]), 1)
+            if dev < -0.003:
+                bias_votes += 1
+            elif dev > 0.003:
+                bias_votes -= 1
+            total_votes += 1
+
+        if total_votes < 2 or abs(bias_votes) < 2:
+            return None
+
+        # 1h ATR for stop distance
+        from hogan_bot.strategy import compute_atr
+        atr_s = compute_atr(candles_1h, window=14)
+        px = float(candles_1h["close"].iloc[-1])
+        atr_pct = float(atr_s.iloc[-1]) / max(px, 1e-9)
+
+        if bias_votes >= 2:
+            return TechSignal(
+                action="buy", confidence=0.20,
+                stop_distance_pct=max(0.003, atr_pct * 1.5),
+                volume_ratio=1.0,
+                details={"source": "mtf_bias", "bias_votes": bias_votes, "total": total_votes},
+            )
+        elif bias_votes <= -2:
+            return TechSignal(
+                action="sell", confidence=0.20,
+                stop_distance_pct=max(0.003, atr_pct * 1.5),
+                volume_ratio=1.0,
+                details={"source": "mtf_bias", "bias_votes": bias_votes, "total": total_votes},
+            )
+
     def analyze(self, candles: pd.DataFrame, **runtime_state) -> TechSignal:
         """Produce a TechSignal. ``runtime_state`` passes dynamic per-bar RL
         fields (rl_in_position, rl_unrealized_pnl, rl_bars_in_trade) and
@@ -118,6 +201,8 @@ class TechnicalAgent:
             return TechSignal(action="hold", confidence=0.0)
 
         regime_state = runtime_state.pop("regime_state", None)
+
+        mtf_candles = runtime_state.pop("mtf_candles", None)
 
         # Strategy-router path: regime-aware family selection
         if self._router is not None and regime_state is not None:
@@ -130,9 +215,26 @@ class TechnicalAgent:
                     regime_state.regime, self._router.families.get("trending_up")
                 )
                 src = f"router/{getattr(family_name, 'name', 'unknown')}"
+
+                # If router produced a signal, return it
+                if raw.action != "hold":
+                    return TechSignal(
+                        action=raw.action,
+                        confidence=conf,
+                        stop_distance_pct=float(raw.stop_distance_pct),
+                        volume_ratio=float(raw.volume_ratio),
+                        details={"source": src, "regime": regime_state.regime},
+                    )
+
+                # Router returned hold — try MTF bias as fallback
+                mtf_signal = self._compute_mtf_bias(candles, mtf_candles)
+                if mtf_signal is not None:
+                    return mtf_signal
+
+                # Return the hold signal from the router
                 return TechSignal(
-                    action=raw.action,
-                    confidence=conf,
+                    action="hold",
+                    confidence=0.0,
                     stop_distance_pct=float(raw.stop_distance_pct),
                     volume_ratio=float(raw.volume_ratio),
                     details={"source": src, "regime": regime_state.regime},
