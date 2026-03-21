@@ -956,9 +956,10 @@ async def _run_event_loop_inner(
                     upsert_candles(conn, symbol, tf, pd.DataFrame([_mtf_row]))
                 except Exception:
                     pass
-                # 15m and 30m candles trigger a re-evaluation using the
+                # Sub-hourly candles trigger a re-evaluation using the
                 # buffered 1h data so the bot can react faster than once/hour
-                if tf not in ("15m", "30m"):
+                _EVAL_TIMEFRAMES = ("1m", "5m", "15m", "30m")
+                if tf not in _EVAL_TIMEFRAMES:
                     continue
                 _primary_df = buffer.to_df(symbol, config.timeframe)
                 if _primary_df.empty or len(_primary_df) < max(config.long_ma_window, 20):
@@ -1238,8 +1239,10 @@ async def _run_event_loop_inner(
                 _sym_regime = sig.regime
                 _sym_atr_pct = sig.atr_pct
                 if _is_mtf_eval:
-                    size *= 0.70
-                    logger.info("MTF_EVAL %s/%s → %s (size scaled 0.70x for sub-hour eval)", symbol, tf, action)
+                    _MTF_SIZE_SCALE = {"1m": 0.30, "5m": 0.40, "15m": 0.60, "30m": 0.70}
+                    _mtf_scale = _MTF_SIZE_SCALE.get(tf, 0.50)
+                    size *= _mtf_scale
+                    logger.info("MTF_EVAL %s/%s → %s (size scaled %.2fx for sub-hour eval)", symbol, tf, action, _mtf_scale)
                 if _sym_regime:
                     _current_regime[symbol] = _sym_regime
             except Exception as exc:
