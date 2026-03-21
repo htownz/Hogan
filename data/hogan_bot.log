@@ -1,0 +1,2715 @@
+2026-03-21 16:01:01,578 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-21 16:01:01,578 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-21 16:01:01,578 INFO CHAMPION_MODE: overriding use_online_learning = True -> False
+2026-03-21 16:01:01,578 INFO CHAMPION_MODE: overriding min_final_confidence = 0.15 -> 0.08
+2026-03-21 16:01:01,579 INFO CHAMPION_MODE: overriding min_tech_confidence = 0.1 -> 0.15
+2026-03-21 16:01:01,579 INFO CHAMPION_MODE: overriding min_regime_confidence = 0.2 -> 0.3
+2026-03-21 16:01:01,579 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 24.0
+2026-03-21 16:01:01,579 INFO Champion mode applied — 7 overrides
+2026-03-21 16:01:01,580 INFO Sweep results applied: trailing_stop=0.025 take_profit=0.054 (from diagnostics/exit_sweep_results.json)
+2026-03-21 16:01:01,589 INFO FETCH_ORCHESTRATOR: starting data refresh (backfill=False, symbols=['BTC/USD'])
+2026-03-21 16:01:01,776 INFO FETCH feargreed: 1 rows
+2026-03-21 16:01:02,046 INFO FETCH derivatives BTC/USD: {'funding_rate': 1, 'open_interest_pct_change': 1}
+2026-03-21 16:01:02,706 INFO Macro candles: wrote 30 1d rows for SPY/USD (S&P 500 ETF)
+2026-03-21 16:01:02,855 INFO Macro candles: wrote 49 1h rows for SPY/USD (S&P 500 ETF)
+2026-03-21 16:01:02,997 INFO Macro candles: wrote 30 1d rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-21 16:01:03,150 INFO Macro candles: wrote 49 1h rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-21 16:01:03,324 INFO Macro candles: wrote 30 1d rows for GLD/USD (Gold ETF)
+2026-03-21 16:01:03,499 INFO Macro candles: wrote 49 1h rows for GLD/USD (Gold ETF)
+2026-03-21 16:01:03,684 INFO Macro candles: wrote 30 1d rows for SLV/USD (Silver ETF)
+2026-03-21 16:01:03,819 INFO Macro candles: wrote 49 1h rows for SLV/USD (Silver ETF)
+2026-03-21 16:01:03,998 INFO Macro candles: wrote 30 1d rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-21 16:01:04,147 INFO Macro candles: wrote 49 1h rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-21 16:01:04,329 INFO Macro candles: wrote 30 1d rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-21 16:01:04,462 INFO Macro candles: wrote 49 1h rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-21 16:01:04,625 INFO Macro candles: wrote 29 1d rows for VIX/USD (CBOE Volatility Index)
+2026-03-21 16:01:04,763 INFO Macro candles: wrote 98 1h rows for VIX/USD (CBOE Volatility Index)
+2026-03-21 16:01:04,927 INFO Macro candles: wrote 29 1d rows for TNX/USD (10-Year Treasury Yield)
+2026-03-21 16:01:05,171 INFO Macro candles: wrote 49 1h rows for TNX/USD (10-Year Treasury Yield)
+2026-03-21 16:01:05,171 INFO Macro candle backfill complete: 679 rows across 16 series
+2026-03-21 16:01:05,171 INFO FETCH macro_candles: {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 29, 'VIX/USD_1h': 98, 'TNX/USD_1d': 29, 'TNX/USD_1h': 49}
+2026-03-21 16:01:05,267 WARNING FETCH news_sentiment failed: HTTP 403 fetching CryptoPanic page 1
+2026-03-21 16:01:05,656 INFO FETCH gpr: 15034
+2026-03-21 16:01:05,656 INFO FETCH_ORCHESTRATOR: done in 4.1s — 4 OK, 1 failed, 4 skipped
+2026-03-21 16:01:05,656 INFO Startup data fetch complete: {'feargreed': 1, 'derivatives_BTC/USD': {'funding_rate': 1, 'open_interest_pct_change': 1}, 'macro_candles': {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 29, 'VIX/USD_1h': 98, 'TNX/USD_1d': 29, 'TNX/USD_1h': 49}, 'news_sentiment': 'ERROR: HTTP 403 fetching CryptoPanic page 1', 'gpr': 15034}
+2026-03-21 16:01:05,657 INFO RESTORE: loaded last cash balance 9997.80 from DB (seed was 10000.00)
+2026-03-21 16:01:05,657 INFO Paper mode with realistic fills (slip=5.0bps spread=3.0bps)
+2026-03-21 16:01:06,644 INFO Loaded ML model from models/hogan_champion.pkl
+2026-03-21 16:01:06,660 INFO MacroSitout: loaded 2963 Fear & Greed records
+2026-03-21 16:01:06,674 INFO MacroSitout: loaded 3612 VIX hourly records
+2026-03-21 16:01:06,675 INFO Macro sitout filter enabled (greed-only scaling)
+2026-03-21 16:01:06,686 INFO FundingOverlay: loaded 8823 hourly records
+2026-03-21 16:01:06,686 INFO Funding rate overlay enabled
+2026-03-21 16:01:06,696 INFO PerformanceTracker restored 0 trades across 0 regimes from DB snapshot
+2026-03-21 16:01:06,696 INFO PerformanceTracker restored state from DB snapshot
+2026-03-21 16:01:06,697 INFO WF failure response: 2/5 windows positive → scale=0.70
+2026-03-21 16:01:06,697 INFO WF failure scale applied: 0.70
+2026-03-21 16:01:06,721 INFO MTF candle subscriptions: ['1h', '15m', '30m'] (primary=1h)
+2026-03-21 16:01:06,722 INFO Event loop starting: mode=PAPER symbols=BTC/USD timeframe=1h
+2026-03-21 16:01:06,722 INFO STARTUP SUMMARY: balance=10000.00 max_dd=20.0% risk/trade=1.5% trailing_stop=2.5% take_profit=5.4% ML=ON swarm=ON regime=ON policy_core=ON online_learn=OFF
+2026-03-21 16:01:06,722 INFO HOGAN_USE_REST_DATA=1 — using REST polling (WebSocket disabled).
+2026-03-21 16:01:06,724 INFO REST polling active: kraken ['BTC/USD'] every 30s
+2026-03-21 16:01:09,071 INFO REST warmup: BTC/USD/1h loaded 200 candles
+2026-03-21 16:01:10,270 INFO REST warmup: BTC/USD/15m loaded 200 candles
+2026-03-21 16:01:11,483 INFO REST warmup: BTC/USD/30m loaded 200 candles
+2026-03-21 16:01:15,082 INFO Loaded per-symbol config for BTC/USD/1h (16 overrides, sharpe=1.20)
+2026-03-21 16:01:15,108 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:01:15,113 WARNING Failed to load models\forecast_4h.pkl: No module named 'lightgbm'
+2026-03-21 16:01:15,114 WARNING Failed to load models\forecast_12h.pkl: No module named 'lightgbm'
+2026-03-21 16:01:15,115 WARNING Failed to load models\forecast_24h.pkl: No module named 'lightgbm'
+2026-03-21 16:15:21,747 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:15:21,852 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-21 16:16:17,973 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-21 16:16:17,973 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-21 16:16:17,974 INFO CHAMPION_MODE: overriding use_online_learning = True -> False
+2026-03-21 16:16:17,974 INFO CHAMPION_MODE: overriding min_final_confidence = 0.15 -> 0.08
+2026-03-21 16:16:17,974 INFO CHAMPION_MODE: overriding min_tech_confidence = 0.1 -> 0.15
+2026-03-21 16:16:17,974 INFO CHAMPION_MODE: overriding min_regime_confidence = 0.2 -> 0.3
+2026-03-21 16:16:17,974 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 24.0
+2026-03-21 16:16:17,974 INFO Champion mode applied — 7 overrides
+2026-03-21 16:16:17,975 INFO Sweep results applied: trailing_stop=0.025 take_profit=0.054 (from diagnostics/exit_sweep_results.json)
+2026-03-21 16:16:17,981 INFO FETCH_ORCHESTRATOR: starting data refresh (backfill=False, symbols=['BTC/USD'])
+2026-03-21 16:16:18,155 INFO FETCH feargreed: 1 rows
+2026-03-21 16:16:18,909 INFO FETCH derivatives BTC/USD: {'funding_rate': 1, 'open_interest_pct_change': 1}
+2026-03-21 16:16:19,512 INFO Macro candles: wrote 30 1d rows for SPY/USD (S&P 500 ETF)
+2026-03-21 16:16:19,646 INFO Macro candles: wrote 49 1h rows for SPY/USD (S&P 500 ETF)
+2026-03-21 16:16:19,861 INFO Macro candles: wrote 30 1d rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-21 16:16:20,025 INFO Macro candles: wrote 49 1h rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-21 16:16:20,193 INFO Macro candles: wrote 30 1d rows for GLD/USD (Gold ETF)
+2026-03-21 16:16:20,388 INFO Macro candles: wrote 49 1h rows for GLD/USD (Gold ETF)
+2026-03-21 16:16:20,524 INFO Macro candles: wrote 30 1d rows for SLV/USD (Silver ETF)
+2026-03-21 16:16:20,678 INFO Macro candles: wrote 49 1h rows for SLV/USD (Silver ETF)
+2026-03-21 16:16:21,055 INFO Macro candles: wrote 30 1d rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-21 16:16:21,279 INFO Macro candles: wrote 49 1h rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-21 16:16:21,502 INFO Macro candles: wrote 30 1d rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-21 16:16:21,655 INFO Macro candles: wrote 49 1h rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-21 16:16:21,791 INFO Macro candles: wrote 29 1d rows for VIX/USD (CBOE Volatility Index)
+2026-03-21 16:16:21,969 INFO Macro candles: wrote 98 1h rows for VIX/USD (CBOE Volatility Index)
+2026-03-21 16:16:22,102 INFO Macro candles: wrote 29 1d rows for TNX/USD (10-Year Treasury Yield)
+2026-03-21 16:16:22,307 INFO Macro candles: wrote 49 1h rows for TNX/USD (10-Year Treasury Yield)
+2026-03-21 16:16:22,307 INFO Macro candle backfill complete: 679 rows across 16 series
+2026-03-21 16:16:22,307 INFO FETCH macro_candles: {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 29, 'VIX/USD_1h': 98, 'TNX/USD_1d': 29, 'TNX/USD_1h': 49}
+2026-03-21 16:16:22,388 WARNING FETCH news_sentiment failed: HTTP 403 fetching CryptoPanic page 1
+2026-03-21 16:16:22,771 INFO FETCH gpr: 15034
+2026-03-21 16:16:22,771 INFO FETCH_ORCHESTRATOR: done in 4.8s — 4 OK, 1 failed, 4 skipped
+2026-03-21 16:16:22,771 INFO Startup data fetch complete: {'feargreed': 1, 'derivatives_BTC/USD': {'funding_rate': 1, 'open_interest_pct_change': 1}, 'macro_candles': {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 29, 'VIX/USD_1h': 98, 'TNX/USD_1d': 29, 'TNX/USD_1h': 49}, 'news_sentiment': 'ERROR: HTTP 403 fetching CryptoPanic page 1', 'gpr': 15034}
+2026-03-21 16:16:22,772 INFO RESTORE: loaded last cash balance 9997.80 from DB (seed was 10000.00)
+2026-03-21 16:16:22,772 INFO Paper mode with realistic fills (slip=5.0bps spread=3.0bps)
+2026-03-21 16:16:23,723 INFO Loaded ML model from models/hogan_champion.pkl
+2026-03-21 16:16:23,740 INFO MacroSitout: loaded 2963 Fear & Greed records
+2026-03-21 16:16:23,754 INFO MacroSitout: loaded 3612 VIX hourly records
+2026-03-21 16:16:23,754 INFO Macro sitout filter enabled (greed-only scaling)
+2026-03-21 16:16:23,766 INFO FundingOverlay: loaded 8823 hourly records
+2026-03-21 16:16:23,766 INFO Funding rate overlay enabled
+2026-03-21 16:16:23,777 INFO PerformanceTracker restored 0 trades across 0 regimes from DB snapshot
+2026-03-21 16:16:23,777 INFO PerformanceTracker restored state from DB snapshot
+2026-03-21 16:16:23,778 INFO WF failure response: 2/5 windows positive → scale=0.70
+2026-03-21 16:16:23,778 INFO WF failure scale applied: 0.70
+2026-03-21 16:16:23,805 INFO MTF candle subscriptions: ['1h', '1m', '5m', '15m', '30m', '3h'] (primary=1h)
+2026-03-21 16:16:23,805 INFO Event loop starting: mode=PAPER symbols=BTC/USD timeframe=1h
+2026-03-21 16:16:23,805 INFO STARTUP SUMMARY: balance=10000.00 max_dd=20.0% risk/trade=1.5% trailing_stop=2.5% take_profit=5.4% ML=ON swarm=ON regime=ON policy_core=ON online_learn=OFF
+2026-03-21 16:16:23,806 INFO HOGAN_USE_REST_DATA=1 — using REST polling (WebSocket disabled).
+2026-03-21 16:16:23,808 INFO REST polling active: kraken ['BTC/USD'] every 30s
+2026-03-21 16:16:26,156 INFO REST warmup: BTC/USD/1h loaded 200 candles
+2026-03-21 16:16:27,345 INFO REST warmup: BTC/USD/1m loaded 200 candles
+2026-03-21 16:16:28,550 INFO REST warmup: BTC/USD/5m loaded 200 candles
+2026-03-21 16:16:29,755 INFO REST warmup: BTC/USD/15m loaded 200 candles
+2026-03-21 16:16:30,958 INFO REST warmup: BTC/USD/30m loaded 200 candles
+2026-03-21 16:16:32,145 WARNING REST warmup error BTC/USD/3h: kraken {"error":["EGeneral:Invalid arguments"]}
+2026-03-21 16:16:39,353 WARNING REST poll error BTC/USD/3h: kraken {"error":["EGeneral:Invalid arguments"]}
+2026-03-21 16:16:39,359 INFO Loaded per-symbol config for BTC/USD/1h (16 overrides, sharpe=1.20)
+2026-03-21 16:16:39,390 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:16:39,396 WARNING Failed to load models\forecast_4h.pkl: No module named 'lightgbm'
+2026-03-21 16:16:39,396 WARNING Failed to load models\forecast_12h.pkl: No module named 'lightgbm'
+2026-03-21 16:16:39,397 WARNING Failed to load models\forecast_24h.pkl: No module named 'lightgbm'
+2026-03-21 16:16:56,669 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-21 16:16:56,669 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-21 16:16:56,670 INFO CHAMPION_MODE: overriding use_online_learning = True -> False
+2026-03-21 16:16:56,670 INFO CHAMPION_MODE: overriding min_final_confidence = 0.15 -> 0.04
+2026-03-21 16:16:56,670 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 24.0
+2026-03-21 16:16:56,670 INFO Champion mode applied — 5 overrides
+2026-03-21 16:16:56,671 INFO Sweep results applied: trailing_stop=0.025 take_profit=0.054 (from diagnostics/exit_sweep_results.json)
+2026-03-21 16:16:56,682 INFO FETCH_ORCHESTRATOR: starting data refresh (backfill=False, symbols=['BTC/USD'])
+2026-03-21 16:16:56,851 INFO FETCH feargreed: 1 rows
+2026-03-21 16:16:57,340 INFO FETCH derivatives BTC/USD: {'funding_rate': 1, 'open_interest_pct_change': 1}
+2026-03-21 16:16:57,952 INFO Macro candles: wrote 30 1d rows for SPY/USD (S&P 500 ETF)
+2026-03-21 16:16:58,124 INFO Macro candles: wrote 49 1h rows for SPY/USD (S&P 500 ETF)
+2026-03-21 16:16:58,352 INFO Macro candles: wrote 30 1d rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-21 16:16:58,544 INFO Macro candles: wrote 49 1h rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-21 16:16:58,740 INFO Macro candles: wrote 30 1d rows for GLD/USD (Gold ETF)
+2026-03-21 16:16:58,937 INFO Macro candles: wrote 49 1h rows for GLD/USD (Gold ETF)
+2026-03-21 16:16:59,089 INFO Macro candles: wrote 30 1d rows for SLV/USD (Silver ETF)
+2026-03-21 16:16:59,274 INFO Macro candles: wrote 49 1h rows for SLV/USD (Silver ETF)
+2026-03-21 16:16:59,490 INFO Macro candles: wrote 30 1d rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-21 16:16:59,674 INFO Macro candles: wrote 49 1h rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-21 16:16:59,940 INFO Macro candles: wrote 30 1d rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-21 16:17:00,115 INFO Macro candles: wrote 49 1h rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-21 16:17:00,237 INFO Macro candles: wrote 29 1d rows for VIX/USD (CBOE Volatility Index)
+2026-03-21 16:17:00,364 INFO Macro candles: wrote 98 1h rows for VIX/USD (CBOE Volatility Index)
+2026-03-21 16:17:00,463 INFO Macro candles: wrote 29 1d rows for TNX/USD (10-Year Treasury Yield)
+2026-03-21 16:17:00,609 INFO Macro candles: wrote 49 1h rows for TNX/USD (10-Year Treasury Yield)
+2026-03-21 16:17:00,609 INFO Macro candle backfill complete: 679 rows across 16 series
+2026-03-21 16:17:00,609 INFO FETCH macro_candles: {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 29, 'VIX/USD_1h': 98, 'TNX/USD_1d': 29, 'TNX/USD_1h': 49}
+2026-03-21 16:17:00,695 WARNING FETCH news_sentiment failed: HTTP 403 fetching CryptoPanic page 1
+2026-03-21 16:17:01,102 INFO FETCH gpr: 15034
+2026-03-21 16:17:01,102 INFO FETCH_ORCHESTRATOR: done in 4.4s — 4 OK, 1 failed, 4 skipped
+2026-03-21 16:17:01,102 INFO Startup data fetch complete: {'feargreed': 1, 'derivatives_BTC/USD': {'funding_rate': 1, 'open_interest_pct_change': 1}, 'macro_candles': {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 29, 'VIX/USD_1h': 98, 'TNX/USD_1d': 29, 'TNX/USD_1h': 49}, 'news_sentiment': 'ERROR: HTTP 403 fetching CryptoPanic page 1', 'gpr': 15034}
+2026-03-21 16:17:01,102 INFO RESTORE: loaded last cash balance 9997.80 from DB (seed was 10000.00)
+2026-03-21 16:17:01,102 INFO Paper mode with realistic fills (slip=5.0bps spread=3.0bps)
+2026-03-21 16:17:01,997 INFO Loaded ML model from models/hogan_champion.pkl
+2026-03-21 16:17:02,013 INFO MacroSitout: loaded 2963 Fear & Greed records
+2026-03-21 16:17:02,028 INFO MacroSitout: loaded 3612 VIX hourly records
+2026-03-21 16:17:02,028 INFO Macro sitout filter enabled (greed-only scaling)
+2026-03-21 16:17:02,039 INFO FundingOverlay: loaded 8823 hourly records
+2026-03-21 16:17:02,040 INFO Funding rate overlay enabled
+2026-03-21 16:17:02,050 INFO PerformanceTracker restored 0 trades across 0 regimes from DB snapshot
+2026-03-21 16:17:02,050 INFO PerformanceTracker restored state from DB snapshot
+2026-03-21 16:17:02,051 INFO WF failure response: 2/5 windows positive → scale=0.70
+2026-03-21 16:17:02,051 INFO WF failure scale applied: 0.70
+2026-03-21 16:17:02,076 INFO MTF candle subscriptions: ['1h', '1m', '5m', '15m', '30m', '3h'] (primary=1h)
+2026-03-21 16:17:02,076 INFO Event loop starting: mode=PAPER symbols=BTC/USD timeframe=1h
+2026-03-21 16:17:02,076 INFO STARTUP SUMMARY: balance=10000.00 max_dd=20.0% risk/trade=1.5% trailing_stop=2.5% take_profit=5.4% ML=ON swarm=ON regime=ON policy_core=ON online_learn=OFF
+2026-03-21 16:17:02,077 INFO HOGAN_USE_REST_DATA=1 — using REST polling (WebSocket disabled).
+2026-03-21 16:17:02,079 INFO REST polling active: kraken ['BTC/USD'] every 30s
+2026-03-21 16:17:04,424 INFO REST warmup: BTC/USD/1h loaded 200 candles
+2026-03-21 16:17:05,629 INFO REST warmup: BTC/USD/1m loaded 200 candles
+2026-03-21 16:17:06,821 INFO REST warmup: BTC/USD/5m loaded 200 candles
+2026-03-21 16:17:08,021 INFO REST warmup: BTC/USD/15m loaded 200 candles
+2026-03-21 16:17:09,238 INFO REST warmup: BTC/USD/30m loaded 200 candles
+2026-03-21 16:17:10,412 WARNING REST warmup error BTC/USD/3h: kraken {"error":["EGeneral:Invalid arguments"]}
+2026-03-21 16:17:17,623 WARNING REST poll error BTC/USD/3h: kraken {"error":["EGeneral:Invalid arguments"]}
+2026-03-21 16:17:17,629 INFO Loaded per-symbol config for BTC/USD/1h (16 overrides, sharpe=1.20)
+2026-03-21 16:17:17,653 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:17:17,658 WARNING Failed to load models\forecast_4h.pkl: No module named 'lightgbm'
+2026-03-21 16:17:17,658 WARNING Failed to load models\forecast_12h.pkl: No module named 'lightgbm'
+2026-03-21 16:17:17,659 WARNING Failed to load models\forecast_24h.pkl: No module named 'lightgbm'
+2026-03-21 16:17:53,785 WARNING REST poll error BTC/USD/3h: kraken {"error":["EGeneral:Invalid arguments"]}
+2026-03-21 16:18:29,975 WARNING REST poll error BTC/USD/3h: kraken {"error":["EGeneral:Invalid arguments"]}
+2026-03-21 16:18:30,000 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:18:30,109 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 16:19:06,119 WARNING REST poll error BTC/USD/3h: kraken {"error":["EGeneral:Invalid arguments"]}
+2026-03-21 16:19:06,144 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:19:06,250 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 16:19:42,258 WARNING REST poll error BTC/USD/3h: kraken {"error":["EGeneral:Invalid arguments"]}
+2026-03-21 16:20:18,393 WARNING REST poll error BTC/USD/3h: kraken {"error":["EGeneral:Invalid arguments"]}
+2026-03-21 16:20:18,420 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:20:18,532 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 16:20:18,557 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:20:18,661 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 16:20:54,533 WARNING REST poll error BTC/USD/3h: kraken {"error":["EGeneral:Invalid arguments"]}
+2026-03-21 16:21:30,678 WARNING REST poll error BTC/USD/3h: kraken {"error":["EGeneral:Invalid arguments"]}
+2026-03-21 16:21:30,704 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:21:30,741 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:21:58,678 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-21 16:21:58,678 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-21 16:21:58,678 INFO CHAMPION_MODE: overriding use_online_learning = True -> False
+2026-03-21 16:21:58,678 INFO CHAMPION_MODE: overriding min_final_confidence = 0.15 -> 0.04
+2026-03-21 16:21:58,678 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 24.0
+2026-03-21 16:21:58,678 INFO Champion mode applied — 5 overrides
+2026-03-21 16:21:58,679 INFO Sweep results applied: trailing_stop=0.025 take_profit=0.054 (from diagnostics/exit_sweep_results.json)
+2026-03-21 16:21:58,688 INFO FETCH_ORCHESTRATOR: starting data refresh (backfill=False, symbols=['BTC/USD'])
+2026-03-21 16:21:58,908 INFO FETCH feargreed: 1 rows
+2026-03-21 16:21:59,771 INFO FETCH derivatives BTC/USD: {'funding_rate': 1, 'open_interest_pct_change': 1}
+2026-03-21 16:22:00,407 INFO Macro candles: wrote 30 1d rows for SPY/USD (S&P 500 ETF)
+2026-03-21 16:22:00,593 INFO Macro candles: wrote 49 1h rows for SPY/USD (S&P 500 ETF)
+2026-03-21 16:22:00,756 INFO Macro candles: wrote 30 1d rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-21 16:22:00,939 INFO Macro candles: wrote 49 1h rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-21 16:22:01,104 INFO Macro candles: wrote 30 1d rows for GLD/USD (Gold ETF)
+2026-03-21 16:22:01,252 INFO Macro candles: wrote 49 1h rows for GLD/USD (Gold ETF)
+2026-03-21 16:22:01,385 INFO Macro candles: wrote 30 1d rows for SLV/USD (Silver ETF)
+2026-03-21 16:22:01,560 INFO Macro candles: wrote 49 1h rows for SLV/USD (Silver ETF)
+2026-03-21 16:22:01,702 INFO Macro candles: wrote 30 1d rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-21 16:22:01,878 INFO Macro candles: wrote 49 1h rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-21 16:22:02,038 INFO Macro candles: wrote 30 1d rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-21 16:22:02,187 INFO Macro candles: wrote 49 1h rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-21 16:22:02,348 INFO Macro candles: wrote 29 1d rows for VIX/USD (CBOE Volatility Index)
+2026-03-21 16:22:02,544 INFO Macro candles: wrote 98 1h rows for VIX/USD (CBOE Volatility Index)
+2026-03-21 16:22:02,727 INFO Macro candles: wrote 29 1d rows for TNX/USD (10-Year Treasury Yield)
+2026-03-21 16:22:02,860 INFO Macro candles: wrote 49 1h rows for TNX/USD (10-Year Treasury Yield)
+2026-03-21 16:22:02,860 INFO Macro candle backfill complete: 679 rows across 16 series
+2026-03-21 16:22:02,861 INFO FETCH macro_candles: {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 29, 'VIX/USD_1h': 98, 'TNX/USD_1d': 29, 'TNX/USD_1h': 49}
+2026-03-21 16:22:02,942 WARNING FETCH news_sentiment failed: HTTP 403 fetching CryptoPanic page 1
+2026-03-21 16:22:03,326 INFO FETCH gpr: 15034
+2026-03-21 16:22:03,326 INFO FETCH_ORCHESTRATOR: done in 4.6s — 4 OK, 1 failed, 4 skipped
+2026-03-21 16:22:03,326 INFO Startup data fetch complete: {'feargreed': 1, 'derivatives_BTC/USD': {'funding_rate': 1, 'open_interest_pct_change': 1}, 'macro_candles': {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 29, 'VIX/USD_1h': 98, 'TNX/USD_1d': 29, 'TNX/USD_1h': 49}, 'news_sentiment': 'ERROR: HTTP 403 fetching CryptoPanic page 1', 'gpr': 15034}
+2026-03-21 16:22:03,327 INFO RESTORE: loaded last cash balance 9997.80 from DB (seed was 10000.00)
+2026-03-21 16:22:03,327 INFO Paper mode with realistic fills (slip=5.0bps spread=3.0bps)
+2026-03-21 16:22:04,311 INFO Loaded ML model from models/hogan_champion.pkl
+2026-03-21 16:22:04,328 INFO MacroSitout: loaded 2963 Fear & Greed records
+2026-03-21 16:22:04,342 INFO MacroSitout: loaded 3612 VIX hourly records
+2026-03-21 16:22:04,342 INFO Macro sitout filter enabled (greed-only scaling)
+2026-03-21 16:22:04,353 INFO FundingOverlay: loaded 8823 hourly records
+2026-03-21 16:22:04,354 INFO Funding rate overlay enabled
+2026-03-21 16:22:04,363 INFO PerformanceTracker restored 0 trades across 0 regimes from DB snapshot
+2026-03-21 16:22:04,363 INFO PerformanceTracker restored state from DB snapshot
+2026-03-21 16:22:04,364 INFO WF failure response: 2/5 windows positive → scale=0.70
+2026-03-21 16:22:04,365 INFO WF failure scale applied: 0.70
+2026-03-21 16:22:04,391 INFO MTF candle subscriptions: ['1h', '1m', '5m', '15m', '30m', '4h'] (primary=1h)
+2026-03-21 16:22:04,391 INFO Event loop starting: mode=PAPER symbols=BTC/USD timeframe=1h
+2026-03-21 16:22:04,391 INFO STARTUP SUMMARY: balance=10000.00 max_dd=20.0% risk/trade=1.5% trailing_stop=2.5% take_profit=5.4% ML=ON swarm=ON regime=ON policy_core=ON online_learn=OFF
+2026-03-21 16:22:04,392 INFO HOGAN_USE_REST_DATA=1 — using REST polling (WebSocket disabled).
+2026-03-21 16:22:04,394 INFO REST polling active: kraken ['BTC/USD'] every 30s
+2026-03-21 16:22:06,736 INFO REST warmup: BTC/USD/1h loaded 200 candles
+2026-03-21 16:22:07,936 INFO REST warmup: BTC/USD/1m loaded 200 candles
+2026-03-21 16:22:09,134 INFO REST warmup: BTC/USD/5m loaded 200 candles
+2026-03-21 16:22:10,340 INFO REST warmup: BTC/USD/15m loaded 200 candles
+2026-03-21 16:22:11,536 INFO REST warmup: BTC/USD/30m loaded 200 candles
+2026-03-21 16:22:12,730 INFO REST warmup: BTC/USD/4h loaded 200 candles
+2026-03-21 16:22:19,937 INFO Loaded per-symbol config for BTC/USD/1h (16 overrides, sharpe=1.20)
+2026-03-21 16:22:19,963 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:22:20,080 INFO Loaded forecast model: models\forecast_4h.pkl
+2026-03-21 16:22:20,084 INFO Loaded forecast model: models\forecast_12h.pkl
+2026-03-21 16:22:20,087 INFO Loaded forecast model: models\forecast_24h.pkl
+2026-03-21 16:22:20,177 ERROR Signal eval error for BTC/USD: The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 497, in decide
+    _candles_3h = mtf_candles.get("4h") or mtf_candles.get("3h")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\AppData\Roaming\Python\Python311\site-packages\pandas\core\generic.py", line 1513, in __bool__
+    raise ValueError(
+ValueError: The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2026-03-21 16:23:10,969 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-21 16:23:10,969 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-21 16:23:10,969 INFO CHAMPION_MODE: overriding use_online_learning = True -> False
+2026-03-21 16:23:10,969 INFO CHAMPION_MODE: overriding min_final_confidence = 0.15 -> 0.04
+2026-03-21 16:23:10,970 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 24.0
+2026-03-21 16:23:10,970 INFO Champion mode applied — 5 overrides
+2026-03-21 16:23:10,971 INFO Sweep results applied: trailing_stop=0.025 take_profit=0.054 (from diagnostics/exit_sweep_results.json)
+2026-03-21 16:23:10,987 INFO FETCH_ORCHESTRATOR: starting data refresh (backfill=False, symbols=['BTC/USD'])
+2026-03-21 16:23:11,164 INFO FETCH feargreed: 1 rows
+2026-03-21 16:23:11,527 INFO FETCH derivatives BTC/USD: {'funding_rate': 1, 'open_interest_pct_change': 1}
+2026-03-21 16:23:12,168 INFO Macro candles: wrote 30 1d rows for SPY/USD (S&P 500 ETF)
+2026-03-21 16:23:12,343 INFO Macro candles: wrote 49 1h rows for SPY/USD (S&P 500 ETF)
+2026-03-21 16:23:12,573 INFO Macro candles: wrote 30 1d rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-21 16:23:12,701 INFO Macro candles: wrote 49 1h rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-21 16:23:12,867 INFO Macro candles: wrote 30 1d rows for GLD/USD (Gold ETF)
+2026-03-21 16:23:13,038 INFO Macro candles: wrote 49 1h rows for GLD/USD (Gold ETF)
+2026-03-21 16:23:13,169 INFO Macro candles: wrote 30 1d rows for SLV/USD (Silver ETF)
+2026-03-21 16:23:13,290 INFO Macro candles: wrote 49 1h rows for SLV/USD (Silver ETF)
+2026-03-21 16:23:13,488 INFO Macro candles: wrote 30 1d rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-21 16:23:13,630 INFO Macro candles: wrote 49 1h rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-21 16:23:13,888 INFO Macro candles: wrote 30 1d rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-21 16:23:14,014 INFO Macro candles: wrote 49 1h rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-21 16:23:14,125 INFO Macro candles: wrote 29 1d rows for VIX/USD (CBOE Volatility Index)
+2026-03-21 16:23:14,246 INFO Macro candles: wrote 98 1h rows for VIX/USD (CBOE Volatility Index)
+2026-03-21 16:23:14,430 INFO Macro candles: wrote 29 1d rows for TNX/USD (10-Year Treasury Yield)
+2026-03-21 16:23:14,554 INFO Macro candles: wrote 49 1h rows for TNX/USD (10-Year Treasury Yield)
+2026-03-21 16:23:14,554 INFO Macro candle backfill complete: 679 rows across 16 series
+2026-03-21 16:23:14,554 INFO FETCH macro_candles: {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 29, 'VIX/USD_1h': 98, 'TNX/USD_1d': 29, 'TNX/USD_1h': 49}
+2026-03-21 16:23:14,630 WARNING FETCH news_sentiment failed: HTTP 403 fetching CryptoPanic page 1
+2026-03-21 16:23:15,030 INFO FETCH gpr: 15034
+2026-03-21 16:23:15,031 INFO FETCH_ORCHESTRATOR: done in 4.0s — 4 OK, 1 failed, 4 skipped
+2026-03-21 16:23:15,031 INFO Startup data fetch complete: {'feargreed': 1, 'derivatives_BTC/USD': {'funding_rate': 1, 'open_interest_pct_change': 1}, 'macro_candles': {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 29, 'VIX/USD_1h': 98, 'TNX/USD_1d': 29, 'TNX/USD_1h': 49}, 'news_sentiment': 'ERROR: HTTP 403 fetching CryptoPanic page 1', 'gpr': 15034}
+2026-03-21 16:23:15,031 INFO RESTORE: loaded last cash balance 9997.80 from DB (seed was 10000.00)
+2026-03-21 16:23:15,032 INFO Paper mode with realistic fills (slip=5.0bps spread=3.0bps)
+2026-03-21 16:23:15,954 INFO Loaded ML model from models/hogan_champion.pkl
+2026-03-21 16:23:15,975 INFO MacroSitout: loaded 2963 Fear & Greed records
+2026-03-21 16:23:15,990 INFO MacroSitout: loaded 3612 VIX hourly records
+2026-03-21 16:23:15,990 INFO Macro sitout filter enabled (greed-only scaling)
+2026-03-21 16:23:16,003 INFO FundingOverlay: loaded 8823 hourly records
+2026-03-21 16:23:16,003 INFO Funding rate overlay enabled
+2026-03-21 16:23:16,013 INFO PerformanceTracker restored 0 trades across 0 regimes from DB snapshot
+2026-03-21 16:23:16,013 INFO PerformanceTracker restored state from DB snapshot
+2026-03-21 16:23:16,014 INFO WF failure response: 2/5 windows positive → scale=0.70
+2026-03-21 16:23:16,014 INFO WF failure scale applied: 0.70
+2026-03-21 16:23:16,039 INFO MTF candle subscriptions: ['1h', '1m', '5m', '15m', '30m', '4h'] (primary=1h)
+2026-03-21 16:23:16,039 INFO Event loop starting: mode=PAPER symbols=BTC/USD timeframe=1h
+2026-03-21 16:23:16,039 INFO STARTUP SUMMARY: balance=10000.00 max_dd=20.0% risk/trade=1.5% trailing_stop=2.5% take_profit=5.4% ML=ON swarm=ON regime=ON policy_core=ON online_learn=OFF
+2026-03-21 16:23:16,039 INFO HOGAN_USE_REST_DATA=1 — using REST polling (WebSocket disabled).
+2026-03-21 16:23:16,041 INFO REST polling active: kraken ['BTC/USD'] every 30s
+2026-03-21 16:23:18,386 INFO REST warmup: BTC/USD/1h loaded 200 candles
+2026-03-21 16:23:19,585 INFO REST warmup: BTC/USD/1m loaded 200 candles
+2026-03-21 16:23:20,793 INFO REST warmup: BTC/USD/5m loaded 200 candles
+2026-03-21 16:23:21,978 INFO REST warmup: BTC/USD/15m loaded 200 candles
+2026-03-21 16:23:23,201 INFO REST warmup: BTC/USD/30m loaded 200 candles
+2026-03-21 16:23:24,378 INFO REST warmup: BTC/USD/4h loaded 200 candles
+2026-03-21 16:23:31,602 INFO Loaded per-symbol config for BTC/USD/1h (16 overrides, sharpe=1.20)
+2026-03-21 16:23:31,626 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:23:31,740 INFO Loaded forecast model: models\forecast_4h.pkl
+2026-03-21 16:23:31,744 INFO Loaded forecast model: models\forecast_12h.pkl
+2026-03-21 16:23:31,747 INFO Loaded forecast model: models\forecast_24h.pkl
+2026-03-21 16:23:32,381 INFO BUY BTC/USD px=70359.40 qty=0.003291 ml=0.500 equity=9997.80 regime=ranging long_scale=0.70
+2026-03-21 16:24:07,776 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:24:07,921 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 16:25:20,092 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:25:20,229 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 16:25:20,254 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:25:20,389 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-21 16:25:45,452 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-21 16:25:45,452 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-21 16:25:45,452 INFO CHAMPION_MODE: overriding use_online_learning = True -> False
+2026-03-21 16:25:45,452 INFO CHAMPION_MODE: overriding min_final_confidence = 0.15 -> 0.04
+2026-03-21 16:25:45,453 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 24.0
+2026-03-21 16:25:45,453 INFO Champion mode applied — 5 overrides
+2026-03-21 16:25:45,453 INFO Sweep results applied: trailing_stop=0.025 take_profit=0.054 (from diagnostics/exit_sweep_results.json)
+2026-03-21 16:25:45,464 INFO FETCH_ORCHESTRATOR: starting data refresh (backfill=False, symbols=['BTC/USD'])
+2026-03-21 16:25:45,697 INFO FETCH feargreed: 1 rows
+2026-03-21 16:25:46,222 INFO FETCH derivatives BTC/USD: {'funding_rate': 1, 'open_interest_pct_change': 1}
+2026-03-21 16:25:46,872 INFO Macro candles: wrote 30 1d rows for SPY/USD (S&P 500 ETF)
+2026-03-21 16:25:47,054 INFO Macro candles: wrote 49 1h rows for SPY/USD (S&P 500 ETF)
+2026-03-21 16:25:47,205 INFO Macro candles: wrote 30 1d rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-21 16:25:47,338 INFO Macro candles: wrote 49 1h rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-21 16:25:47,555 INFO Macro candles: wrote 30 1d rows for GLD/USD (Gold ETF)
+2026-03-21 16:25:47,698 INFO Macro candles: wrote 49 1h rows for GLD/USD (Gold ETF)
+2026-03-21 16:25:47,960 INFO Macro candles: wrote 30 1d rows for SLV/USD (Silver ETF)
+2026-03-21 16:25:48,158 INFO Macro candles: wrote 49 1h rows for SLV/USD (Silver ETF)
+2026-03-21 16:25:48,397 INFO Macro candles: wrote 30 1d rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-21 16:25:48,522 INFO Macro candles: wrote 49 1h rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-21 16:25:48,664 INFO Macro candles: wrote 30 1d rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-21 16:25:48,891 INFO Macro candles: wrote 49 1h rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-21 16:25:49,129 INFO Macro candles: wrote 29 1d rows for VIX/USD (CBOE Volatility Index)
+2026-03-21 16:25:49,253 INFO Macro candles: wrote 98 1h rows for VIX/USD (CBOE Volatility Index)
+2026-03-21 16:25:49,447 INFO Macro candles: wrote 29 1d rows for TNX/USD (10-Year Treasury Yield)
+2026-03-21 16:25:49,570 INFO Macro candles: wrote 49 1h rows for TNX/USD (10-Year Treasury Yield)
+2026-03-21 16:25:49,570 INFO Macro candle backfill complete: 679 rows across 16 series
+2026-03-21 16:25:49,571 INFO FETCH macro_candles: {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 29, 'VIX/USD_1h': 98, 'TNX/USD_1d': 29, 'TNX/USD_1h': 49}
+2026-03-21 16:25:49,653 WARNING FETCH news_sentiment failed: HTTP 403 fetching CryptoPanic page 1
+2026-03-21 16:25:50,051 INFO FETCH gpr: 15034
+2026-03-21 16:25:50,051 INFO FETCH_ORCHESTRATOR: done in 4.6s — 4 OK, 1 failed, 4 skipped
+2026-03-21 16:25:50,051 INFO Startup data fetch complete: {'feargreed': 1, 'derivatives_BTC/USD': {'funding_rate': 1, 'open_interest_pct_change': 1}, 'macro_candles': {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 29, 'VIX/USD_1h': 98, 'TNX/USD_1d': 29, 'TNX/USD_1h': 49}, 'news_sentiment': 'ERROR: HTTP 403 fetching CryptoPanic page 1', 'gpr': 15034}
+2026-03-21 16:25:50,052 INFO RESTORE: loaded last cash balance 9765.43 from DB (seed was 10000.00)
+2026-03-21 16:25:50,052 INFO Paper mode with realistic fills (slip=5.0bps spread=3.0bps)
+2026-03-21 16:25:50,052 INFO RECONCILE: restored open long BTC/USD qty=0.003291 entry=70359.40
+2026-03-21 16:25:50,052 INFO RECONCILE: restored 1 open position(s) from DB
+2026-03-21 16:25:51,000 INFO Loaded ML model from models/hogan_champion.pkl
+2026-03-21 16:25:51,020 INFO MacroSitout: loaded 2963 Fear & Greed records
+2026-03-21 16:25:51,036 INFO MacroSitout: loaded 3612 VIX hourly records
+2026-03-21 16:25:51,036 INFO Macro sitout filter enabled (greed-only scaling)
+2026-03-21 16:25:51,049 INFO FundingOverlay: loaded 8823 hourly records
+2026-03-21 16:25:51,049 INFO Funding rate overlay enabled
+2026-03-21 16:25:51,060 INFO PerformanceTracker restored 0 trades across 0 regimes from DB snapshot
+2026-03-21 16:25:51,060 INFO PerformanceTracker restored state from DB snapshot
+2026-03-21 16:25:51,062 INFO WF failure response: 2/5 windows positive → scale=0.70
+2026-03-21 16:25:51,062 INFO WF failure scale applied: 0.70
+2026-03-21 16:25:51,089 INFO MTF candle subscriptions: ['1h', '1m', '5m', '15m', '30m', '4h'] (primary=1h)
+2026-03-21 16:25:51,090 INFO Event loop starting: mode=PAPER symbols=BTC/USD timeframe=1h
+2026-03-21 16:25:51,090 INFO STARTUP SUMMARY: balance=10000.00 max_dd=20.0% risk/trade=1.5% trailing_stop=2.5% take_profit=5.4% ML=ON swarm=ON regime=ON policy_core=ON online_learn=OFF
+2026-03-21 16:25:51,090 INFO HOGAN_USE_REST_DATA=1 — using REST polling (WebSocket disabled).
+2026-03-21 16:25:51,093 INFO REST polling active: kraken ['BTC/USD'] every 30s
+2026-03-21 16:25:53,339 INFO REST warmup: BTC/USD/1h loaded 200 candles
+2026-03-21 16:25:54,651 INFO REST warmup: BTC/USD/1m loaded 200 candles
+2026-03-21 16:25:55,826 INFO REST warmup: BTC/USD/5m loaded 200 candles
+2026-03-21 16:25:57,053 INFO REST warmup: BTC/USD/15m loaded 200 candles
+2026-03-21 16:25:58,248 INFO REST warmup: BTC/USD/30m loaded 200 candles
+2026-03-21 16:25:59,435 INFO REST warmup: BTC/USD/4h loaded 200 candles
+2026-03-21 16:26:06,645 INFO Loaded per-symbol config for BTC/USD/1h (16 overrides, sharpe=1.20)
+2026-03-21 16:26:06,786 INFO Loaded forecast model: models\forecast_4h.pkl
+2026-03-21 16:26:06,790 INFO Loaded forecast model: models\forecast_12h.pkl
+2026-03-21 16:26:06,793 INFO Loaded forecast model: models\forecast_24h.pkl
+2026-03-21 16:26:07,141 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 16:27:19,427 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 16:28:31,746 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 16:29:07,918 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 16:30:20,157 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:30:20,248 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:30:20,334 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:30:20,419 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:31:32,485 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:32:08,633 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:33:21,108 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:34:33,418 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:35:09,608 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:35:09,961 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:36:21,975 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:37:34,271 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:38:10,407 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:39:22,720 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:40:34,998 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:40:35,331 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:41:11,164 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:42:23,476 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:43:36,129 INFO AUTO_EXIT BTC/USD reason=max_hold_time px=70370.20 qty=0.003291
+2026-03-21 16:43:36,215 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:44:12,126 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:45:24,445 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:45:24,733 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:45:25,240 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:46:36,768 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:47:13,137 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:48:25,460 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:49:37,799 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:50:13,942 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:50:14,194 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:51:26,267 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:52:38,563 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:53:14,940 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:54:27,263 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:55:03,409 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:55:39,555 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:56:15,739 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:57:28,065 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:58:40,368 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 16:59:16,543 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:00:28,841 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:00:29,309 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:00:29,895 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:00:30,261 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:00:30,542 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:01:05,008 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:02:17,329 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:03:29,618 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:04:05,789 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:05:18,323 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:05:18,598 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:06:30,610 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:07:06,755 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:08:19,049 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:09:31,366 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:10:07,530 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:10:07,864 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:11:19,823 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:12:32,136 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:13:08,284 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:14:20,591 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:15:32,915 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:15:33,246 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:15:33,582 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:16:09,082 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:17:21,458 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:18:33,759 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:19:09,930 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:20:22,239 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:20:22,524 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:21:34,533 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:22:10,688 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:23:22,986 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:24:35,282 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:25:11,432 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:25:11,701 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:26:23,738 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:27:36,041 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:28:12,184 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:29:24,488 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:30:00,658 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:30:36,814 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:30:37,132 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:30:37,419 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:31:13,001 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:32:25,300 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:33:37,672 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:34:13,820 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:35:26,131 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:35:26,431 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:36:38,435 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:37:14,593 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:38:26,901 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:39:39,219 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:40:15,368 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:40:15,637 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:41:27,696 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:42:40,008 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:43:16,144 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:44:28,457 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:45:04,632 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:45:05,093 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:45:40,782 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:46:16,945 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:47:29,248 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:48:05,428 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:49:17,717 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:50:30,045 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:50:30,363 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:51:06,214 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:52:18,506 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:53:30,827 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:54:06,996 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:55:19,283 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:55:19,637 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:56:31,595 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:57:07,757 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:58:20,085 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 17:59:32,391 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 18:00:08,555 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 18:00:08,859 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 18:00:09,468 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 18:00:09,984 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 18:00:10,413 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 18:01:20,941 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 18:02:33,184 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 18:03:09,353 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 18:04:21,647 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'

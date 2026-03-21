@@ -21,7 +21,14 @@ import sys
 
 logger = logging.getLogger(__name__)
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("data/hogan_bot.log", encoding="utf-8"),
+    ],
+)
 
 
 def run(max_loops: int | None = None) -> None:

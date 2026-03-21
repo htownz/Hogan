@@ -164,8 +164,8 @@ class BotConfig:
     meta_weight_technical: float = 0.55
     meta_weight_sentiment: float = 0.25
     meta_weight_macro: float = 0.20
-    meta_buy_threshold: float = 0.25    # combined score ≥ this → buy
-    meta_sell_threshold: float = -0.25  # combined score ≤ this → sell
+    meta_buy_threshold: float = 0.08    # combined score ≥ this → buy
+    meta_sell_threshold: float = -0.08  # combined score ≤ this → sell
 
     # ── Regime detection ─────────────────────────────────────────────────────
     # When enabled, the bot classifies the current market as trending_up,
@@ -250,7 +250,7 @@ class BotConfig:
 
     # Multi-timeframe ensemble: daily bias + primary signal + 30m confirmation
     use_mtf_ensemble: bool = False
-    mtf_timeframes: list[str] | None = field(default_factory=lambda: ["1m", "5m", "15m", "30m", "3h"])
+    mtf_timeframes: list[str] | None = field(default_factory=lambda: ["1m", "5m", "15m", "30m", "4h"])
     mtf_use_daily_filter: bool = False   # enable after daily is Optuna-optimised
     mtf_daily_timeframe: str = "1d"
     mtf_m30_timeframe: str = "30m"
@@ -489,8 +489,8 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         meta_tech_delta=-0.05,
         meta_sent_delta=+0.00,
         meta_macro_delta=+0.05,
-        meta_buy_threshold=0.10,
-        meta_sell_threshold=-0.10,
+        meta_buy_threshold=0.05,
+        meta_sell_threshold=-0.05,
         quality_final_mult=1.00,
         quality_tech_mult=1.00,
         allow_longs=True,
@@ -770,8 +770,8 @@ def load_config() -> BotConfig:
         meta_weight_technical=_env_float("HOGAN_META_WEIGHT_TECH", "0.55"),
         meta_weight_sentiment=_env_float("HOGAN_META_WEIGHT_SENT", "0.25"),
         meta_weight_macro=_env_float("HOGAN_META_WEIGHT_MACRO", "0.20"),
-        meta_buy_threshold=_env_float("HOGAN_META_BUY_THRESHOLD", "0.25"),
-        meta_sell_threshold=_env_float("HOGAN_META_SELL_THRESHOLD", "-0.25"),
+        meta_buy_threshold=_env_float("HOGAN_META_BUY_THRESHOLD", "0.08"),
+        meta_sell_threshold=_env_float("HOGAN_META_SELL_THRESHOLD", "-0.08"),
         use_regime_detection=os.getenv("HOGAN_USE_REGIME_DETECTION", "true").lower() == "true",
         regime_adx_trending=_env_float("HOGAN_REGIME_ADX_TRENDING", "25.0"),
         regime_adx_ranging=_env_float("HOGAN_REGIME_ADX_RANGING", "20.0"),
@@ -803,7 +803,7 @@ def load_config() -> BotConfig:
         ),
         use_mtf_extended=os.getenv("HOGAN_USE_MTF_EXTENDED", "true").lower() == "true",
         use_mtf_ensemble=os.getenv("HOGAN_USE_MTF_ENSEMBLE", "false").lower() == "true",
-        mtf_timeframes=os.getenv("HOGAN_MTF_TIMEFRAMES", "1m,5m,15m,30m,3h").split(","),
+        mtf_timeframes=os.getenv("HOGAN_MTF_TIMEFRAMES", "1m,5m,15m,30m,4h").split(","),
         mtf_use_daily_filter=os.getenv("HOGAN_MTF_USE_DAILY_FILTER", "false").lower() == "true",
         mtf_daily_timeframe=os.getenv("HOGAN_MTF_DAILY_TF", "1d"),
         mtf_m30_timeframe=os.getenv("HOGAN_MTF_M30_TF", "30m"),

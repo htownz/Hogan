@@ -493,8 +493,9 @@ def decide(
     mtf_conf_scale = 1.0
     mtf_size_scale = 1.0
     if mtf_candles and action != "hold":
-        # 3h trend alignment: penalise signals that disagree with 3h trend
-        _candles_3h = mtf_candles.get("3h")
+        # Higher-TF trend alignment: penalise signals that disagree with trend
+        _c4h = mtf_candles.get("4h")
+        _candles_3h = _c4h if _c4h is not None else mtf_candles.get("3h")
         if _candles_3h is not None and len(_candles_3h) >= 20:
             try:
                 _h3_close = _candles_3h["close"].astype(float)

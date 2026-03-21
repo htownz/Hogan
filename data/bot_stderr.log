@@ -1,0 +1,64 @@
+2026-03-21 15:56:46,912 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-21 15:56:46,913 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-21 15:56:46,913 INFO CHAMPION_MODE: overriding use_online_learning = True -> False
+2026-03-21 15:56:46,914 INFO CHAMPION_MODE: overriding min_final_confidence = 0.15 -> 0.08
+2026-03-21 15:56:46,914 INFO CHAMPION_MODE: overriding min_tech_confidence = 0.1 -> 0.15
+2026-03-21 15:56:46,915 INFO CHAMPION_MODE: overriding min_regime_confidence = 0.2 -> 0.3
+2026-03-21 15:56:46,915 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 24.0
+2026-03-21 15:56:46,915 INFO Champion mode applied — 7 overrides
+2026-03-21 15:56:46,922 INFO Sweep results applied: trailing_stop=0.025 take_profit=0.054 (from diagnostics/exit_sweep_results.json)
+2026-03-21 15:56:46,931 INFO FETCH_ORCHESTRATOR: starting data refresh (backfill=False, symbols=['BTC/USD'])
+2026-03-21 15:56:47,127 INFO FETCH feargreed: 1 rows
+2026-03-21 15:56:47,972 INFO FETCH derivatives BTC/USD: {'funding_rate': 1, 'open_interest_pct_change': 1}
+2026-03-21 15:56:50,704 INFO Macro candles: wrote 30 1d rows for SPY/USD (S&P 500 ETF)
+2026-03-21 15:56:50,846 INFO Macro candles: wrote 49 1h rows for SPY/USD (S&P 500 ETF)
+2026-03-21 15:56:51,116 INFO Macro candles: wrote 30 1d rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-21 15:56:51,413 INFO Macro candles: wrote 49 1h rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-21 15:56:51,629 INFO Macro candles: wrote 30 1d rows for GLD/USD (Gold ETF)
+2026-03-21 15:56:51,754 INFO Macro candles: wrote 49 1h rows for GLD/USD (Gold ETF)
+2026-03-21 15:56:51,919 INFO Macro candles: wrote 30 1d rows for SLV/USD (Silver ETF)
+2026-03-21 15:56:52,083 INFO Macro candles: wrote 49 1h rows for SLV/USD (Silver ETF)
+2026-03-21 15:56:52,283 INFO Macro candles: wrote 30 1d rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-21 15:56:52,535 INFO Macro candles: wrote 49 1h rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-21 15:56:52,719 INFO Macro candles: wrote 30 1d rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-21 15:56:52,894 INFO Macro candles: wrote 49 1h rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-21 15:56:53,100 INFO Macro candles: wrote 29 1d rows for VIX/USD (CBOE Volatility Index)
+2026-03-21 15:56:53,340 INFO Macro candles: wrote 98 1h rows for VIX/USD (CBOE Volatility Index)
+2026-03-21 15:56:53,492 INFO Macro candles: wrote 29 1d rows for TNX/USD (10-Year Treasury Yield)
+2026-03-21 15:56:53,685 INFO Macro candles: wrote 49 1h rows for TNX/USD (10-Year Treasury Yield)
+2026-03-21 15:56:53,685 INFO Macro candle backfill complete: 679 rows across 16 series
+2026-03-21 15:56:53,685 INFO FETCH macro_candles: {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 29, 'VIX/USD_1h': 98, 'TNX/USD_1d': 29, 'TNX/USD_1h': 49}
+2026-03-21 15:56:53,848 WARNING FETCH news_sentiment failed: HTTP 403 fetching CryptoPanic page 1
+2026-03-21 15:56:54,309 INFO FETCH gpr: 15034
+2026-03-21 15:56:54,309 INFO FETCH_ORCHESTRATOR: done in 7.4s — 4 OK, 1 failed, 4 skipped
+2026-03-21 15:56:54,309 INFO Startup data fetch complete: {'feargreed': 1, 'derivatives_BTC/USD': {'funding_rate': 1, 'open_interest_pct_change': 1}, 'macro_candles': {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 29, 'VIX/USD_1h': 98, 'TNX/USD_1d': 29, 'TNX/USD_1h': 49}, 'news_sentiment': 'ERROR: HTTP 403 fetching CryptoPanic page 1', 'gpr': 15034}
+2026-03-21 15:56:54,309 INFO RESTORE: loaded last cash balance 9997.80 from DB (seed was 10000.00)
+2026-03-21 15:56:54,309 INFO Paper mode with realistic fills (slip=5.0bps spread=3.0bps)
+2026-03-21 15:56:55,226 INFO Loaded ML model from models/hogan_champion.pkl
+2026-03-21 15:56:55,242 INFO MacroSitout: loaded 2963 Fear & Greed records
+2026-03-21 15:56:55,256 INFO MacroSitout: loaded 3612 VIX hourly records
+2026-03-21 15:56:55,256 INFO Macro sitout filter enabled (greed-only scaling)
+2026-03-21 15:56:55,267 INFO FundingOverlay: loaded 8822 hourly records
+2026-03-21 15:56:55,267 INFO Funding rate overlay enabled
+2026-03-21 15:56:55,279 INFO PerformanceTracker restored 0 trades across 0 regimes from DB snapshot
+2026-03-21 15:56:55,280 INFO PerformanceTracker restored state from DB snapshot
+2026-03-21 15:56:55,288 INFO WF failure response: 2/5 windows positive \u2192 scale=0.70
+2026-03-21 15:56:55,288 INFO WF failure scale applied: 0.70
+2026-03-21 15:56:55,314 INFO MTF candle subscriptions: ['1h', '15m', '30m'] (primary=1h)
+2026-03-21 15:56:55,314 INFO Event loop starting: mode=PAPER symbols=BTC/USD timeframe=1h
+2026-03-21 15:56:55,314 INFO STARTUP SUMMARY: balance=10000.00 max_dd=20.0% risk/trade=1.5% trailing_stop=2.5% take_profit=5.4% ML=ON swarm=ON regime=ON policy_core=ON online_learn=OFF
+2026-03-21 15:56:55,315 INFO HOGAN_USE_REST_DATA=1 — using REST polling (WebSocket disabled).
+2026-03-21 15:56:55,317 INFO REST polling active: kraken ['BTC/USD'] every 30s
+2026-03-21 15:56:57,668 INFO REST warmup: BTC/USD/1h loaded 200 candles
+2026-03-21 15:56:58,865 INFO REST warmup: BTC/USD/15m loaded 200 candles
+2026-03-21 15:57:00,073 INFO REST warmup: BTC/USD/30m loaded 200 candles
+2026-03-21 15:57:03,677 INFO Loaded per-symbol config for BTC/USD/1h (16 overrides, sharpe=1.20)
+2026-03-21 15:57:03,702 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 15:57:03,707 WARNING Failed to load models\forecast_4h.pkl: No module named 'lightgbm'
+2026-03-21 15:57:03,707 WARNING Failed to load models\forecast_12h.pkl: No module named 'lightgbm'
+2026-03-21 15:57:03,708 WARNING Failed to load models\forecast_24h.pkl: No module named 'lightgbm'
+2026-03-21 16:00:19,132 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:00:19,280 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:00:19,382 INFO MTF_EVAL BTC/USD/15m \u2192 hold (size scaled 0.60x for sub-hour eval)
+2026-03-21 16:00:19,405 WARNING MACRO stale feeds: SPY, QQQ, UUP, VIX, GLD — returning neutral to avoid stale signals
+2026-03-21 16:00:19,508 INFO MTF_EVAL BTC/USD/30m \u2192 hold (size scaled 0.70x for sub-hour eval)

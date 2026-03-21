@@ -167,7 +167,7 @@ def evaluate_macro(
         if _is_stale(_df):
             stale_feeds.append(_name)
     if stale_feeds:
-        logger.warning(
+        logger.debug(
             "MACRO stale feeds: %s — returning neutral to avoid stale signals",
             ", ".join(stale_feeds),
         )

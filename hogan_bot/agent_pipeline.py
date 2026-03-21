@@ -128,8 +128,9 @@ class TechnicalAgent:
         total_votes = 0
         atr_pct = 0.01
 
-        # 3h trend: SMA(10) slope
-        c3h = mtf_candles.get("3h")
+        # Higher-TF trend: SMA(10) slope (prefer 4h, fall back to 3h)
+        _c4h = mtf_candles.get("4h")
+        c3h = _c4h if _c4h is not None else mtf_candles.get("3h")
         if c3h is not None and len(c3h) >= 12:
             close_3h = c3h["close"].astype(float)
             sma_3h = close_3h.rolling(10).mean()
@@ -705,9 +706,23 @@ class MetaWeigher:
             rag_win_rate = float(rag_context.get("similar_win_rate", 0.5))
             rag_boost = (rag_win_rate - 0.5) * 0.2
 
+        # Cap sentiment opposition: when sentiment directly opposes the tech
+        # signal, limit its effective contribution so a single stale/contrarian
+        # sentiment reading can't fully negate a price-action-based signal.
+        _eff_sent_score = sent_score
+        _tech_sent_oppose = (tech_score > 0 and sent_score < 0) or (tech_score < 0 and sent_score > 0)
+        if _tech_sent_oppose and tech.action != "hold":
+            _max_opposition = abs(tech_score) * 0.50
+            if abs(sent_score) > _max_opposition:
+                _eff_sent_score = -_max_opposition if sent_score < 0 else _max_opposition
+                logger.debug(
+                    "META_WEIGHER: capping sentiment opposition %.3f -> %.3f (tech_score=%.3f)",
+                    sent_score, _eff_sent_score, tech_score,
+                )
+
         raw_score = (
             w["technical"] * tech_score
-            + w["sentiment"] * sent_score
+            + w["sentiment"] * _eff_sent_score
             + w["macro"] * macro_score
             + rag_boost
         )
@@ -719,7 +734,7 @@ class MetaWeigher:
         # strong non-tech consensus can still produce entries.
         if tech.action == "hold" and tech.confidence > 0.3:
             hold_dampen = 1.0 - (tech.confidence * w["technical"] * 2.0)
-            _non_tech_agree = (sent_score > 0 and macro_score > 0) or (sent_score < 0 and macro_score < 0)
+            _non_tech_agree = (_eff_sent_score > 0 and macro_score > 0) or (_eff_sent_score < 0 and macro_score < 0)
             _dampen_floor = 0.4 if _non_tech_agree else 0.2
             hold_dampen = max(_dampen_floor, hold_dampen)
             raw_score *= hold_dampen

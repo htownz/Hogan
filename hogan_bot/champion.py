@@ -57,12 +57,12 @@ class ChampionLocks:
     exit_confirmation_bars: int = 2
     min_edge_multiple: float = 1.5
 
-    # Entry quality gate thresholds — tuned for single-agent contribution
-    # (sentiment/macro are usually neutral in practice, so the combined
-    # confidence from MetaWeigher is naturally lower than with 3 agents).
-    min_final_confidence: float = 0.08
-    min_tech_confidence: float = 0.15
-    min_regime_confidence: float = 0.30
+    # Entry quality gate thresholds — lowered to allow mixed-signal trades
+    # through. Sentiment often opposes tech, tanking combined confidence;
+    # the quality gate and sizing already scale positions down for weak signals.
+    min_final_confidence: float = 0.04
+    min_tech_confidence: float = 0.10
+    min_regime_confidence: float = 0.20
     max_whipsaws: int = 3
     reversal_confidence_multiplier: float = 1.3
 
