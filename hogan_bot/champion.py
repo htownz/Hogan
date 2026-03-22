@@ -60,9 +60,9 @@ class ChampionLocks:
     # Entry quality gate thresholds — lowered to allow mixed-signal trades
     # through. Sentiment often opposes tech, tanking combined confidence;
     # the quality gate and sizing already scale positions down for weak signals.
-    min_final_confidence: float = 0.04
-    min_tech_confidence: float = 0.10
-    min_regime_confidence: float = 0.20
+    min_final_confidence: float = 0.12
+    min_tech_confidence: float = 0.15
+    min_regime_confidence: float = 0.30
     max_whipsaws: int = 3
     reversal_confidence_multiplier: float = 1.3
 

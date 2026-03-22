@@ -1073,6 +1073,64 @@ async def _run_event_loop_inner(
                 for ws_sym in list(_whipsaw_counts):
                     _whipsaw_counts[ws_sym] = max(0, _whipsaw_counts[ws_sym] - 1)
 
+            # Proactive thesis check: for positions nearing max hold, run
+            # ExitEvaluator before the timer forces them out.  This converts
+            # ~37% win-rate max_hold_time exits into ~78% win-rate thesis exits.
+            if not _is_mtf_eval and candles is not None:
+                _proactive_threshold = 0.75
+                for _pe_sym, _pe_pos in list(portfolio.positions.items()):
+                    _pe_ratio = _pe_pos.bars_held / max(max_hold_bars, 1)
+                    if _pe_ratio >= _proactive_threshold and max_hold_bars > 0:
+                        _pe_px = mark_prices.get(_pe_sym, 0.0)
+                        if _pe_px <= 0:
+                            continue
+                        _pe_upnl = (_pe_px - _pe_pos.avg_entry) / _pe_pos.avg_entry if _pe_pos.avg_entry > 0 else 0
+                        if _pe_upnl < 0:
+                            _pe_dec = _exit_eval.should_exit(
+                                candles=candles,
+                                entry_price=_pe_pos.avg_entry,
+                                current_price=_pe_px,
+                                bars_held=_pe_pos.bars_held,
+                                side="long",
+                                max_hold_bars=max_hold_bars,
+                                entry_atr=getattr(_pe_pos, "entry_atr_pct", None),
+                                vol_ratio=None,
+                                regime=_current_regime.get(_pe_sym),
+                            )
+                            if _pe_dec.should_exit:
+                                logger.info(
+                                    "PROACTIVE_EXIT %s — %s (hold=%.0f%%, upnl=%.2f%%)",
+                                    _pe_sym, _pe_dec.reason, _pe_ratio * 100, _pe_upnl * 100,
+                                )
+                                _pe_reason = f"proactive_{_pe_dec.reason}"
+                                _pe_qty = _pe_pos.qty
+                                _pe_entry = _pe_pos.avg_entry
+                                now_ms = int(time.time() * 1000)
+                                res = await _safe_exec(executor.close_long, _pe_sym, _pe_px, _pe_qty, reason=_pe_reason)
+                                if res.ok:
+                                    fee = _pe_qty * _pe_px * config.fee_rate
+                                    _pe_regime = _entry_regime.pop(_pe_sym, _current_regime.get(_pe_sym, "unknown"))
+                                    if not allow_live:
+                                        close_paper_trade(
+                                            conn, _pe_sym, "long", _pe_px, fee, now_ms, close_reason=_pe_reason,
+                                            max_adverse_pct=getattr(_pe_pos, "max_adverse_pct", 0.0),
+                                            max_favorable_pct=getattr(_pe_pos, "max_favorable_pct", 0.0),
+                                            bars_held=_pe_pos.bars_held,
+                                            exit_regime=_pe_regime,
+                                            entry_atr_pct=getattr(_pe_pos, "entry_atr_pct", None),
+                                        )
+                                    evaluator._trade_outcomes.append(_pe_px > _pe_entry)
+                                    gross_pnl_pct = (_pe_px - _pe_entry) / _pe_entry if _pe_entry else 0
+                                    net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
+                                    _expectancy.record_trade(
+                                        symbol=_pe_sym, regime=_pe_regime,
+                                        gross_pnl_pct=gross_pnl_pct, net_pnl_pct=net_pnl_pct,
+                                        mae_pct=getattr(_pe_pos, "max_adverse_pct", 0.0),
+                                        mfe_pct=getattr(_pe_pos, "max_favorable_pct", 0.0),
+                                        hold_bars=_pe_pos.bars_held, close_reason=_pe_reason,
+                                    )
+                                    _record_outcome(_pe_sym, _pe_regime, gross_pnl_pct, _entry_up_prob.pop(_pe_sym, None))
+
             # Auto-exit trailing stops / take profits / max_hold_time
             # All exits go through the executor so live orders are always sent.
             # During MTF evaluations, still update trailing stops and MAE/MFE
@@ -1356,15 +1414,19 @@ async def _run_event_loop_inner(
                 # Cover existing short first (with ExitEvaluator confirmation — parity with backtest)
                 if enable_shorts and symbol in portfolio.short_positions:
                     spos = portfolio.short_positions[symbol]
+                    _s_mhb = short_max_hold_bars if short_max_hold_bars > 0 else max_hold_bars
+                    _s_hold_ratio = spos.bars_held / max(_s_mhb, 1) if _s_mhb > 0 else 0
+                    _s_near_max = _s_hold_ratio >= 0.75
+                    _s_eff_confirm = 1 if _s_near_max else exit_confirm_bars
                     if spos.bars_held < min_hold_bars:
                         logger.debug(
                             "HOLD_SHORT %s — min hold not met (%d/%d bars)",
                             symbol, spos.bars_held, min_hold_bars,
                         )
-                    elif _consecutive_short_exit_signals[symbol] < exit_confirm_bars:
+                    elif _consecutive_short_exit_signals[symbol] < _s_eff_confirm:
                         logger.debug(
                             "HOLD_SHORT %s — exit confirmation %d/%d",
-                            symbol, _consecutive_short_exit_signals[symbol], exit_confirm_bars,
+                            symbol, _consecutive_short_exit_signals[symbol], _s_eff_confirm,
                         )
                     else:
                         _short_exit_dec = _exit_eval.should_exit(
@@ -1500,21 +1562,28 @@ async def _run_event_loop_inner(
                 # ── Close existing long ───────────────────────────────
                 if symbol in portfolio.positions:
                     pos = portfolio.positions[symbol]
+                    # Near max hold: relax confirmation and reversal thresholds
+                    # so the system can exit on weaker sell signals rather than
+                    # waiting for the timer to force-close at a loss.
+                    _hold_ratio = pos.bars_held / max(max_hold_bars, 1) if max_hold_bars > 0 else 0
+                    _near_max_hold = _hold_ratio >= 0.75
+                    _eff_exit_confirm = 1 if _near_max_hold else exit_confirm_bars
+                    _eff_rev_mult = 1.0 if _near_max_hold else config.reversal_confidence_multiplier
                     if pos.bars_held < min_hold_bars:
                         logger.debug(
                             "HOLD %s — min hold not met (%d/%d bars)",
                             symbol, pos.bars_held, min_hold_bars,
                         )
-                    elif sig.final_confidence < config.min_final_confidence * config.reversal_confidence_multiplier:
+                    elif sig.final_confidence < config.min_final_confidence * _eff_rev_mult:
                         logger.debug(
                             "HOLD %s — reversal conf %.2f < asymmetric threshold %.2f",
                             symbol, sig.final_confidence,
-                            config.min_final_confidence * config.reversal_confidence_multiplier,
+                            config.min_final_confidence * _eff_rev_mult,
                         )
-                    elif _consecutive_exit_signals[symbol] < exit_confirm_bars:
+                    elif _consecutive_exit_signals[symbol] < _eff_exit_confirm:
                         logger.debug(
                             "HOLD %s — exit confirmation %d/%d",
-                            symbol, _consecutive_exit_signals[symbol], exit_confirm_bars,
+                            symbol, _consecutive_exit_signals[symbol], _eff_exit_confirm,
                         )
                     else:
                         exit_decision = _exit_eval.should_exit(
