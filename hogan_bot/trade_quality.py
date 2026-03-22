@@ -222,8 +222,8 @@ def generate_training_data(
     )
     result = run_backtest_on_candles(candles, **_bt_kwargs)
 
-    from hogan_bot.backtest import enrich_closed_trades
-    enrich_closed_trades(result.closed_trades, candles)
+    from hogan_bot.backtest import enrich_trades_with_entry_context
+    enrich_trades_with_entry_context(candles, result.closed_trades)
 
     return _trades_to_dataset(result.closed_trades)
 
@@ -438,8 +438,8 @@ def walk_forward_validate(
             use_policy_core=True,
         )
         train_result = run_backtest_on_candles(train_candles, **_bt_kwargs)
-        from hogan_bot.backtest import enrich_closed_trades
-        enrich_closed_trades(train_result.closed_trades, train_candles)
+        from hogan_bot.backtest import enrich_trades_with_entry_context
+        enrich_trades_with_entry_context(train_candles, train_result.closed_trades)
 
         train_data = _trades_to_dataset(train_result.closed_trades)
         if train_data is None:
@@ -464,7 +464,7 @@ def walk_forward_validate(
         model.fit(X_train, y_train)
 
         test_result = run_backtest_on_candles(test_candles, **_bt_kwargs)
-        enrich_closed_trades(test_result.closed_trades, test_candles)
+        enrich_trades_with_entry_context(test_candles, test_result.closed_trades)
 
         test_trades = [t for t in test_result.closed_trades
                        if t.get("entry_bar_idx", 0) >= train_end]
