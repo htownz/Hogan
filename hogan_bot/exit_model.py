@@ -221,15 +221,33 @@ class ExitEvaluator:
                 urgency=min(1.0, hold_ratio + _urgency_ramp * 0.2),
             )
 
-        # 3b. Position decay: after 75% hold, exit even marginally profitable trades
-        if hold_ratio > 0.75 and 0.0 <= upnl_pct < 0.005:
-            logger.debug("EXIT_MODEL: position decay (held %.0f%%, upnl=%.3f — marginal profit, closing)",
-                         hold_ratio * 100, upnl_pct)
+        # 3b. Position decay: after 75% hold, exit marginal-profit trades
+        # Fee round-trip ~0.2% for BTC, so 0.8% threshold gives ~0.6% net.
+        _decay_thresh = 0.008 - _urgency_ramp * 0.003  # tightens from 0.8% to 0.5% at max hold
+        if hold_ratio > 0.75 and 0.0 <= upnl_pct < _decay_thresh:
+            logger.debug("EXIT_MODEL: position decay (held %.0f%%, upnl=%.3f < %.3f — marginal profit, closing)",
+                         hold_ratio * 100, upnl_pct, _decay_thresh)
             return ExitDecision(
                 should_exit=True,
                 reason="position_decay",
                 urgency=hold_ratio,
             )
+
+        # 3c. Give-back protection: if trade had a good run (MFE > 1.5%)
+        # but has given back more than 60% of peak profit, exit to lock in gains.
+        if max_favorable_pct > 0.015 and upnl_pct > 0:
+            _giveback_ratio = 1.0 - (upnl_pct / max_favorable_pct)
+            _giveback_thresh = max(0.40, 0.60 - _urgency_ramp * 0.20)  # 60% give-back at base, 40% at max urgency
+            if _giveback_ratio > _giveback_thresh:
+                logger.debug(
+                    "EXIT_MODEL: give-back (mfe=%.3f, upnl=%.3f, given_back=%.0f%%, thresh=%.0f%%)",
+                    max_favorable_pct, upnl_pct, _giveback_ratio * 100, _giveback_thresh * 100,
+                )
+                return ExitDecision(
+                    should_exit=True,
+                    reason="give_back",
+                    urgency=min(1.0, _giveback_ratio),
+                )
 
         # 4a. Volatility expansion (longs): regime changed dramatically
         # 4b. Volatility contraction (shorts): vol is dying, thesis weakening

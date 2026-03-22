@@ -1164,6 +1164,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         bar_ts = str(window["timestamp"].iloc[-1]) if "timestamp" in window.columns else str(i)
         # Open of current bar (for next_open fills from previous bar's signal)
         open_px = float(window["open"].iloc[-1]) if "open" in window.columns else px
+        _bar_spread_est = estimate_spread_from_candles(window)
 
         if _cooldown_remaining > 0:
             _cooldown_remaining -= 1
@@ -1320,10 +1321,12 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     _ge_reason = f"proactive_{_ge_dec.reason}"
                     _ge_qty = _ge_pos.qty
                     _ge_entry = _ge_pos.avg_entry
+                    _ge_mae = getattr(_ge_pos, "max_adverse_pct", 0.0)
+                    _ge_mfe = getattr(_ge_pos, "max_favorable_pct", 0.0)
                     _ge_entry_bar = _entry_bar.get(_ge_sym)
                     sell_px = px * (1.0 - slip_mult)
-                    _entry_bar.pop(_ge_sym, None)
                     if portfolio.execute_sell(_ge_sym, sell_px, _ge_qty):
+                        _entry_bar.pop(_ge_sym, None)
                         trades += 1
                         closed += 1
                         is_win = sell_px > _ge_entry
@@ -1340,6 +1343,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             gross_pnl_pct=gross_pct, net_pnl_pct=gross_pct - 2 * fee_rate,
                             hold_bars=(i - 1 - _ge_entry_bar) if _ge_entry_bar is not None else 0,
                             close_reason=_ge_reason,
+                            mae_pct=_ge_mae, mfe_pct=_ge_mfe,
                         )
                         if _ge_entry_bar is not None:
                             exit_bar_idx = min(i - 1, len(candles) - 1)
@@ -1380,10 +1384,12 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     _ge_s_reason = f"proactive_{_ge_s_dec.reason}"
                     _ge_s_qty = _ge_spos.qty
                     _ge_s_entry = _ge_spos.avg_entry
+                    _ge_s_mae = getattr(_ge_spos, "max_adverse_pct", 0.0)
+                    _ge_s_mfe = getattr(_ge_spos, "max_favorable_pct", 0.0)
                     _ge_s_entry_bar = _short_entry_bar.get(_ge_sym)
                     cover_px = px * (1.0 + slip_mult)
-                    _short_entry_bar.pop(_ge_sym, None)
                     if portfolio.execute_cover(_ge_sym, cover_px, _ge_s_qty):
+                        _short_entry_bar.pop(_ge_sym, None)
                         trades += 1
                         short_closed += 1
                         is_win = cover_px < _ge_s_entry
@@ -1400,6 +1406,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             gross_pnl_pct=gross_pct, net_pnl_pct=gross_pct - 2 * fee_rate,
                             hold_bars=(i - 1 - _ge_s_entry_bar) if _ge_s_entry_bar is not None else 0,
                             close_reason=_ge_s_reason,
+                            mae_pct=_ge_s_mae, mfe_pct=_ge_s_mfe,
                         )
                         if _ge_s_entry_bar is not None:
                             exit_bar_idx = min(i - 1, len(candles) - 1)
@@ -1951,6 +1958,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                                     "momentum_scale": _momentum_scale if "_momentum_scale" in dir() else 1.0,
                                     "conf_scale": conf_scale if "conf_scale" in dir() else 1.0,
                                     "whipsaw_count": _whipsaw_count,
+                                    "spread_est": _bar_spread_est,
                                     "side": "long",
                                 }
                                 trade_log.append({
@@ -2115,6 +2123,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     "momentum_scale": _momentum_scale,
                     "conf_scale": conf_scale,
                     "whipsaw_count": _whipsaw_count,
+                    "spread_est": _bar_spread_est,
                     "side": "long",
                 }
             else:
@@ -2149,6 +2158,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         "momentum_scale": _momentum_scale,
                         "conf_scale": conf_scale,
                         "whipsaw_count": _whipsaw_count,
+                        "spread_est": _bar_spread_est,
                         "side": "long",
                     }
                     trade_log.append(
@@ -2290,6 +2300,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                         "momentum_scale": _momentum_scale,
                         "conf_scale": conf_scale,
                         "whipsaw_count": _whipsaw_count,
+                        "spread_est": _bar_spread_est,
                         "side": "short",
                     }
                 else:
@@ -2324,6 +2335,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                             "momentum_scale": _momentum_scale,
                             "conf_scale": conf_scale,
                             "whipsaw_count": _whipsaw_count,
+                            "spread_est": _bar_spread_est,
                             "side": "short",
                         }
                         trade_log.append(

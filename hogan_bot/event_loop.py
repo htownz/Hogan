@@ -1159,52 +1159,52 @@ async def _run_event_loop_inner(
                         if _pe_px <= 0:
                             continue
                         _pe_upnl = (_pe_px - _pe_pos.avg_entry) / _pe_pos.avg_entry if _pe_pos.avg_entry > 0 else 0
-                        if True:  # always evaluate; ExitEvaluator handles urgency graduation
-                            _pe_dec = _exit_eval.should_exit(
-                                candles=candles,
-                                entry_price=_pe_pos.avg_entry,
-                                current_price=_pe_px,
-                                bars_held=_pe_pos.bars_held,
-                                side="long",
-                                max_hold_bars=max_hold_bars,
-                                entry_atr=getattr(_pe_pos, "entry_atr_pct", None),
-                                vol_ratio=None,
-                                regime=_current_regime.get(_pe_sym),
+                        _pe_dec = _exit_eval.should_exit(
+                            candles=candles,
+                            entry_price=_pe_pos.avg_entry,
+                            current_price=_pe_px,
+                            bars_held=_pe_pos.bars_held,
+                            side="long",
+                            max_hold_bars=max_hold_bars,
+                            entry_atr=getattr(_pe_pos, "entry_atr_pct", None),
+                            vol_ratio=None,
+                            regime=_current_regime.get(_pe_sym),
+                            max_favorable_pct=getattr(_pe_pos, "max_favorable_pct", 0.0),
+                        )
+                        if _pe_dec.should_exit:
+                            logger.info(
+                                "PROACTIVE_EXIT %s — %s (hold=%.0f%%, upnl=%.2f%%)",
+                                _pe_sym, _pe_dec.reason, _pe_ratio * 100, _pe_upnl * 100,
                             )
-                            if _pe_dec.should_exit:
-                                logger.info(
-                                    "PROACTIVE_EXIT %s — %s (hold=%.0f%%, upnl=%.2f%%)",
-                                    _pe_sym, _pe_dec.reason, _pe_ratio * 100, _pe_upnl * 100,
-                                )
-                                _pe_reason = f"proactive_{_pe_dec.reason}"
-                                _pe_qty = _pe_pos.qty
-                                _pe_entry = _pe_pos.avg_entry
-                                now_ms = int(time.time() * 1000)
-                                res = await _safe_exec(executor.close_long, _pe_sym, _pe_px, _pe_qty, reason=_pe_reason)
-                                if res.ok:
-                                    fee = _pe_qty * _pe_px * config.fee_rate
-                                    _pe_regime = _entry_regime.pop(_pe_sym, _current_regime.get(_pe_sym, "unknown"))
-                                    if not allow_live:
-                                        close_paper_trade(
-                                            conn, _pe_sym, "long", _pe_px, fee, now_ms, close_reason=_pe_reason,
-                                            max_adverse_pct=getattr(_pe_pos, "max_adverse_pct", 0.0),
-                                            max_favorable_pct=getattr(_pe_pos, "max_favorable_pct", 0.0),
-                                            bars_held=_pe_pos.bars_held,
-                                            exit_regime=_pe_regime,
-                                            entry_atr_pct=getattr(_pe_pos, "entry_atr_pct", None),
-                                        )
-                                    evaluator._trade_outcomes.append(_pe_px > _pe_entry)
-                                    gross_pnl_pct = (_pe_px - _pe_entry) / _pe_entry if _pe_entry else 0
-                                    net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
-                                    _expectancy.record_trade(
-                                        symbol=_pe_sym, regime=_pe_regime,
-                                        gross_pnl_pct=gross_pnl_pct, net_pnl_pct=net_pnl_pct,
-                                        mae_pct=getattr(_pe_pos, "max_adverse_pct", 0.0),
-                                        mfe_pct=getattr(_pe_pos, "max_favorable_pct", 0.0),
-                                        hold_bars=_pe_pos.bars_held, close_reason=_pe_reason,
+                            _pe_reason = f"proactive_{_pe_dec.reason}"
+                            _pe_qty = _pe_pos.qty
+                            _pe_entry = _pe_pos.avg_entry
+                            now_ms = int(time.time() * 1000)
+                            res = await _safe_exec(executor.close_long, _pe_sym, _pe_px, _pe_qty, reason=_pe_reason)
+                            if res.ok:
+                                fee = _pe_qty * _pe_px * config.fee_rate
+                                _pe_regime = _entry_regime.pop(_pe_sym, _current_regime.get(_pe_sym, "unknown"))
+                                if not allow_live:
+                                    close_paper_trade(
+                                        conn, _pe_sym, "long", _pe_px, fee, now_ms, close_reason=_pe_reason,
+                                        max_adverse_pct=getattr(_pe_pos, "max_adverse_pct", 0.0),
+                                        max_favorable_pct=getattr(_pe_pos, "max_favorable_pct", 0.0),
+                                        bars_held=_pe_pos.bars_held,
+                                        exit_regime=_pe_regime,
+                                        entry_atr_pct=getattr(_pe_pos, "entry_atr_pct", None),
                                     )
-                                    _record_outcome(_pe_sym, _pe_regime, gross_pnl_pct, _entry_up_prob.pop(_pe_sym, None))
-                                    _label_for_online_learner(_pe_sym, gross_pnl_pct, _pe_pos.bars_held)
+                                evaluator._trade_outcomes.append(_pe_px > _pe_entry)
+                                gross_pnl_pct = (_pe_px - _pe_entry) / _pe_entry if _pe_entry else 0
+                                net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
+                                _expectancy.record_trade(
+                                    symbol=_pe_sym, regime=_pe_regime,
+                                    gross_pnl_pct=gross_pnl_pct, net_pnl_pct=net_pnl_pct,
+                                    mae_pct=getattr(_pe_pos, "max_adverse_pct", 0.0),
+                                    mfe_pct=getattr(_pe_pos, "max_favorable_pct", 0.0),
+                                    hold_bars=_pe_pos.bars_held, close_reason=_pe_reason,
+                                )
+                                _record_outcome(_pe_sym, _pe_regime, gross_pnl_pct, _entry_up_prob.pop(_pe_sym, None))
+                                _label_for_online_learner(_pe_sym, gross_pnl_pct, _pe_pos.bars_held)
 
                 # Graduated exit for shorts
                 for _pe_sym, _pe_spos in list(portfolio.short_positions.items()):
@@ -1671,6 +1671,7 @@ async def _run_event_loop_inner(
                             momentum_scale=_momentum_scale,
                             conf_scale=getattr(sig, "conf_scale", 1.0),
                             whipsaw_count=_whipsaw_count,
+                            spread_est=getattr(sig, "spread_est", 0.0),
                             side="long",
                         )
                         _tq_prob = predict_trade_quality(_tq_feats, _tq_model)
@@ -1876,6 +1877,7 @@ async def _run_event_loop_inner(
                             momentum_scale=1.0,
                             conf_scale=getattr(sig, "conf_scale", 1.0),
                             whipsaw_count=_whipsaw_count,
+                            spread_est=getattr(sig, "spread_est", 0.0),
                             side="short",
                         )
                         _tq_s_prob = predict_trade_quality(_tq_s_feats, _tq_model)

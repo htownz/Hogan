@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 GOOD_EXIT_REASONS = frozenset({
     "signal", "take_profit", "short_take_profit", "buy_signal",
+    "proactive_momentum_exhaustion", "proactive_give_back",
 })
 
 FEATURE_COLUMNS = [
@@ -52,6 +53,7 @@ FEATURE_COLUMNS = [
     "whipsaw_count",
     "local_range_position",
     "run_up_before_entry",
+    "spread_est",
     "regime_trending_up",
     "regime_trending_down",
     "regime_ranging",
@@ -89,6 +91,7 @@ def _build_feature_row_from_context(entry_context: dict, trade: dict) -> dict:
         "whipsaw_count": ctx.get("whipsaw_count", 0),
         "local_range_position": trade.get("local_range_position", 0.5),
         "run_up_before_entry": trade.get("run_up_before_entry", 0.0),
+        "spread_est": ctx.get("spread_est") or trade.get("spread_est", 0.0),
         "regime_trending_up": 1.0 if regime == "trending_up" else 0.0,
         "regime_trending_down": 1.0 if regime == "trending_down" else 0.0,
         "regime_ranging": 1.0 if regime == "ranging" else 0.0,
@@ -114,6 +117,7 @@ def build_feature_row_from_live(
     whipsaw_count: int = 0,
     local_range_position: float = 0.5,
     run_up_before_entry: float = 0.0,
+    spread_est: float = 0.0,
     side: str = "long",
 ) -> list[float]:
     """Build feature vector for live inference. Returns values in FEATURE_COLUMNS order."""
@@ -132,6 +136,7 @@ def build_feature_row_from_live(
         float(whipsaw_count),
         local_range_position,
         run_up_before_entry,
+        spread_est,
         1.0 if regime == "trending_up" else 0.0,
         1.0 if regime == "trending_down" else 0.0,
         1.0 if regime == "ranging" else 0.0,
@@ -186,8 +191,7 @@ def generate_training_data(
     except Exception:
         pass
 
-    result = run_backtest_on_candles(
-        candles,
+    _bt_kwargs = dict(
         symbol=symbol,
         starting_balance_usd=config.starting_balance_usd,
         aggressive_allocation=config.aggressive_allocation,
@@ -214,7 +218,12 @@ def generate_training_data(
         trail_activation_pct=config.trail_activation_pct,
         breakeven_stop_pct=getattr(config, "breakeven_stop_pct", 0.015),
         enable_pullback_gate=cli_ov.get("enable_pullback_gate", False),
+        use_policy_core=True,
     )
+    result = run_backtest_on_candles(candles, **_bt_kwargs)
+
+    from hogan_bot.backtest import enrich_closed_trades
+    enrich_closed_trades(result.closed_trades, candles)
 
     return _trades_to_dataset(result.closed_trades)
 
@@ -230,7 +239,12 @@ def _trades_to_dataset(
         if not ctx:
             continue
         close_reason = trade.get("close_reason", "unknown")
-        label = 1 if close_reason in GOOD_EXIT_REASONS else 0
+        pnl_pct = trade.get("pnl_pct", 0.0)
+        is_good_reason = close_reason in GOOD_EXIT_REASONS
+        is_proactive_profitable = (
+            close_reason.startswith("proactive_") and pnl_pct > 0.2
+        )
+        label = 1 if (is_good_reason or is_proactive_profitable) else 0
 
         features = _build_feature_row_from_context(ctx, trade)
         rows.append(features)
@@ -372,7 +386,7 @@ def walk_forward_validate(
     config, cli_ov = apply_profile(config, CANONICAL_PROFILE)
     config = apply_champion_mode(config)
 
-    _enable_shorts = cli_ov.get("enable_shorts", config.enable_shorts)
+    _enable_shorts = cli_ov.get("enable_shorts", getattr(config, "enable_shorts", True))
     _enable_pb = cli_ov.get("enable_pullback_gate", False)
 
     ml_model = None
@@ -421,8 +435,11 @@ def walk_forward_validate(
             trail_activation_pct=config.trail_activation_pct,
             breakeven_stop_pct=getattr(config, "breakeven_stop_pct", 0.015),
             enable_pullback_gate=_enable_pb,
+            use_policy_core=True,
         )
         train_result = run_backtest_on_candles(train_candles, **_bt_kwargs)
+        from hogan_bot.backtest import enrich_closed_trades
+        enrich_closed_trades(train_result.closed_trades, train_candles)
 
         train_data = _trades_to_dataset(train_result.closed_trades)
         if train_data is None:
@@ -447,9 +464,10 @@ def walk_forward_validate(
         model.fit(X_train, y_train)
 
         test_result = run_backtest_on_candles(test_candles, **_bt_kwargs)
+        enrich_closed_trades(test_result.closed_trades, test_candles)
 
         test_trades = [t for t in test_result.closed_trades
-                       if t.get("entry_bar_idx", 0) >= train_end - 100]
+                       if t.get("entry_bar_idx", 0) >= train_end]
         test_data = _trades_to_dataset(test_trades)
         if test_data is None:
             logger.warning("  [W%d] Insufficient test data", wi)
