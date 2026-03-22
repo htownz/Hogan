@@ -131,18 +131,23 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 ## Trade Quality Classifier
 - `hogan_bot/trade_quality.py` — replaces directional ML with setup quality prediction
 - Predicts whether a trade will exit profitably (signal/TP) vs bleed out (max_hold/trailing_stop)
-- 19 features from entry context: confidence, ATR, regime one-hot, quality/ranging/pullback scales, etc.
+- 20 features from entry context: confidence, ATR, spread_est, regime one-hot, quality/ranging/pullback scales, local_range_position, run_up_before_entry, etc.
+- Training enriches trades via `enrich_trades_with_entry_context` for local_range_position / run_up_before_entry
+- Labels: `GOOD_EXIT_REASONS` (signal, TP, buy_signal, proactive_momentum_exhaustion, proactive_give_back) + proactive exits with pnl > 0.2%
 - `HOGAN_USE_TRADE_QUALITY=true` enables in champion mode
+- Uses `use_policy_core=True` in training backtest for 10x speedup
 - Train: `python -m hogan_bot.trade_quality --db data/hogan.db --train`
 - Validate: `python -m hogan_bot.trade_quality --db data/hogan.db --validate`
 - Wired into event_loop.py: gates entries where quality_prob < threshold (0.40), scales position by probability
 
 ## Graduated Exit Urgency
-- ExitEvaluator (`exit_model.py`) now runs from bar 3 onward (not just at 75% of max hold)
+- ExitEvaluator (`exit_model.py`) runs from bar 3 onward (not just at 75% of max hold)
 - Thresholds loosen as `hold_ratio` grows: at 50% hold, thresholds begin easing; at 100%, they're halved
-- New `position_decay` exit: closes marginal-profit trades (0-0.5% PnL) after 75% of max hold
+- `position_decay` exit: closes marginal-profit trades (0-0.8% PnL, fee-aware) after 75% of max hold
+- `give_back` exit: closes when MFE > 1.5% but >60% of peak profit has been given back
 - Backtest and event_loop both run proactive graduated exits for longs and shorts
 - `max_hold_time` becomes a last-resort backstop, not the primary exit mechanism
+- Backtest proactive exits record MAE/MFE and only pop `_entry_bar` after confirmed execution
 
 ## Delayed Trailing Stop Activation
 - `trail_activation_pct` in `BotConfig` (default 0.5%) — minimum favorable excursion before trailing stop activates
