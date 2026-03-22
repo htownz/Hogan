@@ -140,8 +140,8 @@ def _train_regime_models(candles, args, db_conn, label_mode: str, global_metrics
 
     from hogan_bot.ml import (
         TrainedModel,
-        build_training_set,
         _make_cv_model,
+        build_training_set,
     )
     from hogan_bot.regime import detect_regime, reset_regime_history
 

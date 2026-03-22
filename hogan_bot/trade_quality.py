@@ -167,8 +167,8 @@ def generate_training_data(
 ) -> tuple[pd.DataFrame, pd.Series] | None:
     """Run a backtest and extract labeled training data from closed trades."""
     from hogan_bot.backtest import run_backtest_on_candles
-    from hogan_bot.config import load_config
     from hogan_bot.champion import apply_champion_mode
+    from hogan_bot.config import load_config
     from hogan_bot.ml import load_model
     from hogan_bot.profiles import CANONICAL_PROFILE, apply_profile
     from hogan_bot.storage import get_connection, load_candles
@@ -271,7 +271,13 @@ def train_trade_quality_model(
     model_path: str = DEFAULT_MODEL_PATH,
 ) -> dict:
     """Train a LightGBM trade quality classifier and save."""
-    from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
+    from sklearn.metrics import (
+        accuracy_score,
+        f1_score,
+        precision_score,
+        recall_score,
+        roc_auc_score,
+    )
     from sklearn.model_selection import train_test_split
 
     X_train, X_test, y_train, y_test = train_test_split(
@@ -367,13 +373,14 @@ def walk_forward_validate(
     For each window: train on past trades, predict on test trades,
     measure how well the model separates good from bad setups.
     """
+    from sklearn.metrics import roc_auc_score
+
     from hogan_bot.backtest import run_backtest_on_candles
-    from hogan_bot.config import load_config
     from hogan_bot.champion import apply_champion_mode
+    from hogan_bot.config import load_config
     from hogan_bot.ml import load_model
     from hogan_bot.profiles import CANONICAL_PROFILE, apply_profile
     from hogan_bot.storage import get_connection, load_candles
-    from sklearn.metrics import roc_auc_score
 
     conn = get_connection(db_path)
     candles = load_candles(conn, symbol, timeframe, limit=limit)

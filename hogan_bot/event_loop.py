@@ -726,8 +726,9 @@ async def _run_event_loop_inner(
 
         if ml_model is not None and getattr(config, "use_regime_models", False):
             try:
-                from hogan_bot.ml import RegimeModelRouter
                 from pathlib import Path as _Path
+
+                from hogan_bot.ml import RegimeModelRouter
                 _regime_dir = _Path(getattr(config, "regime_model_dir", "models/regime"))
                 _regime_models: dict[str, TrainedModel] = {}
                 if _regime_dir.is_dir():
@@ -1656,7 +1657,10 @@ async def _run_event_loop_inner(
                         logger.debug("CORR_SCALE %s — other positions %s, scale=%.2f", symbol, _other_syms, _corr_scale)
                     _tq_scale = 1.0
                     if _tq_model is not None:
-                        from hogan_bot.trade_quality import build_feature_row_from_live, predict_trade_quality
+                        from hogan_bot.trade_quality import (
+                            build_feature_row_from_live,
+                            predict_trade_quality,
+                        )
                         _tq_feats = build_feature_row_from_live(
                             tech_confidence=getattr(sig, "tech_confidence", 0.0),
                             final_confidence=getattr(sig, "final_confidence", 0.0),
@@ -1670,7 +1674,7 @@ async def _run_event_loop_inner(
                             pullback_scale=getattr(sig, "pullback_scale", 1.0),
                             momentum_scale=_momentum_scale,
                             conf_scale=getattr(sig, "conf_scale", 1.0),
-                            whipsaw_count=_whipsaw_count,
+                            whipsaw_count=getattr(sig, "whipsaw_count", 0),
                             spread_est=getattr(sig, "spread_est", 0.0),
                             side="long",
                         )
@@ -1862,7 +1866,10 @@ async def _run_event_loop_inner(
                         logger.debug("CORR_SCALE_SHORT %s — other positions %s, scale=%.2f", symbol, _other_short_syms, _corr_short_scale)
                     _tq_short_scale = 1.0
                     if _tq_model is not None:
-                        from hogan_bot.trade_quality import build_feature_row_from_live, predict_trade_quality
+                        from hogan_bot.trade_quality import (
+                            build_feature_row_from_live,
+                            predict_trade_quality,
+                        )
                         _tq_s_feats = build_feature_row_from_live(
                             tech_confidence=getattr(sig, "tech_confidence", 0.0),
                             final_confidence=getattr(sig, "final_confidence", 0.0),
@@ -1876,7 +1883,7 @@ async def _run_event_loop_inner(
                             pullback_scale=getattr(sig, "pullback_scale", 1.0),
                             momentum_scale=1.0,
                             conf_scale=getattr(sig, "conf_scale", 1.0),
-                            whipsaw_count=_whipsaw_count,
+                            whipsaw_count=getattr(sig, "whipsaw_count", 0),
                             spread_est=getattr(sig, "spread_est", 0.0),
                             side="short",
                         )

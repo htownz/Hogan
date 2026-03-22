@@ -1313,7 +1313,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     current_price=px, bars_held=_ge_pos.bars_held,
                     side="long", max_hold_bars=max_hold_bars,
                     entry_atr=getattr(_ge_pos, "entry_atr_pct", None),
-                    vol_ratio=signal.volume_ratio if hasattr(signal, "volume_ratio") else None,
+                    vol_ratio=None,
                     regime=_current_regime,
                     max_favorable_pct=getattr(_ge_pos, "max_favorable_pct", 0.0),
                 )
@@ -1376,7 +1376,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                     current_price=px, bars_held=_ge_spos.bars_held,
                     side="short", max_hold_bars=_ge_s_mhb,
                     entry_atr=getattr(_ge_spos, "entry_atr_pct", None),
-                    vol_ratio=signal.volume_ratio if hasattr(signal, "volume_ratio") else None,
+                    vol_ratio=None,
                     regime=_current_regime,
                     max_favorable_pct=getattr(_ge_spos, "max_favorable_pct", 0.0),
                 )
