@@ -66,7 +66,7 @@ class ChampionLocks:
     max_whipsaws: int = 3
     reversal_confidence_multiplier: float = 1.3
 
-    max_hold_hours: float = 24.0
+    max_hold_hours: float = 12.0
     loss_cooldown_hours: float = 2.0
 
 
