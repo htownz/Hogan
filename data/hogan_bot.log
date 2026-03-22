@@ -2713,3 +2713,441 @@ Traceback (most recent call last):
     tail = np.asarray(recent_probs[-window:], dtype=np.float64)
                       ~~~~~~~~~~~~^^^^^^^^^^
 TypeError: sequence index must be integer, not 'slice'
+2026-03-21 18:05:33,976 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 18:05:34,336 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 18:06:10,130 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 18:07:22,432 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 18:08:34,754 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+                      ~~~~~~~~~~~~^^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 18:09:10,968 ERROR Signal eval error for BTC/USD: sequence index must be integer, not 'slice'
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 1230, in _run_event_loop_inner
+    sig = evaluator.evaluate(
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 270, in evaluate
+    return self._policy_core_evaluate(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\event_loop.py", line 211, in _policy_core_evaluate
+    intent = decide(
+             ^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 352, in decide
+    _blind = ml_blind_scale(state.ml_probs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\decision.py", line 709, in ml_blind_scale
+    _probs = list(recent_probs)
+                      ^^^^^^^^^
+TypeError: sequence index must be integer, not 'slice'
+2026-03-21 18:09:18,760 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-21 18:09:18,760 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-21 18:09:18,761 INFO CHAMPION_MODE: overriding use_online_learning = True -> False
+2026-03-21 18:09:18,761 INFO CHAMPION_MODE: overriding min_final_confidence = 0.15 -> 0.04
+2026-03-21 18:09:18,761 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 24.0
+2026-03-21 18:09:18,761 INFO Champion mode applied — 5 overrides
+2026-03-21 18:09:18,762 INFO Sweep results applied: trailing_stop=0.025 take_profit=0.054 (from diagnostics/exit_sweep_results.json)
+2026-03-21 18:09:18,773 INFO FETCH_ORCHESTRATOR: starting data refresh (backfill=False, symbols=['BTC/USD'])
+2026-03-21 18:09:18,962 INFO FETCH feargreed: 1 rows
+2026-03-21 18:09:19,479 INFO FETCH derivatives BTC/USD: {'funding_rate': 1, 'open_interest_pct_change': 1}
+2026-03-21 18:09:20,179 INFO Macro candles: wrote 30 1d rows for SPY/USD (S&P 500 ETF)
+2026-03-21 18:09:20,348 INFO Macro candles: wrote 49 1h rows for SPY/USD (S&P 500 ETF)
+2026-03-21 18:09:20,531 INFO Macro candles: wrote 30 1d rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-21 18:09:20,782 INFO Macro candles: wrote 49 1h rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-21 18:09:20,926 INFO Macro candles: wrote 30 1d rows for GLD/USD (Gold ETF)
+2026-03-21 18:09:21,162 INFO Macro candles: wrote 49 1h rows for GLD/USD (Gold ETF)
+2026-03-21 18:09:21,334 INFO Macro candles: wrote 30 1d rows for SLV/USD (Silver ETF)
+2026-03-21 18:09:21,471 INFO Macro candles: wrote 49 1h rows for SLV/USD (Silver ETF)
+2026-03-21 18:09:21,690 INFO Macro candles: wrote 30 1d rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-21 18:09:21,826 INFO Macro candles: wrote 49 1h rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-21 18:09:22,067 INFO Macro candles: wrote 30 1d rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-21 18:09:22,261 INFO Macro candles: wrote 49 1h rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-21 18:09:22,373 INFO Macro candles: wrote 29 1d rows for VIX/USD (CBOE Volatility Index)
+2026-03-21 18:09:22,558 INFO Macro candles: wrote 98 1h rows for VIX/USD (CBOE Volatility Index)
+2026-03-21 18:09:22,734 INFO Macro candles: wrote 29 1d rows for TNX/USD (10-Year Treasury Yield)
+2026-03-21 18:09:22,854 INFO Macro candles: wrote 49 1h rows for TNX/USD (10-Year Treasury Yield)
+2026-03-21 18:09:22,854 INFO Macro candle backfill complete: 679 rows across 16 series
+2026-03-21 18:09:22,854 INFO FETCH macro_candles: {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 29, 'VIX/USD_1h': 98, 'TNX/USD_1d': 29, 'TNX/USD_1h': 49}
+2026-03-21 18:09:22,936 WARNING FETCH news_sentiment failed: HTTP 403 fetching CryptoPanic page 1
+2026-03-21 18:09:23,342 INFO FETCH gpr: 15034
+2026-03-21 18:09:23,343 INFO FETCH_ORCHESTRATOR: done in 4.6s — 4 OK, 1 failed, 4 skipped
+2026-03-21 18:09:23,343 INFO Startup data fetch complete: {'feargreed': 1, 'derivatives_BTC/USD': {'funding_rate': 1, 'open_interest_pct_change': 1}, 'macro_candles': {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 29, 'VIX/USD_1h': 98, 'TNX/USD_1d': 29, 'TNX/USD_1h': 49}, 'news_sentiment': 'ERROR: HTTP 403 fetching CryptoPanic page 1', 'gpr': 15034}
+2026-03-21 18:09:23,343 INFO RESTORE: loaded last cash balance 9764.07 from DB (seed was 10000.00)
+2026-03-21 18:09:23,343 INFO Paper mode with realistic fills (slip=5.0bps spread=3.0bps)
+2026-03-21 18:09:24,340 INFO Loaded ML model from models/hogan_champion.pkl
+2026-03-21 18:09:24,356 INFO MacroSitout: loaded 2963 Fear & Greed records
+2026-03-21 18:09:24,370 INFO MacroSitout: loaded 3612 VIX hourly records
+2026-03-21 18:09:24,370 INFO Macro sitout filter enabled (greed-only scaling)
+2026-03-21 18:09:24,382 INFO FundingOverlay: loaded 8824 hourly records
+2026-03-21 18:09:24,382 INFO Funding rate overlay enabled
+2026-03-21 18:09:24,393 INFO PerformanceTracker restored 0 trades across 0 regimes from DB snapshot
+2026-03-21 18:09:24,393 INFO PerformanceTracker restored state from DB snapshot
+2026-03-21 18:09:24,394 INFO WF failure response: 2/5 windows positive → scale=0.70
+2026-03-21 18:09:24,394 INFO WF failure scale applied: 0.70
+2026-03-21 18:09:24,422 INFO MTF candle subscriptions: ['1h', '1m', '5m', '15m', '30m', '4h'] (primary=1h)
+2026-03-21 18:09:24,422 INFO Event loop starting: mode=PAPER symbols=BTC/USD timeframe=1h
+2026-03-21 18:09:24,422 INFO STARTUP SUMMARY: balance=10000.00 max_dd=20.0% risk/trade=1.5% trailing_stop=2.5% take_profit=5.4% ML=ON swarm=ON regime=ON policy_core=ON online_learn=OFF
+2026-03-21 18:09:24,422 INFO HOGAN_USE_REST_DATA=1 — using REST polling (WebSocket disabled).
+2026-03-21 18:09:24,424 INFO REST polling active: kraken ['BTC/USD'] every 30s
+2026-03-21 18:09:26,664 INFO REST warmup: BTC/USD/1h loaded 200 candles
+2026-03-21 18:09:27,952 INFO REST warmup: BTC/USD/1m loaded 200 candles
+2026-03-21 18:09:29,167 INFO REST warmup: BTC/USD/5m loaded 200 candles
+2026-03-21 18:09:30,357 INFO REST warmup: BTC/USD/15m loaded 200 candles
+2026-03-21 18:09:31,560 INFO REST warmup: BTC/USD/30m loaded 200 candles
+2026-03-21 18:09:32,874 INFO REST warmup: BTC/USD/4h loaded 200 candles
+2026-03-21 18:09:39,975 INFO Loaded per-symbol config for BTC/USD/1h (16 overrides, sharpe=1.20)
+2026-03-21 18:09:40,147 INFO Loaded forecast model: models\forecast_4h.pkl
+2026-03-21 18:09:40,151 INFO Loaded forecast model: models\forecast_12h.pkl
+2026-03-21 18:09:40,155 INFO Loaded forecast model: models\forecast_24h.pkl
+2026-03-21 18:09:40,732 INFO BUY BTC/USD px=70214.60 qty=0.003104 ml=0.488 equity=9764.07 regime=ranging long_scale=0.70
+2026-03-21 18:10:16,278 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:10:16,430 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-21 18:11:28,580 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:12:40,869 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:13:17,029 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:14:29,239 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:15:05,390 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:15:05,542 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-21 18:15:05,695 INFO MTF_EVAL BTC/USD/15m → buy (size scaled 0.60x for sub-hour eval)
+2026-03-21 18:16:17,685 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:17:30,005 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:18:06,151 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:19:18,431 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:20:30,726 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:20:30,880 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-21 18:21:06,873 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:22:19,211 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:23:31,490 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:24:07,640 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:25:19,836 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:25:19,991 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-21 18:26:32,153 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:27:08,404 INFO SWARM global weight promoted: {'pipeline_v1': 0.1431, 'risk_steward_v1': 0.1431, 'data_guardian_v1': 0.1431, 'execution_cost_v1': 0.1431, 'volatility_regime_v1': 0.4275}
+2026-03-21 18:27:08,448 INFO SWARM auto-quarantined: ['data_guardian_v1', 'execution_cost_v1', 'pipeline_v1', 'risk_steward_v1']
+2026-03-21 18:27:08,449 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:28:20,800 INFO AUTO_EXIT BTC/USD reason=max_hold_time px=70128.70 qty=0.003104
+2026-03-21 18:28:20,973 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:29:32,903 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:30:09,065 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:30:09,303 INFO BUY BTC/USD px=70106.10 qty=0.000931 ml=0.488 equity=9762.32 regime=ranging long_scale=0.70
+2026-03-21 18:30:09,473 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-21 18:30:09,647 INFO MTF_EVAL BTC/USD/15m → buy (size scaled 0.60x for sub-hour eval)
+2026-03-21 18:30:09,810 INFO MTF_EVAL BTC/USD/30m → buy (size scaled 0.70x for sub-hour eval)
+2026-03-21 18:31:21,370 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:32:33,698 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:33:09,856 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:34:22,058 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:35:34,371 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:35:34,542 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-21 18:36:10,520 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:37:22,832 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:38:35,152 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:39:11,305 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:40:23,610 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:40:23,780 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-21 18:41:35,927 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:42:12,121 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:43:24,399 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:44:36,716 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:45:12,878 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:45:13,134 INFO SWARM global weight promoted: {'pipeline_v1': 0.103, 'risk_steward_v1': 0.103, 'data_guardian_v1': 0.103, 'execution_cost_v1': 0.103, 'volatility_regime_v1': 0.5879}
+2026-03-21 18:45:13,177 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-21 18:45:13,350 INFO MTF_EVAL BTC/USD/15m → buy (size scaled 0.60x for sub-hour eval)
+2026-03-21 18:46:25,168 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:47:37,547 INFO AUTO_EXIT BTC/USD reason=max_hold_time px=69793.70 qty=0.000931
+2026-03-21 18:47:37,739 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:47:37,739 INFO EXPECTANCY [2 trades] win=0.0% net_edge=-0.0088% payoff=0.00 exp=-0.0088% sig_exit_loss=0.0%
+2026-03-21 18:47:37,739 INFO   regime=ranging n=2 win=0.0% exp=-0.0088%
+2026-03-21 18:48:13,635 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:49:25,942 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:49:26,141 INFO BUY BTC/USD px=69631.40 qty=0.000931 ml=0.488 equity=9761.59 regime=ranging long_scale=0.70
+2026-03-21 18:50:38,245 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:50:38,423 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-21 18:51:14,395 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:52:26,771 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:53:39,076 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:54:15,222 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:55:27,540 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:55:27,744 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-21 18:56:03,683 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:57:15,981 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:58:28,298 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 18:59:04,438 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:00:17,158 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:00:17,306 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 19:00:17,454 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-21 19:00:17,603 INFO MTF_EVAL BTC/USD/30m → hold (size scaled 0.70x for sub-hour eval)
+2026-03-21 19:01:29,071 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:02:06,895 INFO SWARM global weight promoted: {'pipeline_v1': 0.135, 'risk_steward_v1': 0.135, 'data_guardian_v1': 0.135, 'execution_cost_v1': 0.135, 'volatility_regime_v1': 0.4599}
+2026-03-21 19:02:06,940 INFO SWARM auto-quarantined: ['volatility_regime_v1']
+2026-03-21 19:02:06,941 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:03:19,107 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:04:31,398 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:05:07,444 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:05:07,599 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 19:06:19,881 INFO AUTO_EXIT BTC/USD reason=max_hold_time px=68608.70 qty=0.000931
+2026-03-21 19:06:20,049 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:07:32,078 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:08:08,233 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:09:20,533 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:10:32,828 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:10:32,985 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 19:11:08,972 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:12:21,269 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:13:33,587 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:14:09,724 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:15:22,025 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:15:22,181 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 19:15:22,342 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-21 19:16:34,326 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:17:10,477 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:18:22,770 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:19:35,094 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:20:11,250 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:20:11,415 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 19:21:23,633 INFO SWARM global weight promoted: {'pipeline_v1': 0.1432, 'risk_steward_v1': 0.1432, 'data_guardian_v1': 0.1432, 'execution_cost_v1': 0.1432, 'volatility_regime_v1': 0.427}
+2026-03-21 19:21:23,678 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:22:35,867 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:23:12,016 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:24:24,314 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:25:36,633 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:25:36,633 INFO HEARTBEAT [100 events] equity=9760.20 cash=9760.20 longs=0 shorts=0 regime=ranging
+2026-03-21 19:25:36,798 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 19:25:36,798 INFO EXPECTANCY [3 trades] win=0.0% net_edge=-0.0128% payoff=0.00 exp=-0.0128% sig_exit_loss=0.0%
+2026-03-21 19:25:36,798 INFO   regime=ranging n=3 win=0.0% exp=-0.0128%
+2026-03-21 19:26:12,788 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:27:25,094 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:28:37,394 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:29:13,555 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:30:25,849 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:30:26,014 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 19:30:26,183 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-21 19:30:26,354 INFO MTF_EVAL BTC/USD/30m → hold (size scaled 0.70x for sub-hour eval)
+2026-03-21 19:31:38,160 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:32:14,345 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:33:26,636 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:34:38,952 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:35:15,098 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:35:15,269 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 19:36:27,381 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:37:39,669 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:38:15,877 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:39:28,344 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:40:40,780 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:40:40,961 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 19:41:16,787 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:42:29,069 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:43:41,386 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:44:17,523 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:45:30,013 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:45:30,194 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 19:45:30,376 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-21 19:46:42,325 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:47:18,471 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:48:30,769 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:49:06,931 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:50:19,259 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:50:19,443 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 19:51:31,552 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:52:07,704 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:53:20,027 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:54:32,357 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:55:08,507 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:55:08,691 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 19:56:20,857 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:57:33,188 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:58:09,342 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 19:59:21,777 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:00:34,361 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:00:34,508 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 20:00:34,655 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-21 20:00:34,802 INFO MTF_EVAL BTC/USD/30m → hold (size scaled 0.70x for sub-hour eval)
+2026-03-21 20:01:10,088 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:02:22,439 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:02:22,440 INFO EXPECTANCY [3 trades] win=0.0% net_edge=-0.0128% payoff=0.00 exp=-0.0128% sig_exit_loss=0.0%
+2026-03-21 20:02:22,440 INFO   regime=ranging n=3 win=0.0% exp=-0.0128%
+2026-03-21 20:03:34,747 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:04:10,890 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:05:23,213 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:05:23,363 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 20:06:35,525 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:07:11,724 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:08:24,257 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:09:36,537 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:10:12,717 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:10:12,869 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 20:11:25,005 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:12:37,309 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:13:13,472 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:14:25,766 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:15:38,107 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:15:38,270 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 20:15:38,519 INFO SWARM global weight promoted: {'pipeline_v1': 0.114, 'risk_steward_v1': 0.114, 'data_guardian_v1': 0.114, 'execution_cost_v1': 0.114, 'volatility_regime_v1': 0.5442}
+2026-03-21 20:15:38,566 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-21 20:16:14,260 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:17:26,545 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:18:38,888 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:19:15,035 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:20:27,424 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:20:27,584 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 20:21:39,721 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:22:15,866 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:23:28,160 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:24:40,480 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:25:16,642 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:25:16,807 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 20:26:28,917 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:27:41,189 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:28:17,388 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:29:29,703 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:30:05,845 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:30:06,013 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 20:30:06,181 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-21 20:30:06,350 INFO MTF_EVAL BTC/USD/30m → hold (size scaled 0.70x for sub-hour eval)
+2026-03-21 20:31:18,165 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:32:30,476 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:33:42,830 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:34:19,075 INFO SWARM global weight promoted: {'pipeline_v1': 0.1005, 'risk_steward_v1': 0.1005, 'data_guardian_v1': 0.1005, 'execution_cost_v1': 0.1005, 'volatility_regime_v1': 0.5979}
+2026-03-21 20:34:19,120 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:35:31,297 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:35:31,470 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 20:36:07,456 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:37:19,752 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:38:32,082 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:39:08,233 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:40:20,545 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:40:20,726 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 20:40:20,726 INFO HEARTBEAT [200 events] equity=9760.20 cash=9760.20 longs=0 shorts=0 regime=ranging
+2026-03-21 20:41:32,883 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:41:32,884 INFO EXPECTANCY [3 trades] win=0.0% net_edge=-0.0128% payoff=0.00 exp=-0.0128% sig_exit_loss=0.0%
+2026-03-21 20:41:32,884 INFO   regime=ranging n=3 win=0.0% exp=-0.0128%
+2026-03-21 20:42:09,037 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:43:21,351 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:44:33,699 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:45:09,845 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:45:10,024 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 20:45:10,203 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-21 20:46:22,153 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:47:34,485 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:48:10,639 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:49:22,943 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:50:35,237 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:50:35,419 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 20:51:11,413 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:52:23,713 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:53:36,167 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:54:12,201 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:55:24,486 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:55:24,671 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 20:56:36,787 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:57:12,957 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:58:25,270 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 20:59:37,795 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:00:14,357 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:00:14,507 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 21:00:14,655 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-21 21:00:14,804 INFO MTF_EVAL BTC/USD/30m → hold (size scaled 0.70x for sub-hour eval)
+2026-03-21 21:01:26,536 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:02:38,868 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:03:15,021 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:04:27,336 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:05:39,662 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:05:39,821 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 21:06:15,822 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:07:28,139 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:08:40,479 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:09:16,629 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:10:28,941 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:10:29,184 INFO SWARM global weight promoted: {'pipeline_v1': 0.1178, 'risk_steward_v1': 0.1178, 'data_guardian_v1': 0.1178, 'execution_cost_v1': 0.1178, 'volatility_regime_v1': 0.529}
+2026-03-21 21:10:29,230 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 21:11:41,231 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:12:17,386 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:13:29,708 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:14:41,997 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:15:18,142 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:15:18,305 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-21 21:15:18,465 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-21 21:16:30,453 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:17:06,622 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-21 21:18:19,002 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)

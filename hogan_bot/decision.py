@@ -706,7 +706,8 @@ def ml_blind_scale(
     """
     if recent_probs is None or len(recent_probs) < max(4, window // 4):
         return 1.0
-    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+    _probs = list(recent_probs)
+    tail = np.asarray(_probs[-window:], dtype=np.float64)
     tail = tail[~np.isnan(tail)]
     if len(tail) < 4:
         return 1.0
@@ -732,7 +733,8 @@ def ml_blind_blocks_shorts(
     """
     if recent_probs is None or len(recent_probs) < max(4, window // 4):
         return False
-    tail = np.asarray(recent_probs[-window:], dtype=np.float64)
+    _probs = list(recent_probs)
+    tail = np.asarray(_probs[-window:], dtype=np.float64)
     tail = tail[~np.isnan(tail)]
     if len(tail) < 4:
         return False
