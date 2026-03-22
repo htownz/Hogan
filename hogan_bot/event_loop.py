@@ -1075,7 +1075,14 @@ async def _run_event_loop_inner(
 
             # Auto-exit trailing stops / take profits / max_hold_time
             # All exits go through the executor so live orders are always sent.
-            exits = portfolio.check_exits(mark_prices, max_hold_bars=max_hold_bars, short_max_hold_bars=short_max_hold_bars)
+            # During MTF evaluations, still update trailing stops and MAE/MFE
+            # but do NOT increment bars_held — it should only tick on primary candles.
+            exits = portfolio.check_exits(
+                mark_prices,
+                max_hold_bars=max_hold_bars,
+                short_max_hold_bars=short_max_hold_bars,
+                tick_bars=not _is_mtf_eval,
+            )
             for exit_symbol, reason in exits:
                 ep = mark_prices.get(exit_symbol, 0.0)
                 now_ms = int(time.time() * 1000)

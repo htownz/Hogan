@@ -953,22 +953,25 @@ class AgentPipeline:
 
             fc_bias = (fc_4h - 0.5) * 0.6 + (fc_12h - 0.5) * 0.4
 
-            if signal.action == "sell" and fc_bias > 0.03:
+            _fc_disagree_sell = signal.action == "sell" and fc_bias > 0.03
+            _fc_disagree_buy = signal.action == "buy" and fc_bias < -0.03
+
+            if _fc_disagree_sell or _fc_disagree_buy:
+                _abs_bias = abs(fc_bias)
                 signal.explanation += f" | Forecast disagrees ({fc_4h:.0%}up@4h, bias={fc_bias:+.3f})"
-                if fc_bias > 0.08:
-                    signal.action = "hold"
-                    signal.confidence *= 0.3
-                    signal.explanation += " -> VETO to hold"
+                # Graduated dampening: scale confidence proportionally to
+                # forecast disagreement strength, but never hard-VETO.
+                # Mild (0.03-0.08): 20% reduction. Moderate (0.08-0.15): 40%.
+                # Strong (>0.15): 60%. The tech thesis still gets a chance.
+                if _abs_bias > 0.15:
+                    signal.confidence *= 0.40
+                    signal.explanation += " -> strong dampen (0.40x)"
+                elif _abs_bias > 0.08:
+                    signal.confidence *= 0.60
+                    signal.explanation += " -> moderate dampen (0.60x)"
                 else:
-                    signal.confidence *= 0.5
-            elif signal.action == "buy" and fc_bias < -0.03:
-                signal.explanation += f" | Forecast disagrees ({fc_4h:.0%}up@4h, bias={fc_bias:+.3f})"
-                if fc_bias < -0.08:
-                    signal.action = "hold"
-                    signal.confidence *= 0.3
-                    signal.explanation += " -> VETO to hold"
-                else:
-                    signal.confidence *= 0.5
+                    signal.confidence *= 0.80
+                    signal.explanation += " -> mild dampen (0.80x)"
             elif signal.action == "sell" and fc_bias < -0.03:
                 signal.confidence = min(1.0, signal.confidence * 1.2)
                 signal.explanation += f" | Forecast confirms ({fc_4h:.0%}up@4h)"

@@ -211,6 +211,7 @@ class PaperPortfolio:
         mark_prices: dict[str, float],
         max_hold_bars: int = 0,
         short_max_hold_bars: int = 0,
+        tick_bars: bool = True,
     ) -> list[tuple[str, str]]:
         """Check open long and short positions and return exit signals.
 
@@ -227,7 +228,8 @@ class PaperPortfolio:
             if px <= 0:
                 logger.debug("check_exits: skipping long %s — no valid price", symbol)
                 continue
-            pos.bars_held += 1
+            if tick_bars:
+                pos.bars_held += 1
             if pos.avg_entry > 0 and px > 0:
                 move_pct = (px - pos.avg_entry) / pos.avg_entry
                 if move_pct < 0:
@@ -287,7 +289,8 @@ class PaperPortfolio:
             if px <= 0:
                 logger.debug("check_exits: skipping short %s — no valid price", symbol)
                 continue
-            pos.bars_held += 1
+            if tick_bars:
+                pos.bars_held += 1
             if pos.avg_entry > 0:
                 move_pct = (pos.avg_entry - px) / pos.avg_entry
                 if move_pct < 0:
