@@ -751,6 +751,24 @@ async def _run_event_loop_inner(
 
     evaluator = SignalEvaluator(config, ml_model, conn=conn)
 
+    # ── Trade Quality model ───────────────────────────────────────────
+    _tq_model = None
+    if getattr(config, "use_trade_quality", False):
+        try:
+            from hogan_bot.trade_quality import load_trade_quality_model
+            _tq_model = load_trade_quality_model(config.trade_quality_model_path)
+            logger.info(
+                "Trade quality model loaded from %s (threshold=%.2f)",
+                config.trade_quality_model_path, config.trade_quality_threshold,
+            )
+        except FileNotFoundError:
+            logger.warning(
+                "Trade quality model not found at %s — running without quality gate",
+                config.trade_quality_model_path,
+            )
+        except Exception as exc:
+            logger.warning("Trade quality model load error: %s", exc)
+
     _macro_sitout = None
     _use_macro_sitout = os.getenv("HOGAN_MACRO_SITOUT", "true").strip().lower() in ("1", "true", "yes")
     if _use_macro_sitout:
@@ -1127,19 +1145,21 @@ async def _run_event_loop_inner(
                 for ws_sym in list(_whipsaw_counts):
                     _whipsaw_counts[ws_sym] = max(0, _whipsaw_counts[ws_sym] - 1)
 
-            # Proactive thesis check: for positions nearing max hold, run
-            # ExitEvaluator before the timer forces them out.  This converts
-            # ~37% win-rate max_hold_time exits into ~78% win-rate thesis exits.
+            # Graduated exit: run ExitEvaluator every bar from bar 3 onward.
+            # Thresholds inside ExitEvaluator loosen as hold_ratio grows,
+            # converting max_hold_time from a cliff into a smooth ramp.
             if not _is_mtf_eval and candles is not None:
-                _proactive_threshold = 0.75
+                _proactive_threshold = 3  # minimum bars before thesis checks
                 for _pe_sym, _pe_pos in list(portfolio.positions.items()):
+                    if _pe_pos.bars_held < _proactive_threshold:
+                        continue
                     _pe_ratio = _pe_pos.bars_held / max(max_hold_bars, 1)
-                    if _pe_ratio >= _proactive_threshold and max_hold_bars > 0:
+                    if max_hold_bars > 0:
                         _pe_px = mark_prices.get(_pe_sym, 0.0)
                         if _pe_px <= 0:
                             continue
                         _pe_upnl = (_pe_px - _pe_pos.avg_entry) / _pe_pos.avg_entry if _pe_pos.avg_entry > 0 else 0
-                        if _pe_upnl < 0:
+                        if True:  # always evaluate; ExitEvaluator handles urgency graduation
                             _pe_dec = _exit_eval.should_exit(
                                 candles=candles,
                                 entry_price=_pe_pos.avg_entry,
@@ -1185,6 +1205,62 @@ async def _run_event_loop_inner(
                                     )
                                     _record_outcome(_pe_sym, _pe_regime, gross_pnl_pct, _entry_up_prob.pop(_pe_sym, None))
                                     _label_for_online_learner(_pe_sym, gross_pnl_pct, _pe_pos.bars_held)
+
+                # Graduated exit for shorts
+                for _pe_sym, _pe_spos in list(portfolio.short_positions.items()):
+                    if _pe_spos.bars_held < _proactive_threshold:
+                        continue
+                    _pe_s_ratio = _pe_spos.bars_held / max(short_max_hold_bars if short_max_hold_bars > 0 else max_hold_bars, 1)
+                    _pe_s_px = mark_prices.get(_pe_sym, 0.0)
+                    if _pe_s_px <= 0:
+                        continue
+                    _pe_s_upnl = (_pe_spos.avg_entry - _pe_s_px) / _pe_spos.avg_entry if _pe_spos.avg_entry > 0 else 0
+                    _pe_s_dec = _exit_eval.should_exit(
+                        candles=candles,
+                        entry_price=_pe_spos.avg_entry,
+                        current_price=_pe_s_px,
+                        bars_held=_pe_spos.bars_held,
+                        side="short",
+                        max_hold_bars=short_max_hold_bars if short_max_hold_bars > 0 else max_hold_bars,
+                        entry_atr=getattr(_pe_spos, "entry_atr_pct", None),
+                        vol_ratio=None,
+                        regime=_current_regime.get(_pe_sym),
+                        max_favorable_pct=getattr(_pe_spos, "max_favorable_pct", 0.0),
+                    )
+                    if _pe_s_dec.should_exit:
+                        logger.info(
+                            "PROACTIVE_EXIT_SHORT %s — %s (hold=%.0f%%, upnl=%.2f%%)",
+                            _pe_sym, _pe_s_dec.reason, _pe_s_ratio * 100, _pe_s_upnl * 100,
+                        )
+                        _pe_s_reason = f"proactive_{_pe_s_dec.reason}"
+                        _pe_s_qty = _pe_spos.qty
+                        _pe_s_entry = _pe_spos.avg_entry
+                        now_ms = int(time.time() * 1000)
+                        res = await _safe_exec(executor.close_short, _pe_sym, _pe_s_px, _pe_s_qty, reason=_pe_s_reason)
+                        if res.ok:
+                            fee = _pe_s_qty * _pe_s_px * config.fee_rate
+                            _pe_s_regime = _entry_regime.pop(_pe_sym, _current_regime.get(_pe_sym, "unknown"))
+                            if not allow_live:
+                                close_paper_trade(
+                                    conn, _pe_sym, "short", _pe_s_px, fee, now_ms, close_reason=_pe_s_reason,
+                                    max_adverse_pct=getattr(_pe_spos, "max_adverse_pct", 0.0),
+                                    max_favorable_pct=getattr(_pe_spos, "max_favorable_pct", 0.0),
+                                    bars_held=_pe_spos.bars_held,
+                                    exit_regime=_pe_s_regime,
+                                    entry_atr_pct=getattr(_pe_spos, "entry_atr_pct", None),
+                                )
+                            evaluator._trade_outcomes.append(_pe_s_px < _pe_s_entry)
+                            gross_pnl_pct = (_pe_s_entry - _pe_s_px) / _pe_s_entry if _pe_s_entry else 0
+                            net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
+                            _expectancy.record_trade(
+                                symbol=_pe_sym, regime=_pe_s_regime,
+                                gross_pnl_pct=gross_pnl_pct, net_pnl_pct=net_pnl_pct,
+                                mae_pct=getattr(_pe_spos, "max_adverse_pct", 0.0),
+                                mfe_pct=getattr(_pe_spos, "max_favorable_pct", 0.0),
+                                hold_bars=_pe_spos.bars_held, close_reason=_pe_s_reason,
+                            )
+                            _record_outcome(_pe_sym, _pe_s_regime, gross_pnl_pct, _entry_up_prob.pop(_pe_sym, None))
+                            _label_for_online_learner(_pe_sym, gross_pnl_pct, _pe_spos.bars_held)
 
             # Auto-exit trailing stops / take profits / max_hold_time
             # All exits go through the executor so live orders are always sent.
@@ -1578,7 +1654,35 @@ async def _run_event_loop_inner(
                     if _other_syms and config.portfolio_correlation_scale < 1.0:
                         _corr_scale = config.portfolio_correlation_scale
                         logger.debug("CORR_SCALE %s — other positions %s, scale=%.2f", symbol, _other_syms, _corr_scale)
-                    _long_size = size * sig.eff_long_size_scale * _macro_scale * _momentum_scale * _funding_scale * _wf_scale * _exp_scale * _corr_scale
+                    _tq_scale = 1.0
+                    if _tq_model is not None:
+                        from hogan_bot.trade_quality import build_feature_row_from_live, predict_trade_quality
+                        _tq_feats = build_feature_row_from_live(
+                            tech_confidence=getattr(sig, "tech_confidence", 0.0),
+                            final_confidence=getattr(sig, "final_confidence", 0.0),
+                            up_prob=up_prob,
+                            atr_pct=_sym_atr_pct,
+                            regime=_sym_regime or "unknown",
+                            regime_confidence=getattr(sig, "regime_confidence", 0.0),
+                            vol_ratio=getattr(sig, "vol_ratio", 0.0),
+                            quality_scale=getattr(sig, "quality_scale", 1.0),
+                            ranging_scale=getattr(sig, "ranging_scale", 1.0),
+                            pullback_scale=getattr(sig, "pullback_scale", 1.0),
+                            momentum_scale=_momentum_scale,
+                            conf_scale=getattr(sig, "conf_scale", 1.0),
+                            whipsaw_count=_whipsaw_count,
+                            side="long",
+                        )
+                        _tq_prob = predict_trade_quality(_tq_feats, _tq_model)
+                        if _tq_prob < config.trade_quality_threshold:
+                            logger.info("TQ_BLOCK %s LONG — quality_prob=%.3f < threshold=%.3f",
+                                        symbol, _tq_prob, config.trade_quality_threshold)
+                            _long_size = 0.0
+                        else:
+                            _tq_scale = 0.5 + _tq_prob
+                            logger.debug("TQ_SCALE %s LONG — quality_prob=%.3f, tq_scale=%.2f", symbol, _tq_prob, _tq_scale)
+
+                    _long_size = size * sig.eff_long_size_scale * _macro_scale * _momentum_scale * _funding_scale * _wf_scale * _exp_scale * _corr_scale * _tq_scale
                     if _long_size <= 0:
                         logger.info("BUY_BLOCK %s — size scaled to zero (base=%.6f eff_scale=%.2f macro=%.2f mom=%.2f fund=%.2f)",
                                     symbol, size, sig.eff_long_size_scale, _macro_scale, _momentum_scale, _funding_scale)
@@ -1755,7 +1859,35 @@ async def _run_event_loop_inner(
                     if _other_short_syms and config.portfolio_correlation_scale < 1.0:
                         _corr_short_scale = config.portfolio_correlation_scale
                         logger.debug("CORR_SCALE_SHORT %s — other positions %s, scale=%.2f", symbol, _other_short_syms, _corr_short_scale)
-                    _short_size = size * sig.eff_short_size_scale * _macro_scale * _funding_short_scale * _wf_scale * _exp_short_scale * _corr_short_scale
+                    _tq_short_scale = 1.0
+                    if _tq_model is not None:
+                        from hogan_bot.trade_quality import build_feature_row_from_live, predict_trade_quality
+                        _tq_s_feats = build_feature_row_from_live(
+                            tech_confidence=getattr(sig, "tech_confidence", 0.0),
+                            final_confidence=getattr(sig, "final_confidence", 0.0),
+                            up_prob=up_prob,
+                            atr_pct=_sym_atr_pct,
+                            regime=_sym_regime or "unknown",
+                            regime_confidence=getattr(sig, "regime_confidence", 0.0),
+                            vol_ratio=getattr(sig, "vol_ratio", 0.0),
+                            quality_scale=getattr(sig, "quality_scale", 1.0),
+                            ranging_scale=getattr(sig, "ranging_scale", 1.0),
+                            pullback_scale=getattr(sig, "pullback_scale", 1.0),
+                            momentum_scale=1.0,
+                            conf_scale=getattr(sig, "conf_scale", 1.0),
+                            whipsaw_count=_whipsaw_count,
+                            side="short",
+                        )
+                        _tq_s_prob = predict_trade_quality(_tq_s_feats, _tq_model)
+                        if _tq_s_prob < config.trade_quality_threshold:
+                            logger.info("TQ_BLOCK %s SHORT — quality_prob=%.3f < threshold=%.3f",
+                                        symbol, _tq_s_prob, config.trade_quality_threshold)
+                            _tq_short_scale = 0.0
+                        else:
+                            _tq_short_scale = 0.5 + _tq_s_prob
+                            logger.debug("TQ_SCALE %s SHORT — quality_prob=%.3f, tq_scale=%.2f", symbol, _tq_s_prob, _tq_short_scale)
+
+                    _short_size = size * sig.eff_short_size_scale * _macro_scale * _funding_short_scale * _wf_scale * _exp_short_scale * _corr_short_scale * _tq_short_scale
                     if not sig.eff_allow_shorts:
                         logger.info("SHORT_BLOCK %s — regime %s disallows shorts (eff_allow_shorts=False)", symbol, _sym_regime)
                     elif ml_blind_blocks_shorts(evaluator._ml_probs):

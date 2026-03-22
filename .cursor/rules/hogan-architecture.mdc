@@ -128,6 +128,22 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 - Duck-types as `TrainedModel` — transparent to `predict_up_probability()`
 - Backtest/event_loop call `set_regime()` before prediction to route to the appropriate model
 
+## Trade Quality Classifier
+- `hogan_bot/trade_quality.py` — replaces directional ML with setup quality prediction
+- Predicts whether a trade will exit profitably (signal/TP) vs bleed out (max_hold/trailing_stop)
+- 19 features from entry context: confidence, ATR, regime one-hot, quality/ranging/pullback scales, etc.
+- `HOGAN_USE_TRADE_QUALITY=true` enables in champion mode
+- Train: `python -m hogan_bot.trade_quality --db data/hogan.db --train`
+- Validate: `python -m hogan_bot.trade_quality --db data/hogan.db --validate`
+- Wired into event_loop.py: gates entries where quality_prob < threshold (0.40), scales position by probability
+
+## Graduated Exit Urgency
+- ExitEvaluator (`exit_model.py`) now runs from bar 3 onward (not just at 75% of max hold)
+- Thresholds loosen as `hold_ratio` grows: at 50% hold, thresholds begin easing; at 100%, they're halved
+- New `position_decay` exit: closes marginal-profit trades (0-0.5% PnL) after 75% of max hold
+- Backtest and event_loop both run proactive graduated exits for longs and shorts
+- `max_hold_time` becomes a last-resort backstop, not the primary exit mechanism
+
 ## Delayed Trailing Stop Activation
 - `trail_activation_pct` in `BotConfig` (default 0.5%) — minimum favorable excursion before trailing stop activates
 - Wired into paper.py (Position + ShortPosition), backtest, execution engines, event_loop, walk_forward

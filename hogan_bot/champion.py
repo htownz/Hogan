@@ -35,6 +35,7 @@ class ChampionLocks:
     use_macro_filter: bool = False
     use_online_learning: bool = True
     use_regime_models: bool = True
+    use_trade_quality: bool = True
     use_mtf_extended: bool = True
     use_ema_clouds: bool = False
     use_fvg: bool = False

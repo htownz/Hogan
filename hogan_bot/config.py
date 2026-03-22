@@ -56,6 +56,11 @@ class BotConfig:
     use_regime_models: bool = False
     regime_model_dir: str = "models/regime"
 
+    # Trade Quality Classifier — replaces directional ML with setup quality gate
+    use_trade_quality: bool = False
+    trade_quality_model_path: str = "models/trade_quality.pkl"
+    trade_quality_threshold: float = 0.40
+
     # Ripster EMA cloud settings (disabled: empirically hurts win rate as
     # cloud-based confirmation filters out good crossover trades)
     use_ema_clouds: bool = False
@@ -722,6 +727,9 @@ def load_config() -> BotConfig:
         ml_sell_threshold=_env_float("HOGAN_ML_SELL_THRESHOLD", "0.45"),
         use_regime_models=os.getenv("HOGAN_USE_REGIME_MODELS", "false").lower() == "true",
         regime_model_dir=os.getenv("HOGAN_REGIME_MODEL_DIR", "models/regime"),
+        use_trade_quality=os.getenv("HOGAN_USE_TRADE_QUALITY", "false").lower() == "true",
+        trade_quality_model_path=os.getenv("HOGAN_TRADE_QUALITY_MODEL", "models/trade_quality.pkl"),
+        trade_quality_threshold=_env_float("HOGAN_TRADE_QUALITY_THRESHOLD", "0.40"),
         use_ema_clouds=os.getenv("HOGAN_USE_EMA_CLOUDS", "false").lower() == "true",
         ema_fast_short=_env_int("HOGAN_EMA_FAST_SHORT", "8"),
         ema_fast_long=_env_int("HOGAN_EMA_FAST_LONG", "9"),

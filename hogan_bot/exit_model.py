@@ -131,6 +131,10 @@ class ExitEvaluator:
         """Evaluate whether the current position should be exited.
 
         Returns an ExitDecision with should_exit, reason, and urgency.
+
+        Graduated urgency: as hold_ratio increases, thresholds loosen so
+        that the ExitEvaluator becomes progressively easier to trigger.
+        This converts max_hold_time from a cliff into a smooth ramp.
         """
         if len(candles) < 20:
             logger.debug("EXIT_MODEL: insufficient candles (%d < 20), skipping", len(candles))
@@ -166,45 +170,64 @@ class ExitEvaluator:
             if "trend_reversal_threshold" in _rp:
                 trend_rev_thresh = _rp["trend_reversal_threshold"]
 
+        # ── Graduated urgency: scale thresholds by hold_ratio ─────────
+        # After 50% of max hold, progressively loosen all triggers.
+        # At 100% hold, thresholds are halved (2x easier to exit).
+        hold_ratio = bars_held / max(max_hold_bars, 1)
+        _urgency_ramp = max(0.0, (hold_ratio - 0.5) * 2.0)  # 0 at 50%, 1 at 100%
+        _ease = 1.0 - _urgency_ramp * 0.5  # 1.0 at 50%, 0.5 at 100%
+
+        dd_panic *= _ease
+        trend_rev_thresh *= _ease
+        stag_bars = max(3, int(stag_bars * _ease))
+
         # 1. Trend persistence check: has the trend actually reversed?
         trend_score = self._trend_persistence(close, side)
         if trend_score < -trend_rev_thresh:
-            logger.debug("EXIT_MODEL: trend reversed (score=%.2f, side=%s)", trend_score, side)
+            logger.debug("EXIT_MODEL: trend reversed (score=%.2f, thresh=%.2f, side=%s, hold_ratio=%.2f)",
+                         trend_score, trend_rev_thresh, side, hold_ratio)
             return ExitDecision(
                 should_exit=True,
                 reason="trend_reversal",
-                urgency=min(1.0, abs(trend_score)),
+                urgency=min(1.0, abs(trend_score) + _urgency_ramp * 0.3),
             )
 
         # 2. Drawdown panic: significant unrealized loss
-        # MFE-aware: a trade that has already captured significant profit
-        # (high max_favorable_pct) has proven its thesis and deserves a
-        # wider drawdown leash.  We widen the panic threshold by up to 50%
-        # proportional to how much profit was captured.
         _mfe_relief = min(0.50, max_favorable_pct * 5.0) if max_favorable_pct > 0 else 0.0
         _eff_dd_panic = dd_panic * (1.0 + _mfe_relief)
         if upnl_pct < -_eff_dd_panic:
             atr_pct = self._current_atr_pct(candles)
-            atr_mult = 1.2 if is_short else 1.5
+            atr_mult = (1.2 if is_short else 1.5) * _ease
             if abs(upnl_pct) > atr_pct * atr_mult:
                 logger.debug(
-                    "EXIT_MODEL: drawdown panic (upnl=%.3f, mfe=%.3f, eff_dd=%.3f, side=%s)",
-                    upnl_pct, max_favorable_pct, _eff_dd_panic, side,
+                    "EXIT_MODEL: drawdown panic (upnl=%.3f, mfe=%.3f, eff_dd=%.3f, side=%s, hold_ratio=%.2f)",
+                    upnl_pct, max_favorable_pct, _eff_dd_panic, side, hold_ratio,
                 )
                 return ExitDecision(
                     should_exit=True,
                     reason="drawdown_exceeded",
-                    urgency=min(1.0, abs(upnl_pct) / _eff_dd_panic),
+                    urgency=min(1.0, abs(upnl_pct) / max(_eff_dd_panic, 1e-9)),
                 )
 
         # 3. Time decay: position has aged past expected hold window
-        hold_ratio = bars_held / max(max_hold_bars, 1)
-        if hold_ratio > td_threshold and upnl_pct < 0.0:
-            logger.debug("EXIT_MODEL: time decay (held %.0f%%, upnl=%.3f, side=%s)",
-                         hold_ratio * 100, upnl_pct, side)
+        # With graduated urgency, this activates earlier for losing trades
+        _eff_td = td_threshold * _ease
+        if hold_ratio > _eff_td and upnl_pct < 0.0:
+            logger.debug("EXIT_MODEL: time decay (held %.0f%%, upnl=%.3f, side=%s, eff_td=%.2f)",
+                         hold_ratio * 100, upnl_pct, side, _eff_td)
             return ExitDecision(
                 should_exit=True,
                 reason="time_decay",
+                urgency=min(1.0, hold_ratio + _urgency_ramp * 0.2),
+            )
+
+        # 3b. Position decay: after 75% hold, exit even marginally profitable trades
+        if hold_ratio > 0.75 and 0.0 <= upnl_pct < 0.005:
+            logger.debug("EXIT_MODEL: position decay (held %.0f%%, upnl=%.3f — marginal profit, closing)",
+                         hold_ratio * 100, upnl_pct)
+            return ExitDecision(
+                should_exit=True,
+                reason="position_decay",
                 urgency=hold_ratio,
             )
 
@@ -213,50 +236,55 @@ class ExitEvaluator:
         if entry_atr is not None:
             current_atr = self._current_atr_pct(candles)
             if is_short:
+                _vol_thresh = self._short_vol_contraction_threshold * (1.0 + _urgency_ramp * 0.3)
                 atr_ratio = current_atr / max(entry_atr, 1e-9)
-                if atr_ratio < self._short_vol_contraction_threshold:
-                    logger.debug("EXIT_MODEL: vol contraction (ratio=%.2f, side=short)", atr_ratio)
+                if atr_ratio < _vol_thresh:
+                    logger.debug("EXIT_MODEL: vol contraction (ratio=%.2f, thresh=%.2f, side=short)", atr_ratio, _vol_thresh)
                     return ExitDecision(
                         should_exit=True,
                         reason="volatility_contraction",
-                        urgency=min(1.0, (self._short_vol_contraction_threshold - atr_ratio) / 0.3),
+                        urgency=min(1.0, (_vol_thresh - atr_ratio) / 0.3),
                     )
             else:
+                _vol_exp_thresh = self._vol_expansion_threshold * _ease
                 atr_expansion = current_atr / max(entry_atr, 1e-9)
-                if atr_expansion > self._vol_expansion_threshold:
-                    logger.debug("EXIT_MODEL: vol expansion (ratio=%.1f)", atr_expansion)
+                if atr_expansion > _vol_exp_thresh:
+                    logger.debug("EXIT_MODEL: vol expansion (ratio=%.1f, thresh=%.1f)", atr_expansion, _vol_exp_thresh)
                     return ExitDecision(
                         should_exit=True,
                         reason="volatility_expansion",
-                        urgency=min(1.0, atr_expansion / self._vol_expansion_threshold - 0.5),
+                        urgency=min(1.0, atr_expansion / max(_vol_exp_thresh, 0.1) - 0.5),
                     )
 
         # 5. Stagnation: position is flat for too long
         if bars_held > stag_bars and abs(upnl_pct) < self._stagnation_threshold:
-            logger.debug("EXIT_MODEL: stagnation (bars=%d, upnl=%.4f, side=%s)",
-                         bars_held, upnl_pct, side)
+            logger.debug("EXIT_MODEL: stagnation (bars=%d, stag_thresh=%d, upnl=%.4f, side=%s)",
+                         bars_held, stag_bars, upnl_pct, side)
             return ExitDecision(
                 should_exit=True,
                 reason="stagnation",
-                urgency=0.3,
+                urgency=min(1.0, 0.3 + _urgency_ramp * 0.4),
             )
 
         # 6. Volume fade: volume dried up while position stalls in mild profit
-        if vol_ratio is not None and vol_ratio < 0.5 and -0.002 <= upnl_pct < 0.001:
-            logger.debug("EXIT_MODEL: volume fade (vol_ratio=%.2f, upnl=%.4f)", vol_ratio, upnl_pct)
+        _vol_fade_thresh = 0.5 + _urgency_ramp * 0.3
+        if vol_ratio is not None and vol_ratio < _vol_fade_thresh and -0.002 <= upnl_pct < 0.001:
+            logger.debug("EXIT_MODEL: volume fade (vol_ratio=%.2f, thresh=%.2f, upnl=%.4f)",
+                         vol_ratio, _vol_fade_thresh, upnl_pct)
             return ExitDecision(
                 should_exit=True,
                 reason="volume_fade",
-                urgency=0.25,
+                urgency=0.25 + _urgency_ramp * 0.3,
             )
 
         # 7. Momentum exhaustion: price extending but momentum fading
         if bars_held >= 4 and upnl_pct > 0.003:
             _exh = self._momentum_exhaustion(close, side)
-            if _exh > 0.5:
+            _exh_thresh = max(0.25, 0.5 - _urgency_ramp * 0.25)
+            if _exh > _exh_thresh:
                 logger.debug(
-                    "EXIT_MODEL: momentum exhaustion (score=%.2f, upnl=%.3f, side=%s)",
-                    _exh, upnl_pct, side,
+                    "EXIT_MODEL: momentum exhaustion (score=%.2f, thresh=%.2f, upnl=%.3f, side=%s)",
+                    _exh, _exh_thresh, upnl_pct, side,
                 )
                 return ExitDecision(
                     should_exit=True,
