@@ -724,6 +724,31 @@ async def _run_event_loop_inner(
         except Exception as exc:
             logger.warning("ML model load error: %s — running without ML.", exc)
 
+        if ml_model is not None and getattr(config, "use_regime_models", False):
+            try:
+                from hogan_bot.ml import RegimeModelRouter
+                from pathlib import Path as _Path
+                _regime_dir = _Path(getattr(config, "regime_model_dir", "models/regime"))
+                _regime_models: dict[str, TrainedModel] = {}
+                if _regime_dir.is_dir():
+                    for _rfile in _regime_dir.glob("*.pkl"):
+                        _rname = _rfile.stem
+                        try:
+                            _rm = load_model(str(_rfile))
+                            _regime_models[_rname] = _rm
+                        except Exception as _re:
+                            logger.warning("Failed to load regime model %s: %s", _rname, _re)
+                if _regime_models:
+                    ml_model = RegimeModelRouter(ml_model, _regime_models)
+                    logger.info(
+                        "RegimeModelRouter active: %d regime models (%s) + global fallback",
+                        len(_regime_models), ", ".join(sorted(_regime_models)),
+                    )
+                else:
+                    logger.info("Regime models enabled but no models found in %s — using global only", _regime_dir)
+            except Exception as exc:
+                logger.warning("RegimeModelRouter setup failed: %s — using global model", exc)
+
     evaluator = SignalEvaluator(config, ml_model, conn=conn)
 
     _macro_sitout = None
@@ -885,6 +910,35 @@ async def _run_event_loop_inner(
     _entry_regime_conf: dict[str, float] = {}
     _EXPECTANCY_LOG_INTERVAL = 50
     _entry_up_prob: dict[str, float | None] = {}
+    _entry_features: dict[str, list[float]] = {}
+    _entry_ts_ms: dict[str, int] = {}
+
+    def _label_for_online_learner(
+        sym: str, pnl_pct: float, bars_held: int,
+    ) -> None:
+        """Write a labeled row to online_training_buffer for the OnlineLearner."""
+        feats = _entry_features.pop(sym, None)
+        ets = _entry_ts_ms.pop(sym, None)
+        if feats is None or ets is None:
+            return
+        try:
+            import json as _json
+            conn.execute(
+                "INSERT OR IGNORE INTO online_training_buffer "
+                "(symbol, ts_ms, features_json, label, fill_ts_ms, pnl_pct, horizon_bars) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    sym, ets,
+                    _json.dumps([round(float(f), 8) for f in feats]),
+                    1 if pnl_pct > 0 else 0,
+                    int(time.time() * 1000),
+                    round(pnl_pct * 100, 4),
+                    bars_held,
+                ),
+            )
+            conn.commit()
+        except Exception as exc:
+            logger.debug("Online labeler write failed: %s", exc)
 
     def _record_outcome(sym: str, regime: str, pnl: float, up_prob: float | None = None) -> None:
         """Feed closed-trade results back to AgentPipeline for learned weights."""
@@ -1130,6 +1184,7 @@ async def _run_event_loop_inner(
                                         hold_bars=_pe_pos.bars_held, close_reason=_pe_reason,
                                     )
                                     _record_outcome(_pe_sym, _pe_regime, gross_pnl_pct, _entry_up_prob.pop(_pe_sym, None))
+                                    _label_for_online_learner(_pe_sym, gross_pnl_pct, _pe_pos.bars_held)
 
             # Auto-exit trailing stops / take profits / max_hold_time
             # All exits go through the executor so live orders are always sent.
@@ -1182,6 +1237,7 @@ async def _run_event_loop_inner(
                             close_reason=reason,
                         )
                         _record_outcome(exit_symbol, _exit_entry_regime, gross_pnl_pct, _entry_up_prob.pop(exit_symbol, None))
+                        _label_for_online_learner(exit_symbol, gross_pnl_pct, bars_held)
                         if _perf_tracker:
                             try:
                                 _perf_tracker.record_trade_outcome(
@@ -1243,6 +1299,7 @@ async def _run_event_loop_inner(
                             close_reason=reason,
                         )
                         _record_outcome(exit_symbol, _exit_s_entry_regime, gross_pnl_pct, _entry_up_prob.pop(exit_symbol, None))
+                        _label_for_online_learner(exit_symbol, gross_pnl_pct, bars_held)
                         if _perf_tracker:
                             try:
                                 _perf_tracker.record_trade_outcome(
@@ -1479,6 +1536,7 @@ async def _run_event_loop_inner(
                                     close_reason="buy_signal",
                                 )
                                 _record_outcome(symbol, _exit_s_regime, gross_pnl_pct, _entry_up_prob.pop(symbol, None))
+                                _label_for_online_learner(symbol, gross_pnl_pct, getattr(spos, "bars_held", 0))
                                 is_loss = cover_px > s_avg_entry
                                 if is_loss and loss_cooldown_bars > 0:
                                     _cooldown_remaining = loss_cooldown_bars
@@ -1535,6 +1593,14 @@ async def _run_event_loop_inner(
                             _entry_regime[symbol] = _sym_regime or "unknown"
                             _entry_regime_conf[symbol] = getattr(sig, "final_confidence", 0.0)
                             _entry_up_prob[symbol] = up_prob
+                            _entry_ts_ms[symbol] = int(time.time() * 1000)
+                            try:
+                                from hogan_bot.ml import build_feature_row
+                                _ef = build_feature_row(candles, db_conn=conn)
+                                if _ef is not None:
+                                    _entry_features[symbol] = _ef
+                            except Exception:
+                                pass
                             pos = portfolio.positions.get(symbol)
                             if pos is not None:
                                 pos.entry_atr_pct = _sym_atr_pct
@@ -1639,6 +1705,7 @@ async def _run_event_loop_inner(
                                     close_reason="signal",
                                 )
                                 _record_outcome(symbol, _sig_entry_regime, gross_pnl_pct, _entry_up_prob.pop(symbol, None))
+                                _label_for_online_learner(symbol, gross_pnl_pct, bars_held)
                                 if _perf_tracker:
                                     try:
                                         _perf_tracker.record_trade_outcome(
@@ -1711,6 +1778,14 @@ async def _run_event_loop_inner(
                             _entry_regime[symbol] = _sym_regime or "unknown"
                             _entry_regime_conf[symbol] = getattr(sig, "final_confidence", 0.0)
                             _entry_up_prob[symbol] = up_prob
+                            _entry_ts_ms[symbol] = int(time.time() * 1000)
+                            try:
+                                from hogan_bot.ml import build_feature_row
+                                _ef = build_feature_row(candles, db_conn=conn)
+                                if _ef is not None:
+                                    _entry_features[symbol] = _ef
+                            except Exception:
+                                pass
                             spos = portfolio.short_positions.get(symbol)
                             if spos is not None:
                                 spos.entry_atr_pct = _sym_atr_pct

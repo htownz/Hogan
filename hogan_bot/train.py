@@ -89,6 +89,11 @@ def parse_args() -> argparse.Namespace:
         default="enhanced_triple_barrier",
         help="Labeling strategy (default: enhanced_triple_barrier — regime-adaptive, no dead zone)",
     )
+    parser.add_argument(
+        "--regime-models",
+        action="store_true",
+        help="Train separate per-regime models and save to models/regime/",
+    )
     return parser.parse_args()
 
 
@@ -124,6 +129,99 @@ def main() -> None:
     finally:
         if train_db_conn is not None:
             train_db_conn.close()
+
+
+def _train_regime_models(candles, args, db_conn, label_mode: str, global_metrics: dict) -> None:
+    """Train separate per-regime LightGBM models and save to models/regime/."""
+    import pickle
+    from pathlib import Path
+
+    import numpy as np
+
+    from hogan_bot.ml import (
+        TrainedModel,
+        build_training_set,
+        _make_cv_model,
+    )
+    from hogan_bot.regime import detect_regime, reset_regime_history
+
+    regime_dir = Path("models/regime")
+    regime_dir.mkdir(parents=True, exist_ok=True)
+
+    X, y, feature_cols, _quality = build_training_set(
+        candles,
+        horizon_bars=args.horizon_bars,
+        db_conn=db_conn,
+        label_mode=label_mode,
+    )
+    if X is None or len(X) == 0:
+        print("No training data for regime models")
+        return
+
+    print(f"Regime model training: {len(X)} total samples, {len(feature_cols)} features")
+
+    reset_regime_history()
+    regime_labels: list[str | None] = []
+    for _ri in range(len(candles)):
+        _rw = candles.iloc[max(0, _ri - 79):_ri + 1]
+        if len(_rw) >= 80:
+            try:
+                regime_labels.append(detect_regime(_rw).regime)
+            except Exception:
+                regime_labels.append(None)
+        else:
+            regime_labels.append(None)
+    reset_regime_history()
+
+    _idx_to_pos = {candles.index[i]: i for i in range(len(candles))}
+    regime_arr = np.array([
+        regime_labels[_idx_to_pos[idx]]
+        if idx in _idx_to_pos and _idx_to_pos[idx] < len(regime_labels)
+        else None
+        for idx in X.index
+    ])
+
+    _MIN_SAMPLES = 50
+    regime_metrics = {}
+    for regime_name in ("trending_up", "trending_down", "ranging", "volatile"):
+        mask = regime_arr == regime_name
+        n_regime = int(mask.sum())
+        if n_regime < _MIN_SAMPLES:
+            print(f"  Regime '{regime_name}': {n_regime} samples (< {_MIN_SAMPLES}), skipping")
+            continue
+
+        X_r = X[mask]
+        y_r = y[mask]
+        try:
+            model = _make_cv_model(args.model_type)
+            model.fit(X_r.values if hasattr(X_r, "values") else X_r, y_r)
+
+            artifact = TrainedModel(model=model, feature_columns=feature_cols, scaler=None)
+            out_path = regime_dir / f"{regime_name}.pkl"
+            with open(out_path, "wb") as f:
+                pickle.dump(artifact, f)
+
+            from sklearn.metrics import accuracy_score, roc_auc_score
+            y_pred = model.predict(X_r.values if hasattr(X_r, "values") else X_r)
+            y_proba = model.predict_proba(X_r.values if hasattr(X_r, "values") else X_r)[:, 1]
+            acc = accuracy_score(y_r, y_pred)
+            try:
+                auc = roc_auc_score(y_r, y_proba)
+            except ValueError:
+                auc = 0.5
+
+            regime_metrics[regime_name] = {
+                "n_samples": n_regime,
+                "accuracy": round(acc, 4),
+                "auc": round(auc, 4),
+                "pos_rate": round(float(y_r.mean()), 4),
+            }
+            print(f"  Regime '{regime_name}': {n_regime} samples, acc={acc:.3f}, AUC={auc:.3f} -> {out_path}")
+        except Exception as exc:
+            print(f"  Regime '{regime_name}' training failed: {exc}")
+
+    global_metrics["regime_models"] = regime_metrics
+    print(f"\nRegime models saved to {regime_dir}/ ({len(regime_metrics)} models)")
 
 
 def _main_train(args, candles, train_db_conn, label_mode: str) -> None:
@@ -196,6 +294,9 @@ def _main_train(args, candles, train_db_conn, label_mode: str) -> None:
         )
 
     metrics["label_mode"] = label_mode
+
+    if getattr(args, "regime_models", False):
+        _train_regime_models(candles, args, train_db_conn, label_mode, metrics)
 
     if args.calibrate:
         cal_db = None

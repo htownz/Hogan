@@ -33,7 +33,8 @@ class ChampionLocks:
     use_rl_agent: bool = False
     use_mtf_ensemble: bool = False
     use_macro_filter: bool = False
-    use_online_learning: bool = False
+    use_online_learning: bool = True
+    use_regime_models: bool = True
     use_mtf_extended: bool = True
     use_ema_clouds: bool = False
     use_fvg: bool = False
@@ -74,7 +75,7 @@ CHAMPION_LOCKS = ChampionLocks()
 
 _EXPERIMENTAL_FLAGS = (
     "use_ict", "use_rl_agent", "use_mtf_ensemble",
-    "use_macro_filter", "use_online_learning",
+    "use_macro_filter",
 )
 
 

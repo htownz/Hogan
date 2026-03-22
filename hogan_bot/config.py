@@ -53,6 +53,8 @@ class BotConfig:
     champion_ml_model_path: str = "models/hogan_champion.pkl"
     ml_buy_threshold: float = 0.55
     ml_sell_threshold: float = 0.45
+    use_regime_models: bool = False
+    regime_model_dir: str = "models/regime"
 
     # Ripster EMA cloud settings (disabled: empirically hurts win rate as
     # cloud-based confirmation filters out good crossover trades)
@@ -718,6 +720,8 @@ def load_config() -> BotConfig:
         champion_ml_model_path=os.getenv("HOGAN_CHAMPION_ML_MODEL_PATH", "models/hogan_champion.pkl"),
         ml_buy_threshold=_env_float("HOGAN_ML_BUY_THRESHOLD", "0.55"),
         ml_sell_threshold=_env_float("HOGAN_ML_SELL_THRESHOLD", "0.45"),
+        use_regime_models=os.getenv("HOGAN_USE_REGIME_MODELS", "false").lower() == "true",
+        regime_model_dir=os.getenv("HOGAN_REGIME_MODEL_DIR", "models/regime"),
         use_ema_clouds=os.getenv("HOGAN_USE_EMA_CLOUDS", "false").lower() == "true",
         ema_fast_short=_env_int("HOGAN_EMA_FAST_SHORT", "8"),
         ema_fast_long=_env_int("HOGAN_EMA_FAST_LONG", "9"),
