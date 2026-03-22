@@ -5134,3 +5134,7 @@ TypeError: sequence index must be integer, not 'slice'
 2026-03-22 14:26:18,985 INFO SHORT_SKIP BTC/USD — entry preconditions not met (shorts=True in_long=False in_short=True fx_ok=True close_rev=False)
 2026-03-22 14:27:31,270 INFO MTF_EVAL BTC/USD/1m → sell (size scaled 0.30x for sub-hour eval)
 2026-03-22 14:27:31,270 INFO SHORT_SKIP BTC/USD — entry preconditions not met (shorts=True in_long=False in_short=True fx_ok=True close_rev=False)
+2026-03-22 14:28:07,503 INFO MTF_EVAL BTC/USD/1m → sell (size scaled 0.30x for sub-hour eval)
+2026-03-22 14:28:07,503 INFO SHORT_SKIP BTC/USD — entry preconditions not met (shorts=True in_long=False in_short=True fx_ok=True close_rev=False)
+2026-03-22 14:29:19,782 INFO MTF_EVAL BTC/USD/1m → sell (size scaled 0.30x for sub-hour eval)
+2026-03-22 14:29:19,782 INFO SHORT_SKIP BTC/USD — entry preconditions not met (shorts=True in_long=False in_short=True fx_ok=True close_rev=False)
