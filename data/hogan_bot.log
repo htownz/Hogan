@@ -7549,3 +7549,7 @@ TypeError: sequence index must be integer, not 'slice'
 2026-03-23 12:12:13,265 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
 2026-03-23 12:13:25,550 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
 2026-03-23 12:14:37,931 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-23 12:15:14,390 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-23 12:15:14,558 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-23 12:15:14,742 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-23 12:16:26,484 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
