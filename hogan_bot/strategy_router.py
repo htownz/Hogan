@@ -3,10 +3,16 @@
 Maps the current market regime to the appropriate StrategyFamily and
 delegates signal generation.  When regime confidence is too low or the
 regime is unrecognised, the router returns a hold signal.
+
+Tournament winner (D_bb_squeeze x T1_trend) can be activated with
+``use_tournament_winner=True``. This replaces the regime-routed families
+with the Bollinger Squeeze Breakout entry, which showed positive edge
+across BTC, ETH, and SOL in zero-cost walk-forward testing.
 """
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING
 
 from hogan_bot.strategy import (
@@ -25,13 +31,29 @@ logger = logging.getLogger(__name__)
 class StrategyRouter:
     """Select a StrategyFamily based on the detected market regime."""
 
-    def __init__(self, config=None):
-        self.families: dict[str, StrategyFamily] = {
-            "trending_up": TrendFollowFamily(),
-            "trending_down": TrendFollowFamily(),
-            "ranging": MeanRevertFamily(),
-            "volatile": BreakoutFamily(),
-        }
+    def __init__(self, config=None, use_tournament_winner: bool | None = None):
+        if use_tournament_winner is None:
+            use_tournament_winner = os.getenv("HOGAN_TOURNAMENT_WINNER", "").lower() in ("1", "true")
+
+        if use_tournament_winner:
+            from hogan_bot.strategy_candidates import BollingerSqueezeBreakout
+            winner = BollingerSqueezeBreakout()
+            self.families: dict[str, StrategyFamily] = {
+                "trending_up": winner,
+                "trending_down": winner,
+                "ranging": winner,
+                "volatile": winner,
+            }
+            self._tournament_mode = True
+            logger.info("StrategyRouter: tournament winner (bb_squeeze) active for all regimes")
+        else:
+            self.families = {
+                "trending_up": TrendFollowFamily(),
+                "trending_down": TrendFollowFamily(),
+                "ranging": MeanRevertFamily(),
+                "volatile": BreakoutFamily(),
+            }
+            self._tournament_mode = False
         self._config = config
 
     def route(

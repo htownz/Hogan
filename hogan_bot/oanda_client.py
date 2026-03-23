@@ -173,20 +173,34 @@ class OandaClient:
         self,
         symbol: str,
         timeframe: str = "1h",
-        count: int = 500,
+        count: int | None = 500,
+        from_time: str | None = None,
+        to_time: str | None = None,
     ) -> pd.DataFrame:
         """Fetch OHLCV candles from Oanda.
+
+        Parameters
+        ----------
+        from_time : RFC3339 timestamp (e.g. "2024-01-01T00:00:00Z")
+        to_time : RFC3339 timestamp — requires from_time, mutually
+                  exclusive with count.
 
         Returns a DataFrame with columns: timestamp, open, high, low, close, volume.
         """
         inst = _oanda_instrument(symbol)
         granularity = _TF_MAP.get(timeframe, "H1")
-        count = min(count, 5000)
 
-        data = self._get(
-            f"/v3/instruments/{inst}/candles"
-            f"?granularity={granularity}&count={count}&price=M"
-        )
+        params = f"granularity={granularity}&price=M"
+        if from_time and to_time:
+            params += f"&from={from_time}&to={to_time}"
+        elif from_time:
+            c = min(count or 5000, 5000)
+            params += f"&from={from_time}&count={c}"
+        else:
+            c = min(count or 500, 5000)
+            params += f"&count={c}"
+
+        data = self._get(f"/v3/instruments/{inst}/candles?{params}")
 
         rows = []
         for candle in data.get("candles", []):

@@ -1,0 +1,10 @@
+rank,entry,exit_pack,asset,mean_net_return_pct,median_net_return_pct,mean_calmar,mean_sharpe,max_drawdown_pct,mean_profit_factor,mean_net_expectancy_r,mean_gross_expectancy_r,mean_gross_return_pct,total_trades,mean_win_rate,positive_windows,n_windows,avg_cost_per_trade,mean_cost_drag_pct,mean_turnover,mean_time_in_market,worst_window_return_pct,screen_gate,promotion_gate
+1,D_bb_squeeze,T1_trend,SOL/USD,7.4304,9.9358,6.6679,1.2660,6.3348,1.5043,0.1957,0.1957,7.4304,206,0.4376,4,5,0.0000,0.00,10.08,0.2171,-4.3926,True,True
+2,D_bb_squeeze,T2_mean_revert,SOL/USD,7.5973,7.2495,5.0570,1.5359,6.1133,1.3316,0.1699,0.1699,7.5973,242,0.4636,5,5,0.0000,0.00,11.85,0.1082,3.6115,True,True
+3,D_bb_squeeze,T3_balanced,SOL/USD,1.6064,3.9769,1.7669,0.2536,10.4527,1.0803,0.0509,0.0509,1.6064,221,0.3581,3,5,0.0000,0.00,10.82,0.1748,-5.3708,True,False
+4,E_baseline,T1_trend,SOL/USD,6.1583,7.0814,3.9926,1.0466,9.7460,1.3324,0.1445,0.1445,6.1583,231,0.3879,4,5,0.0000,0.00,11.31,0.1965,-0.9362,True,True
+5,E_baseline,T2_mean_revert,SOL/USD,5.4811,5.6550,4.1643,1.0552,10.1114,1.2449,0.1199,0.1199,5.4811,247,0.4415,4,5,0.0000,0.00,12.09,0.0942,-6.6337,True,False
+6,E_baseline,T3_balanced,SOL/USD,-3.6739,-2.0578,-0.7094,-0.8567,19.7666,0.8904,-0.0720,-0.0720,-3.6739,230,0.3121,2,5,0.0000,0.00,11.26,0.1546,-17.2908,False,False
+7,C_ema_pullback,T1_trend,SOL/USD,13.6455,5.3435,5.7982,1.3607,21.0409,1.2742,0.1244,0.1244,13.6455,561,0.3904,4,5,0.0000,0.00,27.46,0.4782,-4.9822,False,False
+8,C_ema_pullback,T2_mean_revert,SOL/USD,12.5736,0.1967,5.6715,1.0730,19.5167,1.1416,0.0842,0.0842,12.5736,725,0.4197,3,5,0.0000,0.00,35.49,0.2632,-12.6786,False,False
+9,C_ema_pullback,T3_balanced,SOL/USD,9.1518,7.8239,4.1109,0.6973,21.4125,1.1225,0.0834,0.0834,9.1518,568,0.3600,3,5,0.0000,0.00,27.80,0.3551,-16.1352,False,False
