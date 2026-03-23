@@ -193,6 +193,16 @@ def _collect_evidence(
     except Exception:
         ev["weight_proposals"] = 0
 
+    # Shadow vs active drift
+    try:
+        from hogan_bot.swarm_authority import compute_shadow_active_drift
+        drift = compute_shadow_active_drift(conn, symbol=symbol)
+        ev["drift"] = drift.to_dict()
+        ev["drift_acceptable"] = drift.drift_acceptable
+    except Exception:
+        ev["drift"] = {}
+        ev["drift_acceptable"] = True
+
     # Mode from swarm_decisions (latest row)
     try:
         row = conn.execute(
@@ -349,6 +359,16 @@ def _check_phase2(ev: dict[str, Any]) -> tuple[list[GateCheck], list[str]]:
     gates.append(g)
     if not g.passed:
         blockers.append(f"Paper PnL negative: {ev['total_paper_pnl']}")
+
+    drift_ok = ev.get("drift_acceptable", True)
+    drift_info = ev.get("drift", {})
+    drift_str = f"drift={drift_info.get('trade_count_drift_pct', 0):.0f}%"
+    g = GateCheck("shadow_active_drift", "trade/veto drift within bounds",
+                  drift_str, drift_ok)
+    gates.append(g)
+    if not g.passed:
+        for w in drift_info.get("warnings", []):
+            blockers.append(f"Drift: {w}")
 
     return gates, blockers
 

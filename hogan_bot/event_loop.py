@@ -1005,6 +1005,13 @@ async def _run_event_loop_inner(
         "ON" if getattr(config, "use_online_learning", False) else "OFF",
     )
 
+    if config.swarm_enabled:
+        try:
+            from hogan_bot.swarm_authority import log_swarm_authority_warnings
+            log_swarm_authority_warnings(config, conn=conn)
+        except Exception as _sw_auth_exc:
+            logger.debug("Swarm authority check error: %s", _sw_auth_exc)
+
     async with engine:
         async for event in engine.stream():
             if max_events is not None and event_count >= max_events:

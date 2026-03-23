@@ -48,6 +48,7 @@ class ShadowReport:
     baseline_trade_count: int = 0
     skipped_by_swarm: int = 0
     agent_leaderboard: list[dict] = field(default_factory=list)
+    drift: dict = field(default_factory=dict)
     gates: list[dict] = field(default_factory=list)
     recommendation: str = "collecting"
     blockers: list[str] = field(default_factory=list)
@@ -181,7 +182,14 @@ def build_shadow_report(
     except Exception:
         pass
 
-    # 6. Go/no-go gates -------------------------------------------------------
+    # 6. Shadow vs active drift -----------------------------------------------
+    try:
+        from hogan_bot.swarm_authority import compute_shadow_active_drift
+        rpt.drift = compute_shadow_active_drift(conn, symbol=symbol).to_dict()
+    except Exception:
+        rpt.drift = {}
+
+    # 7. Go/no-go gates -------------------------------------------------------
     rpt.gates, rpt.blockers = _evaluate_gates(rpt)
     rpt.recommendation = "advance" if not rpt.blockers else (
         "collecting" if rpt.total_shadow_decisions < 300 else "hold"
@@ -312,6 +320,19 @@ def _format_text(rpt: ShadowReport) -> str:
                 f"  {a['agent_id']:<20} {a['votes']:>6} {a['vetoes']:>7} "
                 f"{a['mean_confidence']:>6.3f} {a['buys']:>5} {a['sells']:>6} {a['holds']:>6}"
             )
+        lines.append("")
+
+    if rpt.drift:
+        lines.append("── Shadow vs Active Drift ──────────────────────────────")
+        d = rpt.drift
+        lines.append(f"  Shadow trades:      {d.get('shadow_trade_count', 0)}")
+        lines.append(f"  Active trades:      {d.get('active_trade_count', 0)}")
+        lines.append(f"  Trade drift:        {d.get('trade_count_drift_pct', 0):.0f}%")
+        lines.append(f"  Veto rate (shadow): {d.get('shadow_veto_rate', 0):.1%}")
+        lines.append(f"  Veto rate (active): {d.get('active_veto_rate', 0):.1%}")
+        lines.append(f"  Drift acceptable:   {d.get('drift_acceptable', True)}")
+        for w in d.get("warnings", []):
+            lines.append(f"  ⚠ {w}")
         lines.append("")
 
     lines.append("── Go / No-Go Gates ────────────────────────────────────")
