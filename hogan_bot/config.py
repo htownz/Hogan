@@ -301,6 +301,9 @@ class BotConfig:
     swarm_weight_auto_promote: bool = True       # Phase 5B: auto-promote when evidence sufficient
     swarm_conditional_min_agreement: float = 0.70
     swarm_conditional_min_confidence: float = 0.60
+    # When False (default), active/conditional swarm cannot turn a gated
+    # ``hold`` into ``buy``/``sell`` — avoids bypassing ML/edge/quality gates.
+    swarm_active_allow_new_signals: bool = False
 
     # Swarm agent thresholds (configurable via env)
     swarm_risk_max_drawdown_pct: float = 0.10
@@ -848,6 +851,9 @@ def load_config() -> BotConfig:
         swarm_weight_auto_promote=os.getenv("HOGAN_SWARM_WEIGHT_AUTO_PROMOTE", "true").lower() == "true",
         swarm_conditional_min_agreement=_env_float("HOGAN_SWARM_CONDITIONAL_MIN_AGREEMENT", "0.70"),
         swarm_conditional_min_confidence=_env_float("HOGAN_SWARM_CONDITIONAL_MIN_CONFIDENCE", "0.60"),
+        swarm_active_allow_new_signals=os.getenv(
+            "HOGAN_SWARM_ACTIVE_ALLOW_NEW_SIGNALS", "false",
+        ).lower() == "true",
         rl_model_path=os.getenv("HOGAN_RL_MODEL_PATH", "models/hogan_rl_policy.zip"),
         rl_reward_type=os.getenv("HOGAN_RL_REWARD_TYPE", "risk_adjusted"),
         rl_timesteps=_env_int("HOGAN_RL_TIMESTEPS", "200000"),

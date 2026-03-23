@@ -17,10 +17,11 @@ The decision pipeline:
     9. → DecisionIntent
 
 Swarm integration:  When ``config.swarm_enabled`` is True, the swarm
-controller runs in parallel (shadow) or in-line (active) and its output
-is attached to the DecisionIntent for logging.  In shadow mode the
-baseline decision is executed; in active mode the swarm decision replaces
-it.
+controller runs after the full gate chain.  Shadow mode logs votes only.
+Active / conditional_active merge swarm with the gated action: vetoes and
+``hold`` outcomes are respected; directional trades require the gate chain
+to have already produced ``buy``/``sell`` unless
+``swarm_active_allow_new_signals`` is True (experimental).
 """
 from __future__ import annotations
 
@@ -31,9 +32,61 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-from hogan_bot.swarm_decision.types import DecisionIntent
+from hogan_bot.swarm_decision.types import DecisionIntent, SwarmDecision
 
 logger = logging.getLogger(__name__)
+
+
+def merge_swarm_with_gated_action(
+    pre_action: str,
+    size: float,
+    sd: SwarmDecision,
+    *,
+    swarm_mode: str,
+    allow_new_signals: bool,
+    conditional_min_agreement: float,
+    conditional_min_confidence: float,
+) -> tuple[str, float, list[str]]:
+    """Apply swarm output on top of the ML/gated policy action.
+
+    - Vetoes always force ``hold`` and scale size by ``final_size_scale``
+      (typically 0).
+    - ``conditional_active``: if confidence gates fail, keep the gated
+      action unchanged.  If they pass, same merge rules as ``active``.
+    - ``active``: swarm may veto or align size; it cannot promote
+      ``hold`` → ``buy``/``sell`` unless *allow_new_signals* is True.
+    - If swarm direction disagrees with the gated direction → ``hold``.
+
+    Shadow mode does not call this (baseline action is executed).
+    """
+    extra: list[str] = []
+    sm = float(sd.final_size_scale)
+
+    if sd.vetoed:
+        return "hold", size * sm, extra
+
+    if swarm_mode == "conditional_active":
+        if not (
+            sd.agreement >= conditional_min_agreement
+            and sd.final_confidence >= conditional_min_confidence
+        ):
+            return pre_action, size, extra
+
+    fa = sd.final_action
+    if fa == "hold":
+        return "hold", size * sm, extra
+
+    if pre_action == "hold":
+        if not allow_new_signals:
+            extra.append("swarm_blocked_unsigned_signal")
+            return "hold", size, extra
+        return fa, size * sm, extra
+
+    if fa != pre_action:
+        extra.append("swarm_direction_clash")
+        return "hold", size, extra
+
+    return fa, size * sm, extra
 
 
 _DATA_AGE_TABLES: dict[str, tuple[str, str]] = {
@@ -679,6 +732,9 @@ def decide(
             macro_scale = _sitout.size_scale
             size *= macro_scale
 
+    # Gated baseline before swarm (ML + gates + sizing + macro sitout).
+    _pre_swarm_action = action
+
     # ------------------------------------------------------------------
     # Swarm Decision Layer (shadow / active)
     # ------------------------------------------------------------------
@@ -769,9 +825,13 @@ def decide(
                     except Exception as exc:
                         logger.debug("Swarm weight snapshot log error: %s", exc)
 
-                # Load agent modes from DB for quarantine/advisory enforcement
+                # Load agent modes from DB for quarantine/advisory enforcement.
+                # In backtest mode, skip loading persisted modes so all agents
+                # start active — avoids stale quarantine from live runs bleeding
+                # into certification backtests.
                 _agent_modes: dict[str, str] = {}
-                if conn is not None:
+                _skip_quarantine = getattr(config, "_backtest", False)
+                if conn is not None and not _skip_quarantine:
                     try:
                         from hogan_bot.agent_quarantine import get_all_agent_modes
                         _am = get_all_agent_modes(conn)
@@ -788,22 +848,31 @@ def decide(
                 )
 
                 _swarm_mode = getattr(config, "swarm_mode", "shadow")
-                if _swarm_mode == "active" and swarm_decision is not None:
-                    action = swarm_decision.final_action
-                    size *= swarm_decision.final_size_scale
-                elif _swarm_mode == "conditional_active" and swarm_decision is not None:
-                    _ca_min_agreement = getattr(config, "swarm_conditional_min_agreement", 0.70)
-                    _ca_min_confidence = getattr(config, "swarm_conditional_min_confidence", 0.60)
-                    if (
-                        swarm_decision.agreement >= _ca_min_agreement
-                        and swarm_decision.final_confidence >= _ca_min_confidence
-                        and not swarm_decision.vetoed
-                    ):
-                        action = swarm_decision.final_action
-                        size *= swarm_decision.final_size_scale
+                if (
+                    swarm_decision is not None
+                    and _swarm_mode in ("active", "conditional_active")
+                ):
+                    _allow_new = getattr(config, "swarm_active_allow_new_signals", False)
+                    _ca_agree = getattr(config, "swarm_conditional_min_agreement", 0.70)
+                    _ca_conf = getattr(config, "swarm_conditional_min_confidence", 0.60)
+                    action, size, _sw_extra = merge_swarm_with_gated_action(
+                        _pre_swarm_action,
+                        size,
+                        swarm_decision,
+                        swarm_mode=_swarm_mode,
+                        allow_new_signals=_allow_new,
+                        conditional_min_agreement=_ca_agree,
+                        conditional_min_confidence=_ca_conf,
+                    )
+                    for _r in _sw_extra:
+                        block_reasons.append(_r)
+                    if _swarm_mode == "conditional_active" and action != _pre_swarm_action:
                         logger.debug(
-                            "SWARM conditional_active OVERRIDE: action=%s agreement=%.2f conf=%.2f",
-                            action, swarm_decision.agreement, swarm_decision.final_confidence,
+                            "SWARM conditional_active: %s -> %s agreement=%.2f conf=%.2f",
+                            _pre_swarm_action,
+                            action,
+                            swarm_decision.agreement,
+                            swarm_decision.final_confidence,
                         )
 
                 if conn is not None:
@@ -837,11 +906,14 @@ def decide(
                         except Exception as exc:
                             logger.debug("Swarm outcome backfill error: %s", exc)
 
-                        # Periodic weight learning loop
+                        # Periodic weight learning loop (live/paper only — never during
+                        # backtest: would promote weights / auto-quarantine into the
+                        # shared DB from synthetic history).
                         state.swarm_bars_since_weight_learn += 1
                         _wl_interval = getattr(config, "swarm_weight_learning_interval_bars", 24)
                         if (
-                            getattr(config, "swarm_weight_learning_enabled", False)
+                            not getattr(config, "_backtest", False)
+                            and getattr(config, "swarm_weight_learning_enabled", False)
                             and state.swarm_bars_since_weight_learn >= _wl_interval
                         ):
                             state.swarm_bars_since_weight_learn = 0
@@ -927,7 +999,7 @@ def decide(
                     except Exception as exc:
                         logger.warning("Swarm decision logging error: %s", exc)
         except Exception as exc:
-            logger.warning("Swarm layer error: %s", exc)
+            logger.warning("Swarm layer error: %s (type=%s)", exc, type(exc).__name__)
 
     # ------------------------------------------------------------------
     # Build and return DecisionIntent

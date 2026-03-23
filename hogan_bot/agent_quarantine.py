@@ -92,6 +92,18 @@ def get_all_agent_modes(conn: sqlite3.Connection) -> dict[str, AgentQuarantineSt
     return result
 
 
+_DIRECTIONAL_AGENTS: frozenset[str] = frozenset({
+    "pipeline_v1",
+    "volatility_regime_v1",
+})
+
+# Never demote the last directional agent that still has fusion weight — if all
+# directional agents become advisory_only, vote scores stay at zero and active
+# swarm mode produces only holds.  Count only directional IDs that appear in the
+# accuracy dataframe (agents that actually logged votes with outcomes).
+_MIN_ACTIVE_DIRECTIONAL: int = 1
+
+
 def auto_quarantine_check(
     conn: sqlite3.Connection,
     symbol: str | None = None,
@@ -102,9 +114,13 @@ def auto_quarantine_check(
     """Check agent accuracy and quarantine underperformers.
 
     Returns list of agent_ids that were quarantined this cycle.
-    Agents with accuracy below *min_accuracy* over at least *min_votes*
-    decisions are demoted to advisory_only.  Agents that recover above
-    the threshold are restored to active.
+    Only directional agents (pipeline, volatility_regime) are subject to
+    accuracy-based quarantine.  Non-directional agents (risk_steward,
+    data_guardian, execution_cost) are confirmation/safety agents whose
+    accuracy tracks the pipeline — quarantining them is meaningless.
+
+    A guard prevents demoting the last *directional* agent (among those present
+    in the accuracy table) so fusion always retains at least one weighted voter.
     """
     quarantined: list[str] = []
     try:
@@ -112,20 +128,36 @@ def auto_quarantine_check(
         df = compute_agent_accuracy(conn, symbol=symbol, min_outcomes=min_votes, days=days)
         if df.empty:
             return []
+
+        directional_in_df = [
+            str(a) for a in df["agent_id"].unique() if a in _DIRECTIONAL_AGENTS
+        ]
+        active_directional = sum(
+            1 for aid in directional_in_df if get_agent_mode(aid, conn) == "active"
+        )
+
         for _, row in df.iterrows():
             aid = row["agent_id"]
             acc = float(row["accuracy"])
             n = int(row["total_votes"])
             if n < min_votes:
                 continue
+
             current = get_agent_mode(aid, conn)
+
             if acc < min_accuracy and current == "active":
+                if aid not in _DIRECTIONAL_AGENTS:
+                    continue
+                if active_directional <= _MIN_ACTIVE_DIRECTIONAL:
+                    continue
                 set_agent_mode(
                     aid, "advisory_only", "auto_quarantine",
                     f"accuracy={acc:.3f} < {min_accuracy} over {n} votes",
                     conn,
                 )
                 quarantined.append(aid)
+                if aid in directional_in_df:
+                    active_directional -= 1
             elif acc >= min_accuracy + 0.05 and current == "advisory_only":
                 state = get_agent_state(aid, conn)
                 if state.operator == "auto_quarantine":
@@ -134,6 +166,8 @@ def auto_quarantine_check(
                         f"accuracy recovered to {acc:.3f} over {n} votes",
                         conn,
                     )
+                    if aid in directional_in_df:
+                        active_directional += 1
     except Exception as exc:
         import logging as _logging
         _logging.getLogger(__name__).warning("auto_quarantine_check error: %s", exc)

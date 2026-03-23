@@ -2010,7 +2010,7 @@ async def _run_event_loop_inner(
                         if _should_apply and getattr(proposal, "regime_weights", None) is not None:
                             # Apply proposed weights to MetaWeigher, bounded ±0.05 per agent
                             _old_w = dict(evaluator.pipeline.meta_weigher._weights)
-                            for regime, rw in proposal.regime_weights.items():
+                            for _regime, rw in proposal.regime_weights.items():
                                 for agent_key in ("technical", "sentiment", "macro"):
                                     if agent_key in rw and agent_key in _old_w:
                                         delta = rw[agent_key] - _old_w[agent_key]

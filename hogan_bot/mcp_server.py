@@ -440,7 +440,7 @@ def create_app(db_path: str | None = None):
         from fastapi import FastAPI, Request
         from fastapi.responses import JSONResponse
     except ImportError:
-        raise SystemExit("fastapi not installed. Run: pip install fastapi uvicorn")
+        raise SystemExit("fastapi not installed. Run: pip install fastapi uvicorn") from None
 
     app = FastAPI(
         title="Hogan MCP Server",

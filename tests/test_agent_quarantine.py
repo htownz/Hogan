@@ -4,6 +4,7 @@ from __future__ import annotations
 import sqlite3
 
 from hogan_bot.agent_quarantine import (
+    auto_quarantine_check,
     get_agent_mode,
     get_agent_state,
     get_all_agent_modes,
@@ -154,3 +155,51 @@ class TestPreVetoCapture:
         dec = ctrl.decide(symbol="X", candles=pd.DataFrame({"close": [1]}))
         assert dec.vetoed is False
         assert dec.pre_veto_action is not None
+
+
+class TestAutoQuarantineCheck:
+    """auto_quarantine_check uses mocked accuracy — no swarm_outcomes seeding required."""
+
+    def test_skips_demote_when_only_one_directional_in_accuracy_df(self, monkeypatch):
+        import pandas as pd
+
+        conn = _make_conn()
+
+        def _fake_accuracy(*_a, **_k):
+            return pd.DataFrame(
+                [{"agent_id": "pipeline_v1", "accuracy": 0.05, "total_votes": 500}],
+            )
+
+        monkeypatch.setattr(
+            "hogan_bot.swarm_decision.weight_learner.compute_agent_accuracy",
+            _fake_accuracy,
+        )
+        out = auto_quarantine_check(conn, symbol="BTC/USD")
+        assert out == []
+        assert get_agent_mode("pipeline_v1", conn) == "active"
+        conn.close()
+
+    def test_demotes_one_directional_when_two_in_accuracy_df(self, monkeypatch):
+        import pandas as pd
+
+        conn = _make_conn()
+
+        def _fake_accuracy(*_a, **_k):
+            return pd.DataFrame(
+                [
+                    {"agent_id": "pipeline_v1", "accuracy": 0.05, "total_votes": 500},
+                    {"agent_id": "volatility_regime_v1", "accuracy": 0.05, "total_votes": 500},
+                ],
+            )
+
+        monkeypatch.setattr(
+            "hogan_bot.swarm_decision.weight_learner.compute_agent_accuracy",
+            _fake_accuracy,
+        )
+        out = auto_quarantine_check(conn, symbol="BTC/USD")
+        assert len(out) == 1
+        assert out[0] in ("pipeline_v1", "volatility_regime_v1")
+        pm = get_agent_mode("pipeline_v1", conn)
+        vm = get_agent_mode("volatility_regime_v1", conn)
+        assert (pm == "advisory_only") ^ (vm == "advisory_only")
+        conn.close()

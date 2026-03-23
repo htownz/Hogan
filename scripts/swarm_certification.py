@@ -5,19 +5,26 @@ Runs the backtest twice over the same candle window:
   2. Active:    swarm in active mode (swarm controls trade decisions)
 
 Compares P&L, Sharpe, drawdown, and trade quality between the two runs.
-Also writes swarm decisions to the live DB so the dashboard's
-Promotion Readiness card updates with regime coverage and would-trade counts.
+Also writes swarm decisions to SQLite (default: the same DB as --db).  Use
+``--scratch-db`` to copy the source DB to a tempfile so certification does
+not append swarm rows / weight snapshots to your production file.
 
 Usage:
     python scripts/swarm_certification.py
     python scripts/swarm_certification.py --bars 8000
     python scripts/swarm_certification.py --dry-run
+    python scripts/swarm_certification.py --scratch-db
+    python scripts/swarm_certification.py --scratch-db --keep-scratch-db
 """
 from __future__ import annotations
 
 import argparse
+import atexit
 import logging
+import os
+import shutil
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -68,23 +75,36 @@ def _run_backtest(candles, ml_model, db_path, swarm_mode, macro_sitout, bot_cfg,
         use_policy_core=True,
         swarm_enabled=True,
         swarm_mode=swarm_mode,
+        swarm_active_allow_new_signals=getattr(
+            bot_cfg, "swarm_active_allow_new_signals", False,
+        ),
         db_path=db_path,
     )
     return bt
 
 
-def main():
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Swarm certification backtest")
-    parser.add_argument("--db", default="data/hogan.db", help="SQLite DB path")
+    parser.add_argument("--db", default="data/hogan.db", help="SQLite DB path (read candles + macro data)")
     parser.add_argument("--bars", type=int, default=5000, help="Number of recent 1h bars to use")
     parser.add_argument("--symbol", default="BTC/USD", help="Trading pair")
     parser.add_argument("--dry-run", action="store_true", help="Print plan only")
-    args = parser.parse_args()
+    parser.add_argument(
+        "--scratch-db",
+        action="store_true",
+        help="Copy --db to a temp file; backtests write swarm logs only there (production DB unchanged)",
+    )
+    parser.add_argument(
+        "--keep-scratch-db",
+        action="store_true",
+        help="With --scratch-db, keep the temp file and print its path (default: delete on exit)",
+    )
+    args = parser.parse_args(argv)
 
-    from hogan_bot.storage import get_connection, load_candles
-    from hogan_bot.ml import load_model
-    from hogan_bot.config import load_config
     from hogan_bot.champion import apply_champion_mode
+    from hogan_bot.config import load_config
+    from hogan_bot.ml import load_model
+    from hogan_bot.storage import get_connection, load_candles
 
     config = load_config()
     config = apply_champion_mode(config)
@@ -105,19 +125,43 @@ def main():
     macro_sitout = None
     try:
         from hogan_bot.macro_sitout import MacroSitout
-        macro_sitout = MacroSitout(conn)
+
+        macro_sitout = MacroSitout.from_db(conn)
         logger.info("Macro sitout filter loaded")
     except Exception:
         pass
 
     conn.close()
 
+    scratch_path: str | None = None
+    if args.scratch_db and not args.dry_run:
+        fd, scratch_path = tempfile.mkstemp(suffix=".db", prefix="hogan_swarm_cert_")
+        os.close(fd)
+        shutil.copy2(args.db, scratch_path)
+        logger.info("Scratch DB: copied %s -> %s", args.db, scratch_path)
+        if not args.keep_scratch_db:
+            _scratch_copy = scratch_path
+
+            def _rm_scratch(p: str = _scratch_copy) -> None:
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
+
+            atexit.register(_rm_scratch)
+
+    write_db = scratch_path if scratch_path else args.db
+
     if args.dry_run:
         print(f"\nDRY RUN — would run {len(candles)} bars x 2 modes (shadow + active)")
-        print(f"  Symbol: {args.symbol}, DB: {args.db}")
+        print(f"  Symbol: {args.symbol}, read DB: {args.db}")
+        if args.scratch_db:
+            print("  Writes: isolated temp copy (--scratch-db)")
+        else:
+            print(f"  Writes: same as read DB ({args.db})")
         print(f"  ML model: {config.ml_model_path}")
         print(f"  Swarm agents: {config.swarm_agents}")
-        return
+        return 0
 
     from dataclasses import replace
     bot_cfg = replace(config, timeframe="1h")
@@ -130,25 +174,25 @@ def main():
 
     logger.info("Run 1/2: SHADOW mode (baseline)...")
     t0 = time.perf_counter()
-    shadow = _run_backtest(candles, ml_model, args.db, "shadow", macro_sitout, bot_cfg, _symbol)
+    shadow = _run_backtest(candles, ml_model, write_db, "shadow", macro_sitout, bot_cfg, _symbol)
     t_shadow = time.perf_counter() - t0
     logger.info("Shadow done in %.0fs", t_shadow)
 
     logger.info("Run 2/2: ACTIVE mode (swarm controls)...")
     t0 = time.perf_counter()
-    active = _run_backtest(candles, ml_model, args.db, "active", macro_sitout, bot_cfg, _symbol)
+    active = _run_backtest(candles, ml_model, write_db, "active", macro_sitout, bot_cfg, _symbol)
     t_active = time.perf_counter() - t0
     logger.info("Active done in %.0fs", t_active)
 
     s_ret = shadow.total_return_pct
     s_dd = shadow.max_drawdown_pct
-    s_sh = shadow.sharpe_ratio
+    s_sh = shadow.sharpe_ratio or 0.0
     s_tr = shadow.trades
     s_wr = shadow.win_rate
 
     a_ret = active.total_return_pct
     a_dd = active.max_drawdown_pct
-    a_sh = active.sharpe_ratio
+    a_sh = active.sharpe_ratio or 0.0
     a_tr = active.trades
     a_wr = active.win_rate
 
@@ -164,6 +208,14 @@ def main():
     print(f"{'Sharpe':<22} {s_sh:>18.2f} {a_sh:>18.2f} {a_sh - s_sh:>+12.2f}")
     print(f"{'=' * 70}")
 
+    if a_tr == 0:
+        print("\nWARNING: Swarm ACTIVE mode produced 0 trades.")
+        print("  Common causes:")
+        print("  - All swarm agents in advisory_only / quarantine (check swarm_agent_modes in DB).")
+        print("  - Persistent vetoes (data_guardian gaps, risk_steward drawdown).")
+        print("  - Gated policy never emits buy/sell while swarm only confirms gated trades")
+        print("    (default: swarm_active_allow_new_signals=false).")
+
     swarm_better = a_sh > s_sh and a_ret > s_ret
     if swarm_better:
         print("\nVERDICT: SWARM IMPROVES PERFORMANCE")
@@ -178,8 +230,18 @@ def main():
         print("\nVERDICT: BASELINE OUTPERFORMS SWARM")
         print("  Keep swarm in shadow mode. Investigate veto patterns for improvements.")
 
-    print(f"\nSwarm decisions written to {args.db} — dashboard will update on next refresh.")
+    if scratch_path:
+        if args.keep_scratch_db:
+            print(f"\nSwarm certification writes kept at: {scratch_path}")
+            print("  (dashboard will not see these unless you point it at this file)")
+        else:
+            print(f"\nSwarm writes went to scratch DB (deleted on exit): {scratch_path}")
+            print(f"  Production DB unchanged: {args.db}")
+    else:
+        print(f"\nSwarm decisions written to {args.db} — dashboard will update on next refresh.")
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

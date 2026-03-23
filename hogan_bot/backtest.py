@@ -967,6 +967,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
     swarm_enabled: bool = False,
     swarm_mode: str = "shadow",
     swarm_agents: str = "pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1",
+    swarm_active_allow_new_signals: bool = False,
     exit_drawdown_pct: float = 0.03,
     exit_time_decay: float = 0.75,
     exit_vol_expansion: float = 2.0,
@@ -1046,6 +1047,8 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
         swarm_min_vote_margin=0.10,
         swarm_max_entropy=0.95,
         swarm_log_full_votes=True,
+        swarm_active_allow_new_signals=swarm_active_allow_new_signals,
+        _backtest=True,
     )
     _bt_conn = None
     if db_path:

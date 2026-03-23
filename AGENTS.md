@@ -21,6 +21,19 @@ python -m hogan_bot.main
 - `.env` — API keys, HOGAN_* vars (load_dotenv in config.py)
 - `hogan_bot/config.py` — BotConfig, load_config, symbol_config
 
+## Swarm vs gate chain
+- `HOGAN_SWARM_MODE=active` / `conditional_active`: swarm runs **after** ML + edge/quality/ranging/pullback gates.
+- Default `swarm_active_allow_new_signals=false`: swarm cannot promote a gated `hold` into `buy`/`sell` (only veto, align, or size-scale when the gated action is already directional). Set `HOGAN_SWARM_ACTIVE_ALLOW_NEW_SIGNALS=true` only for experiments.
+- `conditional_active` always honors vetoes (hold + zero size when any agent vetoes).
+- Swarm weight learning and `auto_quarantine_check` are **disabled** when `config._backtest` is true (backtest must not write promotions/quarantine to the shared DB).
+- If agents are stuck `advisory_only` and fusion scores stay at zero: `python scripts/reset_swarm_agent_modes.py` (use `--dry-run` first).
+
+## Enhancement backlog (short)
+- **Swarm**: per-regime `swarm_min_agreement` / margin; dashboard for `swarm_blocked_unsigned_signal` vs `swarm_direction_clash` rates.
+- **Quarantine**: optional minimum calendar age before demoting `pipeline_v1`; auto-quarantine counts only directional agents that appear in the accuracy table so a phantom default-active `volatility_regime_v1` cannot unlock demoting the last real voter (`pipeline_v1`).
+- **ML**: silence sklearn feature-name warning in tests or align `LogisticRegression` with feature names.
+- **Certification**: use `python scripts/swarm_certification.py --scratch-db` to avoid writing swarm rows to production (add `--keep-scratch-db` to inspect the copy).
+
 ## Champion Path
 - `HOGAN_CHAMPION_MODE=true` locks experimental features
 - 8-feature subset in `feature_registry.CHAMPION_FEATURE_COLUMNS`
@@ -59,6 +72,12 @@ Each regime-aware component has a clearly defined role. Avoid double-counting.
 
 ## Validation & Testing
 ```bash
+# Fast sanity (subset, ~10s) — pass the listed paths as one pytest invocation
+python -m pytest tests/test_champion.py tests/test_ml.py tests/test_exchange.py tests/test_agent_quarantine.py tests/test_swarm_certification.py::TestSwarmGatedMerge tests/test_swarm_certification.py::TestShadowParity tests/test_decision_parity.py::TestPolicyCoreEquivalence tests/test_observability_scripts.py::TestConfigDefaults -q
+
+# Lint (CI uses ruff; on Windows if `ruff` is missing:)
+python -m ruff check hogan_bot/ tests/ --select E,F,I --ignore E501
+
 # Unit tests (CI runs these on push/PR)
 pytest tests/ -v
 

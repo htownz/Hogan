@@ -308,6 +308,11 @@ class TestConfigDefaults:
         cfg = BotConfig()
         assert cfg.swarm_phase == "certification"
 
+    def test_swarm_active_allow_new_signals_default_false(self):
+        from hogan_bot.config import BotConfig
+        cfg = BotConfig()
+        assert cfg.swarm_active_allow_new_signals is False
+
     def test_load_config_policy_core_true(self):
         from unittest.mock import patch  # isort: skip
 
@@ -315,3 +320,19 @@ class TestConfigDefaults:
         with patch.dict("os.environ", {"HOGAN_USE_POLICY_CORE": "true"}, clear=False):
             cfg = load_config()
         assert cfg.use_policy_core is True
+
+
+# ===================================================================
+# swarm_certification.py
+# ===================================================================
+
+class TestSwarmCertificationScript:
+    def test_dry_run_scratch_db_exits_zero(self, tmp_path):
+        from hogan_bot.storage import get_connection
+        from scripts.swarm_certification import main
+
+        db = tmp_path / "cert.db"
+        conn = get_connection(str(db))
+        conn.close()
+        code = main(["--db", str(db), "--dry-run", "--scratch-db", "--bars", "1"])
+        assert code == 0

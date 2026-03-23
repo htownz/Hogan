@@ -67,7 +67,7 @@ def encrypt_aes256(plaintext: str, password: str) -> str:
     except ImportError:
         raise RuntimeError(
             "cryptography package not installed. Run: pip install cryptography"
-        )
+        ) from None
 
     salt = secrets.token_bytes(16)
     key, iv = _derive_key_iv(password, salt)
@@ -91,7 +91,7 @@ def decrypt_aes256(encrypted: str, password: str) -> str:
     except ImportError:
         raise RuntimeError(
             "cryptography package not installed. Run: pip install cryptography"
-        )
+        ) from None
 
     parts = encrypted.split("$")
     if len(parts) != 3:

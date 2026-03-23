@@ -204,7 +204,7 @@ def cmd_pnl(db_path: str) -> list[dict]:
     total_fees = 0.0
     wins = 0
     by_symbol: dict[str, float] = {}
-    for sym, side, pnl, pnl_pct, entry_fee, exit_fee, reason in rows:
+    for sym, _side, pnl, _pnl_pct, entry_fee, exit_fee, _reason in rows:
         pnl = pnl or 0.0
         total_pnl += pnl
         total_fees += (entry_fee or 0.0) + (exit_fee or 0.0)
@@ -244,7 +244,7 @@ def cmd_fills(db_path: str) -> list[dict]:
         return [_embed("Recent Trades", [("Status", "No paper trades yet — waiting for first signal", False)], 0xFEE75C)]
 
     fields = []
-    for sym, side, qty, entry_px, exit_px, pnl, pnl_pct, open_ms, close_ms, reason, ml_prob in rows:
+    for sym, side, qty, entry_px, exit_px, pnl, pnl_pct, open_ms, _close_ms, reason, ml_prob in rows:
         dt_open = datetime.fromtimestamp(open_ms / 1000, tz=timezone.utc).strftime("%m-%d %H:%M")
         if exit_px is not None:
             pnl_str = f"P&L ${pnl:+,.4f} ({pnl_pct*100:+.2f}%)" if pnl is not None else ""

@@ -563,7 +563,7 @@ class BacktestDataEngine(DataEngineBase):
         all_events.sort(key=lambda x: x[0])
         logger.info("BacktestDataEngine: replaying %d candle events.", len(all_events))
 
-        for ts_ms, event in all_events:
+        for _ts_ms, event in all_events:
             if not self._running:
                 break
             await self._queue.put(event)

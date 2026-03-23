@@ -456,21 +456,147 @@ class TestShadowParity:
             assert 0.0 <= intent.swarm.agreement <= 1.0
             assert intent.swarm.entropy >= 0.0
 
-    def test_active_mode_can_override(self):
-        """In active mode, the swarm CAN change the baseline action."""
-        from hogan_bot.policy_core import PolicyState, decide
 
-        candles = _synthetic_candles(200, seed=42)
-        cfg = _base_config(swarm_enabled=True, swarm_mode="active")
-        pipeline = _make_pipeline(cfg)
-        state = PolicyState()
+# ===================================================================
+# 2b. GATED MERGE — active swarm must not bypass the gate chain
+# ===================================================================
 
-        intent = decide(
-            symbol="BTC/USD", candles=candles, equity_usd=10000.0,
-            config=cfg, pipeline=pipeline, state=state, mode="backtest",
+class TestSwarmGatedMerge:
+    """merge_swarm_with_gated_action enforces veto / direction / hold promotion rules."""
+
+    def _sd(
+        self,
+        *,
+        final_action: str,
+        agreement: float = 0.80,
+        final_confidence: float = 0.80,
+        final_size_scale: float = 1.0,
+        vetoed: bool = False,
+    ) -> SwarmDecision:
+        return SwarmDecision(
+            final_action=final_action,
+            final_confidence=final_confidence,
+            final_size_scale=final_size_scale,
+            agreement=agreement,
+            entropy=0.5,
+            weights_used={"pipeline_v1": 1.0},
+            votes=[],
+            vetoed=vetoed,
         )
-        assert intent.swarm is not None
-        assert intent.action == intent.swarm.final_action
+
+    def test_active_blocks_hold_to_buy_without_flag(self):
+        from hogan_bot.policy_core import merge_swarm_with_gated_action
+
+        sd = self._sd(final_action="buy")
+        act, sz, extra = merge_swarm_with_gated_action(
+            "hold", 100.0, sd,
+            swarm_mode="active",
+            allow_new_signals=False,
+            conditional_min_agreement=0.70,
+            conditional_min_confidence=0.60,
+        )
+        assert act == "hold"
+        assert sz == 100.0
+        assert "swarm_blocked_unsigned_signal" in extra
+
+    def test_active_allows_hold_to_buy_with_flag(self):
+        from hogan_bot.policy_core import merge_swarm_with_gated_action
+
+        sd = self._sd(final_action="buy", final_size_scale=0.9)
+        act, sz, extra = merge_swarm_with_gated_action(
+            "hold", 100.0, sd,
+            swarm_mode="active",
+            allow_new_signals=True,
+            conditional_min_agreement=0.70,
+            conditional_min_confidence=0.60,
+        )
+        assert act == "buy"
+        assert sz == pytest.approx(90.0)
+        assert extra == []
+
+    def test_active_veto_forces_hold(self):
+        from hogan_bot.policy_core import merge_swarm_with_gated_action
+
+        sd = self._sd(final_action="buy", vetoed=True, final_size_scale=0.0)
+        act, sz, _ = merge_swarm_with_gated_action(
+            "buy", 50.0, sd,
+            swarm_mode="active",
+            allow_new_signals=False,
+            conditional_min_agreement=0.70,
+            conditional_min_confidence=0.60,
+        )
+        assert act == "hold"
+        assert sz == 0.0
+
+    def test_active_direction_clash(self):
+        from hogan_bot.policy_core import merge_swarm_with_gated_action
+
+        sd = self._sd(final_action="sell")
+        act, sz, extra = merge_swarm_with_gated_action(
+            "buy", 100.0, sd,
+            swarm_mode="active",
+            allow_new_signals=False,
+            conditional_min_agreement=0.70,
+            conditional_min_confidence=0.60,
+        )
+        assert act == "hold"
+        assert sz == 100.0
+        assert "swarm_direction_clash" in extra
+
+    def test_active_aligned_applies_size_scale(self):
+        from hogan_bot.policy_core import merge_swarm_with_gated_action
+
+        sd = self._sd(final_action="buy", final_size_scale=0.8)
+        act, sz, extra = merge_swarm_with_gated_action(
+            "buy", 100.0, sd,
+            swarm_mode="active",
+            allow_new_signals=False,
+            conditional_min_agreement=0.70,
+            conditional_min_confidence=0.60,
+        )
+        assert act == "buy"
+        assert sz == pytest.approx(80.0)
+        assert extra == []
+
+    def test_conditional_respects_veto_even_if_confidence_high(self):
+        from hogan_bot.policy_core import merge_swarm_with_gated_action
+
+        sd = self._sd(
+            final_action="buy",
+            agreement=0.99,
+            final_confidence=0.99,
+            vetoed=True,
+            final_size_scale=0.0,
+        )
+        act, sz, _ = merge_swarm_with_gated_action(
+            "buy", 40.0, sd,
+            swarm_mode="conditional_active",
+            allow_new_signals=False,
+            conditional_min_agreement=0.70,
+            conditional_min_confidence=0.60,
+        )
+        assert act == "hold"
+        assert sz == 0.0
+
+    def test_conditional_low_confidence_keeps_gated_action(self):
+        from hogan_bot.policy_core import merge_swarm_with_gated_action
+
+        sd = self._sd(
+            final_action="hold",
+            agreement=0.50,
+            final_confidence=0.50,
+            vetoed=False,
+        )
+        act, sz, extra = merge_swarm_with_gated_action(
+            "buy", 100.0, sd,
+            swarm_mode="conditional_active",
+            allow_new_signals=False,
+            conditional_min_agreement=0.70,
+            conditional_min_confidence=0.60,
+        )
+        assert act == "buy"
+        assert sz == 100.0
+        assert extra == []
 
 
 # ===================================================================
