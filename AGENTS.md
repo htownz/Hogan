@@ -33,6 +33,7 @@ python -m hogan_bot.main
 - **Swarm authority**: `hogan_bot/swarm_authority.py` — startup config validation + shadow/active drift detection. Wired into event_loop, shadow_report, and promotion_check.
 - **Execution health**: `hogan_bot/execution_health.py` — tracks order outcomes, slippage, fill rates, circuit-breaker state. Wired into event_loop. Operator runbook: `docs/EXECUTION_RUNBOOK.md`.
 - **Exit lifecycle**: `hogan_bot/exit_lifecycle.py` — tail-loss, time-in-trade-by-regime, exit quality analytics. Wired into walk-forward JSON + CLI.
+- **Observability**: `hogan_bot/observability.py` — full block-reason histogram, agent mode staleness, DB table stats, prune/vacuum. CLI: `scripts/db_hygiene.py`. Docs: `docs/OBSERVABILITY_AND_DB_HYGIENE.md`.
 - **Quarantine**: optional minimum calendar age before demoting `pipeline_v1`; auto-quarantine counts only directional agents that appear in the accuracy table so a phantom default-active `volatility_regime_v1` cannot unlock demoting the last real voter (`pipeline_v1`).
 - **ML**: silence sklearn feature-name warning in tests or align `LogisticRegression` with feature names.
 - **Certification**: use `python scripts/swarm_certification.py --scratch-db` to avoid writing swarm rows to production (add `--keep-scratch-db` to inspect the copy).

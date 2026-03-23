@@ -1005,13 +1005,22 @@ def decide(
     # Build and return DecisionIntent
     # ------------------------------------------------------------------
     try:
-        from hogan_bot.metrics import record_swarm_policy_events
+        from hogan_bot.metrics import (
+            BLOCK_REASONS,
+            HOLD_NO_REASON,
+            record_swarm_policy_events,
+        )
 
         record_swarm_policy_events(
             swarm_mode=getattr(config, "swarm_mode", "shadow"),
             swarm_decision=swarm_decision,
             block_reasons=block_reasons,
         )
+        for reason in block_reasons:
+            if isinstance(reason, str) and reason.strip():
+                BLOCK_REASONS.labels(reason=reason).inc()
+        if action == "hold" and not block_reasons:
+            HOLD_NO_REASON.inc()
     except Exception:
         pass
 

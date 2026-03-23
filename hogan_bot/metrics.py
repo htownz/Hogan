@@ -38,6 +38,17 @@ MODEL_PROMOTED = Counter("hogan_model_promoted_total", "Challenger promotions to
 DEAD_MAN_ALERTS = Counter("hogan_dead_man_alerts_total", "Dead-man switch alerts fired")
 SIGNAL_QUALITY = Gauge("hogan_signal_quality", "Fraction of recent signals that are non-hold", ["symbol"])
 
+# Decision transparency — all gate block reasons (not just swarm)
+BLOCK_REASONS = Counter(
+    "hogan_block_reasons_total",
+    "Block reasons from policy_core.decide() — counts every gate hit per bar",
+    ["reason"],
+)
+HOLD_NO_REASON = Counter(
+    "hogan_hold_no_reason_total",
+    "Hold decisions with empty block_reasons — potential logging gap",
+)
+
 # Swarm — policy merge layer (after ML + edge/quality/ranging/pullback gates)
 SWARM_MERGE_BLOCKS = Counter(
     "hogan_swarm_merge_blocks_total",
