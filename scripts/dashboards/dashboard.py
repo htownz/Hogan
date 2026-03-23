@@ -781,10 +781,10 @@ with tab_os:
         st.info("No candle data available.")
     else:
         try:
+            from hogan_bot.agent_pipeline import MacroAgent, SentimentAgent
             from hogan_bot.forecast import compute_forecast
-            from hogan_bot.risk_head import compute_risk
             from hogan_bot.regime import detect_regime
-            from hogan_bot.agent_pipeline import SentimentAgent, MacroAgent
+            from hogan_bot.risk_head import compute_risk
 
             fc = compute_forecast(os_candles)
             rk = compute_risk(os_candles, stop_pct=0.0184, tp_pct=0.0572)
@@ -1456,12 +1456,14 @@ with tab_swarm:
                 # ── Section 5: Learning & Drift ──────────────────────
                 st.subheader("Learning & Drift")
                 try:
-                    from hogan_bot.swarm_observability import (
-                        load_swarm_decisions, load_swarm_score_calibration,
-                    )
                     from hogan_bot.swarm_metrics import (
-                        compute_disagreement_stats, compute_trade_density,
                         compute_agent_leaderboard,
+                        compute_disagreement_stats,
+                        compute_trade_density,
+                    )
+                    from hogan_bot.swarm_observability import (
+                        load_swarm_decisions,
+                        load_swarm_score_calibration,
                     )
 
                     _drift_decisions = load_swarm_decisions(_sw_conn, limit=500)
@@ -1513,7 +1515,9 @@ with tab_swarm:
                             if not cal_df.empty and "forward_60m_bps" in cal_df.columns:
                                 _has_outcomes = cal_df["forward_60m_bps"].notna().any()
                                 if _has_outcomes:
-                                    from hogan_bot.swarm_metrics import compute_opportunity_monotonicity
+                                    from hogan_bot.swarm_metrics import (
+                                        compute_opportunity_monotonicity,
+                                    )
                                     mono = compute_opportunity_monotonicity(cal_df)
                                     st.markdown("**Score Calibration**")
                                     mc1, mc2 = st.columns(2)
@@ -1537,7 +1541,9 @@ with tab_swarm:
 
                 # ── Persisted Promotion Reports ──────────────────────
                 try:
-                    from hogan_bot.swarm_observability import load_swarm_promotion_status
+                    from hogan_bot.swarm_observability import (
+                        load_swarm_promotion_status,
+                    )
                     _promo_report = load_swarm_promotion_status(_sw_conn)
                     if not _promo_report.empty:
                         st.subheader("Latest Promotion Report")
@@ -1671,7 +1677,10 @@ with tab_swarm:
                 _tq_schema(_sw_conn)
 
                 # Panel 1 — Stall Status
-                from hogan_bot.stall_detection import get_latest_stall_alerts, compute_stall_summary
+                from hogan_bot.stall_detection import (
+                    compute_stall_summary,
+                    get_latest_stall_alerts,
+                )
                 _stall_status = compute_stall_summary(_sw_conn)
                 _stall_colors = {"healthy": "green", "info": "blue", "warning": "orange", "critical": "red"}
                 st.markdown(f"**Stall Status:** :{_stall_colors.get(_stall_status, 'gray')}[{_stall_status.upper()}]")
@@ -1807,9 +1816,16 @@ with tab_replay:
             except Exception:
                 pass
 
-            from hogan_bot.swarm_replay_queries import ReplayFilter, list_replay_decisions, get_replay_decision
-            from hogan_bot.swarm_attribution import compute_full_attribution, build_learning_note
+            from hogan_bot.swarm_attribution import (
+                build_learning_note,
+                compute_full_attribution,
+            )
             from hogan_bot.swarm_replay import render_decision_story
+            from hogan_bot.swarm_replay_queries import (
+                ReplayFilter,
+                get_replay_decision,
+                list_replay_decisions,
+            )
 
             # ── Zone A: Replay Selector ───────────────────────────
             st.subheader("Replay Selector")

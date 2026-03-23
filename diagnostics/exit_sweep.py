@@ -3,20 +3,20 @@
 Runs the walk-forward validation with different TS/TP combinations to find
 the optimal exit parameters.  Uses no-ML + macro-sitout as the baseline.
 """
+import json
+import logging
 import os
 import sqlite3
 import sys
 import time
-import logging
-import json
 from pathlib import Path
 
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from hogan_bot.walk_forward import WFConfig, walk_forward_validate
 from hogan_bot.macro_sitout import MacroSitout
+from hogan_bot.walk_forward import WFConfig, walk_forward_validate
 
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)

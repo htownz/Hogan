@@ -469,7 +469,7 @@ class TestICTSetupSignal(unittest.TestCase):
         """
         rows = []
         # Consolidation
-        for i in range(20):
+        for _i in range(20):
             rows.append({"open": 100.0, "high": 100.5, "low": 99.5, "close": 100.0})
         # Decline
         for i in range(10):

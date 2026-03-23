@@ -1,6 +1,6 @@
 """Diagnostic: analyze trade funnel and decision blocking."""
-import sqlite3
 import json
+import sqlite3
 from datetime import datetime, timezone
 
 DB = "data/hogan.db"
@@ -184,6 +184,7 @@ def _run(conn):
     print("KEY ENV / CONFIG")
     print("=" * 60)
     import os
+
     from dotenv import load_dotenv
     load_dotenv()
     keys = [

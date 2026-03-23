@@ -285,7 +285,7 @@ def backfill_historical(
     records: list[tuple[str, str, float]] = []
 
     # cg_btc_ath_pct: distance below current ATH
-    for i, (date, price) in enumerate(zip(dates, prices)):
+    for _i, (date, price) in enumerate(zip(dates, prices)):
         ath_pct = (price - current_ath) / current_ath * 100.0
         records.append((date, "cg_btc_ath_pct", float(ath_pct)))
 

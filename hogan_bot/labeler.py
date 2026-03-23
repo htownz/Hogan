@@ -152,7 +152,7 @@ def label_pending_trades(
         return 0
 
     labeled = 0
-    for row_id, symbol, ts_ms, features_json, horizon_bars in pending:
+    for row_id, symbol, ts_ms, _features_json, _horizon_bars in pending:
         # Find the first sell fill after this entry
         sell_cur = conn.execute(
             """

@@ -17,9 +17,9 @@ import threading
 import time
 import webbrowser
 from http.server import HTTPServer, SimpleHTTPRequestHandler
-from socketserver import ThreadingMixIn
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs
+from socketserver import ThreadingMixIn
+from urllib.parse import parse_qs, urlparse
 
 DB_PATH = "data/hogan.db"
 PORT = 8777

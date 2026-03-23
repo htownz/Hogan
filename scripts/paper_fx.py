@@ -37,20 +37,30 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from hogan_bot.agent_pipeline import AgentPipeline
 from hogan_bot.config import BotConfig, load_config
 from hogan_bot.decision import (
-    edge_gate, entry_quality_gate,
+    edge_gate,
+    entry_quality_gate,
     estimate_spread_from_candles,
 )
-from hogan_bot.execution import RealisticPaperExecution, FillSimConfig
+from hogan_bot.execution import FillSimConfig, RealisticPaperExecution
 from hogan_bot.expectancy import ExpectancyTracker
 from hogan_bot.fx_utils import (
-    SessionFilter, current_session, fx_position_size,
-    pip_take_profit, pip_size, is_weekend,
+    SessionFilter,
+    current_session,
+    fx_position_size,
+    is_weekend,
+    pip_size,
+    pip_take_profit,
 )
 from hogan_bot.instrument_profiles import get_profile, spread_cost_bps
 from hogan_bot.oanda_client import OandaClient
 from hogan_bot.paper import PaperPortfolio
 from hogan_bot.risk import DrawdownGuard
-from hogan_bot.storage import get_connection, record_equity, open_paper_trade, close_paper_trade
+from hogan_bot.storage import (
+    close_paper_trade,
+    get_connection,
+    open_paper_trade,
+    record_equity,
+)
 
 logger = logging.getLogger(__name__)
 

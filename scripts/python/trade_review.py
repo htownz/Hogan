@@ -1,6 +1,6 @@
 """Quick trade performance review script."""
-import sqlite3
 import os
+import sqlite3
 
 DB = os.path.join(os.path.dirname(__file__), "..", "data", "hogan.db")
 conn = sqlite3.connect(DB)

@@ -390,7 +390,7 @@ def _compute_extended_table(conn: "sqlite3.Connection", symbol: str = "BTC/USD")
         all_ts = set()
         if not fr_df.empty:
             all_ts.update(fr_df["ts_ms"].tolist())
-        for name, df in daily_frames.items():
+        for _name, df in daily_frames.items():
             if df is not None:
                 all_ts.update(df["ts_ms"].tolist())
 
@@ -408,7 +408,7 @@ def _compute_extended_table(conn: "sqlite3.Connection", symbol: str = "BTC/USD")
             base = pd.merge_asof(base, oi_df, on="ts_ms", direction="backward")
 
         # Merge daily features
-        for name, df in daily_frames.items():
+        for _name, df in daily_frames.items():
             if df is not None and not df.empty:
                 base = pd.merge_asof(base, df.sort_values("ts_ms"), on="ts_ms", direction="backward")
 

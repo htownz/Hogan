@@ -1,6 +1,8 @@
 """Quick check: how many bars does the macro sitout filter affect?"""
 import sqlite3
+
 import pandas as pd
+
 from hogan_bot.macro_sitout import MacroSitout, count_sitout_bars
 
 conn = sqlite3.connect("data/hogan.db")

@@ -75,8 +75,8 @@ Each regime-aware component has a clearly defined role. Avoid double-counting.
 # Fast sanity (subset, ~10s) — pass the listed paths as one pytest invocation
 python -m pytest tests/test_champion.py tests/test_ml.py tests/test_exchange.py tests/test_agent_quarantine.py tests/test_swarm_certification.py::TestSwarmGatedMerge tests/test_swarm_certification.py::TestShadowParity tests/test_decision_parity.py::TestPolicyCoreEquivalence tests/test_observability_scripts.py::TestConfigDefaults -q
 
-# Lint (CI uses ruff; on Windows if `ruff` is missing:)
-python -m ruff check hogan_bot/ tests/ --select E,F,I --ignore E501
+# Lint (CI: E,F,I,B007,B904 on hogan_bot, tests, scripts, diagnostics; on Windows use python -m ruff)
+python -m ruff check hogan_bot/ tests/ scripts/ diagnostics/ --select E,F,I,B007,B904 --ignore E501
 
 # Unit tests (CI runs these on push/PR)
 pytest tests/ -v
@@ -95,4 +95,4 @@ python -m hogan_bot.feature_importance --db data/hogan.db
 ```
 
 ## CI/CD
-- `.github/workflows/ci.yml` runs all tests + ruff lint on push/PR to main/develop
+- `.github/workflows/ci.yml` runs all tests + ruff (`E,F,I,B007,B904` on `hogan_bot/`, `tests/`, `scripts/`, `diagnostics/`) on push/PR to main/develop

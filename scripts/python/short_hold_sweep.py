@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import sys
+
 sys.path.insert(0, ".")
 
-from hogan_bot.config import load_config
-from hogan_bot.storage import get_connection, load_candles
 from hogan_bot.backtest import diagnose_shorts_by_confidence
 from hogan_bot.backtest_cli import _run_single
+from hogan_bot.config import load_config
+from hogan_bot.storage import get_connection, load_candles
 
 
 def main() -> None:

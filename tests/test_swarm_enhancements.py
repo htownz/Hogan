@@ -219,7 +219,7 @@ class TestWeightLearner:
             conn, current, min_trades=5, max_daily_shift=0.02, days=36500,
         )
 
-        for k, d in proposal.deltas.items():
+        for _k, d in proposal.deltas.items():
             assert abs(d) <= 0.25  # adaptive shift (up to 3x base) + renormalization can amplify
         conn.close()
 

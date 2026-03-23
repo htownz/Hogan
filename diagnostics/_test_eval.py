@@ -1,10 +1,12 @@
 """Test: can SignalEvaluator process candles from Kraken REST warmup?"""
 import sys
+
 sys.path.insert(0, ".")
 import ccxt
 import pandas as pd
-from hogan_bot.config import load_config
+
 from hogan_bot.champion import apply_champion_mode
+from hogan_bot.config import load_config
 from hogan_bot.ml import load_model
 
 cfg = load_config()

@@ -220,8 +220,12 @@ def _refresh_oanda() -> None:
 def _refresh_openbb() -> None:
     """Fetch DXY, VIX, SPY return, FOMC calendar via OpenBB / yfinance."""
     from hogan_bot.fetch_openbb import (
-        fetch_dxy, fetch_vix, fetch_spy_return, fetch_fed_calendar,
-        fetch_btc_options_skew, store_records,
+        fetch_btc_options_skew,
+        fetch_dxy,
+        fetch_fed_calendar,
+        fetch_spy_return,
+        fetch_vix,
+        store_records,
     )
     from hogan_bot.storage import get_connection
     conn = get_connection(_db_path())

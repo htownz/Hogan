@@ -357,7 +357,7 @@ class TestAdaptiveConfidence:
 
     def test_max_history_eviction(self):
         ac = AdaptiveConfidence(max_history=10)
-        for i in range(20):
+        for _i in range(20):
             ac.record_outcome(0.6, 1)
         assert len(ac._predictions) == 10
 

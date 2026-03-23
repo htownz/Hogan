@@ -1,9 +1,9 @@
 """Quick dependency check."""
 try:
-    import pandas  # noqa: F401
-    import numpy  # noqa: F401
-    import sklearn  # noqa: F401
     import dotenv  # noqa: F401
+    import numpy  # noqa: F401
+    import pandas  # noqa: F401
+    import sklearn  # noqa: F401
     print("Core deps: OK")
 except ImportError as e:
     print(f"Missing: {e}")

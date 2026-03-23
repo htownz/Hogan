@@ -1,5 +1,6 @@
 """Diagnose position sizing bug and trade frequency."""
 import sqlite3
+
 conn = sqlite3.connect("data/hogan.db")
 cur = conn.cursor()
 

@@ -5,8 +5,8 @@ After:  volume_threshold=0.3, ml_confidence_sizing=False, EMA cloud fix
 """
 from __future__ import annotations
 
-import sys
 import os
+import sys
 
 # Ensure project root is on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -17,8 +17,8 @@ try:
 except ImportError:
     pass
 
-from hogan_bot.config import load_config
 from hogan_bot.backtest import run_backtest_on_candles
+from hogan_bot.config import load_config
 from hogan_bot.storage import get_connection, load_candles
 
 cfg = load_config()

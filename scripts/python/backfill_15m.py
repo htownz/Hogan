@@ -3,6 +3,7 @@
 Aggregates every 3 consecutive 5m bars aligned to 15m boundaries.
 """
 import pandas as pd
+
 from hogan_bot.storage import get_connection, upsert_candles
 
 conn = get_connection("data/hogan.db")

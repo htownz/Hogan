@@ -27,18 +27,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from hogan_bot.storage import get_connection, load_candles
+from hogan_bot.config import load_config
 from hogan_bot.ml import (
+    _FEATURE_COLUMNS,
     build_training_set,
-    walk_forward_cv,
+    train_lightgbm,
     train_logistic_regression,
     train_random_forest,
     train_xgboost,
-    train_lightgbm,
-    _FEATURE_COLUMNS,
+    walk_forward_cv,
 )
-from hogan_bot.config import load_config
 from hogan_bot.retrain import default_horizon_bars
+from hogan_bot.storage import get_connection, load_candles
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("massive_retrain")

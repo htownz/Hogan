@@ -17,7 +17,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 DB = os.path.join(PROJECT_ROOT, "data", "hogan.db")
 
-from hogan_bot.storage import get_connection, close_paper_trade  # noqa: E402
+from hogan_bot.storage import close_paper_trade, get_connection  # noqa: E402
 
 
 def main():
@@ -51,7 +51,7 @@ def main():
     now_ms = int(time.time() * 1000)
     closed_count = 0
 
-    for trade_id, symbol, side, entry_price, qty, _ in stale:
+    for trade_id, symbol, side, entry_price, _qty, _ in stale:
         norm_side = "long" if side in ("buy", "long") else "short"
         result = close_paper_trade(
             conn,

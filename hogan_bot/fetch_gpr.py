@@ -99,7 +99,7 @@ def _parse_xls(path: Path):
     results: list[tuple[str, float]] = []
     import datetime as dt_module
 
-    for i, row in enumerate(rows):
+    for _i, row in enumerate(rows):
         if len(row) < 3:
             continue
         raw_date = row[0]

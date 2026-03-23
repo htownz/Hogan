@@ -1,8 +1,10 @@
 """Smoke test: verify signal confidence is non-zero after EMA cloud fix."""
 import sys
+
 sys.path.insert(0, ".")
 import numpy as np
 import pandas as pd
+
 from hogan_bot.strategy import generate_signal
 
 # Synthetic bearish candles (price falling, low volume — simulates current market)
