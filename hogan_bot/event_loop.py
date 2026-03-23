@@ -643,6 +643,10 @@ async def _run_event_loop_inner(
     )
     guard = DrawdownGuard(config.starting_balance_usd, config.max_drawdown)
 
+    from hogan_bot.execution_health import ExecutionHealthState, record_exec_outcome
+    _exec_health = ExecutionHealthState()
+    _exec_health.rest_fallback_active = os.getenv("HOGAN_USE_REST_DATA", "").strip().lower() in ("1", "true", "yes")
+
     use_oanda = (
         config.exchange_id.lower() == "oanda"
         or os.getenv("HOGAN_USE_OANDA", "").strip().lower() in ("1", "true", "yes")
@@ -1082,10 +1086,13 @@ async def _run_event_loop_inner(
                 _candle_age_h = (time.time() * 1000 - _latest_candle_ms) / 3_600_000
                 if _candle_age_h > 4.0:
                     logger.warning("GAP_GUARD %s — latest candle is %.1fh old, skipping trading", symbol, _candle_age_h)
+                    _exec_health.gap_guard_active = True
                     if notifier and _candle_age_h > 8.0:
                         notifier.notify("warning", {"msg": f"GAP_GUARD {symbol} — candle {_candle_age_h:.1f}h stale"})
                     event_count += 1
                     continue
+                else:
+                    _exec_health.gap_guard_active = False
 
             mark_prices = {}
             for s in config.symbols:
@@ -1114,11 +1121,23 @@ async def _run_event_loop_inner(
                     EQUITY.set(equity)
                     CASH.set(portfolio.cash_usd)
                     DRAWDOWN.set(dd)
+                    try:
+                        from hogan_bot.metrics import (
+                            GAP_GUARD_ACTIVE,
+                            ORDER_FAILURE_CIRCUIT,
+                            REST_FALLBACK_ACTIVE,
+                        )
+                        REST_FALLBACK_ACTIVE.set(1 if _exec_health.rest_fallback_active else 0)
+                        ORDER_FAILURE_CIRCUIT.set(1 if _exec_health.order_failure_circuit_open else 0)
+                        GAP_GUARD_ACTIVE.set(1 if _exec_health.gap_guard_active else 0)
+                    except Exception:
+                        pass
             except Exception as exc:
                 logger.warning("Equity record error: %s", exc)
 
             # DrawdownGuard
             if not guard.update_and_check(equity):
+                _exec_health.drawdown_circuit_open = True
                 logger.error("Drawdown limit hit: equity=%.2f peak=%.2f", equity, guard.peak_equity)
                 if notifier:
                     notifier.notify("drawdown_breach", {"equity": equity, "peak": guard.peak_equity})
@@ -1189,6 +1208,8 @@ async def _run_event_loop_inner(
                             _pe_entry = _pe_pos.avg_entry
                             now_ms = int(time.time() * 1000)
                             res = await _safe_exec(executor.close_long, _pe_sym, _pe_px, _pe_qty, reason=_pe_reason)
+                            record_exec_outcome(_exec_health, symbol=_pe_sym, side="close_long",
+                                                decision_price=_pe_px, result=res)
                             if res.ok:
                                 fee = _pe_qty * _pe_px * config.fee_rate
                                 _pe_regime = _entry_regime.pop(_pe_sym, _current_regime.get(_pe_sym, "unknown"))
@@ -1245,6 +1266,8 @@ async def _run_event_loop_inner(
                         _pe_s_entry = _pe_spos.avg_entry
                         now_ms = int(time.time() * 1000)
                         res = await _safe_exec(executor.close_short, _pe_sym, _pe_s_px, _pe_s_qty, reason=_pe_s_reason)
+                        record_exec_outcome(_exec_health, symbol=_pe_sym, side="close_short",
+                                            decision_price=_pe_s_px, result=res)
                         if res.ok:
                             fee = _pe_s_qty * _pe_s_px * config.fee_rate
                             _pe_s_regime = _entry_regime.pop(_pe_sym, _current_regime.get(_pe_sym, "unknown"))
@@ -1294,6 +1317,8 @@ async def _run_event_loop_inner(
                     mae_pct = getattr(pos, "max_adverse_pct", 0.0)
                     mfe_pct = getattr(pos, "max_favorable_pct", 0.0)
                     res = await _safe_exec(executor.close_long, exit_symbol, ep, qty, reason=reason)
+                    record_exec_outcome(_exec_health, symbol=exit_symbol, side="close_long",
+                                        decision_price=ep, result=res)
                     executed = bool(res.ok)
                     sell_px = ep
                     _exit_entry_regime = _entry_regime.pop(exit_symbol, _current_regime.get(exit_symbol, "unknown"))
@@ -1357,6 +1382,8 @@ async def _run_event_loop_inner(
                     mfe_pct = getattr(pos, "max_favorable_pct", 0.0)
                     cover_px = ep
                     res = await _safe_exec(executor.close_short, exit_symbol, cover_px, qty, reason=reason)
+                    record_exec_outcome(_exec_health, symbol=exit_symbol, side="close_short",
+                                        decision_price=cover_px, result=res)
                     executed = bool(res.ok)
                     _exit_s_entry_regime = _entry_regime.pop(exit_symbol, _current_regime.get(exit_symbol, "unknown"))
                     if executed:
@@ -1408,6 +1435,7 @@ async def _run_event_loop_inner(
             # Dead-man's switch check
             stale = engine.check_dead_man()
             if stale:
+                _exec_health.dead_man_triggered = True
                 msg = f"No candles received for >15min: {stale}"
                 logger.warning(msg)
                 if notifier:
@@ -1417,6 +1445,8 @@ async def _run_event_loop_inner(
                     DEAD_MAN_ALERTS.inc()
                 except Exception as exc:
                     logger.debug("DEAD_MAN_ALERTS metric error: %s", exc)
+            else:
+                _exec_health.record_candle_received()
 
             # FX session filter: block trading during off-hours/weekends
             if _fx_session_filter is not None:
@@ -1593,6 +1623,8 @@ async def _run_event_loop_inner(
                             s_avg_entry = spos.avg_entry
                             cover_px = px if _executor_owns_fill else px * (1.0 + slip_mult)
                             res = await _safe_exec(executor.close_short, symbol, cover_px, cover_qty, reason="buy_signal")
+                            record_exec_outcome(_exec_health, symbol=symbol, side="close_short",
+                                                decision_price=cover_px, result=res)
                             if res.ok:
                                 _exit_s_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
                                 now_ms = int(time.time() * 1000)
@@ -1704,6 +1736,8 @@ async def _run_event_loop_inner(
                                                trailing_stop_pct=_eff_stop,
                                                take_profit_pct=_eff_tp,
                                                trail_activation_pct=config.trail_activation_pct)
+                        record_exec_outcome(_exec_health, symbol=symbol, side="open_long",
+                                            decision_price=buy_px, result=res)
                         executed = bool(res.ok)
                         if executed:
                             _entry_regime[symbol] = _sym_regime or "unknown"
@@ -1790,6 +1824,8 @@ async def _run_event_loop_inner(
                             sell_px = px if _executor_owns_fill else px * (1.0 - slip_mult)
                             avg_entry = pos.avg_entry
                             res = await _safe_exec(executor.close_long, symbol, sell_px, sell_qty, reason="signal")
+                            record_exec_outcome(_exec_health, symbol=symbol, side="close_long",
+                                                decision_price=sell_px, result=res)
                             executed = bool(res.ok)
                             _sig_entry_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
                             if executed:
@@ -1922,6 +1958,8 @@ async def _run_event_loop_inner(
                             take_profit_pct=_eff_tp,
                             trail_activation_pct=config.trail_activation_pct,
                         )
+                        record_exec_outcome(_exec_health, symbol=symbol, side="open_short",
+                                            decision_price=short_px, result=res)
                         if res.ok:
                             _entry_regime[symbol] = _sym_regime or "unknown"
                             _entry_regime_conf[symbol] = getattr(sig, "final_confidence", 0.0)

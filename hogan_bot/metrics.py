@@ -24,6 +24,11 @@ WS_RECONNECTS = Counter("hogan_ws_reconnects_total", "WebSocket reconnection att
 CANDLES_RECEIVED = Counter("hogan_candles_received_total", "Candles received via WS/REST", ["symbol", "timeframe"])
 DATA_LAG_SECONDS = Gauge("hogan_data_lag_seconds", "Seconds since last candle received", ["symbol"])
 
+# Execution health — data feed
+REST_FALLBACK_ACTIVE = Gauge("hogan_rest_fallback_active", "1 when WebSocket is down and REST polling is active")
+ORDER_FAILURE_CIRCUIT = Gauge("hogan_order_failure_circuit_open", "1 when consecutive order failures exceed threshold")
+GAP_GUARD_ACTIVE = Gauge("hogan_gap_guard_active", "1 when GAP_GUARD is blocking trades due to stale candles")
+
 # Phase 4 — online / continuous learning
 FEATURE_DRIFT = Counter("hogan_feature_drift_total", "Feature distribution drift detections", ["symbol"])
 ONLINE_UPDATES = Counter("hogan_online_updates_total", "Online model partial_fit calls", ["model_name"])

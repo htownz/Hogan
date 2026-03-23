@@ -31,6 +31,7 @@ LiveDataEngine → CandleEvent queue → SignalEvaluator → RiskManager → Exe
 | `profiles.py` | CANONICAL_PROFILE, get_profile, apply_profile |
 | `walk_forward.py` | Rolling walk-forward validation harness with promotion gate (Calmar + DD + Sharpe + exit lifecycle) |
 | `exit_lifecycle.py` | Tail-loss, time-in-trade-by-regime, exit quality, hold duration analytics |
+| `execution_health.py` | Order outcome tracking, slippage, fill rate, circuit-breaker state, health_snapshot() |
 | `feature_importance.py` | Permutation importance audit for champion features |
 | `oos_eval.py` | Single-window OOS evaluation for retrain pipeline |
 | `macro_sitout.py` | Macro event sit-out filter (FOMC/CPI/NFP calendar + Fear&Greed + VIX) |
