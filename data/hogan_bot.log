@@ -7476,3 +7476,24 @@ TypeError: sequence index must be integer, not 'slice'
 2026-03-23 11:21:35,983 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
 2026-03-23 11:22:12,155 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
 2026-03-23 11:23:24,449 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-23 11:24:36,774 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-23 11:25:12,928 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-23 11:25:13,119 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-23 11:26:25,262 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-23 11:27:37,601 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-23 11:28:13,754 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-23 11:29:26,090 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-23 11:30:02,284 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-23 11:30:02,480 INFO MTF_EVAL BTC/USD/30m → hold (size scaled 0.70x for sub-hour eval)
+2026-03-23 11:30:38,428 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-23 11:30:38,626 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-23 11:31:14,606 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-23 11:31:14,614 INFO OnlineLearner: insufficient labeled data for all
+2026-03-23 11:31:14,615 INFO HEARTBEAT [2800 events] equity=8844.58 cash=8844.45 longs=0 shorts=1 regime=volatile
+2026-03-23 11:32:26,926 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-23 11:32:26,927 INFO EXPECTANCY [3 trades] win=33.3% net_edge=-0.0143% payoff=0.20 exp=-0.0143% sig_exit_loss=0.0%
+2026-03-23 11:32:26,927 INFO   regime=trending_down n=3 win=33.3% exp=-0.0143%
+2026-03-23 11:33:39,230 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-23 11:34:15,361 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-23 11:35:27,664 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-23 11:35:27,862 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)

@@ -66,6 +66,7 @@ class WFConfig:
 
     min_sharpe: float = 0.5
     max_drawdown_pct: float = 15.0
+    min_calmar: float = 0.0
     min_trades_per_window: int = 5
     min_windows_positive: int = 3
 
@@ -85,6 +86,7 @@ class WindowResult:
     max_drawdown_pct: float = 0.0
     sharpe: float | None = None
     sortino: float | None = None
+    calmar: float | None = None
     trades: int = 0
     win_rate: float = 0.0
     net_positive: bool = False
@@ -100,11 +102,13 @@ class WindowResult:
 
     def summary_line(self) -> str:
         s = self.sharpe if self.sharpe is not None else 0.0
+        c = self.calmar if self.calmar is not None else 0.0
         return (
             f"W{self.window_idx}: "
             f"ret={self.total_return_pct:+.2f}% "
             f"dd={self.max_drawdown_pct:.1f}% "
             f"sharpe={s:.2f} "
+            f"calmar={c:.2f} "
             f"trades={self.trades} "
             f"win={self.win_rate:.0%} "
             f"{'PASS' if self.net_positive else 'FAIL'}"
@@ -154,6 +158,18 @@ class WalkForwardReport:
         return max(dds) if dds else 0.0
 
     @property
+    def mean_calmar(self) -> float:
+        vals = [w.calmar for w in self.windows
+                if w.calmar is not None and w.error is None]
+        return float(np.mean(vals)) if vals else 0.0
+
+    @property
+    def worst_calmar(self) -> float:
+        vals = [w.calmar for w in self.windows
+                if w.calmar is not None and w.error is None]
+        return min(vals) if vals else 0.0
+
+    @property
     def passes_gate(self) -> bool:
         if self.n_failed > 0:
             return False
@@ -162,6 +178,8 @@ class WalkForwardReport:
         if self.mean_sharpe < self.config.min_sharpe:
             return False
         if self.worst_drawdown > self.config.max_drawdown_pct:
+            return False
+        if self.config.min_calmar > 0 and self.mean_calmar < self.config.min_calmar:
             return False
         return True
 
@@ -173,11 +191,14 @@ class WalkForwardReport:
             "total_trades": self.total_trades,
             "mean_return_pct": round(self.mean_return, 4),
             "mean_sharpe": round(self.mean_sharpe, 4),
+            "mean_calmar": round(self.mean_calmar, 4),
+            "worst_calmar": round(self.worst_calmar, 4),
             "mean_drawdown_pct": round(self.mean_drawdown, 2),
             "worst_drawdown_pct": round(self.worst_drawdown, 2),
             "passes_gate": self.passes_gate,
             "gate_config": {
                 "min_sharpe": self.config.min_sharpe,
+                "min_calmar": self.config.min_calmar,
                 "max_drawdown_pct": self.config.max_drawdown_pct,
                 "min_windows_positive": self.config.min_windows_positive,
             },
@@ -472,6 +493,12 @@ def _train_and_evaluate_window(
         result.trades = bt.trades
         result.win_rate = bt.win_rate
         result.net_positive = bt.total_return_pct > 0.0
+
+        dd = bt.max_drawdown_pct
+        if dd > 0:
+            result.calmar = round(bt.total_return_pct / dd, 4)
+        else:
+            result.calmar = None
         result.signal_funnel = dict(bt.signal_funnel)
         result.regime_distribution = bt.signal_funnel.get("regime_distribution", {})
         result.closed_trades = list(bt.closed_trades)
@@ -585,8 +612,9 @@ def _print_funnel_comparison(report: WalkForwardReport) -> None:
         f = w.signal_funnel
         label = "PASS" if w.net_positive else "FAIL"
         print(f"\n--- W{w.window_idx} ({label}) | {w.test_start_date or '?'} to {w.test_end_date or '?'} ---")
+        _c = w.calmar if w.calmar is not None else 0.0
         print(f"  Return: {w.total_return_pct:+.2f}%  Sharpe: {w.sharpe or 0:.2f}  "
-              f"Trades: {w.trades}  Win: {w.win_rate:.0%}")
+              f"Calmar: {_c:.2f}  Trades: {w.trades}  Win: {w.win_rate:.0%}")
 
         bars = f.get("bars_evaluated", 0)
         pipe_buy = f.get("pipeline_buy", 0)
@@ -743,6 +771,8 @@ def main() -> None:
     p.add_argument("--min-train", type=int, default=2000)
     p.add_argument("--min-test", type=int, default=200)
     p.add_argument("--min-sharpe", type=float, default=0.5)
+    p.add_argument("--min-calmar", type=float, default=0.0,
+                   help="Minimum mean Calmar (return/DD) across windows (0 = disabled)")
     p.add_argument("--max-dd", type=float, default=15.0)
     p.add_argument("--no-ml", action="store_true", help="Disable ML filter (technical pipeline only)")
     p.add_argument("--ml-sizer", action="store_true", help="Use ML probability as continuous position sizer instead of binary filter")
@@ -783,6 +813,7 @@ def main() -> None:
         symbol=args.symbol,
         timeframe=args.timeframe,
         min_sharpe=args.min_sharpe,
+        min_calmar=args.min_calmar,
         max_drawdown_pct=args.max_dd,
         use_ml_filter=not args.no_ml and not args.ml_sizer,
         use_ml_as_sizer=args.ml_sizer,
@@ -827,6 +858,7 @@ def main() -> None:
                 "max_drawdown_pct": round(w.max_drawdown_pct, 2),
                 "sharpe": round(w.sharpe, 4) if w.sharpe is not None else None,
                 "sortino": round(w.sortino, 4) if w.sortino is not None else None,
+                "calmar": round(w.calmar, 4) if w.calmar is not None else None,
                 "trades": w.trades,
                 "win_rate": round(w.win_rate, 4),
                 "net_positive": w.net_positive,
@@ -859,6 +891,8 @@ def main() -> None:
     print(f"WALK-FORWARD GATE: {gate}")
     print(f"  Windows: {report.n_positive}/{report.n_windows} positive")
     print(f"  Mean Sharpe: {report.mean_sharpe:.2f}")
+    print(f"  Mean Calmar: {report.mean_calmar:.2f}")
+    print(f"  Worst Calmar: {report.worst_calmar:.2f}")
     print(f"  Mean Return: {report.mean_return:+.2f}%")
     print(f"  Worst Drawdown: {report.worst_drawdown:.1f}%")
     print(f"  Total Trades: {report.total_trades}")
