@@ -2,30 +2,32 @@
 
 ## Executive Summary
 
-The 5x3 entry-exit matrix was run on BTC/USD and ETH/USD (1h candles, 5 walk-forward OOS windows).
-**No cell survived the BTC screen gate with realistic costs** (fee_rate=0.0026, slippage=5bps).
-However, the zero-cost diagnostic revealed **6 BTC survivors and 4 promotion candidates**,
-proving that multiple entries have real signal edge — the problem is execution economics, not signal quality.
+The 5x3 entry-exit matrix was run on BTC/USD and ETH/USD (1h, 5 walk-forward OOS windows).
+**No cell survived the BTC screen gate with realistic costs.** However, the zero-cost diagnostic
+revealed **6 BTC survivors and 4 promotion candidates**, proving multiple entries have real signal
+edge destroyed by execution economics.
+
+GBP/USD cross-asset testing (12,745 bars backfilled from Oanda) confirmed that **C_ema_pullback**
+has edge in BOTH crypto and FX markets, while **D_bb_squeeze** is crypto-specific.
 
 ## Key Numbers
 
 | Run Mode | BTC Cells | Screen Survivors | Promotion Candidates |
 |----------|-----------|------------------|---------------------|
-| With costs | 15 | 0 | 0 |
+| With costs (0.26% fee) | 15 | 0 | 0 |
 | Zero-cost | 15 | 6 | 4 |
 | Long-only (costs) | 15 | 0 | 0 |
 
 ## The Critical Finding: Signal Exists, Costs Kill It
 
-| Entry | Exit | Gross Return% | Net Return% | Cost Drag |
-|-------|------|:------------:|:-----------:|:---------:|
-| E_baseline | T1_trend | +6.57% | -10.81% | 1108% |
-| E_baseline | T3_balanced | +7.25% | -12.57% | 450% |
-| D_bb_squeeze | T1_trend | +10.22% | -15.40% | 409% |
-| C_ema_pullback | T1_trend | +11.99% | -29.64% | 789% |
+| Entry | Exit | Gross Return% | Net Return% | Cost per Trade | Trades/mo |
+|-------|------|:------------:|:-----------:|:--------------:|:---------:|
+| C_ema_pullback | T1_trend | +11.99% | -29.64% | $39.75 | 25.5 |
+| D_bb_squeeze | T1_trend | +10.22% | -15.40% | $45.63 | 13.7 |
+| E_baseline | T1_trend | +6.57% | -10.81% | $45.87 | 9.2 |
+| E_baseline | T3_balanced | +7.25% | -12.57% | $51.41 | 9.4 |
 
-The average trade costs $35-52 in fees+slippage on a $10,000 account. With 9-30 trades per month,
-cost drag consumes 100-1000%+ of gross edge.
+With 0.52% round-trip cost and 9-25 trades/month, cost drag consumes 100-1000%+ of gross edge.
 
 ## Zero-Cost BTC Promotion Candidates
 
@@ -36,7 +38,9 @@ cost drag consumes 100-1000%+ of gross edge.
 | 3 | D_bb_squeeze | T1_trend | +7.27 | +11.82% | 1.56 | 7.5% | 38% | 281 |
 | 4 | E_baseline | T3_balanced | +6.80 | +7.84% | 1.52 | 5.0% | 45% | 194 |
 
-## ETH Confirmation (Zero-Cost)
+## Cross-Asset Confirmation (Zero-Cost)
+
+### ETH/USD (crypto portability)
 
 | Entry | Exit | BTC Calmar | ETH Calmar | ETH Net% | Portable? |
 |-------|------|-----------|-----------|---------|-----------|
@@ -44,61 +48,100 @@ cost drag consumes 100-1000%+ of gross edge.
 | D_bb_squeeze | T1_trend | +7.27 | +4.57 | +8.26% | YES |
 | C_ema_pullback | T1_trend | +5.51 | +6.41 | +12.65% | YES |
 
-## SOL/USD Stress Test (Zero-Cost)
+### SOL/USD (high-beta stress test)
 
-| Entry | Exit | SOL Calmar | SOL Net% | PF | DD% |
-|-------|------|-----------|---------|-----|-----|
-| D_bb_squeeze | T1_trend | +6.67 | +7.43% | 1.50 | 6.3% |
-| D_bb_squeeze | T2_mean_revert | +5.06 | +7.60% | 1.33 | 6.1% |
-| E_baseline | T1_trend | +3.99 | +6.16% | 1.33 | 9.7% |
-| C_ema_pullback | T1_trend | +5.80 | +13.65% | 1.27 | 21.0% |
+| Entry | Exit | BTC Calmar | SOL Calmar | SOL Net% | Fragile? |
+|-------|------|-----------|-----------|---------|----------|
+| D_bb_squeeze | T1_trend | +7.27 | +6.67 | +7.43% | NO |
+| D_bb_squeeze | T2_mean_revert | n/a | +5.06 | +7.60% | NO |
+| E_baseline | T1_trend | +8.18 | +3.99 | +6.16% | NO |
+| C_ema_pullback | T1_trend | +5.51 | +5.80 | +13.65% | NO |
 
-D_bb_squeeze shows the most consistent edge across all three assets with the lowest drawdown.
+### GBP/USD (FX cross-market robustness)
 
-## Four-Quadrant Reading
+| Entry | Exit | BTC Calmar | GBP Calmar | GBP Net% | FX Edge? |
+|-------|------|-----------|-----------|---------|----------|
+| C_ema_pullback | T1_trend | +5.51 | **+6.10** | +1.22% | **YES** |
+| C_ema_pullback | T3_balanced | n/a | +4.87 | +1.63% | **YES** |
+| E_baseline | T1_trend | +8.18 | +2.41 | +0.20% | marginal |
+| E_baseline | T3_balanced | +6.80 | +2.32 | +0.08% | marginal |
+| D_bb_squeeze | T1_trend | +7.27 | -1.35 | -0.72% | **NO** |
+| D_bb_squeeze | T3_balanced | n/a | -0.61 | -0.32% | **NO** |
 
-**BTC + ETH + SOL all work (zero-cost)**: Real price/volatility edge confirmed across all crypto assets.
-The edge is NOT crypto-specific noise — it appears in three structurally different crypto assets.
-GBP/USD testing blocked by Oanda auth issue; FX robustness check deferred.
+## Four-Quadrant Reading (Final)
 
-## Entry Family Analysis
+| Entry | BTC | ETH | SOL | GBP | Interpretation |
+|-------|-----|-----|-----|-----|----------------|
+| **C_ema_pullback** | +15.79% | +12.65% | +13.65% | +1.22% | **True price/volatility edge — works in crypto AND FX** |
+| **D_bb_squeeze** | +11.82% | +8.26% | +7.43% | -0.72% | **Crypto-native edge — does not transfer to FX** |
+| **E_baseline** | +7.27% | +5.92% | +6.16% | +0.20% | **Broad edge but is a control — needs ablation** |
 
-| Entry | Signal Quality | Trade Frequency | Verdict |
-|-------|---------------|-----------------|---------|
-| **D_bb_squeeze** | Best risk-adjusted edge | 14 trades/month | **WINNER** — best Calmar, lowest DD, 3-asset confirmation |
-| **E_baseline** | Strong edge, high PF | 9-10 trades/month | Strong but is a control — requires ablation |
-| **C_ema_pullback** | Highest raw return | 26-35 trades/month | Too frequent — cost drag worst of the three |
-| A_donchian | Marginal edge | 30-53 trades/month | Fails even zero-cost on BTC |
-| B_rsi_reclaim | Zero activity | <1 trade total | Filter too strict for 1h BTC data |
+**C_ema_pullback has the broadest validity.** It is the only entry that shows positive edge
+on all four assets, including the FX robustness check. This suggests a real structural
+price/volatility pattern, not crypto-specific noise.
 
-## Tournament Winner: D_bb_squeeze x T1_trend
+**D_bb_squeeze has the best BTC risk-adjusted returns** (lowest drawdown at 7.5%)
+but is crypto-specific — it fails on GBP/USD.
 
-**Bollinger Squeeze Breakout + Trend Exit** is the cleanest candidate to build from:
-- Positive edge across BTC (+11.82%), ETH (+8.26%), SOL (+7.43%) — zero-cost
-- Lowest max drawdown of any promoted cell (7.5% BTC)
-- Moderate trade frequency (14/month) — less cost-sensitive than EMA pullback
-- T1 (trend exit with trailing stop, no fixed TP) works best — the edge comes from letting winners run
+## Entry Family Ranking
+
+| Rank | Entry | BTC Edge | Cross-Asset | Trades/mo | Best Exit | Verdict |
+|------|-------|----------|-------------|-----------|-----------|---------|
+| 1 | **C_ema_pullback** | +15.79% | 4/4 assets | 26 | T1_trend | **Broadest edge — true signal** |
+| 2 | **D_bb_squeeze** | +11.82% | 3/4 (no FX) | 14 | T1_trend | **Best risk-adjusted BTC — crypto-native** |
+| 3 | **E_baseline** | +7.27% | 4/4 marginal | 9 | T1_trend | **Control — needs ablation if adopted** |
+| 4 | A_donchian | +2.54% | 1/4 (ETH only) | 30 | T1_trend | Weak, too frequent |
+| 5 | B_rsi_reclaim | n/a | 0/4 | <1 | n/a | Too strict for 1h data |
+
+## Exit Pack Analysis
+
+**T1 (Trend Exit) dominates across all entries.** Every entry performs best with T1 — wide stop
+(2.0 ATR), trailing stop (2.5 ATR), no fixed TP, long hold (120h). This means:
+- The edge comes from **letting winners run**, not from capturing quick mean-reversion
+- T2 (mean-reversion exit) consistently underperforms — tight stops get stopped out in noise
+- T3 (balanced) is a reasonable middle ground but still trails T1
+
+This is a **trend-following signal structure**, even for the entries that look like pullback/compression plays.
 
 ## The Path Forward
 
-The tournament proved the signal exists. The next steps to make it profitable with real costs:
+The tournament definitively answers the core question: **Hogan has real entry edge in BTC 1h data.**
+The problem is pure execution economics — 0.52% round-trip costs on 9-26 trades/month destroy the edge.
 
-1. **Reduce trade frequency** — add a quality/strength filter to only take the strongest squeezes
-2. **Lower execution costs** — evaluate exchanges with maker/taker fee tiers (target <0.10% per side)
-3. **Move to 4h timeframe** — same logic, fewer signals, larger moves per trade vs cost
-4. **Re-layer regime routing** — only if it improves BTC Calmar vs D_bb_squeeze standalone
-5. **ML as entry qualifier** — use model probability to skip marginal squeeze signals
-6. **Macro sitout** — reduce exposure during high-event periods
+### Priority 1: Make the signal profitable with real costs
 
-Each addition must be walk-forward validated and must not degrade BTC Calmar.
+Three levers:
+1. **Lower fees** — negotiate exchange tier or switch to a lower-fee venue (target <0.10% per side)
+2. **Reduce frequency** — add a quality filter that only takes the strongest signals (halving trade
+   count would roughly halve cost drag while keeping the best signals)
+3. **Move to 4h timeframe** — same logic, ~4x fewer signals, larger moves per trade relative to cost
 
-## Files Generated
+### Priority 2: Choose one winner for the re-layering sequence
 
-- `leaderboard.csv` — full matrix with costs (30 cells)
-- `leaderboard_zero_cost.csv` — zero-cost diagnostic (30 cells)
-- `leaderboard_long_only.csv` — long-only with costs (30 cells)
-- `leaderboard_sol_zero_cost.csv` — SOL stress test zero-cost (9 cells)
-- `leaderboard_sol_with_cost.csv` — SOL stress test with costs (9 cells)
-- `summary_zero_cost.md` — zero-cost analysis
-- `summary_long_only.md` — long-only analysis
-- Per-cell JSON results in `reports/tournament/`
+- If pursuing **broadest robustness**: adopt **C_ema_pullback** (works everywhere)
+- If pursuing **best BTC risk-adjusted**: adopt **D_bb_squeeze** (lowest drawdown)
+- If both are close, use C as primary with D as a confirmation/ensemble
+
+### Priority 3: Re-layer one at a time
+
+Per the plan, each addition must be walk-forward validated and must not degrade BTC Calmar:
+1. Regime routing (only if it helps)
+2. Exit refinement
+3. ML as optional entry qualifier / size layer
+4. Quality/edge gates
+5. Macro/sentiment
+6. Swarm last, if ever
+
+## All Output Files
+
+| File | Description |
+|------|-------------|
+| `leaderboard.csv` | Full matrix with costs (30 cells, BTC+ETH) |
+| `leaderboard_zero_cost.csv` | Zero-cost diagnostic (30 cells, BTC+ETH) |
+| `leaderboard_long_only.csv` | Long-only with costs (30 cells, BTC+ETH) |
+| `leaderboard_sol_zero_cost.csv` | SOL stress test zero-cost (9 cells) |
+| `leaderboard_sol_with_cost.csv` | SOL stress test with costs (9 cells) |
+| `leaderboard_gbp_zero_cost.csv` | GBP robustness zero-cost (9 cells) |
+| `leaderboard_gbp_with_cost.csv` | GBP robustness with costs (9 cells) |
+| `summary_*.md` | Per-run analysis summaries |
+| `results_*.json` | Full per-cell JSON with window breakdowns |

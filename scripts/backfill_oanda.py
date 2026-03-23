@@ -77,11 +77,11 @@ def backfill(
             continue
 
         if df is not None and not df.empty:
-            upsert_candles(conn, df, symbol=symbol, timeframe=timeframe)
+            upsert_candles(conn, symbol, timeframe, df)
             total_inserted += len(df)
-            print(f"  {cursor.date()} → {chunk_end.date()}: {len(df)} bars (total: {total_inserted})")
+            print(f"  {cursor.date()} -> {chunk_end.date()}: {len(df)} bars (total: {total_inserted})")
         else:
-            print(f"  {cursor.date()} → {chunk_end.date()}: 0 bars")
+            print(f"  {cursor.date()} -> {chunk_end.date()}: 0 bars")
 
         cursor = chunk_end
         time.sleep(0.5)
