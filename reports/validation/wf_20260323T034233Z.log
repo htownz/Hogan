@@ -1,0 +1,38 @@
+2026-03-22 22:42:33,652 INFO Loaded 17762 candles for BTC/USD 1h
+2026-03-22 22:42:33,652 INFO Walk-forward: 5 windows over 17762 bars (15760 total test bars) [ML]
+2026-03-22 22:42:33,652 INFO   Window 1/5: train[0:2000] (2000 bars) -> test[2000:5152] (3152 bars)
+2026-03-22 22:42:33,689 INFO     [W0] Building training set (2000 bars, model=histgb, labels=enhanced_triple_barrier)...
+2026-03-22 22:42:37,157 INFO     [W0] histgb trained in 3.5s (samples=1946, features=8)
+2026-03-22 22:42:37,165 INFO     [W0] Train AUC: 0.7096
+2026-03-22 22:42:37,179 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-22 22:42:37,179 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-22 22:42:37,179 INFO CHAMPION_MODE: overriding min_final_confidence = 0.2 -> 0.12
+2026-03-22 22:42:37,179 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 12.0
+2026-03-22 22:42:37,179 INFO Champion mode applied — 4 overrides
+2026-03-22 22:42:37,180 INFO     [W0] Running backtest on 3402 test bars...
+2026-03-22 22:42:37,194 INFO Loaded per-symbol config for BTC/USD/1h (16 overrides, sharpe=1.20)
+2026-03-22 22:42:37,725 INFO Loaded forecast model: models\forecast_4h.pkl
+2026-03-22 22:42:37,729 INFO Loaded forecast model: models\forecast_12h.pkl
+2026-03-22 22:42:37,733 INFO Loaded forecast model: models\forecast_24h.pkl
+2026-03-22 22:43:36,885 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.84% >= 1.50%, stop floor at entry 64898.37
+2026-03-22 22:43:53,020 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.81% >= 1.50%, stop floor at entry 60746.94
+2026-03-22 22:44:51,305 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.60% >= 1.50%, stop floor at entry 67163.78
+2026-03-22 22:45:10,915 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.52% >= 1.50%, stop floor at entry 65146.38
+2026-03-22 22:45:14,410 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.67% >= 1.50%, stop floor at entry 64117.37
+2026-03-22 22:45:24,559 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.90% >= 1.50%, stop floor at entry 57291.50
+2026-03-22 22:45:55,918 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.57% >= 1.50%, stop floor at entry 61359.41
+2026-03-22 22:46:32,035 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.60% >= 1.50%, stop floor at entry 54252.37
+2026-03-22 22:46:37,469 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.54% >= 1.50%, stop floor at entry 55854.62
+2026-03-22 22:47:01,271 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.08% >= 1.50%, stop floor at entry 62661.20
+2026-03-22 22:47:40,571 INFO     [W0] Backtest done in 303.4s (total 306.9s)
+2026-03-22 22:47:40,572 INFO     W0: ret=-1.94% dd=2.0% sharpe=-4.27 trades=136 win=38% FAIL
+2026-03-22 22:47:40,572 INFO   Window 2/5: train[0:5152] (5152 bars) -> test[5152:8304] (3152 bars)
+2026-03-22 22:47:40,572 INFO     [W1] Building training set (5152 bars, model=histgb, labels=enhanced_triple_barrier)...
+2026-03-22 22:47:40,952 INFO     [W1] histgb trained in 0.4s (samples=5098, features=8)
+2026-03-22 22:47:40,963 INFO     [W1] Train AUC: 0.6715
+2026-03-22 22:47:40,979 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-22 22:47:40,979 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-22 22:47:40,979 INFO CHAMPION_MODE: overriding min_final_confidence = 0.2 -> 0.12
+2026-03-22 22:47:40,979 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 12.0
+2026-03-22 22:47:40,979 INFO Champion mode applied — 4 overrides
+2026-03-22 22:47:40,979 INFO     [W1] Running backtest on 3402 test bars...

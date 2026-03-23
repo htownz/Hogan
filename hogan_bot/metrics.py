@@ -33,6 +33,47 @@ MODEL_PROMOTED = Counter("hogan_model_promoted_total", "Challenger promotions to
 DEAD_MAN_ALERTS = Counter("hogan_dead_man_alerts_total", "Dead-man switch alerts fired")
 SIGNAL_QUALITY = Gauge("hogan_signal_quality", "Fraction of recent signals that are non-hold", ["symbol"])
 
+# Swarm — policy merge layer (after ML + edge/quality/ranging/pullback gates)
+SWARM_MERGE_BLOCKS = Counter(
+    "hogan_swarm_merge_blocks_total",
+    "Extra hold reasons from merge_swarm_with_gated_action (swarm_* tags on block_reasons)",
+    ["reason"],
+)
+SWARM_FINAL_VETO = Counter(
+    "hogan_swarm_final_veto_total",
+    "Swarm veto forced hold (size scale applied); counted once per bar when vetoed",
+    ["swarm_mode"],
+)
+SWARM_DOMINANT_VETO = Counter(
+    "hogan_swarm_dominant_veto_agent_total",
+    "Which agent ID was recorded as dominant when a swarm veto fired",
+    ["agent", "swarm_mode"],
+)
+
+
+def record_swarm_policy_events(
+    *,
+    swarm_mode: str,
+    swarm_decision: object | None,
+    block_reasons: list[str],
+) -> None:
+    """Increment Prometheus counters for swarm vetoes and gated-merge hold tags.
+
+    Safe to call every bar; failures are swallowed (metrics must never break trading).
+    """
+    try:
+        mode = str(swarm_mode or "unknown")
+        if swarm_decision is not None and bool(getattr(swarm_decision, "vetoed", False)):
+            SWARM_FINAL_VETO.labels(swarm_mode=mode).inc()
+            dom = getattr(swarm_decision, "dominant_veto_agent", None)
+            agent = dom if isinstance(dom, str) and dom.strip() else "unknown"
+            SWARM_DOMINANT_VETO.labels(agent=agent, swarm_mode=mode).inc()
+        for r in block_reasons:
+            if isinstance(r, str) and r.startswith("swarm_"):
+                SWARM_MERGE_BLOCKS.labels(reason=r).inc()
+    except Exception:
+        return
+
 
 @dataclass
 class MetricsServer:

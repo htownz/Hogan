@@ -29,7 +29,7 @@ python -m hogan_bot.main
 - If agents are stuck `advisory_only` and fusion scores stay at zero: `python scripts/reset_swarm_agent_modes.py` (use `--dry-run` first).
 
 ## Enhancement backlog (short)
-- **Swarm**: per-regime `swarm_min_agreement` / margin; dashboard for `swarm_blocked_unsigned_signal` vs `swarm_direction_clash` rates.
+- **Swarm**: per-regime `swarm_min_agreement` / margin tuning (see `docs/SWARM_CONDITIONAL_TUNING.md`); merge-block + veto metrics: dashboard Swarm tab + Prometheus `hogan_swarm_*` counters.
 - **Quarantine**: optional minimum calendar age before demoting `pipeline_v1`; auto-quarantine counts only directional agents that appear in the accuracy table so a phantom default-active `volatility_regime_v1` cannot unlock demoting the last real voter (`pipeline_v1`).
 - **ML**: silence sklearn feature-name warning in tests or align `LogisticRegression` with feature names.
 - **Certification**: use `python scripts/swarm_certification.py --scratch-db` to avoid writing swarm rows to production (add `--keep-scratch-db` to inspect the copy).
@@ -70,10 +70,16 @@ Each regime-aware component has a clearly defined role. Avoid double-counting.
 - Asymmetric: does NOT penalize extreme fear (strategy thrives in volatile crash-recovery)
 - Walk-forward validated: mean return improved from -0.14% to -0.01%
 
+## Promotion & validation docs
+- **Operator checklist** (before changing `HOGAN_SWARM_MODE` / `HOGAN_SWARM_PHASE`): `docs/PROMOTION_CHECKLIST.md`
+- **Conditional swarm + regime weights**: `docs/SWARM_CONDITIONAL_TUNING.md`
+- **Walk-forward gate for strategy changes**: `docs/STRATEGY_CHANGE_GATE.md`
+- **Archived runs**: `python scripts/run_validation_battery.py --db data/hogan.db` → `reports/validation/`
+
 ## Validation & Testing
 ```bash
 # Fast sanity (subset, ~10s) — pass the listed paths as one pytest invocation
-python -m pytest tests/test_champion.py tests/test_ml.py tests/test_exchange.py tests/test_agent_quarantine.py tests/test_swarm_certification.py::TestSwarmGatedMerge tests/test_swarm_certification.py::TestShadowParity tests/test_decision_parity.py::TestPolicyCoreEquivalence tests/test_observability_scripts.py::TestConfigDefaults -q
+python -m pytest tests/test_champion.py tests/test_ml.py tests/test_exchange.py tests/test_agent_quarantine.py tests/test_swarm_certification.py::TestSwarmGatedMerge tests/test_swarm_certification.py::TestShadowParity tests/test_decision_parity.py::TestPolicyCoreEquivalence tests/test_observability_scripts.py::TestConfigDefaults tests/test_swarm_policy_observability.py -q
 
 # Lint (CI: E,F,I,B007,B904 on hogan_bot, tests, scripts, diagnostics; on Windows use python -m ruff)
 python -m ruff check hogan_bot/ tests/ scripts/ diagnostics/ --select E,F,I,B007,B904 --ignore E501

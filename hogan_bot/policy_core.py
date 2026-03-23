@@ -1004,6 +1004,17 @@ def decide(
     # ------------------------------------------------------------------
     # Build and return DecisionIntent
     # ------------------------------------------------------------------
+    try:
+        from hogan_bot.metrics import record_swarm_policy_events
+
+        record_swarm_policy_events(
+            swarm_mode=getattr(config, "swarm_mode", "shadow"),
+            swarm_decision=swarm_decision,
+            block_reasons=block_reasons,
+        )
+    except Exception:
+        pass
+
     return DecisionIntent(
         action=action,
         confidence=signal.confidence or 0.0,

@@ -27,6 +27,8 @@ import streamlit as st  # noqa: E402
 import streamlit.components.v1 as components  # noqa: E402
 from streamlit_autorefresh import st_autorefresh  # type: ignore[import]  # noqa: E402
 
+from hogan_bot.swarm_metrics import aggregate_swarm_policy_block_reasons  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Page config
 # ---------------------------------------------------------------------------
@@ -1280,6 +1282,73 @@ with tab_swarm:
                         st.bar_chart(df_rc.set_index("Reason"))
                 else:
                     st.info("No veto events logged yet.")
+
+                st.subheader("Dominant veto agent (swarm_decisions)")
+                try:
+                    _sd_cols = [r[1] for r in _sw_conn.execute("PRAGMA table_info(swarm_decisions)")]
+                    if "dominant_veto_agent" in _sd_cols:
+                        df_dom = pd.read_sql_query(
+                            """SELECT dominant_veto_agent AS agent, COUNT(*) AS n
+                               FROM swarm_decisions
+                               WHERE vetoed = 1
+                                 AND dominant_veto_agent IS NOT NULL
+                                 AND TRIM(dominant_veto_agent) != ''
+                               GROUP BY dominant_veto_agent
+                               ORDER BY n DESC
+                               LIMIT 15""",
+                            _sw_conn,
+                        )
+                        if not df_dom.empty:
+                            st.caption("Which agent ID was recorded as dominant when vetoed=true.")
+                            st.bar_chart(df_dom.set_index("agent"))
+                        else:
+                            st.info("No dominant_veto_agent rows yet (or no vetoes).")
+                    else:
+                        st.info("dominant_veto_agent column not present — migrate DB schema.")
+                except Exception as _dom_exc:
+                    st.warning(f"Could not load veto dominance: {_dom_exc}")
+
+                st.subheader("Policy / gated merge blocks (decision_log)")
+                try:
+                    _dl_cols = [r[1] for r in _sw_conn.execute("PRAGMA table_info(decision_log)")]
+                    if "block_reasons_json" in _dl_cols:
+                        df_mb = pd.read_sql_query(
+                            """SELECT block_reasons_json
+                               FROM decision_log
+                               WHERE block_reasons_json IS NOT NULL
+                                 AND block_reasons_json != ''
+                                 AND block_reasons_json LIKE '%swarm_%'
+                               ORDER BY ts_ms DESC
+                               LIMIT 5000""",
+                            _sw_conn,
+                        )
+                        if not df_mb.empty:
+                            _stats = aggregate_swarm_policy_block_reasons(
+                                df_mb["block_reasons_json"].tolist(),
+                            )
+                            st.caption(
+                                f"Rows with ≥1 swarm_* tag: {_stats['rows_with_swarm_policy_tags']} "
+                                f"(tag events: {_stats['total_swarm_policy_tag_events']})"
+                            )
+                            if _stats["counts"]:
+                                df_counts = pd.DataFrame(
+                                    list(_stats["counts"].items()),
+                                    columns=["reason", "count"],
+                                ).sort_values("count", ascending=False)
+                                st.bar_chart(df_counts.set_index("reason"))
+                            else:
+                                st.info("No parsed swarm_* tags in recent decision_log rows.")
+                        else:
+                            st.info("No decision_log rows with swarm_* in block_reasons_json yet.")
+                    else:
+                        st.info("decision_log.block_reasons_json missing — migrate DB schema.")
+                except Exception as _mb_exc:
+                    st.warning(f"Could not load merge-block stats: {_mb_exc}")
+
+                st.caption(
+                    "Prometheus (if enabled): hogan_swarm_merge_blocks_total{reason=...}, "
+                    "hogan_swarm_final_veto_total, hogan_swarm_dominant_veto_agent_total."
+                )
 
                 st.subheader("Shadow vs Baseline Divergence")
                 df_div = pd.read_sql_query(

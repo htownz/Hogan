@@ -6,7 +6,9 @@ the data.
 """
 from __future__ import annotations
 
-from typing import Any
+import json
+from collections import Counter
+from typing import Any, Iterable
 
 import pandas as pd
 
@@ -187,6 +189,42 @@ def compute_opportunity_monotonicity(
         "bins": bins.round(4).to_dict("records"),
         "monotonic": monotonic,
         "correlation": round(corr, 4) if pd.notna(corr) else 0.0,
+    }
+
+
+def aggregate_swarm_policy_block_reasons(
+    block_reasons_json_values: Iterable[str | None],
+) -> dict[str, Any]:
+    """Count ``swarm_*`` tags stored in ``decision_log.block_reasons_json``.
+
+    Used by dashboards and offline reports to approximate rates of
+    ``swarm_blocked_unsigned_signal`` and ``swarm_direction_clash`` without
+    scanning full logs.
+    """
+    counts: Counter[str] = Counter()
+    rows_with_tag = 0
+    for raw in block_reasons_json_values:
+        if raw is None:
+            continue
+        s = str(raw).strip()
+        if not s or s == "null":
+            continue
+        try:
+            arr = json.loads(s)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(arr, list):
+            continue
+        swarm_tags = [x for x in arr if isinstance(x, str) and x.startswith("swarm_")]
+        if swarm_tags:
+            rows_with_tag += 1
+        for t in swarm_tags:
+            counts[t] += 1
+    total_events = int(sum(counts.values()))
+    return {
+        "counts": dict(counts.most_common()),
+        "rows_with_swarm_policy_tags": rows_with_tag,
+        "total_swarm_policy_tag_events": total_events,
     }
 
 
