@@ -845,8 +845,15 @@ def main() -> None:
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    from hogan_bot.exit_lifecycle import summarize_exit_lifecycle
+
+    all_closed: list[dict] = []
+    for w in report.windows:
+        all_closed.extend(w.closed_trades)
+
     output = {
         "summary": report.summary(),
+        "exit_lifecycle": summarize_exit_lifecycle(all_closed),
         "windows": [
             {
                 "window_idx": w.window_idx,
@@ -900,6 +907,74 @@ def main() -> None:
 
     _print_funnel_comparison(report)
     _print_exit_attribution(report)
+    _print_exit_lifecycle(report)
+
+
+def _print_exit_lifecycle(report: WalkForwardReport) -> None:
+    """Print tail-loss and time-in-trade-by-regime summary."""
+    from hogan_bot.exit_lifecycle import (
+        compute_hold_duration_vs_pnl,
+        compute_tail_loss_metrics,
+        compute_time_in_trade_by_regime,
+    )
+
+    all_trades: list[dict] = []
+    for w in report.windows:
+        all_trades.extend(w.closed_trades)
+    if not all_trades:
+        return
+
+    print(f"\n{'=' * 90}")
+    print("EXIT LIFECYCLE ANALYSIS")
+    print(f"{'=' * 90}")
+
+    tl = compute_tail_loss_metrics(all_trades)
+    print(f"\n  TAIL LOSSES ({tl['n_trades']} trades, {tl['n_losses']} losers)")
+    print(f"    Worst single loss:  {tl['worst_loss_pct']:+.2f}%")
+    print(f"    Mean loss:          {tl['mean_loss_pct']:+.2f}%")
+    print(f"    Total loss drag:    {tl['total_loss_drag_pct']:+.2f}%")
+    for key in sorted(k for k in tl if k.startswith("p")):
+        print(f"    {key}: {tl[key]:+.2f}%")
+    for key in sorted(k for k in tl if k.startswith("losses_beyond")):
+        threshold = key.replace("losses_beyond_", "").replace("pct", "%")
+        print(f"    > {threshold} losses: {tl[key]}")
+
+    regimes = compute_time_in_trade_by_regime(all_trades)
+    if regimes:
+        print("\n  TIME IN TRADE BY REGIME")
+        hdr = (
+            f"    {'Regime':<16} {'N':>4} {'AvgBars':>8} "
+            f"{'MedBars':>8} {'AvgPnL':>8} {'WinR':>6} "
+            f"{'Worst':>8}"
+        )
+        print(hdr)
+        print(f"    {'-' * 60}")
+        for regime, s in regimes.items():
+            print(
+                f"    {regime:<16} {s['n_trades']:>4} "
+                f"{s['avg_bars_held']:>8.1f} "
+                f"{s['median_bars_held']:>8.1f} "
+                f"{s['avg_pnl_pct']:>+7.2f}% "
+                f"{s['win_rate']:>5.0%} "
+                f"{s['worst_loss_pct']:>+7.2f}%"
+            )
+
+    dur = compute_hold_duration_vs_pnl(all_trades)
+    if dur:
+        print("\n  HOLD DURATION vs PNL")
+        hdr = f"    {'Bucket':<10} {'N':>4} {'AvgPnL':>8} {'TotalPnL':>10} {'WinR':>6} {'Worst':>8}"
+        print(hdr)
+        print(f"    {'-' * 50}")
+        for bucket, s in dur.items():
+            print(
+                f"    {bucket:<10} {s['n_trades']:>4} "
+                f"{s['avg_pnl_pct']:>+7.2f}% "
+                f"{s['total_pnl_pct']:>+9.2f}% "
+                f"{s['win_rate']:>5.0%} "
+                f"{s['worst_pct']:>+7.2f}%"
+            )
+
+    print(f"\n{'=' * 90}\n")
 
 
 if __name__ == "__main__":

@@ -26,6 +26,16 @@ python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --regime-models
 python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --no-ml
 ```
 
+## Exit lifecycle review
+
+Walk-forward JSON output now includes an `exit_lifecycle` section with:
+- **Tail losses**: worst single loss, percentile breakpoints, loss-beyond-threshold counts.
+- **Time in trade by regime**: avg/median bars held, PnL, and worst loss per regime.
+- **Exit quality by regime**: PnL breakdown by (regime, exit_reason) to identify bleeders.
+- **Hold duration vs PnL**: trade outcomes bucketed by hold duration.
+
+The CLI also prints a summary table. Review this **before and after** any exit/hold parameter change to verify the change actually helped where it was supposed to.
+
 ## Archive
 
 Use the validation battery to store logs + manifest:
