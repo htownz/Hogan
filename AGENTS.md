@@ -71,6 +71,7 @@ Each regime-aware component has a clearly defined role. Avoid double-counting.
 - Walk-forward validated: mean return improved from -0.14% to -0.01%
 
 ## Promotion & validation docs
+- **What counts as success** (profitability, monthly framing, OOS + drawdown): `docs/SUCCESS_DEFINITION.md`
 - **Operator checklist** (before changing `HOGAN_SWARM_MODE` / `HOGAN_SWARM_PHASE`): `docs/PROMOTION_CHECKLIST.md`
 - **Conditional swarm + regime weights**: `docs/SWARM_CONDITIONAL_TUNING.md`
 - **Walk-forward gate for strategy changes**: `docs/STRATEGY_CHANGE_GATE.md`
