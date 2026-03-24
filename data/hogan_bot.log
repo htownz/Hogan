@@ -9089,3 +9089,540 @@ TypeError: sequence index must be integer, not 'slice'
 2026-03-24 14:38:06,701 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
 2026-03-24 14:38:33,494 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
 2026-03-24 14:38:33,721 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:39:09,651 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:39:09,888 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:39:18,766 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:39:18,972 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:40:21,991 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:40:22,259 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:40:22,294 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:40:22,519 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 14:40:31,070 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:40:31,279 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:40:31,309 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:40:31,522 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 14:41:07,245 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:41:07,510 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:41:34,339 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:41:34,564 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:42:10,469 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:42:10,701 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:42:19,547 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:42:19,786 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:43:22,759 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:43:22,991 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:43:31,840 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:43:32,073 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:44:07,997 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:44:08,623 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:44:35,042 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:44:35,279 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:45:11,275 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:45:11,510 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:45:11,540 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:45:11,769 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 14:45:11,795 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:45:12,014 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-24 14:45:20,319 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:45:20,545 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:45:20,577 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:45:20,794 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 14:45:20,821 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:45:21,033 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-24 14:46:23,788 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:46:24,036 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:46:32,831 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:46:33,059 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:47:08,989 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:47:09,217 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:47:36,073 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:47:36,310 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:48:12,210 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:48:12,820 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:48:21,296 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:48:21,522 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:49:24,526 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:49:24,769 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:49:33,592 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:49:33,830 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:50:09,743 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:50:09,962 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:50:09,991 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:50:10,218 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 14:50:36,851 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:50:37,095 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:50:37,119 INFO OnlineLearner: insufficient labeled data for all
+2026-03-24 14:50:37,144 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:50:37,363 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 14:51:12,994 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:51:13,235 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:51:22,049 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:51:22,269 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:52:25,294 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:52:25,540 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:52:34,387 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:52:34,625 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:53:10,604 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:53:10,828 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:53:37,598 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:53:37,877 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:54:13,756 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:54:13,995 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:54:22,907 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:54:23,147 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:55:26,048 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:55:26,298 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:55:26,331 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:55:26,568 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 14:55:35,242 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:55:35,486 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:55:35,518 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:55:35,742 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 14:56:11,387 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:56:11,621 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:56:38,359 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:56:38,609 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:57:14,516 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:57:14,755 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:57:23,897 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:57:24,142 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:58:26,871 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:58:27,124 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:58:36,274 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:58:36,514 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:58:36,523 INFO OnlineLearner: insufficient labeled data for all
+2026-03-24 14:59:12,427 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:59:12,663 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 14:59:12,663 INFO EXPECTANCY [4 trades] win=50.0% net_edge=-0.0087% payoff=0.27 exp=-0.0087% sig_exit_loss=0.0%
+2026-03-24 14:59:12,663 INFO   regime=trending_down n=3 win=33.3% exp=-0.0143%
+2026-03-24 14:59:12,663 INFO   regime=trending_up n=1 win=100.0% exp=0.0081%
+2026-03-24 14:59:39,200 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 14:59:39,461 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:00:15,359 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:00:16,454 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:00:16,613 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:00:16,642 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:00:16,802 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:00:16,833 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:00:16,995 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-24 15:00:17,026 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:00:17,189 INFO MTF_EVAL BTC/USD/30m → hold (size scaled 0.70x for sub-hour eval)
+2026-03-24 15:00:24,733 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:00:24,924 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:00:25,093 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:00:25,120 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:00:25,273 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:00:25,302 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:00:25,450 INFO MTF_EVAL BTC/USD/15m → buy (size scaled 0.60x for sub-hour eval)
+2026-03-24 15:00:25,478 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:00:26,063 INFO MTF_EVAL BTC/USD/30m → buy (size scaled 0.70x for sub-hour eval)
+2026-03-24 15:01:27,661 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:01:27,811 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:01:37,032 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:01:37,210 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:02:13,200 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:02:13,371 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:02:39,967 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:02:40,125 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:03:16,110 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:03:16,275 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:03:25,500 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:03:25,682 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:04:28,420 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:04:28,576 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:04:37,819 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:04:37,984 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:05:04,565 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:05:04,733 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:05:13,972 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:05:14,148 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:05:14,174 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:05:14,334 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:05:40,730 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:05:41,330 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:06:16,872 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:06:17,041 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:06:26,258 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:06:26,443 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:07:29,231 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:07:29,412 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:07:38,584 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:07:38,769 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:08:05,422 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:08:05,594 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:08:14,805 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:08:14,982 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:09:18,023 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:09:18,208 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:09:27,344 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:09:27,528 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:10:03,502 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:10:03,690 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:10:30,331 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:10:30,507 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:10:30,534 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:10:30,716 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:10:39,664 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:10:39,839 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:11:06,474 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:11:06,654 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:11:15,844 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:11:16,040 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:12:18,773 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:12:18,954 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:12:28,188 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:12:28,369 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:13:04,713 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:13:04,893 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:13:31,065 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:13:31,266 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:14:07,205 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:14:07,379 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:14:17,008 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:14:17,191 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:15:19,503 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:15:19,692 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:15:19,726 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:15:19,916 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:15:19,945 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:15:20,135 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-24 15:15:29,318 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:15:29,517 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:15:29,542 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:15:29,719 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:15:29,745 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:15:29,921 INFO MTF_EVAL BTC/USD/15m → buy (size scaled 0.60x for sub-hour eval)
+2026-03-24 15:16:05,460 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:16:05,652 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:16:31,802 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:16:31,991 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:17:07,989 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:17:08,171 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:17:17,957 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:17:18,147 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:18:20,303 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:18:20,494 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:18:30,302 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:18:30,494 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:19:06,497 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:19:06,703 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:19:32,671 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:19:32,866 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:20:08,829 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:20:09,023 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:20:09,055 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:20:09,266 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:20:18,856 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:20:19,476 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:20:19,502 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:20:19,697 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:20:19,727 INFO AUTO_RETRAIN: model age 63.6h > 24.0h schedule, 280347 candles available — triggering retrain
+2026-03-24 15:20:19,727 WARNING AUTO_RETRAIN error: retrain_once() got an unexpected keyword argument 'db_path'
+2026-03-24 15:21:21,153 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:21:21,350 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:21:31,196 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:21:31,400 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:22:07,370 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:22:07,555 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:22:33,578 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:22:33,783 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:23:09,719 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:23:09,908 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:23:19,741 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:23:19,932 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:24:22,017 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:24:22,210 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:24:32,114 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:24:32,317 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:25:08,263 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:25:08,449 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:25:08,483 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:25:08,686 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:25:34,367 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:25:34,951 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:25:34,983 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:25:35,181 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:26:10,550 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:26:10,756 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:26:20,568 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:26:20,770 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:27:22,878 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:27:23,077 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:27:32,880 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:27:33,077 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:28:09,101 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:28:09,353 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:28:35,552 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:28:35,840 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:28:35,850 INFO OnlineLearner: insufficient labeled data for all
+2026-03-24 15:28:35,851 INFO HEARTBEAT [100 events] equity=8627.84 cash=8407.10 longs=1 shorts=0 regime=ranging
+2026-03-24 15:29:11,692 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:29:11,900 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:29:21,430 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:29:21,630 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:30:23,985 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:30:24,186 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:30:24,212 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:30:24,407 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:30:24,432 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:30:24,630 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-24 15:30:24,656 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:30:24,859 INFO MTF_EVAL BTC/USD/30m → hold (size scaled 0.70x for sub-hour eval)
+2026-03-24 15:30:33,848 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:30:34,108 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:30:34,142 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:30:34,391 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:30:34,425 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:30:34,642 INFO MTF_EVAL BTC/USD/15m → buy (size scaled 0.60x for sub-hour eval)
+2026-03-24 15:30:34,673 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:30:34,936 INFO MTF_EVAL BTC/USD/30m → buy (size scaled 0.70x for sub-hour eval)
+2026-03-24 15:31:09,977 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:31:10,190 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:31:36,290 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:31:36,530 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:32:12,435 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:32:12,650 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:32:22,316 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:32:22,516 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:33:24,723 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:33:24,933 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:33:34,627 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:33:34,838 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:34:10,748 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:34:10,952 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:34:37,042 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:34:37,259 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:35:13,175 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:35:13,377 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:35:13,402 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:35:13,606 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:35:23,095 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:35:23,302 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:35:23,309 INFO OnlineLearner: insufficient labeled data for all
+2026-03-24 15:35:23,310 INFO HEARTBEAT [4100 events] equity=8846.45 cash=8625.73 longs=1 shorts=0 regime=ranging
+2026-03-24 15:35:23,338 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:35:23,543 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:35:23,543 INFO EXPECTANCY [4 trades] win=50.0% net_edge=-0.0087% payoff=0.27 exp=-0.0087% sig_exit_loss=0.0%
+2026-03-24 15:35:23,543 INFO   regime=trending_down n=3 win=33.3% exp=-0.0143%
+2026-03-24 15:35:23,544 INFO   regime=trending_up n=1 win=100.0% exp=0.0081%
+2026-03-24 15:36:25,522 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:36:25,737 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:36:35,406 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:36:35,628 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:37:11,552 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:37:11,761 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:37:37,829 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:37:38,067 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:38:13,976 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:38:14,202 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:38:24,087 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:38:24,725 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:39:26,258 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:39:26,480 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:39:36,370 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:39:36,587 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:40:12,513 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:40:12,734 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:40:12,764 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:40:12,983 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:40:38,562 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:40:38,854 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:40:38,884 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:40:39,122 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:41:14,708 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:41:14,939 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:41:24,806 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:41:25,037 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:42:27,069 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:42:27,323 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:42:37,111 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:42:37,341 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:43:13,353 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:43:13,602 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:43:39,467 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:43:40,020 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:44:15,701 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:44:15,929 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:44:26,088 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:44:26,320 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:45:28,089 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:45:28,313 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:45:28,340 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:45:28,562 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:45:28,588 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:45:28,810 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-24 15:45:38,451 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:45:38,679 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:45:38,705 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:45:38,929 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:45:38,956 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:45:39,178 INFO MTF_EVAL BTC/USD/15m → buy (size scaled 0.60x for sub-hour eval)
+2026-03-24 15:46:04,464 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:46:04,690 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:46:14,592 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:46:14,818 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:47:16,789 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:47:17,021 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:47:26,892 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:47:27,122 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:48:29,094 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:48:29,320 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:48:39,186 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:48:39,422 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:49:05,248 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:49:05,478 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:49:15,329 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:49:15,563 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:50:17,537 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:50:17,773 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:50:17,799 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:50:18,031 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:50:27,658 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:50:27,893 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:50:27,921 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:50:28,157 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:51:03,803 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:51:04,030 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:51:29,910 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:51:30,145 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:52:06,057 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:52:06,310 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:52:16,172 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:52:16,399 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:53:18,354 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:53:18,588 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:53:28,466 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:53:28,698 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:54:30,656 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:54:30,894 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:54:41,015 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:54:41,248 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:55:06,800 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:55:07,038 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:55:07,063 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:55:07,289 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:55:17,176 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:55:17,409 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:55:17,435 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:55:17,666 INFO MTF_EVAL BTC/USD/5m → buy (size scaled 0.40x for sub-hour eval)
+2026-03-24 15:56:19,119 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:56:19,358 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:56:29,498 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:56:29,736 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:57:05,677 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:57:06,251 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:57:31,436 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:57:31,679 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:58:07,582 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:58:07,824 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:58:17,985 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:58:18,217 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:59:20,116 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:59:20,363 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 15:59:30,274 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 15:59:30,511 INFO MTF_EVAL BTC/USD/1m → buy (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:00:06,440 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:00:07,316 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:00:07,465 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:00:07,493 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:00:07,639 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 16:00:07,666 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:00:07,815 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-24 16:00:07,846 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:00:07,997 INFO MTF_EVAL BTC/USD/30m → hold (size scaled 0.70x for sub-hour eval)
+2026-03-24 16:00:32,429 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:00:32,606 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:00:32,756 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:00:32,785 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:00:32,937 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 16:00:32,965 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:00:33,404 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-24 16:00:33,432 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:00:33,584 INFO MTF_EVAL BTC/USD/30m → hold (size scaled 0.70x for sub-hour eval)
+2026-03-24 16:01:08,597 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:01:08,752 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:01:18,717 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:01:18,875 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:02:20,910 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:02:21,066 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:02:31,031 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:02:31,196 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:03:07,163 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:03:07,322 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:03:33,237 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:03:33,394 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:04:09,400 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:04:09,640 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:04:19,496 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:04:19,658 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:05:21,682 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:05:21,846 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:05:21,854 INFO OnlineLearner: insufficient labeled data for all
+2026-03-24 16:05:21,885 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:05:22,047 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 16:05:31,904 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:05:32,068 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:05:32,095 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:05:32,255 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 16:06:08,067 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:06:08,226 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:06:34,077 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:06:34,247 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:07:10,232 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:07:10,393 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:07:20,439 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:07:20,607 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:08:22,642 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:08:22,803 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:08:33,086 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:08:33,254 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:09:09,233 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:09:09,394 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:09:34,939 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:09:35,112 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:10:11,072 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:10:11,239 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:10:11,265 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:10:11,432 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 16:10:21,738 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:10:21,910 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:10:21,936 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:10:22,103 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 16:11:23,393 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:11:23,575 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:11:34,044 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:11:34,214 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:12:10,174 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:12:10,336 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:12:35,679 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:12:35,845 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:13:11,824 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:13:11,995 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:13:22,503 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:13:22,678 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:13:22,686 INFO OnlineLearner: insufficient labeled data for all
+2026-03-24 16:14:24,213 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:14:24,388 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:14:34,802 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:14:34,977 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:14:34,977 INFO EXPECTANCY [4 trades] win=50.0% net_edge=-0.0087% payoff=0.27 exp=-0.0087% sig_exit_loss=0.0%
+2026-03-24 16:14:34,977 INFO   regime=trending_down n=3 win=33.3% exp=-0.0143%
+2026-03-24 16:14:34,977 INFO   regime=trending_up n=1 win=100.0% exp=0.0081%
+2026-03-24 16:15:10,963 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:15:11,472 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:15:11,498 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:15:11,671 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 16:15:11,698 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:15:11,885 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-24 16:15:36,555 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:15:36,736 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:15:36,761 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:15:36,941 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-24 16:15:36,966 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:15:37,149 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-24 16:16:12,698 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:16:12,869 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:16:23,585 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:16:23,765 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-24 16:17:25,074 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=26.7 >= 25.0 → caution 0.70x
+2026-03-24 16:17:25,266 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)

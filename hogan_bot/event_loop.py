@@ -84,6 +84,15 @@ from hogan_bot.storage import (
 logger = logging.getLogger(__name__)
 
 
+def _exec_fill_px_qty(res: object, decision_px: float, decision_qty: float) -> tuple[float, float]:
+    """Portfolio-truth fill for journaling when executor reports it (e.g. RealisticPaper slip/spread)."""
+    fp = getattr(res, "fill_price", None)
+    fq = getattr(res, "fill_qty", None)
+    px = float(fp) if fp is not None else float(decision_px)
+    qty = float(fq) if fq is not None else float(decision_qty)
+    return px, qty
+
+
 class _FailedResult:
     """Sentinel returned by _safe_exec when an executor call throws."""
     ok = False
@@ -1211,19 +1220,20 @@ async def _run_event_loop_inner(
                             record_exec_outcome(_exec_health, symbol=_pe_sym, side="close_long",
                                                 decision_price=_pe_px, result=res)
                             if res.ok:
-                                fee = _pe_qty * _pe_px * config.fee_rate
+                                _fill_px, _fill_qty = _exec_fill_px_qty(res, _pe_px, _pe_qty)
+                                fee = _fill_qty * _fill_px * config.fee_rate
                                 _pe_regime = _entry_regime.pop(_pe_sym, _current_regime.get(_pe_sym, "unknown"))
                                 if not allow_live:
                                     close_paper_trade(
-                                        conn, _pe_sym, "long", _pe_px, fee, now_ms, close_reason=_pe_reason,
+                                        conn, _pe_sym, "long", _fill_px, fee, now_ms, close_reason=_pe_reason,
                                         max_adverse_pct=getattr(_pe_pos, "max_adverse_pct", 0.0),
                                         max_favorable_pct=getattr(_pe_pos, "max_favorable_pct", 0.0),
                                         bars_held=_pe_pos.bars_held,
                                         exit_regime=_pe_regime,
                                         entry_atr_pct=getattr(_pe_pos, "entry_atr_pct", None),
                                     )
-                                evaluator._trade_outcomes.append(_pe_px > _pe_entry)
-                                gross_pnl_pct = (_pe_px - _pe_entry) / _pe_entry if _pe_entry else 0
+                                evaluator._trade_outcomes.append(_fill_px > _pe_entry)
+                                gross_pnl_pct = (_fill_px - _pe_entry) / _pe_entry if _pe_entry else 0
                                 net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                                 _expectancy.record_trade(
                                     symbol=_pe_sym, regime=_pe_regime,
@@ -1269,19 +1279,20 @@ async def _run_event_loop_inner(
                         record_exec_outcome(_exec_health, symbol=_pe_sym, side="close_short",
                                             decision_price=_pe_s_px, result=res)
                         if res.ok:
-                            fee = _pe_s_qty * _pe_s_px * config.fee_rate
+                            _sfill_px, _sfill_qty = _exec_fill_px_qty(res, _pe_s_px, _pe_s_qty)
+                            fee = _sfill_qty * _sfill_px * config.fee_rate
                             _pe_s_regime = _entry_regime.pop(_pe_sym, _current_regime.get(_pe_sym, "unknown"))
                             if not allow_live:
                                 close_paper_trade(
-                                    conn, _pe_sym, "short", _pe_s_px, fee, now_ms, close_reason=_pe_s_reason,
+                                    conn, _pe_sym, "short", _sfill_px, fee, now_ms, close_reason=_pe_s_reason,
                                     max_adverse_pct=getattr(_pe_spos, "max_adverse_pct", 0.0),
                                     max_favorable_pct=getattr(_pe_spos, "max_favorable_pct", 0.0),
                                     bars_held=_pe_spos.bars_held,
                                     exit_regime=_pe_s_regime,
                                     entry_atr_pct=getattr(_pe_spos, "entry_atr_pct", None),
                                 )
-                            evaluator._trade_outcomes.append(_pe_s_px < _pe_s_entry)
-                            gross_pnl_pct = (_pe_s_entry - _pe_s_px) / _pe_s_entry if _pe_s_entry else 0
+                            evaluator._trade_outcomes.append(_sfill_px < _pe_s_entry)
+                            gross_pnl_pct = (_pe_s_entry - _sfill_px) / _pe_s_entry if _pe_s_entry else 0
                             net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                             _expectancy.record_trade(
                                 symbol=_pe_sym, regime=_pe_s_regime,
@@ -1323,17 +1334,18 @@ async def _run_event_loop_inner(
                     sell_px = ep
                     _exit_entry_regime = _entry_regime.pop(exit_symbol, _current_regime.get(exit_symbol, "unknown"))
                     if executed:
-                        fee = qty * sell_px * config.fee_rate
+                        _af_px, _af_qty = _exec_fill_px_qty(res, sell_px, qty)
+                        fee = _af_qty * _af_px * config.fee_rate
                         if not allow_live:
                             close_paper_trade(
-                                conn, exit_symbol, "long", sell_px, fee, now_ms, close_reason=reason,
+                                conn, exit_symbol, "long", _af_px, fee, now_ms, close_reason=reason,
                                 max_adverse_pct=mae_pct, max_favorable_pct=mfe_pct,
                                 bars_held=bars_held,
                                 exit_regime=_exit_entry_regime,
                                 entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                             )
-                        evaluator._trade_outcomes.append(sell_px > avg_entry)
-                        gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
+                        evaluator._trade_outcomes.append(_af_px > avg_entry)
+                        gross_pnl_pct = (_af_px - avg_entry) / avg_entry if avg_entry else 0
                         net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                         _expectancy.record_trade(
                             symbol=exit_symbol,
@@ -1360,16 +1372,17 @@ async def _run_event_loop_inner(
                                 _perf_trade_count += 1
                             except Exception as exc:
                                 logger.debug("PerfTracker record error: %s", exc)
-                        is_loss = sell_px < avg_entry
+                        is_loss = _af_px < avg_entry
                         if is_loss and loss_cooldown_bars > 0:
                             _cooldown_remaining = loss_cooldown_bars
-                    if not executed:
+                        if notifier:
+                            notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason,
+                                                          "price": _af_px, "qty": _af_qty})
+                        logger.info("AUTO_EXIT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, _af_px, _af_qty)
+                    else:
                         logger.error("AUTO_EXIT_FAILED %s reason=%s px=%.2f qty=%.6f — %s",
                                      exit_symbol, reason, ep, qty, getattr(res, "error", "unknown"))
-                    if notifier and executed:
-                        notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason,
-                                                      "price": sell_px, "qty": qty})
-                    logger.info("AUTO_EXIT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, sell_px, qty)
+                        logger.info("AUTO_EXIT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, sell_px, qty)
 
                 elif reason in ("short_trailing_stop", "short_take_profit", "short_max_hold_time", "short_max_loss", "short_breakeven_stop"):
                     pos = portfolio.short_positions.get(exit_symbol)
@@ -1387,17 +1400,18 @@ async def _run_event_loop_inner(
                     executed = bool(res.ok)
                     _exit_s_entry_regime = _entry_regime.pop(exit_symbol, _current_regime.get(exit_symbol, "unknown"))
                     if executed:
-                        fee = qty * cover_px * config.fee_rate
+                        _cf_px, _cf_qty = _exec_fill_px_qty(res, cover_px, qty)
+                        fee = _cf_qty * _cf_px * config.fee_rate
                         if not allow_live:
                             close_paper_trade(
-                                conn, exit_symbol, "short", cover_px, fee, now_ms, close_reason=reason,
+                                conn, exit_symbol, "short", _cf_px, fee, now_ms, close_reason=reason,
                                 max_adverse_pct=mae_pct, max_favorable_pct=mfe_pct,
                                 bars_held=bars_held,
                                 exit_regime=_exit_s_entry_regime,
                                 entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                             )
-                        evaluator._trade_outcomes.append(cover_px < avg_entry)
-                        gross_pnl_pct = (avg_entry - cover_px) / avg_entry if avg_entry else 0
+                        evaluator._trade_outcomes.append(_cf_px < avg_entry)
+                        gross_pnl_pct = (avg_entry - _cf_px) / avg_entry if avg_entry else 0
                         net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                         _expectancy.record_trade(
                             symbol=exit_symbol,
@@ -1424,13 +1438,14 @@ async def _run_event_loop_inner(
                                 _perf_trade_count += 1
                             except Exception as exc:
                                 logger.debug("PerfTracker record error: %s", exc)
-                    if not executed:
+                        if notifier:
+                            notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason,
+                                                          "price": _cf_px, "qty": _cf_qty})
+                        logger.info("AUTO_EXIT_SHORT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, _cf_px, _cf_qty)
+                    else:
                         logger.error("AUTO_EXIT_SHORT_FAILED %s reason=%s px=%.2f qty=%.6f — %s",
                                      exit_symbol, reason, cover_px, qty, getattr(res, "error", "unknown"))
-                    if notifier and executed:
-                        notifier.notify("auto_exit", {"symbol": exit_symbol, "reason": reason,
-                                                      "price": cover_px, "qty": qty})
-                    logger.info("AUTO_EXIT_SHORT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, cover_px, qty)
+                        logger.info("AUTO_EXIT_SHORT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, cover_px, qty)
 
             # Dead-man's switch check
             stale = engine.check_dead_man()
@@ -1628,11 +1643,12 @@ async def _run_event_loop_inner(
                             if res.ok:
                                 _exit_s_regime = _entry_regime.pop(symbol, _current_regime.get(symbol, "unknown"))
                                 now_ms = int(time.time() * 1000)
-                                fee = cover_qty * cover_px * config.fee_rate
+                                _cov_px, _cov_qty = _exec_fill_px_qty(res, cover_px, cover_qty)
+                                fee = _cov_qty * _cov_px * config.fee_rate
                                 if not allow_live:
                                     s_bars = getattr(spos, "bars_held", 0)
                                     close_paper_trade(
-                                        conn, symbol, "short", cover_px, fee, now_ms,
+                                        conn, symbol, "short", _cov_px, fee, now_ms,
                                         close_reason="buy_signal",
                                         max_adverse_pct=getattr(spos, "max_adverse_pct", 0.0),
                                         max_favorable_pct=getattr(spos, "max_favorable_pct", 0.0),
@@ -1640,8 +1656,8 @@ async def _run_event_loop_inner(
                                         exit_regime=_exit_s_regime,
                                         entry_atr_pct=getattr(spos, "entry_atr_pct", None),
                                     )
-                                evaluator._trade_outcomes.append(cover_px < s_avg_entry)
-                                gross_pnl_pct = (s_avg_entry - cover_px) / s_avg_entry if s_avg_entry else 0
+                                evaluator._trade_outcomes.append(_cov_px < s_avg_entry)
+                                gross_pnl_pct = (s_avg_entry - _cov_px) / s_avg_entry if s_avg_entry else 0
                                 net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                                 _expectancy.record_trade(
                                     symbol=symbol,
@@ -1653,12 +1669,12 @@ async def _run_event_loop_inner(
                                 )
                                 _record_outcome(symbol, _exit_s_regime, gross_pnl_pct, _entry_up_prob.pop(symbol, None))
                                 _label_for_online_learner(symbol, gross_pnl_pct, getattr(spos, "bars_held", 0))
-                                is_loss = cover_px > s_avg_entry
+                                is_loss = _cov_px > s_avg_entry
                                 if is_loss and loss_cooldown_bars > 0:
                                     _cooldown_remaining = loss_cooldown_bars
                                 if notifier:
-                                    notifier.notify("cover", {"symbol": symbol, "price": cover_px,
-                                                              "qty": cover_qty, "reason": "buy_signal"})
+                                    notifier.notify("cover", {"symbol": symbol, "price": _cov_px,
+                                                              "qty": _cov_qty, "reason": "buy_signal"})
                             if not res.ok:
                                 logger.error("COVER_SHORT_FAILED %s px=%.2f qty=%.6f — %s",
                                              symbol, cover_px, cover_qty, getattr(res, "error", "unknown"))
@@ -1756,17 +1772,18 @@ async def _run_event_loop_inner(
                                 pos.entry_atr_pct = _sym_atr_pct
                                 pos.breakeven_pct = getattr(config, "breakeven_stop_pct", 0.0)
                             now_ms = int(time.time() * 1000)
-                            fee = _long_size * buy_px * config.fee_rate
+                            _bj_px, _bj_qty = _exec_fill_px_qty(res, buy_px, _long_size)
+                            fee = _bj_qty * _bj_px * config.fee_rate
                             if not allow_live:
-                                open_paper_trade(conn, symbol, "long", buy_px, _long_size, fee, now_ms,
+                                open_paper_trade(conn, symbol, "long", _bj_px, _bj_qty, fee, now_ms,
                                                  ml_up_prob=up_prob,
                                                  strategy_conf=sig.final_confidence,
                                                  vol_ratio=sig.vol_ratio)
                             if notifier:
-                                notifier.notify("buy", {"symbol": symbol, "price": buy_px,
-                                                        "qty": _long_size, "ml_up_prob": up_prob})
+                                notifier.notify("buy", {"symbol": symbol, "price": _bj_px,
+                                                        "qty": _bj_qty, "ml_up_prob": up_prob})
                             logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s long_scale=%.2f",
-                                        symbol, buy_px, _long_size, up_prob or -1, equity, _sym_regime, sig.eff_long_size_scale)
+                                        symbol, _bj_px, _bj_qty, up_prob or -1, equity, _sym_regime, sig.eff_long_size_scale)
                         else:
                             _fail_detail = getattr(res, "error", "") or "unknown"
                             logger.warning("BUY_FAILED %s px=%.2f qty=%.6f — %s",
@@ -1831,19 +1848,20 @@ async def _run_event_loop_inner(
                             if executed:
                                 _closed_long_this_bar = True
                                 now_ms = int(time.time() * 1000)
-                                exit_fee = sell_qty * sell_px * config.fee_rate
+                                _sj_px, _sj_qty = _exec_fill_px_qty(res, sell_px, sell_qty)
+                                exit_fee = _sj_qty * _sj_px * config.fee_rate
                                 if not allow_live:
                                     _sig_bars = getattr(pos, "bars_held", 0)
                                     close_paper_trade(
-                                        conn, symbol, "long", sell_px, exit_fee, now_ms, close_reason="signal",
+                                        conn, symbol, "long", _sj_px, exit_fee, now_ms, close_reason="signal",
                                         max_adverse_pct=getattr(pos, "max_adverse_pct", None),
                                         max_favorable_pct=getattr(pos, "max_favorable_pct", None),
                                         bars_held=_sig_bars,
                                         exit_regime=_sig_entry_regime,
                                         entry_atr_pct=getattr(pos, "entry_atr_pct", None),
                                     )
-                                evaluator._trade_outcomes.append(sell_px > avg_entry)
-                                gross_pnl_pct = (sell_px - avg_entry) / avg_entry if avg_entry else 0
+                                evaluator._trade_outcomes.append(_sj_px > avg_entry)
+                                gross_pnl_pct = (_sj_px - avg_entry) / avg_entry if avg_entry else 0
                                 net_pnl_pct = gross_pnl_pct - 2 * config.fee_rate
                                 bars_held = getattr(pos, "bars_held", 0)
                                 _expectancy.record_trade(
@@ -1872,17 +1890,19 @@ async def _run_event_loop_inner(
                                     except Exception as exc:
                                         logger.debug("PerfTracker record error: %s", exc)
                                 _consecutive_exit_signals[symbol] = 0
-                                is_loss = sell_px < avg_entry
+                                is_loss = _sj_px < avg_entry
                                 if is_loss and loss_cooldown_bars > 0:
                                     _cooldown_remaining = loss_cooldown_bars
                                 if notifier:
-                                    notifier.notify("sell", {"symbol": symbol, "price": sell_px,
-                                                             "qty": sell_qty, "ml_up_prob": up_prob})
+                                    notifier.notify("sell", {"symbol": symbol, "price": _sj_px,
+                                                             "qty": _sj_qty, "ml_up_prob": up_prob})
+                                logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f ok=%s",
+                                            symbol, _sj_px, _sj_qty, up_prob or -1, equity, executed)
                             if not executed:
                                 logger.error("SELL_FAILED %s px=%.2f qty=%.6f — %s",
                                              symbol, sell_px, sell_qty, getattr(res, "error", "unknown"))
-                            logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f ok=%s",
-                                        symbol, sell_px, sell_qty, up_prob or -1, equity, executed)
+                                logger.info("SELL %s px=%.2f qty=%.6f ml=%.3f equity=%.2f ok=%s",
+                                            symbol, sell_px, sell_qty, up_prob or -1, equity, executed)
 
                 # ── Open short when flat and shorts enabled ───────────
                 _allow_short_entry = (
@@ -1977,17 +1997,18 @@ async def _run_event_loop_inner(
                                 spos.entry_atr_pct = _sym_atr_pct
                                 spos.breakeven_pct = getattr(config, "breakeven_stop_pct", 0.0)
                             now_ms = int(time.time() * 1000)
-                            fee = _short_size * short_px * config.fee_rate
+                            _sh_px, _sh_qty = _exec_fill_px_qty(res, short_px, _short_size)
+                            fee = _sh_qty * _sh_px * config.fee_rate
                             if not allow_live:
-                                open_paper_trade(conn, symbol, "short", short_px, _short_size, fee, now_ms,
+                                open_paper_trade(conn, symbol, "short", _sh_px, _sh_qty, fee, now_ms,
                                                  ml_up_prob=up_prob,
                                                  strategy_conf=sig.final_confidence,
                                                  vol_ratio=sig.vol_ratio)
                             if notifier:
-                                notifier.notify("short", {"symbol": symbol, "price": short_px,
-                                                          "qty": _short_size, "ml_up_prob": up_prob})
+                                notifier.notify("short", {"symbol": symbol, "price": _sh_px,
+                                                          "qty": _sh_qty, "ml_up_prob": up_prob})
                             logger.info("SHORT %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s short_scale=%.2f",
-                                        symbol, short_px, _short_size, up_prob or -1, equity, _sym_regime, sig.eff_short_size_scale)
+                                        symbol, _sh_px, _sh_qty, up_prob or -1, equity, _sym_regime, sig.eff_short_size_scale)
                         else:
                             _fail_detail = getattr(res, "error", "") or "unknown"
                             logger.warning("SHORT_FAILED %s px=%.2f qty=%.6f — %s",

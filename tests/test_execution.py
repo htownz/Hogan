@@ -31,6 +31,8 @@ class TestExecResult:
         assert r.ok is True
         assert r.order_id is None
         assert r.error is None
+        assert r.fill_price is None
+        assert r.fill_qty is None
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +97,8 @@ class TestPaperExecutionIntentAPI:
         ex = PaperExecution(p)
         result = ex.open_long("BTC/USD", 100.0, 5.0)
         assert result.ok is True
+        assert result.fill_price == pytest.approx(100.0)
+        assert result.fill_qty == pytest.approx(5.0)
         assert "BTC/USD" in p.positions
         assert p.positions["BTC/USD"].qty == pytest.approx(5.0)
         assert p.cash_usd == pytest.approx(9_500.0)
@@ -105,6 +109,8 @@ class TestPaperExecutionIntentAPI:
         ex.open_long("BTC/USD", 100.0, 5.0)
         result = ex.close_long("BTC/USD", 110.0, 5.0, reason="take_profit")
         assert result.ok is True
+        assert result.fill_price == pytest.approx(110.0)
+        assert result.fill_qty == pytest.approx(5.0)
         assert "BTC/USD" not in p.positions
         assert p.cash_usd == pytest.approx(10_050.0)
 
@@ -172,12 +178,14 @@ class TestRealisticPaperExecution:
         p = PaperPortfolio(cash_usd=100_000, fee_rate=0.0)
         cfg = FillSimConfig(slippage_bps=10.0, spread_half_bps=5.0)
         ex = RealisticPaperExecution(p, config=cfg)
-        ex.buy("BTC/USD", 100.0, 10.0)
+        r = ex.buy("BTC/USD", 100.0, 10.0)
         pos = p.positions["BTC/USD"]
         # Should fill worse than 100: price * (1 + 15bps)
         assert pos.avg_entry > 100.0
         expected = 100.0 * (1 + 15 / 10_000)
         assert pos.avg_entry == pytest.approx(expected)
+        assert r.fill_price == pytest.approx(expected)
+        assert r.fill_qty == pytest.approx(10.0)
 
     def test_sell_applies_slippage(self):
         p = PaperPortfolio(cash_usd=100_000, fee_rate=0.0)
@@ -189,6 +197,8 @@ class TestRealisticPaperExecution:
         assert result.ok is True
         # Sell fill should be worse than 100
         expected_fill = 100.0 * (1 - 15 / 10_000)
+        assert result.fill_price == pytest.approx(expected_fill)
+        assert result.fill_qty == pytest.approx(10.0)
         proceeds = 10 * expected_fill
         assert p.cash_usd == pytest.approx(cash_before + proceeds)
 

@@ -26,6 +26,9 @@ class ExecResult:
     ok: bool
     order_id: str | None = None
     error: str | None = None
+    # Actual fill (portfolio truth). Used to journal paper_trades when slip/spread sim applies.
+    fill_price: float | None = None
+    fill_qty: float | None = None
 
 
 class ExecutionEngine:
@@ -127,7 +130,9 @@ class PaperExecution(ExecutionEngine):
             pos = self.portfolio.positions.get(symbol)
             if pos is not None:
                 _safe_upsert(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
-        return ExecResult(ok=ok)
+        if ok:
+            return ExecResult(ok=True, fill_price=price, fill_qty=qty)
+        return ExecResult(ok=False)
 
     def close_long(self, symbol: str, price: float, qty: float,
                    reason: str = "signal") -> ExecResult:
@@ -139,7 +144,9 @@ class PaperExecution(ExecutionEngine):
                 _safe_upsert(self.conn, symbol, 0.0, 0.0, ts_ms)
             else:
                 _safe_upsert(self.conn, symbol, pos.qty, pos.avg_entry, ts_ms)
-        return ExecResult(ok=ok)
+        if ok:
+            return ExecResult(ok=True, fill_price=price, fill_qty=qty)
+        return ExecResult(ok=False)
 
     def open_short(self, symbol: str, price: float, qty: float,
                    trailing_stop_pct: float = 0.0,
@@ -156,7 +163,9 @@ class PaperExecution(ExecutionEngine):
             pos = self.portfolio.short_positions.get(symbol)
             if pos is not None:
                 _safe_upsert(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
-        return ExecResult(ok=ok)
+        if ok:
+            return ExecResult(ok=True, fill_price=price, fill_qty=qty)
+        return ExecResult(ok=False)
 
     def close_short(self, symbol: str, price: float, qty: float,
                     reason: str = "signal") -> ExecResult:
@@ -168,7 +177,9 @@ class PaperExecution(ExecutionEngine):
                 _safe_upsert(self.conn, symbol, 0.0, 0.0, ts_ms)
             else:
                 _safe_upsert(self.conn, symbol, -pos.qty, pos.avg_entry, ts_ms)
-        return ExecResult(ok=ok)
+        if ok:
+            return ExecResult(ok=True, fill_price=price, fill_qty=qty)
+        return ExecResult(ok=False)
 
     def emergency_flatten(self, symbol: str, price: float) -> ExecResult:
         results = []
@@ -229,7 +240,12 @@ class LiveExecution(ExecutionEngine):
                     take_profit_pct=take_profit_pct,
                     trail_activation_pct=trail_activation_pct,
                 )
-            return ExecResult(ok=True, order_id=str(order.get("id")))
+            return ExecResult(
+                ok=True,
+                order_id=str(order.get("id")),
+                fill_price=fill_price,
+                fill_qty=fill_qty,
+            )
         except Exception as exc:  # pragma: no cover
             logger.exception("Live open_long failed: %s", exc)
             return ExecResult(ok=False, error=str(exc))
@@ -245,7 +261,12 @@ class LiveExecution(ExecutionEngine):
             fill_qty = float(order.get("filled", qty))
             if self.portfolio is not None:
                 self.portfolio.execute_sell(symbol, fill_price, fill_qty)
-            return ExecResult(ok=True, order_id=str(order.get("id")))
+            return ExecResult(
+                ok=True,
+                order_id=str(order.get("id")),
+                fill_price=fill_price,
+                fill_qty=fill_qty,
+            )
         except Exception as exc:  # pragma: no cover
             logger.exception("Live close_long failed: %s", exc)
             return ExecResult(ok=False, error=str(exc))
@@ -414,7 +435,12 @@ class SmartExecution(ExecutionEngine):
                         "SMART_OPEN_LONG filled %s at %.2f qty=%.6f (attempt %d)",
                         symbol, fill_price, fill_qty, attempt + 1,
                     )
-                    return ExecResult(ok=True, order_id=order_id)
+                    return ExecResult(
+                        ok=True,
+                        order_id=order_id,
+                        fill_price=fill_price,
+                        fill_qty=fill_qty,
+                    )
 
                 self.client.cancel_order(order_id, symbol)
                 logger.debug(
@@ -445,7 +471,12 @@ class SmartExecution(ExecutionEngine):
             if self.portfolio is not None:
                 self.portfolio.execute_sell(symbol, fill_price, fill_qty)
             logger.info("TAKER_SELL %s qty=%.6f fill=%.2f", symbol, fill_qty, fill_price)
-            return ExecResult(ok=True, order_id=str(order.get("id")))
+            return ExecResult(
+                ok=True,
+                order_id=str(order.get("id")),
+                fill_price=fill_price,
+                fill_qty=fill_qty,
+            )
         except Exception as exc:
             logger.exception("Market sell failed: %s", exc)
             return ExecResult(ok=False, error=str(exc))
@@ -468,7 +499,12 @@ class SmartExecution(ExecutionEngine):
             if self.portfolio is not None:
                 self.portfolio.execute_cover(symbol, fill_price, fill_qty)
             logger.info("TAKER_COVER %s qty=%.6f fill=%.2f reason=%s", symbol, fill_qty, fill_price, reason)
-            return ExecResult(ok=True, order_id=str(order.get("id")))
+            return ExecResult(
+                ok=True,
+                order_id=str(order.get("id")),
+                fill_price=fill_price,
+                fill_qty=fill_qty,
+            )
         except Exception as exc:
             logger.exception("Smart cover failed: %s", exc)
             return ExecResult(ok=False, error=str(exc))
@@ -595,7 +631,8 @@ class RealisticPaperExecution(ExecutionEngine):
                 "REALISTIC_OPEN_LONG %s fill=%.2f (signal=%.2f, slip=%.1fbps) qty=%.6f",
                 symbol, fill_price, price, slip_bps, fill_qty,
             )
-        return ExecResult(ok=ok)
+            return ExecResult(ok=True, fill_price=fill_price, fill_qty=fill_qty)
+        return ExecResult(ok=False)
 
     def close_long(self, symbol: str, price: float, qty: float,
                    reason: str = "signal") -> ExecResult:
@@ -617,7 +654,8 @@ class RealisticPaperExecution(ExecutionEngine):
                 "REALISTIC_CLOSE_LONG %s fill=%.2f (signal=%.2f, slip=%.1fbps) qty=%.6f",
                 symbol, fill_price, price, slip_bps, fill_qty,
             )
-        return ExecResult(ok=ok)
+            return ExecResult(ok=True, fill_price=fill_price, fill_qty=fill_qty)
+        return ExecResult(ok=False)
 
     def open_short(self, symbol: str, price: float, qty: float,
                    trailing_stop_pct: float = 0.0,
@@ -644,7 +682,8 @@ class RealisticPaperExecution(ExecutionEngine):
                 "REALISTIC_OPEN_SHORT %s fill=%.2f (signal=%.2f, slip=%.1fbps) qty=%.6f",
                 symbol, fill_price, price, slip_bps, fill_qty,
             )
-        return ExecResult(ok=ok)
+            return ExecResult(ok=True, fill_price=fill_price, fill_qty=fill_qty)
+        return ExecResult(ok=False)
 
     def close_short(self, symbol: str, price: float, qty: float,
                     reason: str = "signal") -> ExecResult:
@@ -665,7 +704,8 @@ class RealisticPaperExecution(ExecutionEngine):
                 "REALISTIC_CLOSE_SHORT %s fill=%.2f (signal=%.2f) qty=%.6f reason=%s",
                 symbol, fill_price, price, fill_qty, reason,
             )
-        return ExecResult(ok=ok)
+            return ExecResult(ok=True, fill_price=fill_price, fill_qty=fill_qty)
+        return ExecResult(ok=False)
 
     def emergency_flatten(self, symbol: str, price: float) -> ExecResult:
         results = []
