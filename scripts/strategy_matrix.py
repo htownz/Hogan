@@ -47,9 +47,16 @@ FX_FEE = 0.0003
 FX_SLIP_BPS = 1.0
 
 
-def _fee_and_slippage(symbol: str, zero_cost: bool = False):
+def _fee_and_slippage(
+    symbol: str,
+    zero_cost: bool = False,
+    custom_fee: float | None = None,
+    custom_slip: float | None = None,
+):
     if zero_cost:
         return 0.0, 0.0
+    if custom_fee is not None:
+        return custom_fee, custom_slip if custom_slip is not None else 0.0
     if "GBP" in symbol or "EUR" in symbol or "JPY" in symbol:
         return FX_FEE, FX_SLIP_BPS
     return CRYPTO_FEE, CRYPTO_SLIP_BPS
@@ -464,8 +471,11 @@ def run_cell(
     risk_per_trade: float = 0.01,
     zero_cost: bool = False,
     long_only: bool = False,
+    custom_fee: float | None = None,
+    custom_slip: float | None = None,
 ) -> AggregatedCell:
-    fee, slip = _fee_and_slippage(asset, zero_cost=zero_cost)
+    fee, slip = _fee_and_slippage(asset, zero_cost=zero_cost,
+                                   custom_fee=custom_fee, custom_slip=custom_slip)
     entry_family = get_entry_family(entry_key)
     windows = _split_windows(len(candles), n_splits)
     window_metrics: list[CellMetrics] = []
@@ -504,6 +514,9 @@ def run_matrix(
     n_splits: int = 5,
     zero_cost: bool = False,
     long_only: bool = False,
+    custom_fee: float | None = None,
+    custom_slip: float | None = None,
+    timeframe: str = "1h",
 ) -> list[AggregatedCell]:
     if entry_keys is None:
         entry_keys = list(ENTRY_FAMILIES.keys())
@@ -516,11 +529,11 @@ def run_matrix(
     cell_num = 0
 
     for asset in assets:
-        candles = load_candles(conn, asset, "1h")
-        if candles is None or len(candles) < 2000:
+        candles = load_candles(conn, asset, timeframe)
+        if candles is None or len(candles) < 500:
             print(f"  SKIP {asset}: insufficient data ({len(candles) if candles is not None else 0} bars)")
             continue
-        print(f"\n  {asset}: {len(candles)} bars loaded")
+        print(f"\n  {asset}: {len(candles)} {timeframe} bars loaded")
 
         for entry_key in entry_keys:
             for ep in exit_packs:
@@ -532,6 +545,8 @@ def run_matrix(
                     n_splits=n_splits,
                     zero_cost=zero_cost,
                     long_only=long_only,
+                    custom_fee=custom_fee,
+                    custom_slip=custom_slip,
                 )
                 elapsed = time.time() - t0
                 flag = "PASS" if passes_screen_gate(agg) else "fail"
@@ -747,6 +762,12 @@ def main():
     parser.add_argument("--output-dir", default="reports/tournament")
     parser.add_argument("--suffix", default="",
                         help="Suffix for output filenames")
+    parser.add_argument("--fee-rate", type=float, default=None,
+                        help="Custom fee rate per side (e.g. 0.001 for 0.10%%)")
+    parser.add_argument("--slippage-bps", type=float, default=None,
+                        help="Custom slippage in basis points")
+    parser.add_argument("--timeframe", default="1h",
+                        help="Candle timeframe (default: 1h)")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -769,9 +790,12 @@ def main():
     print(f"  Assets:     {args.assets}")
     print(f"  Entries:    {args.entries or list(ENTRY_FAMILIES.keys())}")
     print(f"  Exits:      {[ep.name for ep in exit_packs]}")
+    print(f"  Timeframe:  {args.timeframe}")
     print(f"  Splits:     {args.n_splits}")
     print(f"  Zero-cost:  {args.zero_cost}")
     print(f"  Long-only:  {args.long_only}")
+    print(f"  Fee rate:   {args.fee_rate or 'default'}")
+    print(f"  Slip bps:   {args.slippage_bps or 'default'}")
     print(f"  Output:     {args.output_dir}")
     print("=" * 80)
 
@@ -784,6 +808,9 @@ def main():
         n_splits=args.n_splits,
         zero_cost=args.zero_cost,
         long_only=args.long_only,
+        custom_fee=args.fee_rate,
+        custom_slip=args.slippage_bps,
+        timeframe=args.timeframe,
     )
     elapsed = time.time() - t0
 
