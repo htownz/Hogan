@@ -14,15 +14,14 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pandas as pd
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
-from hogan_bot.oanda_client import OandaClient
-from hogan_bot.storage import upsert_candles
+from hogan_bot.oanda_client import OandaClient  # noqa: E402
+from hogan_bot.storage import upsert_candles  # noqa: E402
 
 
 def _rfc3339(dt: datetime) -> str:

@@ -19,7 +19,6 @@ import pandas as pd
 from hogan_bot.indicators import compute_atr
 from hogan_bot.strategy import StrategySignal
 
-
 _HOLD = StrategySignal(action="hold", stop_distance_pct=0.01, confidence=1.0, volume_ratio=1.0)
 _MIN_BARS = 55
 
@@ -222,7 +221,6 @@ class BollingerSqueezeBreakout:
         bb_width = upper_bb - lower_bb
 
         atr_series = compute_atr(candles, window=self.period)
-        ema_kc = close.ewm(span=self.period, adjust=False).mean()
         kc_width = 2.0 * self.kc_mult * atr_series
 
         squeeze = bb_width < kc_width

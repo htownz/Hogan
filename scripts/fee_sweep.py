@@ -18,14 +18,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from hogan_bot.exit_packs import T1_TREND
 from scripts.strategy_matrix import (
-    AggregatedCell,
-    passes_screen_gate,
     passes_promotion_gate,
+    passes_screen_gate,
     run_matrix,
 )
-from hogan_bot.exit_packs import T1_TREND, T3_BALANCED
-
 
 FEE_LEVELS = [0.0, 0.0002, 0.0005, 0.0008, 0.001, 0.0015, 0.002, 0.0026]
 SLIP_LEVELS_BPS = [0.0, 1.0, 2.0, 3.0, 5.0]
@@ -47,9 +45,9 @@ def main():
     print("FEE SENSITIVITY SWEEP")
     print("=" * 90)
     print(f"  Entries: {TOP_ENTRIES}")
-    print(f"  Exit:    T1_trend")
+    print("  Exit:    T1_trend")
     print(f"  Fee levels: {FEE_LEVELS}")
-    print(f"  Slippage: fixed at 5 bps (only fee varies)")
+    print("  Slippage: fixed at 5 bps (only fee varies)")
     print("=" * 90)
 
     for fee_rate in FEE_LEVELS:

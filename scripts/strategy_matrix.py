@@ -23,7 +23,7 @@ import os
 import sqlite3
 import sys
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -351,7 +351,6 @@ def _compute_metrics(
 
     # Cost decomposition
     m.avg_cost_per_trade = sum(costs) / m.n_trades
-    gross_edge = sum(gross_pnls) / m.n_trades
     m.cost_drag_pct = 100.0 * (sum(costs) / max(abs(sum(gross_pnls)), 1e-9))
 
     # Turnover (trades per 30-day month ≈ 720 1h bars)
@@ -480,7 +479,7 @@ def run_cell(
     windows = _split_windows(len(candles), n_splits)
     window_metrics: list[CellMetrics] = []
 
-    for w_idx, (train_end, test_start, test_end) in enumerate(windows):
+    for w_idx, (_train_end, test_start, test_end) in enumerate(windows):
         test_candles = candles.iloc[max(0, test_start - 300):test_end].copy()
         actual_test_bars = test_end - test_start
 
@@ -818,7 +817,7 @@ def main():
     print(f"MATRIX COMPLETE — {len(results)} cells in {elapsed:.1f}s")
     print(f"{'=' * 80}")
 
-    ranked = _save_leaderboard(results, args.output_dir, suffix)
+    _save_leaderboard(results, args.output_dir, suffix)
     _save_json_results(results, args.output_dir, suffix)
     _save_summary_md(results, args.output_dir, suffix)
 

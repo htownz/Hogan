@@ -24,7 +24,6 @@ from hogan_bot.strategy_candidates import (
     get_entry_family,
 )
 
-
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _make_candles(n: int = 300, trend: str = "up", seed: int = 42) -> pd.DataFrame:
