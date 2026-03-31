@@ -145,6 +145,16 @@ class MacroSitout:
 
         all_events = set(_FOMC_DATES) | set(_CPI_DATES) | set(_NFP_DATES)
 
+        latest_event = max(all_events) if all_events else "1970-01-01"
+        from datetime import date as _date
+        _days_remaining = (_date.fromisoformat(latest_event) - _date.today()).days
+        if _days_remaining < 90:
+            logger.warning(
+                "MacroSitout: event calendar expires %s (%d days remaining). "
+                "Update _FOMC_DATES, _CPI_DATES, _NFP_DATES in macro_sitout.py.",
+                latest_event, _days_remaining,
+            )
+
         return cls(
             event_blackout_hours=event_blackout_hours,
             fng_extreme_fear=fng_extreme_fear,
@@ -220,13 +230,13 @@ class MacroSitout:
             result.reasons.append(f"extreme_greed(FnG={fng})")
 
     def _check_vix(self, dt: datetime, result: SitoutResult) -> None:
-        """Check VIX level."""
-        hour_key = dt.strftime("%Y-%m-%d-%H")
-        prev_key = (dt - timedelta(hours=1)).strftime("%Y-%m-%d-%H")
-
-        vix = self._vix_by_hour.get(hour_key)
-        if vix is None:
-            vix = self._vix_by_hour.get(prev_key)
+        """Check VIX level with up to 4-hour lookback for gaps."""
+        vix: float | None = None
+        for offset_h in range(5):
+            key = (dt - timedelta(hours=offset_h)).strftime("%Y-%m-%d-%H")
+            vix = self._vix_by_hour.get(key)
+            if vix is not None:
+                break
         if vix is None:
             return
 

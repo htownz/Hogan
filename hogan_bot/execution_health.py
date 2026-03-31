@@ -24,6 +24,8 @@ class OrderOutcome:
     fill_price: float | None
     ok: bool
     error: str | None = None
+    mode: str = "live"  # "live" or "paper"
+    exchange: str = "unknown"
 
     @property
     def slippage_bps(self) -> float | None:
@@ -82,8 +84,8 @@ class ExecutionHealthState:
         try:
             from hogan_bot.metrics import FILLS, ORDER_FAILS, ORDERS, SLIPPAGE_BPS
 
-            mode = "live" if not outcome.side.startswith("paper") else "paper"
-            exchange = "unknown"
+            mode = getattr(outcome, "mode", "live") or "live"
+            exchange = getattr(outcome, "exchange", "unknown") or "unknown"
 
             ORDERS.labels(side=outcome.side, mode=mode, exchange=exchange).inc()
 
@@ -96,8 +98,8 @@ class ExecutionHealthState:
                 slip = outcome.slippage_bps
                 if slip is not None:
                     SLIPPAGE_BPS.observe(slip)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Prometheus metric update failed: %s", exc)
 
     @property
     def order_failure_circuit_open(self) -> bool:
@@ -256,5 +258,5 @@ def record_exec_outcome(
             error=str(error) if error else None,
         )
         health.record_order(outcome)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("record_exec_outcome failed: %s", exc)

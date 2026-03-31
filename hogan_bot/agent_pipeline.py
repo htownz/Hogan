@@ -122,7 +122,6 @@ class TechnicalAgent:
         """
         if not mtf_candles:
             return None
-        import numpy as np
 
         bias_votes = 0  # +1 bullish, -1 bearish
         total_votes = 0
@@ -424,9 +423,6 @@ class SentimentAgent:
         if not scores:
             return SentimentSignal(bias="neutral", strength=0.0)
 
-        # Updated weights including new signals
-        all_keys = ["fear_greed", "news_sentiment", "social_vol", "funding",
-                    "fg_velocity", "funding_regime"]
         weights = {
             "fear_greed": 0.25,
             "news_sentiment": 0.25,
@@ -443,7 +439,7 @@ class SentimentAgent:
         else:
             composite = 0.5
 
-        coverage = sum(1 for k in all_keys if k in scores) / len(all_keys)
+        coverage = sum(1 for k in weights if k in scores) / len(weights)
 
         data_age_hours = max(_sent_ages) if _sent_ages else 999.0
 
@@ -1005,6 +1001,10 @@ class AgentPipeline:
         )
         self._last_signal[symbol] = signal
         return signal
+
+    def get_last_signal(self, symbol: str) -> AgentSignal | None:
+        """Return the most recent signal for *symbol*, or None."""
+        return self._last_signal.get(symbol)
 
     def record_trade_outcome(
         self,

@@ -42,6 +42,7 @@ def get_connection(db_path: str = "data/hogan.db") -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA cache_size=-32000")  # 32 MB page cache
+    conn.execute("PRAGMA foreign_keys=ON")
     _create_schema(conn)
     return conn
 

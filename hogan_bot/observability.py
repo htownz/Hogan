@@ -254,8 +254,8 @@ def get_db_table_stats(conn: sqlite3.Connection) -> list[TableStats]:
                     oldest_ts_ms=row[1],
                     newest_ts_ms=row[2],
                 ))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("get_db_table_stats: %s query failed: %s", table, exc)
 
     return results
 

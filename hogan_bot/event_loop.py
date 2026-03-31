@@ -132,7 +132,6 @@ def _compute_data_ages(conn) -> dict[str, float]:
             ).fetchone()
             if row and row[0]:
                 if col == "date":
-                    from datetime import datetime, timezone
                     dt = datetime.fromisoformat(str(row[0]))
                     if dt.tzinfo is None:
                         dt = dt.replace(tzinfo=timezone.utc)
@@ -216,7 +215,6 @@ class SignalEvaluator:
         state.ml_probs = self._ml_probs
         state.trade_outcomes = self._trade_outcomes
 
-        import time as _time_mod
         intent = decide(
             symbol=symbol,
             candles=candles,
@@ -232,7 +230,7 @@ class SignalEvaluator:
             enable_pullback_gate=True,
             enable_freshness_check=True,
             peak_equity_usd=peak_equity,
-            as_of_ms=int(_time_mod.time() * 1000),
+            as_of_ms=int(time.time() * 1000),
         )
 
         px = float(candles["close"].iloc[-1])
@@ -974,7 +972,7 @@ async def _run_event_loop_inner(
 
     def _record_outcome(sym: str, regime: str, pnl: float, up_prob: float | None = None) -> None:
         """Feed closed-trade results back to AgentPipeline for learned weights."""
-        last_sig = evaluator.pipeline._last_signal.get(sym)
+        last_sig = evaluator.pipeline.get_last_signal(sym)
         if last_sig is not None:
             evaluator.pipeline.record_trade_outcome(
                 symbol=sym,
@@ -1382,7 +1380,6 @@ async def _run_event_loop_inner(
                     else:
                         logger.error("AUTO_EXIT_FAILED %s reason=%s px=%.2f qty=%.6f — %s",
                                      exit_symbol, reason, ep, qty, getattr(res, "error", "unknown"))
-                        logger.info("AUTO_EXIT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, sell_px, qty)
 
                 elif reason in ("short_trailing_stop", "short_take_profit", "short_max_hold_time", "short_max_loss", "short_breakeven_stop"):
                     pos = portfolio.short_positions.get(exit_symbol)
@@ -1445,7 +1442,6 @@ async def _run_event_loop_inner(
                     else:
                         logger.error("AUTO_EXIT_SHORT_FAILED %s reason=%s px=%.2f qty=%.6f — %s",
                                      exit_symbol, reason, cover_px, qty, getattr(res, "error", "unknown"))
-                        logger.info("AUTO_EXIT_SHORT %s reason=%s px=%.2f qty=%.6f", exit_symbol, reason, cover_px, qty)
 
             # Dead-man's switch check
             stale = engine.check_dead_man()

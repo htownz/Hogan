@@ -136,22 +136,11 @@ def apply_champion_mode(config):
 def get_champion_summary() -> dict:
     """Return a dict describing the champion configuration for logging."""
     from hogan_bot.feature_registry import CHAMPION_FEATURE_COLUMNS
-    return {
+    summary: dict = {
         "champion_mode": is_champion_mode(),
         "champion_feature_count": len(CHAMPION_FEATURE_COLUMNS),
         "locked_experiments_off": list(_EXPERIMENTAL_FLAGS),
-        "signal_mode": CHAMPION_LOCKS.signal_mode,
-        "min_vote_margin": CHAMPION_LOCKS.signal_min_vote_margin,
-        "use_strategy_router": CHAMPION_LOCKS.use_strategy_router,
-        "volatile_policy": CHAMPION_LOCKS.volatile_policy,
-        "min_hold_bars": CHAMPION_LOCKS.min_hold_bars,
-        "exit_confirmation_bars": CHAMPION_LOCKS.exit_confirmation_bars,
-        "min_edge_multiple": CHAMPION_LOCKS.min_edge_multiple,
-        "min_final_confidence": CHAMPION_LOCKS.min_final_confidence,
-        "min_tech_confidence": CHAMPION_LOCKS.min_tech_confidence,
-        "min_regime_confidence": CHAMPION_LOCKS.min_regime_confidence,
-        "max_whipsaws": CHAMPION_LOCKS.max_whipsaws,
-        "reversal_confidence_multiplier": CHAMPION_LOCKS.reversal_confidence_multiplier,
-        "max_hold_hours": CHAMPION_LOCKS.max_hold_hours,
-        "loss_cooldown_hours": CHAMPION_LOCKS.loss_cooldown_hours,
     }
+    for fld in ChampionLocks.__dataclass_fields__:
+        summary[fld] = getattr(CHAMPION_LOCKS, fld)
+    return summary

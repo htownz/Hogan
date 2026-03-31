@@ -289,7 +289,7 @@ def detect_regime(
     fast_ma = close.rolling(fast_ma_period).mean().iloc[-1]
     slow_ma = close.rolling(slow_ma_period).mean().iloc[-1]
     ma_spread = 0.0
-    if slow_ma and slow_ma > 0:
+    if not np.isnan(slow_ma) and slow_ma > 0:
         ma_spread = float((fast_ma - slow_ma) / slow_ma)
 
     if plus_di.iloc[-1] > minus_di.iloc[-1]:
@@ -481,15 +481,6 @@ def effective_thresholds(
     for key in ("ml_buy_threshold", "ml_sell_threshold", "position_scale"):
         if key in overrides:
             result[key] = overrides[key]
-
-    # Mean-reversion score is available in RegimeState for diagnostics
-    # and future use, but walk-forward testing showed that applying it
-    # as a position scaling factor is net negative (hurts trend-following
-    # entries in W1-type rally conditions more than it helps W4-type
-    # mean-reverting conditions).
-    mr_scale = 1.0
-    result["position_scale"] = result["position_scale"] * mr_scale
-    result["mean_reversion_scale"] = mr_scale
 
     return result
 

@@ -33,10 +33,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import time
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+logger = logging.getLogger(__name__)
 
 _FNG_URL = "https://api.alternative.me/fng/"
 _TIMEOUT = 20
@@ -103,11 +106,11 @@ def fetch_and_store(
 
     limit = 2000 if backfill else 1
     label = f"{limit} days" if backfill else "today"
-    print(f"Fetching Fear & Greed Index ({label}) ...")
+    logger.info("Fetching Fear & Greed Index (%s) ...", label)
 
     records_raw = _fetch(limit=limit)
     if not records_raw:
-        print("  No data returned.")
+        logger.warning("  No data returned.")
         return 0
 
     rows = [(r["date"], _METRIC, float(r["value"])) for r in records_raw]
@@ -119,8 +122,8 @@ def fetch_and_store(
 
     if records_raw:
         latest = max(records_raw, key=lambda r: r["date"])
-        print(f"  Latest: {latest['date']}  value={latest['value']}")
-    print(f"  {len(rows)} records upserted.")
+        logger.info("  Latest: %s  value=%s", latest["date"], latest["value"])
+    logger.info("  %d records upserted.", len(rows))
     return written
 
 

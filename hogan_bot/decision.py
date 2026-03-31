@@ -161,7 +161,7 @@ def estimate_spread_from_candles(candles: pd.DataFrame, window: int = 20) -> flo
     alpha = (np.sqrt(2 * beta[valid]) - np.sqrt(gamma[valid])) / (
         3 - 2 * np.sqrt(2)
     )
-    alpha = np.clip(alpha, 0, None)
+    alpha = np.clip(alpha, 0, 5.0)
     spread = 2.0 * (np.exp(alpha) - 1) / (1 + np.exp(alpha))
     cs_est = float(np.median(spread))
 
@@ -871,11 +871,23 @@ class AdaptiveConfidence:
             self._predictions = self._predictions[-self._max_history:]
             self._outcomes = self._outcomes[-self._max_history:]
             self._timestamps = self._timestamps[-self._max_history:]
+            self._rebuild_bins()
+            return
 
         bin_idx = min(self._n_bins - 1, int(predicted_prob * self._n_bins))
         self._bin_total[bin_idx] += 1
         if actual_label == 1:
             self._bin_correct[bin_idx] += 1
+
+    def _rebuild_bins(self) -> None:
+        """Rebuild calibration bins from retained history after trimming."""
+        self._bin_correct = [0] * self._n_bins
+        self._bin_total = [0] * self._n_bins
+        for p, o in zip(self._predictions, self._outcomes):
+            idx = min(self._n_bins - 1, int(p * self._n_bins))
+            self._bin_total[idx] += 1
+            if o == 1:
+                self._bin_correct[idx] += 1
 
     def _recency_accuracy_factor(self) -> float:
         """Compute a recency-weighted accuracy factor in [0.5, 1.3].

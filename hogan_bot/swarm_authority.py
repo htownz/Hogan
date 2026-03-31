@@ -13,12 +13,6 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
-_SWARM_TAGS = frozenset({
-    "swarm_blocked_unsigned_signal",
-    "swarm_direction_clash",
-})
-
-
 @dataclass
 class SwarmAuthorityWarning:
     code: str
@@ -114,7 +108,8 @@ def _count_shadow_decisions(conn: sqlite3.Connection | None) -> int:
             "SELECT COUNT(*) FROM swarm_decisions WHERE mode='shadow'"
         ).fetchone()
         return row[0] if row else 0
-    except Exception:
+    except Exception as exc:
+        logger.debug("_count_shadow_decisions query failed: %s", exc)
         return 0
 
 
@@ -128,7 +123,8 @@ def _count_regime_weight_evidence(conn: sqlite3.Connection | None) -> int:
             "WHERE regime IS NOT NULL"
         ).fetchone()
         return row[0] if row else 0
-    except Exception:
+    except Exception as exc:
+        logger.debug("_count_regime_weight_evidence query failed: %s", exc)
         return 0
 
 

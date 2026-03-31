@@ -15,7 +15,10 @@ Usage::
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 # Decision relevance: which decision does this feature help?
 # "entry_edge" | "regime" | "stop" | "sizing" | "veto" | "execution_timing" | "experimental"
@@ -315,6 +318,7 @@ def check_staleness(
     for name, val in zip(feature_names, feature_values):
         meta = FEATURE_REGISTRY.get(name)
         if meta is None:
+            logger.debug("check_staleness: feature %r not in registry — skipped", name)
             continue
 
         if math.isnan(val):

@@ -382,8 +382,12 @@ class ExchangeClient:
     # Trading (spot) — intentionally minimal, for live routing in production
     # ---------------------------------------------------------------------
 
+    _VALID_SIDES = ("buy", "sell")
+
     def create_market_order(self, symbol: str, side: str, amount: float, params: dict | None = None) -> dict:
         """Create a market order. Returns the raw CCXT order dict."""
+        if side not in self._VALID_SIDES:
+            raise ValueError(f"side must be 'buy' or 'sell', got {side!r}")
         if amount <= 0:
             raise ValueError("amount must be > 0")
         params = params or {}
@@ -391,6 +395,8 @@ class ExchangeClient:
 
     def create_limit_order(self, symbol: str, side: str, amount: float, price: float, params: dict | None = None) -> dict:
         """Create a limit order. Returns the raw CCXT order dict."""
+        if side not in self._VALID_SIDES:
+            raise ValueError(f"side must be 'buy' or 'sell', got {side!r}")
         if amount <= 0 or price <= 0:
             raise ValueError("amount and price must be > 0")
         params = params or {}
@@ -649,17 +655,17 @@ class AlpacaClient:
             return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
 
         rows = [
-            {
-                "timestamp": int(bar.timestamp.timestamp() * 1000),
-                "open": float(bar.open),
-                "high": float(bar.high),
-                "low": float(bar.low),
-                "close": float(bar.close),
-                "volume": float(bar.volume),
-            }
+            [
+                int(bar.timestamp.timestamp() * 1000),
+                float(bar.open),
+                float(bar.high),
+                float(bar.low),
+                float(bar.close),
+                float(bar.volume),
+            ]
             for bar in sym_bars[-limit:]
         ]
-        return pd.DataFrame(rows)
+        return ExchangeClient._rows_to_df(rows)
 
     def get_positions(self) -> list[dict]:
         """Return all open positions as a list of dicts."""

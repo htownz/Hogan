@@ -364,16 +364,7 @@ def _feature_frame(candles: pd.DataFrame) -> pd.DataFrame:
 
     # 6 & 7. Previous-day high / low reference levels (PDH / PDL):
     #    Key ICT levels where buy-side and sell-side liquidity rest overnight.
-    #    Uses UTC calendar-day semantics consistently.
-    if "ts_ms" in candles.columns:
-        day_key = pd.to_datetime(candles["ts_ms"], unit="ms", utc=True).dt.date
-    elif "timestamp" in candles.columns:
-        day_key = pd.to_datetime(candles["timestamp"], utc=True).dt.date
-    else:
-        from hogan_bot.timeframe_utils import bars_per_day, infer_timeframe_from_candles
-        tf = infer_timeframe_from_candles(candles) or "1h"
-        bpd = bars_per_day(tf)
-        day_key = pd.Series(np.arange(len(close)) // bpd, index=close.index)
+    #    Reuses day_key from VWAP section above.
 
     # Per-day agg; map each bar to previous UTC calendar day's high/low
     day_high = high.groupby(day_key).max()
@@ -543,7 +534,7 @@ def build_training_set(
     fee_rate: float = 0.0026,
     label_mode: str = "fee_threshold",
     use_champion_features: bool | None = None,
-) -> tuple[pd.DataFrame | None, pd.Series | None, list[str]]:
+) -> tuple[pd.DataFrame | None, pd.Series | None, list[str], pd.Series | None]:
     """Construct feature matrix *X* and label vector *y* from *candles*.
 
     Parameters

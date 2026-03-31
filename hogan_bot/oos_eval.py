@@ -78,9 +78,9 @@ class OOSResult:
         """Check whether this OOS result passes promotion requirements."""
         if self.trade_count < min_trades:
             return False
-        if self.sharpe is None or self.sharpe < min_sharpe:
+        if self.sharpe < min_sharpe:
             return False
-        if self.max_drawdown_pct is None or self.max_drawdown_pct > max_drawdown:
+        if self.max_drawdown_pct > max_drawdown:
             return False
         return True
 
