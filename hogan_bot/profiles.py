@@ -22,22 +22,30 @@ CANONICAL_PROFILE: dict[str, object] = {
     "ml_confidence_sizing": False,
     "use_ml_as_sizer": True,
 
-    # ── Signal quality gates ──────────────────────────────────────────
-    "min_final_confidence": 0.20,
+    # ── Signal quality gates (aligned with ChampionLocks) ─────────────
+    "min_final_confidence": 0.12,
     "min_tech_confidence": 0.15,
     "min_regime_confidence": 0.30,
     "min_edge_multiple": 1.5,
     "max_whipsaws": 3,
+    "reversal_confidence_multiplier": 1.3,
+
+    # ── Strategy routing (aligned with ChampionLocks) ─────────────────
+    "use_strategy_router": True,
+    "signal_mode": "any",
+    "signal_min_vote_margin": 1,
 
     # ── Risk parameters ───────────────────────────────────────────────
     "trailing_stop_pct": 0.030,
     "take_profit_pct": 0.0572,
     "fee_rate": 0.0026,
 
-    # ── Hold limits ───────────────────────────────────────────────────
-    "max_hold_hours": 24.0,
+    # ── Hold limits (aligned with ChampionLocks) ──────────────────────
+    "max_hold_hours": 12.0,
     "short_max_hold_hours": 12.0,
     "loss_cooldown_hours": 2.0,
+    "min_hold_bars": 3,
+    "exit_confirmation_bars": 2,
 
     # ── Position sides ────────────────────────────────────────────────
     "enable_shorts": True,

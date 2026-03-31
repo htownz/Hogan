@@ -85,7 +85,7 @@ class BotConfig:
     take_profit_pct: float = 0.054
     # Trailing stop activation: only start trailing after MFE reaches this %.
     # Prevents noise-triggered stops in the first bars after entry.
-    trail_activation_pct: float = 0.010
+    trail_activation_pct: float = 0.005
     # Break-even stop: once MFE reaches this %, stop cannot fall below entry.
     # Protects winning trades from reversing into losses. 0 = disabled.
     breakeven_stop_pct: float = 0.015
@@ -703,7 +703,7 @@ def apply_sweep_results(config: "BotConfig", sweep_path: str = "diagnostics/exit
 def load_config() -> BotConfig:
     """Load bot configuration from environment variables."""
     load_dotenv()
-    return BotConfig(
+    config = BotConfig(
         starting_balance_usd=_env_float("HOGAN_STARTING_BALANCE", "1800"),
         aggressive_allocation=_env_float("HOGAN_AGGRESSIVE_ALLOCATION", "0.75"),
         max_risk_per_trade=_env_float("HOGAN_MAX_RISK_PER_TRADE", "0.03"),
@@ -860,3 +860,8 @@ def load_config() -> BotConfig:
         kraken_api_key=os.getenv("KRAKEN_API_KEY"),
         kraken_api_secret=os.getenv("KRAKEN_API_SECRET"),
     )
+    errors = config.validate()
+    if errors:
+        for e in errors:
+            logging.getLogger(__name__).warning("Config validation: %s", e)
+    return config

@@ -2164,7 +2164,8 @@ async def _run_event_loop_inner(
                                 _model_age_h, _schedule_h, _candle_count,
                             )
                             from hogan_bot.retrain import retrain_once
-                            _retrain_result = retrain_once(
+                            _retrain_result = await asyncio.to_thread(
+                                retrain_once,
                                 db_path=config.db_path,
                                 symbol=config.symbols[0] if config.symbols else "BTC/USD",
                                 model_type=getattr(config, "retrain_model_type", "logreg"),

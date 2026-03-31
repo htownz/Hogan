@@ -215,7 +215,14 @@ class LiveDataEngine(DataEngineBase):
                     for symbol in self.symbols
                     for tf in self.timeframes
                 ]
-                await asyncio.gather(*tasks)
+                done, pending = await asyncio.wait(
+                    tasks, return_when=asyncio.FIRST_EXCEPTION,
+                )
+                for t in pending:
+                    t.cancel()
+                for t in done:
+                    if t.exception() is not None:
+                        raise t.exception()
                 ws_fail_count = 0
                 backoff = _RECONNECT_BASE
             except Exception as exc:

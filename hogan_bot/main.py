@@ -17,22 +17,23 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import sys
 
 logger = logging.getLogger(__name__)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("data/hogan_bot.log", encoding="utf-8"),
-    ],
-)
-
 
 def run(max_loops: int | None = None) -> None:
     """Run the Hogan event loop. Entry point for the champion runtime."""
+    os.makedirs("data", exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler("data/hogan_bot.log", encoding="utf-8"),
+        ],
+    )
     from hogan_bot.event_loop import run_event_loop
     parser = argparse.ArgumentParser(description="Hogan champion runtime")
     parser.add_argument("--max-events", type=int, default=None, help="Stop after N candle events")
