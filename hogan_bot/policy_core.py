@@ -250,6 +250,7 @@ def decide(
     recent_whipsaw_count: int = 0,
     macro_sitout=None,
     funding_overlay=None,
+    trade_quality_model=None,
     mtf_candles: dict[str, pd.DataFrame] | None = None,
     enable_pullback_gate: bool = True,
     enable_freshness_check: bool = False,
@@ -298,6 +299,7 @@ def decide(
     from hogan_bot.config import symbol_config
     from hogan_bot.decision import (
         apply_ml_filter,
+        compute_unified_signal_scores,
         edge_gate,
         entry_quality_gate,
         estimate_spread_from_candles,
@@ -684,6 +686,62 @@ def decide(
             logger.debug("Forecast-driven sizing error: %s", _fc_exc)
 
     # ------------------------------------------------------------------
+    # 7c. Trade-quality probability → entry gating + sizing
+    # ------------------------------------------------------------------
+    trade_quality_prob: float | None = None
+    trade_quality_scale = 1.0
+    if (
+        getattr(cfg, "use_trade_quality", False)
+        and trade_quality_model is not None
+        and action in ("buy", "sell")
+    ):
+        try:
+            from hogan_bot.trade_quality import (
+                build_feature_row_from_live,
+                predict_trade_quality,
+            )
+
+            _tq_features = build_feature_row_from_live(
+                tech_confidence=_tech_conf or 0.0,
+                final_confidence=signal.confidence or 0.0,
+                up_prob=up_prob,
+                atr_pct=atr_pct,
+                regime=regime_name or "unknown",
+                regime_confidence=regime_conf or 0.0,
+                vol_ratio=getattr(signal, "volume_ratio", 1.0) or 1.0,
+                quality_scale=quality_scale,
+                ranging_scale=ranging_scale,
+                pullback_scale=pullback_scale,
+                momentum_scale=momentum_scale,
+                conf_scale=conf_scale,
+                whipsaw_count=recent_whipsaw_count,
+                spread_est=spread_est,
+                side="short" if action == "sell" else "long",
+            )
+            trade_quality_prob = predict_trade_quality(_tq_features, trade_quality_model)
+            _tq_threshold = float(getattr(cfg, "trade_quality_threshold", 0.40))
+            if trade_quality_prob < _tq_threshold:
+                action = "hold"
+                block_reasons.append("trade_quality_threshold")
+                trade_quality_scale = 0.0
+            else:
+                trade_quality_scale = 0.5 + trade_quality_prob
+        except Exception as _tq_exc:
+            logger.warning("Trade quality inference error: %s", _tq_exc)
+
+    # Funding overlay (crowded positioning): scale size, don't flip direction
+    funding_scale = 1.0
+    if funding_overlay is not None and action in ("buy", "sell"):
+        try:
+            _bar_ts = candles.iloc[-1]["timestamp"] if "timestamp" in candles.columns else None
+            if _bar_ts is None:
+                _bar_ts = pd.Timestamp.utcnow()
+            _fund_side = "buy" if action == "buy" else "sell"
+            funding_scale = float(funding_overlay.position_scale(_fund_side, _bar_ts))
+        except Exception as _fund_exc:
+            logger.warning("Funding overlay error: %s", _fund_exc)
+
+    # ------------------------------------------------------------------
     # 8. Position sizing
     # ------------------------------------------------------------------
     _MIN_COMPOSITE_SCALE = 0.15
@@ -698,7 +756,9 @@ def decide(
         * momentum_scale
         * macro_filter_scale
         * mtf_size_scale
-        * forecast_size_scale,
+        * forecast_size_scale
+        * trade_quality_scale
+        * funding_scale,
     )
 
     # Compute average ATR for volatility-adjusted sizing
@@ -731,6 +791,24 @@ def decide(
         elif _sitout.size_scale < 1.0:
             macro_scale = _sitout.size_scale
             size *= macro_scale
+
+    _scores = compute_unified_signal_scores(
+        action=action,
+        up_prob=up_prob,
+        final_confidence=signal.confidence or 0.0,
+        regime_confidence=regime_conf,
+        conf_scale=conf_scale,
+        quality_scale=quality_scale,
+        ranging_scale=ranging_scale,
+        pullback_scale=pullback_scale,
+        eff_position_scale=eff_position_scale,
+        freshness_scale=freshness_scale,
+        momentum_scale=momentum_scale,
+        macro_filter_scale=macro_filter_scale,
+        mtf_size_scale=mtf_size_scale,
+        forecast_size_scale=forecast_size_scale,
+        trade_quality_prob=trade_quality_prob,
+    )
 
     # Gated baseline before swarm (ML + gates + sizing + macro sitout).
     _pre_swarm_action = action
@@ -1046,12 +1124,18 @@ def decide(
         momentum_scale=momentum_scale,
         freshness_scale=freshness_scale,
         macro_scale=macro_scale,
+        funding_scale=funding_scale,
         explanation=signal.explanation,
         forecast_ret=forecast_ret,
         agent_weights=signal.agent_weights,
         feature_freshness=_freshness,
         vol_ratio=signal.volume_ratio,
         tech_confidence=_tech_conf,
+        trade_quality_prob=trade_quality_prob,
+        direction_score=_scores.direction_score,
+        quality_score=_scores.quality_score,
+        size_score=_scores.size_score,
+        unified_score=_scores.unified_score,
         block_reasons=block_reasons,
         swarm=swarm_decision,
         swarm_decision_id=_swarm_decision_id,

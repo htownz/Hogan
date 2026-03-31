@@ -108,3 +108,62 @@ class DrawdownGuard:
             )
             return False
         return True
+
+
+def compute_portfolio_exposure_scale(
+    *,
+    portfolio,
+    symbol: str,
+    candidate_qty: float,
+    candidate_price: float,
+    equity_usd: float,
+    max_gross_exposure_pct: float = 1.50,
+    max_symbol_exposure_pct: float = 0.50,
+    loss_streak: int = 0,
+    loss_regime_streak: int = 3,
+    loss_regime_scale: float = 0.70,
+) -> tuple[float, dict]:
+    """Return an exposure-aware portfolio scale and attribution details."""
+    if equity_usd <= 0 or candidate_price <= 0 or candidate_qty <= 0:
+        return 0.0, {"reason": "invalid_inputs"}
+
+    _candidate_notional = float(candidate_qty * candidate_price)
+    _existing_longs = sum(
+        float(getattr(p, "qty", 0.0)) * float(getattr(p, "avg_entry", 0.0))
+        for p in getattr(portfolio, "positions", {}).values()
+    )
+    _existing_shorts = sum(
+        float(getattr(p, "qty", 0.0)) * float(getattr(p, "avg_entry", 0.0))
+        for p in getattr(portfolio, "short_positions", {}).values()
+    )
+    _gross_after = _existing_longs + _existing_shorts + _candidate_notional
+    _gross_ratio = _gross_after / max(equity_usd, 1e-9)
+
+    _symbol_notional = 0.0
+    _lp = getattr(portfolio, "positions", {}).get(symbol)
+    if _lp is not None:
+        _symbol_notional += float(getattr(_lp, "qty", 0.0)) * float(getattr(_lp, "avg_entry", 0.0))
+    _sp = getattr(portfolio, "short_positions", {}).get(symbol)
+    if _sp is not None:
+        _symbol_notional += float(getattr(_sp, "qty", 0.0)) * float(getattr(_sp, "avg_entry", 0.0))
+    _symbol_after = _symbol_notional + _candidate_notional
+    _symbol_ratio = _symbol_after / max(equity_usd, 1e-9)
+
+    scale = 1.0
+    reasons: list[str] = []
+    if max_gross_exposure_pct > 0 and _gross_ratio > max_gross_exposure_pct:
+        scale = min(scale, max_gross_exposure_pct / _gross_ratio)
+        reasons.append("gross_exposure_cap")
+    if max_symbol_exposure_pct > 0 and _symbol_ratio > max_symbol_exposure_pct:
+        scale = min(scale, max_symbol_exposure_pct / _symbol_ratio)
+        reasons.append("symbol_exposure_cap")
+    if loss_streak >= max(1, loss_regime_streak):
+        scale = min(scale, max(0.0, min(1.0, loss_regime_scale)))
+        reasons.append("loss_regime_dampener")
+
+    return max(0.0, min(1.0, scale)), {
+        "gross_ratio": round(_gross_ratio, 4),
+        "symbol_ratio": round(_symbol_ratio, 4),
+        "loss_streak": int(loss_streak),
+        "reasons": reasons,
+    }

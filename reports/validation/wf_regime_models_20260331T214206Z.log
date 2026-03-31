@@ -1,0 +1,126 @@
+2026-03-31 16:42:22,917 INFO Loaded 17962 candles for BTC/USD 1h
+2026-03-31 16:42:22,917 INFO Walk-forward: 2 windows over 17962 bars (15962 total test bars) [ML]
+2026-03-31 16:42:22,917 INFO   Window 1/2: train[0:2000] (2000 bars) -> test[2000:9981] (7981 bars)
+2026-03-31 16:42:22,950 INFO     [W0] Building training set (2000 bars, model=histgb, labels=enhanced_triple_barrier)...
+2026-03-31 16:42:25,516 INFO     [W0] histgb trained in 2.6s (samples=1946, features=8)
+2026-03-31 16:42:25,526 INFO     [W0] Train AUC: 0.7096
+2026-03-31 16:42:35,164 INFO     [W0] Regime model trending_up: 407 samples
+2026-03-31 16:42:35,374 INFO     [W0] Regime model trending_down: 273 samples
+2026-03-31 16:42:35,667 INFO     [W0] Regime model ranging: 811 samples
+2026-03-31 16:42:35,909 INFO     [W0] Regime model volatile: 423 samples
+2026-03-31 16:42:35,909 INFO     [W0] RegimeModelRouter: 4 regime models + global
+2026-03-31 16:42:35,920 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-31 16:42:35,920 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-31 16:42:35,920 INFO CHAMPION_MODE: overriding min_final_confidence = 0.2 -> 0.12
+2026-03-31 16:42:35,920 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 12.0
+2026-03-31 16:42:35,920 INFO Champion mode applied — 4 overrides
+2026-03-31 16:42:35,920 INFO     [W0] Running backtest on 8231 test bars...
+2026-03-31 16:42:35,931 INFO Loaded per-symbol config for BTC/USD/1h (16 overrides, sharpe=1.20)
+2026-03-31 16:42:35,974 ERROR Walk-forward window 0 failed
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\walk_forward.py", line 454, in _train_and_evaluate_window
+    bt = run_backtest_on_candles(
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\backtest.py", line 1627, in run_backtest_on_candles
+    _intent = _pc_decide(
+              ^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 748, in decide
+    composite_scale = max(
+                      ^^^^
+TypeError: Value after * must be an iterable, not float
+2026-03-31 16:42:35,980 INFO     W0: ret=+0.00% dd=0.0% sharpe=0.00 calmar=0.00 trades=0 win=0% FAIL
+2026-03-31 16:42:35,980 INFO   Window 2/2: train[0:9981] (9981 bars) -> test[9981:17962] (7981 bars)
+2026-03-31 16:42:35,980 INFO     [W1] Building training set (9981 bars, model=histgb, labels=enhanced_triple_barrier)...
+2026-03-31 16:42:37,182 INFO     [W1] histgb trained in 1.2s (samples=9927, features=8)
+2026-03-31 16:42:37,202 INFO     [W1] Train AUC: 0.6359
+2026-03-31 16:43:31,337 INFO     [W1] Regime model trending_up: 1941 samples
+2026-03-31 16:43:31,712 INFO     [W1] Regime model trending_down: 1547 samples
+2026-03-31 16:43:32,230 INFO     [W1] Regime model ranging: 4229 samples
+2026-03-31 16:43:32,636 INFO     [W1] Regime model volatile: 2178 samples
+2026-03-31 16:43:32,637 INFO     [W1] RegimeModelRouter: 4 regime models + global
+2026-03-31 16:43:32,656 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-31 16:43:32,656 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-31 16:43:32,656 INFO CHAMPION_MODE: overriding min_final_confidence = 0.2 -> 0.12
+2026-03-31 16:43:32,656 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 12.0
+2026-03-31 16:43:32,656 INFO Champion mode applied — 4 overrides
+2026-03-31 16:43:32,656 INFO     [W1] Running backtest on 8231 test bars...
+2026-03-31 16:43:32,708 ERROR Walk-forward window 1 failed
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\walk_forward.py", line 454, in _train_and_evaluate_window
+    bt = run_backtest_on_candles(
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\backtest.py", line 1627, in run_backtest_on_candles
+    _intent = _pc_decide(
+              ^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 748, in decide
+    composite_scale = max(
+                      ^^^^
+TypeError: Value after * must be an iterable, not float
+2026-03-31 16:43:32,712 INFO     W1: ret=+0.00% dd=0.0% sharpe=0.00 calmar=0.00 trades=0 win=0% FAIL
+2026-03-31 16:43:32,712 INFO Walk-forward complete in 69.8s: {
+  "n_windows": 2,
+  "n_positive": 0,
+  "n_failed": 2,
+  "total_trades": 0,
+  "mean_return_pct": 0.0,
+  "mean_sharpe": 0.0,
+  "mean_calmar": 0.0,
+  "worst_calmar": 0.0,
+  "mean_drawdown_pct": 0.0,
+  "worst_drawdown_pct": 0.0,
+  "passes_gate": false,
+  "gate_config": {
+    "min_sharpe": 0.5,
+    "min_calmar": 0.0,
+    "max_drawdown_pct": 15.0,
+    "min_total_trades": 25,
+    "min_trades_per_window": 5,
+    "min_windows_positive": 3
+  }
+}
+2026-03-31 16:43:32,714 INFO Report saved to reports\validation\wf_regime_models_20260331T214206Z.json
+
+============================================================
+WALK-FORWARD GATE: FAIL
+  Windows: 0/2 positive
+  Mean Sharpe: 0.00
+  Mean Calmar: 0.00
+  Worst Calmar: 0.00
+  Mean Return: +0.00%
+  Worst Drawdown: 0.0%
+  Total Trades: 0
+============================================================
+
+==========================================================================================
+PER-WINDOW FUNNEL ANALYSIS
+==========================================================================================
+
+--- W0 (FAIL) | ? to ? ---
+  Return: +0.00%  Sharpe: 0.00  Calmar: 0.00  Trades: 0  Win: 0%
+  Bars evaluated:     0
+  Pipeline signals:   buy=0  sell=0
+  Post-ML filter:     (ML disabled)
+  Post-edge gate:     buy=0  sell=0  (edge killed 0)
+  Post-quality gate:  buy=0  sell=0  (quality killed 0)
+  Post-ranging gate:  buy=0  sell=0  (ranging killed 0)
+  Executed:           longs=0  shorts=0
+  Blocked:            regime_long=0  regime_short=0  cooldown=0  already_long=0
+
+--- W1 (FAIL) | ? to ? ---
+  Return: +0.00%  Sharpe: 0.00  Calmar: 0.00  Trades: 0  Win: 0%
+  Bars evaluated:     0
+  Pipeline signals:   buy=0  sell=0
+  Post-ML filter:     (ML disabled)
+  Post-edge gate:     buy=0  sell=0  (edge killed 0)
+  Post-quality gate:  buy=0  sell=0  (quality killed 0)
+  Post-ranging gate:  buy=0  sell=0  (ranging killed 0)
+  Executed:           longs=0  shorts=0
+  Blocked:            regime_long=0  regime_short=0  cooldown=0  already_long=0
+
+==========================================================================================
+
+
+==========================================================================================
+EXIT TYPE ATTRIBUTION
+==========================================================================================
+  No trade data available.

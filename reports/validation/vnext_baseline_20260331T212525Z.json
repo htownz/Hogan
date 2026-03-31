@@ -1,0 +1,108 @@
+{
+  "captured_at_utc": "20260331T212525Z",
+  "git": {
+    "branch": "main",
+    "commit": "afca5c014335d86de6b52953604e422341702c61",
+    "dirty": true
+  },
+  "db_path": "data\\hogan.db",
+  "table_stats": [
+    {
+      "name": "decision_log",
+      "row_count": 53135,
+      "oldest_ts_ms": 1773425473305,
+      "newest_ts_ms": 1774992322444
+    },
+    {
+      "name": "swarm_decisions",
+      "row_count": 66118,
+      "oldest_ts_ms": 0,
+      "newest_ts_ms": 1774990800000
+    },
+    {
+      "name": "swarm_agent_votes",
+      "row_count": 295969,
+      "oldest_ts_ms": 0,
+      "newest_ts_ms": 1774990800000
+    },
+    {
+      "name": "swarm_weight_snapshots",
+      "row_count": 2766,
+      "oldest_ts_ms": 0,
+      "newest_ts_ms": 1774991966674
+    },
+    {
+      "name": "swarm_agent_modes",
+      "row_count": 14,
+      "oldest_ts_ms": 1774135628448,
+      "newest_ts_ms": 1774215034599
+    },
+    {
+      "name": "swarm_stall_alerts",
+      "row_count": 0,
+      "oldest_ts_ms": null,
+      "newest_ts_ms": null
+    },
+    {
+      "name": "swarm_outcomes",
+      "row_count": 38414,
+      "oldest_ts_ms": 1773871209481,
+      "newest_ts_ms": 1774990809970
+    },
+    {
+      "name": "paper_trades",
+      "row_count": 37,
+      "oldest_ts_ms": 1773840635424,
+      "newest_ts_ms": 1774944012231
+    },
+    {
+      "name": "equity_snapshots",
+      "row_count": 52226,
+      "oldest_ts_ms": 1773425473175,
+      "newest_ts_ms": 1774992322192
+    },
+    {
+      "name": "candles",
+      "row_count": 712277,
+      "oldest_ts_ms": 1457308800000,
+      "newest_ts_ms": 1774992300000
+    },
+    {
+      "name": "orders",
+      "row_count": 0,
+      "oldest_ts_ms": null,
+      "newest_ts_ms": null
+    },
+    {
+      "name": "fills",
+      "row_count": 0,
+      "oldest_ts_ms": null,
+      "newest_ts_ms": null
+    }
+  ],
+  "latest_artifacts": {
+    "manifest_path": "reports\\validation\\manifest_20260331T211553Z.json",
+    "walk_forward_path": "diagnostics\\walk_forward_report.json"
+  },
+  "latest_manifest_summary": {
+    "stamp_utc": "20260331T211553Z",
+    "steps": []
+  },
+  "latest_walk_forward_summary": {
+    "n_windows": 5,
+    "n_positive": 0,
+    "n_failed": 0,
+    "total_trades": 935,
+    "mean_return_pct": -9.1095,
+    "mean_sharpe": -4.0754,
+    "mean_drawdown_pct": 9.6,
+    "worst_drawdown_pct": 13.13,
+    "passes_gate": false,
+    "gate_config": {
+      "min_sharpe": 0.5,
+      "max_drawdown_pct": 15.0,
+      "min_windows_positive": 3
+    }
+  },
+  "latest_walk_forward_exit_lifecycle": {}
+}

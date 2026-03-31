@@ -1,0 +1,36 @@
+2026-03-31 16:43:33,469 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-31 16:43:33,469 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-31 16:43:33,469 INFO CHAMPION_MODE: overriding min_final_confidence = 0.2 -> 0.12
+2026-03-31 16:43:33,469 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 12.0
+2026-03-31 16:43:33,469 INFO Champion mode applied — 4 overrides
+2026-03-31 16:43:33,507 INFO Loaded 1000 candles for BTC/USD 1h
+2026-03-31 16:43:34,761 INFO Loaded ML model from models/hogan_champion.pkl
+2026-03-31 16:43:34,779 INFO MacroSitout: loaded 2965 Fear & Greed records
+2026-03-31 16:43:34,810 INFO MacroSitout: loaded 3640 VIX hourly records
+2026-03-31 16:43:34,810 INFO Macro sitout filter loaded
+2026-03-31 16:43:35,038 INFO Scratch DB: copied data/hogan.db -> C:\Users\15125\AppData\Local\Temp\hogan_swarm_cert_qbo9bv3p.db
+2026-03-31 16:43:35,038 INFO Run 1/2: SHADOW mode (baseline)...
+2026-03-31 16:43:35,062 INFO Loaded per-symbol config for BTC/USD/1h (16 overrides, sharpe=1.20)
+
+============================================================
+SWARM CERTIFICATION BACKTEST
+  1000 bars | BTC/USD | ML: models/hogan_champion.pkl
+============================================================
+
+Traceback (most recent call last):
+  File "C:\Users\15125\Documents\Hogan\Hogan\scripts\swarm_certification.py", line 247, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\scripts\swarm_certification.py", line 177, in main
+    shadow = _run_backtest(candles, ml_model, write_db, "shadow", macro_sitout, bot_cfg, _symbol)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\scripts\swarm_certification.py", line 43, in _run_backtest
+    bt = run_backtest_on_candles(
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\backtest.py", line 1627, in run_backtest_on_candles
+    _intent = _pc_decide(
+              ^^^^^^^^^^^
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\policy_core.py", line 748, in decide
+    composite_scale = max(
+                      ^^^^
+TypeError: Value after * must be an iterable, not float

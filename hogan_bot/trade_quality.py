@@ -269,6 +269,7 @@ def train_trade_quality_model(
     X: pd.DataFrame,
     y: pd.Series,
     model_path: str = DEFAULT_MODEL_PATH,
+    embargo_bars: int = 24,
 ) -> dict:
     """Train a LightGBM trade quality classifier and save."""
     from sklearn.metrics import (
@@ -278,11 +279,19 @@ def train_trade_quality_model(
         recall_score,
         roc_auc_score,
     )
-    from sklearn.model_selection import train_test_split
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, shuffle=False,
-    )
+    n = len(X)
+    test_n = max(1, int(n * 0.2))
+    test_start = max(1, n - test_n)
+    train_end = max(1, test_start - max(0, embargo_bars))
+    X_train = X.iloc[:train_end]
+    y_train = y.iloc[:train_end]
+    X_test = X.iloc[test_start:]
+    y_test = y.iloc[test_start:]
+    if len(X_train) < 50 or len(X_test) < 10:
+        raise ValueError(
+            f"Insufficient temporal split after embargo: "
+            f"train={len(X_train)} test={len(X_test)} embargo={embargo_bars}"
+        )
 
     try:
         from lightgbm import LGBMClassifier
@@ -316,6 +325,7 @@ def train_trade_quality_model(
         "train_rows": len(X_train),
         "test_rows": len(X_test),
         "features": len(FEATURE_COLUMNS),
+        "embargo_bars": int(embargo_bars),
         "accuracy": round(accuracy_score(y_test, y_pred), 4),
         "roc_auc": round(auc, 4),
         "precision": round(precision_score(y_test, y_pred, zero_division=0), 4),

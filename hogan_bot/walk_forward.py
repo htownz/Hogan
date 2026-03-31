@@ -68,6 +68,7 @@ class WFConfig:
     max_drawdown_pct: float = 15.0
     min_calmar: float = 0.0
     min_trades_per_window: int = 5
+    min_total_trades: int = 25
     min_windows_positive: int = 3
 
 
@@ -175,6 +176,11 @@ class WalkForwardReport:
             return False
         if self.n_positive < self.config.min_windows_positive:
             return False
+        if self.total_trades < self.config.min_total_trades:
+            return False
+        for w in self.windows:
+            if w.error is None and w.trades < self.config.min_trades_per_window:
+                return False
         if self.mean_sharpe < self.config.min_sharpe:
             return False
         if self.worst_drawdown > self.config.max_drawdown_pct:
@@ -200,6 +206,8 @@ class WalkForwardReport:
                 "min_sharpe": self.config.min_sharpe,
                 "min_calmar": self.config.min_calmar,
                 "max_drawdown_pct": self.config.max_drawdown_pct,
+                "min_total_trades": self.config.min_total_trades,
+                "min_trades_per_window": self.config.min_trades_per_window,
                 "min_windows_positive": self.config.min_windows_positive,
             },
         }
@@ -756,7 +764,6 @@ def _print_exit_attribution(report: WalkForwardReport) -> None:
 
 def main() -> None:
     import argparse
-    import sqlite3
 
     logging.basicConfig(
         level=logging.INFO,
@@ -789,7 +796,9 @@ def main() -> None:
     p.add_argument("--output", default="diagnostics/walk_forward_report.json")
     args = p.parse_args()
 
-    conn = sqlite3.connect(args.db)
+    from hogan_bot.storage import get_connection
+
+    conn = get_connection(args.db)
     query = """
         SELECT ts_ms, open, high, low, close, volume
         FROM candles
@@ -826,7 +835,7 @@ def main() -> None:
 
     sitout = None
     if args.macro_sitout:
-        macro_conn = sqlite3.connect(args.db)
+        macro_conn = get_connection(args.db)
         from hogan_bot.macro_sitout import MacroSitout
         sitout = MacroSitout.from_db(macro_conn)
         macro_conn.close()
@@ -834,7 +843,7 @@ def main() -> None:
 
     funding = None
     if args.funding:
-        fund_conn = sqlite3.connect(args.db)
+        fund_conn = get_connection(args.db)
         from hogan_bot.funding_overlay import FundingOverlay
         funding = FundingOverlay.from_db(fund_conn)
         fund_conn.close()

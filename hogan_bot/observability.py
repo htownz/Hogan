@@ -7,11 +7,15 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
 import time
 from collections import Counter
 from dataclasses import dataclass
+from datetime import date as _date
 from typing import Any
+
+from hogan_bot.storage import storage_integrity_report
 
 logger = logging.getLogger(__name__)
 
@@ -316,6 +320,69 @@ def vacuum_db(conn: sqlite3.Connection) -> bool:
         return False
 
 
+def execution_failure_stats(conn: sqlite3.Connection, since_ms: int) -> dict[str, Any]:
+    """Return recent order failure statistics from the orders table."""
+    try:
+        row = conn.execute(
+            """
+            SELECT
+              COUNT(*) AS total,
+              SUM(CASE WHEN status IN ('rejected', 'canceled') THEN 1 ELSE 0 END) AS failed
+            FROM orders
+            WHERE ts_ms >= ?
+            """,
+            (int(since_ms),),
+        ).fetchone()
+        total = int(row[0] or 0) if row else 0
+        failed = int(row[1] or 0) if row else 0
+        fail_rate = (failed / total) if total > 0 else 0.0
+        return {"total": total, "failed": failed, "fail_rate": round(fail_rate, 4)}
+    except Exception as exc:
+        logger.debug("execution_failure_stats failed: %s", exc)
+        return {"total": -1, "failed": -1, "fail_rate": -1.0}
+
+
+def macro_calendar_status() -> dict[str, Any]:
+    """Return remaining days until macro event calendar expiry."""
+    try:
+        from hogan_bot.macro_sitout import _CPI_DATES, _FOMC_DATES, _NFP_DATES
+
+        latest = max(set(_FOMC_DATES) | set(_CPI_DATES) | set(_NFP_DATES))
+        days_remaining = (_date.fromisoformat(latest) - _date.today()).days
+        return {"latest_event_date": latest, "days_remaining": days_remaining}
+    except Exception as exc:
+        logger.debug("macro_calendar_status failed: %s", exc)
+        return {"latest_event_date": None, "days_remaining": -1}
+
+
+def model_drift_status(model_path: str = "models/hogan_champion.pkl") -> dict[str, Any]:
+    """Return model age diagnostics for retrain drift alerting."""
+    try:
+        if not os.path.exists(model_path):
+            return {"model_path": model_path, "exists": False, "age_hours": None}
+        age_h = (time.time() - os.path.getmtime(model_path)) / 3600.0
+        return {"model_path": model_path, "exists": True, "age_hours": round(age_h, 2)}
+    except Exception as exc:
+        logger.debug("model_drift_status failed: %s", exc)
+        return {"model_path": model_path, "exists": False, "age_hours": None}
+
+
+def swarm_shadow_active_drift(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Return shadow vs active drift snapshot from swarm_authority."""
+    try:
+        from hogan_bot.swarm_authority import compute_shadow_active_drift
+
+        return compute_shadow_active_drift(conn=conn).to_dict()
+    except Exception as exc:
+        logger.debug("swarm_shadow_active_drift failed: %s", exc)
+        return {
+            "drift_acceptable": True,
+            "warnings": [],
+            "active_trade_count": 0,
+            "shadow_trade_count": 0,
+        }
+
+
 # ---------------------------------------------------------------------------
 # Combined health report
 # ---------------------------------------------------------------------------
@@ -334,6 +401,11 @@ def observability_health_report(
     block_by_regime = aggregate_block_reasons_by_regime(conn, since_ms=since_ms)
     agent_modes = check_agent_mode_staleness(conn)
     table_stats = get_db_table_stats(conn)
+    integrity = storage_integrity_report(conn)
+    execution = execution_failure_stats(conn, since_ms=since_ms)
+    macro_calendar = macro_calendar_status()
+    model_drift = model_drift_status()
+    swarm_drift = swarm_shadow_active_drift(conn)
 
     stale_agents = [a for a in agent_modes if a.is_stale]
 
@@ -356,7 +428,21 @@ def observability_health_report(
             {"table": t.name, "rows": t.row_count}
             for t in table_stats
         ],
-        "alerts": _compute_observability_alerts(block_reasons, stale_agents, table_stats),
+        "integrity": integrity,
+        "execution": execution,
+        "macro_calendar": macro_calendar,
+        "model_drift": model_drift,
+        "swarm_drift": swarm_drift,
+        "alerts": _compute_observability_alerts(
+            block_reasons,
+            stale_agents,
+            table_stats,
+            integrity,
+            execution=execution,
+            macro_calendar=macro_calendar,
+            model_drift=model_drift,
+            swarm_drift=swarm_drift,
+        ),
     }
 
 
@@ -364,6 +450,12 @@ def _compute_observability_alerts(
     block_reasons: dict,
     stale_agents: list[AgentModeStatus],
     table_stats: list[TableStats],
+    integrity: dict,
+    *,
+    execution: dict | None = None,
+    macro_calendar: dict | None = None,
+    model_drift: dict | None = None,
+    swarm_drift: dict | None = None,
 ) -> list[dict]:
     alerts: list[dict] = []
 
@@ -388,5 +480,57 @@ def _compute_observability_alerts(
                 "code": "large_table",
                 "message": f"Table '{t.name}' has {t.row_count:,} rows — consider pruning",
             })
+
+    if not integrity.get("ok", True):
+        alerts.append({
+            "level": "warning",
+            "code": "storage_integrity",
+            "message": (
+                "Storage integrity checks failed: "
+                f"sqlite_ok={integrity.get('sqlite_integrity_ok')} "
+                f"orphan_fills={integrity.get('orphan_fills')} "
+                f"orphan_decision_links={integrity.get('orphan_decision_links')} "
+                f"invalid_trade_timestamps={integrity.get('invalid_trade_timestamps')}"
+            ),
+        })
+
+    if execution and execution.get("total", 0) >= 10 and execution.get("fail_rate", 0) >= 0.25:
+        alerts.append({
+            "level": "warning",
+            "code": "execution_failure_spike",
+            "message": (
+                f"Order failure rate elevated: {execution.get('failed')}/{execution.get('total')} "
+                f"({execution.get('fail_rate'):.0%}) in lookback window"
+            ),
+        })
+
+    if macro_calendar and int(macro_calendar.get("days_remaining", 9999)) < 90:
+        alerts.append({
+            "level": "warning",
+            "code": "macro_calendar_stale",
+            "message": (
+                f"Macro event calendar expires soon: {macro_calendar.get('latest_event_date')} "
+                f"({macro_calendar.get('days_remaining')} days remaining)"
+            ),
+        })
+
+    if model_drift and model_drift.get("exists") and float(model_drift.get("age_hours") or 0) > 168.0:
+        alerts.append({
+            "level": "info",
+            "code": "model_retrain_drift",
+            "message": (
+                f"Model {model_drift.get('model_path')} is {model_drift.get('age_hours')}h old "
+                "(consider retrain check)"
+            ),
+        })
+
+    if swarm_drift and not swarm_drift.get("drift_acceptable", True):
+        alerts.append({
+            "level": "warning",
+            "code": "swarm_shadow_active_drift",
+            "message": (
+                f"Shadow/active drift unacceptable: warnings={swarm_drift.get('warnings', [])}"
+            ),
+        })
 
     return alerts

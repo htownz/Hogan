@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +35,7 @@ from hogan_bot.observability import (
     prune_old_rows,
     vacuum_db,
 )
+from hogan_bot.storage import get_connection, storage_integrity_report
 
 
 def _ts_to_str(ts_ms: int | None) -> str:
@@ -62,7 +62,7 @@ def main() -> None:
         print(f"Database not found: {db_path}", file=sys.stderr)
         sys.exit(1)
 
-    conn = sqlite3.connect(str(db_path))
+    conn = get_connection(str(db_path))
 
     if args.report:
         rpt = observability_health_report(conn, since_hours=args.hours, symbol=args.symbol)
@@ -92,6 +92,7 @@ def main() -> None:
 
     stats = get_db_table_stats(conn)
     modes = check_agent_mode_staleness(conn)
+    integrity = storage_integrity_report(conn)
 
     if args.json:
         output = {
@@ -100,15 +101,16 @@ def main() -> None:
                          "newest": _ts_to_str(t.newest_ts_ms)} for t in stats],
             "agent_modes": [{"agent_id": m.agent_id, "mode": m.mode,
                              "age_hours": m.age_hours, "is_stale": m.is_stale} for m in modes],
+            "integrity": integrity,
         }
         print(json.dumps(output, indent=2))
     else:
-        _print_stats(stats, modes)
+        _print_stats(stats, modes, integrity)
 
     conn.close()
 
 
-def _print_stats(stats: list, modes: list) -> None:
+def _print_stats(stats: list, modes: list, integrity: dict) -> None:
     print(f"\n{'=' * 70}")
     print("  DB TABLE STATS")
     print(f"{'=' * 70}")
@@ -125,6 +127,15 @@ def _print_stats(stats: list, modes: list) -> None:
         for m in modes:
             stale_tag = " *** STALE ***" if m.is_stale else ""
             print(f"  {m.agent_id:<25} mode={m.mode:<15} age={m.age_hours:.0f}h{stale_tag}")
+
+    print(f"\n{'=' * 70}")
+    print("  STORAGE INTEGRITY")
+    print(f"{'=' * 70}")
+    print(f"  OK: {integrity.get('ok')}")
+    print(f"  sqlite_integrity_ok: {integrity.get('sqlite_integrity_ok')}")
+    print(f"  orphan_fills: {integrity.get('orphan_fills')}")
+    print(f"  orphan_decision_links: {integrity.get('orphan_decision_links')}")
+    print(f"  invalid_trade_timestamps: {integrity.get('invalid_trade_timestamps')}")
 
     print()
 
@@ -166,6 +177,38 @@ def _print_report(rpt: dict) -> None:
         print(f"\n  ALERTS ({len(alerts)})")
         for a in alerts:
             print(f"    [{a['level'].upper()}] {a['code']}: {a['message']}")
+
+    ex = rpt.get("execution", {})
+    if ex:
+        print("\n  EXECUTION HEALTH")
+        print(
+            f"    total={ex.get('total')} failed={ex.get('failed')} "
+            f"fail_rate={ex.get('fail_rate')}"
+        )
+
+    mc = rpt.get("macro_calendar", {})
+    if mc:
+        print("\n  MACRO CALENDAR")
+        print(
+            f"    latest_event={mc.get('latest_event_date')} "
+            f"days_remaining={mc.get('days_remaining')}"
+        )
+
+    md = rpt.get("model_drift", {})
+    if md:
+        print("\n  MODEL DRIFT")
+        print(
+            f"    path={md.get('model_path')} exists={md.get('exists')} "
+            f"age_hours={md.get('age_hours')}"
+        )
+
+    sd = rpt.get("swarm_drift", {})
+    if sd:
+        print("\n  SWARM DRIFT")
+        print(
+            f"    drift_acceptable={sd.get('drift_acceptable')} "
+            f"warnings={sd.get('warnings')}"
+        )
 
     print(f"\n{'=' * 70}\n")
 

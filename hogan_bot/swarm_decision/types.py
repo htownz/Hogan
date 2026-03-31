@@ -166,6 +166,7 @@ class DecisionIntent:
     momentum_scale: float = 1.0
     freshness_scale: float = 1.0
     macro_scale: float = 1.0
+    funding_scale: float = 1.0
 
     # Pipeline metadata
     explanation: str | None = None
@@ -174,6 +175,11 @@ class DecisionIntent:
     feature_freshness: dict | None = None
     vol_ratio: float = 1.0
     tech_confidence: float | None = None
+    trade_quality_prob: float | None = None
+    direction_score: float = 0.0
+    quality_score: float = 0.0
+    size_score: float = 0.0
+    unified_score: float = 0.0
     block_reasons: list[str] = field(default_factory=list)
 
     # Raw signal tracking (for decision log diagnostics)
@@ -194,12 +200,18 @@ class DecisionIntent:
             "size_usd": round(self.size_usd, 4),
             "stop_distance_pct": round(self.stop_distance_pct, 6),
             "regime": self.regime,
+            "direction_score": round(self.direction_score, 4),
+            "quality_score": round(self.quality_score, 4),
+            "size_score": round(self.size_score, 4),
+            "unified_score": round(self.unified_score, 4),
             "block_reasons": self.block_reasons,
             "raw_tech_action": self.raw_tech_action,
             "pipeline_action": self.pipeline_action,
         }
         if self.up_prob is not None:
             d["up_prob"] = round(self.up_prob, 4)
+        if self.trade_quality_prob is not None:
+            d["trade_quality_prob"] = round(self.trade_quality_prob, 4)
         if self.swarm is not None:
             d["swarm"] = self.swarm.to_dict()
         return d

@@ -31,6 +31,88 @@ class QualityComponents:
         return json.dumps(asdict(self), separators=(",", ":"))
 
 
+@dataclass
+class UnifiedSignalScores:
+    """Unified probability-driven decision quality decomposition."""
+
+    direction_score: float
+    quality_score: float
+    size_score: float
+    unified_score: float
+
+
+def compute_unified_signal_scores(
+    *,
+    action: str,
+    up_prob: float | None,
+    final_confidence: float,
+    regime_confidence: float | None,
+    conf_scale: float,
+    quality_scale: float,
+    ranging_scale: float,
+    pullback_scale: float,
+    eff_position_scale: float,
+    freshness_scale: float,
+    momentum_scale: float = 1.0,
+    macro_filter_scale: float = 1.0,
+    mtf_size_scale: float = 1.0,
+    forecast_size_scale: float = 1.0,
+    trade_quality_prob: float | None = None,
+) -> UnifiedSignalScores:
+    """Compute a unified score bundle in [0, 1] for audit + sizing.
+
+    - direction_score: directional separation of ML probability from 0.5.
+    - quality_score: setup quality from confidence + gates (+ trade quality).
+    - size_score: realized sizing confidence from all multiplicative scalers.
+    - unified_score: weighted blend for single-value diagnostics.
+    """
+    if action == "buy" and up_prob is not None:
+        direction_score = min(1.0, max(0.0, (up_prob - 0.5) / 0.5))
+    elif action == "sell" and up_prob is not None:
+        direction_score = min(1.0, max(0.0, (0.5 - up_prob) / 0.5))
+    else:
+        direction_score = 0.0 if action == "hold" else 0.5
+
+    _regime = min(1.0, max(0.0, (regime_confidence or 0.0)))
+    quality_score = min(
+        1.0,
+        max(
+            0.0,
+            (0.55 * min(1.0, max(0.0, final_confidence)) + 0.45 * _regime)
+            * quality_scale
+            * ranging_scale
+            * pullback_scale,
+        ),
+    )
+    if trade_quality_prob is not None:
+        quality_score *= min(1.0, max(0.0, trade_quality_prob))
+
+    size_score = min(
+        1.0,
+        max(
+            0.0,
+            conf_scale
+            * quality_scale
+            * ranging_scale
+            * pullback_scale
+            * eff_position_scale
+            * freshness_scale
+            * momentum_scale
+            * macro_filter_scale
+            * mtf_size_scale
+            * forecast_size_scale,
+        ),
+    )
+
+    unified = 0.40 * direction_score + 0.35 * quality_score + 0.25 * size_score
+    return UnifiedSignalScores(
+        direction_score=round(direction_score, 4),
+        quality_score=round(quality_score, 4),
+        size_score=round(size_score, 4),
+        unified_score=round(min(1.0, max(0.0, unified)), 4),
+    )
+
+
 def compute_quality_components(
     *,
     final_confidence: float | None = None,

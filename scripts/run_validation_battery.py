@@ -55,6 +55,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--n-splits", type=int, default=5)
     parser.add_argument("--skip-walk-forward", action="store_true")
     parser.add_argument("--skip-certification", action="store_true")
+    parser.add_argument(
+        "--single-wf",
+        action="store_true",
+        help="Run only one walk-forward scenario (legacy behavior).",
+    )
+    parser.add_argument(
+        "--min-pass-scenarios",
+        type=int,
+        default=3,
+        help="Minimum successful WF scenarios required in matrix mode.",
+    )
     parser.add_argument("--cert-bars", type=int, default=3000, help="Bars for swarm_certification.py")
     parser.add_argument(
         "--wf-extra",
@@ -73,30 +84,74 @@ def main(argv: list[str] | None = None) -> int:
     }
     wf_rc = 0
     cert_rc = 0
+    wf_matrix_results: list[dict] = []
 
     py = sys.executable
 
     if not args.skip_walk_forward:
-        wf_json = out_dir / f"wf_{stamp}.json"
-        wf_log = out_dir / f"wf_{stamp}.log"
-        wf_cmd = [
-            py, "-m", "hogan_bot.walk_forward",
-            "--db", args.db,
-            "--symbol", args.symbol,
-            "--timeframe", args.timeframe,
-            "--n-splits", str(args.n_splits),
-            "--output", str(wf_json.relative_to(_PROJECT_ROOT)),
-        ]
-        if args.wf_extra:
-            wf_cmd.extend(["--ml-sizer", "--macro-sitout"])
-        wf_rc = _run_cmd(wf_cmd, wf_log, cwd=_PROJECT_ROOT)
-        manifest["steps"].append({
-            "name": "walk_forward",
-            "cmd": wf_cmd,
-            "exit_code": wf_rc,
-            "report_json": str(wf_json.relative_to(_PROJECT_ROOT)),
-            "log": str(wf_log.relative_to(_PROJECT_ROOT)),
-        })
+        _wf_scenarios: list[tuple[str, list[str]]]
+        if args.single_wf:
+            extra = ["--ml-sizer", "--macro-sitout"] if args.wf_extra else []
+            _wf_scenarios = [("single", extra)]
+        else:
+            _wf_scenarios = [
+                ("baseline_no_ml", ["--no-ml"]),
+                ("ml_filter", []),
+                ("ml_sizer", ["--ml-sizer"]),
+                ("ml_sizer_macro", ["--ml-sizer", "--macro-sitout"]),
+                ("regime_models", ["--regime-models"]),
+            ]
+
+        for scen_name, scen_flags in _wf_scenarios:
+            wf_json = out_dir / f"wf_{scen_name}_{stamp}.json"
+            wf_log = out_dir / f"wf_{scen_name}_{stamp}.log"
+            wf_cmd = [
+                py, "-m", "hogan_bot.walk_forward",
+                "--db", args.db,
+                "--symbol", args.symbol,
+                "--timeframe", args.timeframe,
+                "--n-splits", str(args.n_splits),
+                "--output", str(wf_json.relative_to(_PROJECT_ROOT)),
+                *scen_flags,
+            ]
+            rc = _run_cmd(wf_cmd, wf_log, cwd=_PROJECT_ROOT)
+            passes_gate = False
+            if rc == 0 and wf_json.exists():
+                try:
+                    _wf_payload = json.loads(wf_json.read_text(encoding="utf-8"))
+                    passes_gate = bool(_wf_payload.get("summary", {}).get("passes_gate", False))
+                except Exception:
+                    passes_gate = False
+            scenario_ok = bool(rc == 0 and passes_gate)
+            wf_matrix_results.append({
+                "scenario": scen_name,
+                "cmd": wf_cmd,
+                "exit_code": rc,
+                "passes_gate": passes_gate,
+                "scenario_ok": scenario_ok,
+                "report_json": str(wf_json.relative_to(_PROJECT_ROOT)),
+                "log": str(wf_log.relative_to(_PROJECT_ROOT)),
+            })
+            manifest["steps"].append({
+                "name": "walk_forward",
+                "scenario": scen_name,
+                "cmd": wf_cmd,
+                "exit_code": rc,
+                "passes_gate": passes_gate,
+                "scenario_ok": scenario_ok,
+                "report_json": str(wf_json.relative_to(_PROJECT_ROOT)),
+                "log": str(wf_log.relative_to(_PROJECT_ROOT)),
+            })
+        _passes = sum(1 for r in wf_matrix_results if r.get("scenario_ok"))
+        _required = 1 if args.single_wf else max(1, int(args.min_pass_scenarios))
+        wf_rc = 0 if _passes >= _required else 2
+        manifest["wf_matrix"] = {
+            "single_wf": args.single_wf,
+            "required_passes": _required,
+            "actual_passes": _passes,
+            "total": len(wf_matrix_results),
+            "results": wf_matrix_results,
+        }
 
     if not args.skip_certification:
         cert_log = out_dir / f"cert_{stamp}.log"

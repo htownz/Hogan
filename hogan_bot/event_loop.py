@@ -71,7 +71,11 @@ from hogan_bot.indicators import compute_atr
 from hogan_bot.ml import TrainedModel, load_model, predict_up_probability
 from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
-from hogan_bot.risk import DrawdownGuard, calculate_position_size
+from hogan_bot.risk import (
+    DrawdownGuard,
+    calculate_position_size,
+    compute_portfolio_exposure_scale,
+)
 from hogan_bot.storage import (
     close_paper_trade,
     get_connection,
@@ -144,6 +148,36 @@ def _compute_data_ages(conn) -> dict[str, float]:
     return ages
 
 
+async def _run_auto_retrain_job(config: BotConfig) -> dict:
+    """Execute one auto-retrain job in a background thread."""
+    from hogan_bot.retrain import retrain_once
+
+    return await asyncio.to_thread(
+        retrain_once,
+        db_path=config.db_path,
+        symbol=config.symbols[0] if config.symbols else "BTC/USD",
+        model_type=getattr(config, "retrain_model_type", "logreg"),
+        window_bars=getattr(config, "retrain_window_bars", 50000),
+        min_improvement=getattr(config, "retrain_min_improvement", 0.005),
+        promotion_metric=getattr(config, "retrain_promotion_metric", "roc_auc"),
+    )
+
+
+def _process_background_outcomes(logger_obj, outcomes: list) -> None:
+    """Handle RuntimeTaskSupervisor outcomes in one place."""
+    for outcome in outcomes:
+        if outcome.name == "auto_retrain":
+            if outcome.ok:
+                logger_obj.info("AUTO_RETRAIN result: %s", outcome.result)
+            else:
+                logger_obj.warning("AUTO_RETRAIN job failed: %s", outcome.error)
+        else:
+            if outcome.ok:
+                logger_obj.debug("BACKGROUND_TASK %s completed", outcome.name)
+            else:
+                logger_obj.warning("BACKGROUND_TASK %s failed: %s", outcome.name, outcome.error)
+
+
 @dataclass
 class SignalResult:
     """Rich signal evaluation output for decision logging."""
@@ -163,6 +197,8 @@ class SignalResult:
     direction_score: float = 0.0
     quality_score: float = 0.0
     size_score: float = 0.0
+    unified_score: float = 0.0
+    trade_quality_prob: float | None = None
     quality_components: QualityComponents | None = None
     block_reasons: list[str] | None = None
     eff_trailing_stop_pct: float | None = None
@@ -182,9 +218,16 @@ class SignalResult:
 class SignalEvaluator:
     """Routes decisions through AgentPipeline — Technical + Sentiment + Macro."""
 
-    def __init__(self, config: BotConfig, ml_model: TrainedModel | None, conn=None) -> None:
+    def __init__(
+        self,
+        config: BotConfig,
+        ml_model: TrainedModel | None,
+        trade_quality_model=None,
+        conn=None,
+    ) -> None:
         self.config = config
         self.ml_model = ml_model
+        self.trade_quality_model = trade_quality_model
         self.pipeline = AgentPipeline(config, conn=conn)
         self._ml_probs: deque[float] = deque(maxlen=50)
         self._trade_outcomes: deque[bool] = deque(maxlen=50)
@@ -205,6 +248,8 @@ class SignalEvaluator:
         *,
         mtf_candles: dict[str, pd.DataFrame] | None = None,
         peak_equity: float | None = None,
+        macro_sitout=None,
+        funding_overlay=None,
     ) -> SignalResult:
         """Delegate to policy_core.decide() and translate back to SignalResult."""
         from hogan_bot.policy_core import PolicyState, decide
@@ -222,10 +267,13 @@ class SignalEvaluator:
             config=self.config,
             pipeline=self.pipeline,
             ml_model=self.ml_model,
+            trade_quality_model=self.trade_quality_model,
             state=state,
             conn=getattr(self, "_conn", None),
             mode="live",
             recent_whipsaw_count=recent_whipsaw_count,
+            macro_sitout=macro_sitout,
+            funding_overlay=funding_overlay,
             mtf_candles=mtf_candles,
             enable_pullback_gate=True,
             enable_freshness_check=True,
@@ -250,6 +298,11 @@ class SignalEvaluator:
             forecast_ret=intent.forecast_ret,
             agent_weights=intent.agent_weights,
             feature_freshness=intent.feature_freshness,
+            direction_score=intent.direction_score,
+            quality_score=intent.quality_score,
+            size_score=intent.size_score,
+            unified_score=intent.unified_score,
+            trade_quality_prob=intent.trade_quality_prob,
             block_reasons=intent.block_reasons if intent.block_reasons else None,
             eff_trailing_stop_pct=intent.eff_trailing_stop_pct,
             eff_take_profit_pct=intent.eff_take_profit_pct,
@@ -271,6 +324,8 @@ class SignalEvaluator:
         *,
         mtf_candles: dict[str, pd.DataFrame] | None = None,
         peak_equity: float | None = None,
+        macro_sitout=None,
+        funding_overlay=None,
     ) -> SignalResult:
         """Returns a SignalResult with action, sizing, and rich metadata."""
         if self._use_policy_core:
@@ -278,6 +333,8 @@ class SignalEvaluator:
                 symbol, candles, equity, recent_whipsaw_count,
                 mtf_candles=mtf_candles,
                 peak_equity=peak_equity,
+                macro_sitout=macro_sitout,
+                funding_overlay=funding_overlay,
             )
 
         cfg = symbol_config(self.config, symbol)
@@ -651,8 +708,10 @@ async def _run_event_loop_inner(
     guard = DrawdownGuard(config.starting_balance_usd, config.max_drawdown)
 
     from hogan_bot.execution_health import ExecutionHealthState, record_exec_outcome
+    from hogan_bot.runtime_supervisor import RuntimeTaskSupervisor
     _exec_health = ExecutionHealthState()
     _exec_health.rest_fallback_active = os.getenv("HOGAN_USE_REST_DATA", "").strip().lower() in ("1", "true", "yes")
+    _task_supervisor = RuntimeTaskSupervisor(logger, namespace="event_loop")
 
     use_oanda = (
         config.exchange_id.lower() == "oanda"
@@ -761,8 +820,6 @@ async def _run_event_loop_inner(
             except Exception as exc:
                 logger.warning("RegimeModelRouter setup failed: %s — using global model", exc)
 
-    evaluator = SignalEvaluator(config, ml_model, conn=conn)
-
     # ── Trade Quality model ───────────────────────────────────────────
     _tq_model = None
     if getattr(config, "use_trade_quality", False):
@@ -780,6 +837,8 @@ async def _run_event_loop_inner(
             )
         except Exception as exc:
             logger.warning("Trade quality model load error: %s", exc)
+
+    evaluator = SignalEvaluator(config, ml_model, trade_quality_model=_tq_model, conn=conn)
 
     _macro_sitout = None
     _use_macro_sitout = os.getenv("HOGAN_MACRO_SITOUT", "true").strip().lower() in ("1", "true", "yes")
@@ -1027,6 +1086,8 @@ async def _run_event_loop_inner(
         async for event in engine.stream():
             if max_events is not None and event_count >= max_events:
                 break
+
+            _process_background_outcomes(logger, _task_supervisor.poll())
 
             symbol = event.symbol
             tf = event.timeframe
@@ -1479,6 +1540,8 @@ async def _run_event_loop_inner(
                     recent_whipsaw_count=_whipsaw_counts.get(symbol, 0),
                     mtf_candles=_mtf_data if _mtf_data else None,
                     peak_equity=guard.peak_equity,
+                    macro_sitout=_macro_sitout,
+                    funding_overlay=_funding_overlay,
                 )
                 action = sig.action
                 size = sig.size * _online_drift_scale
@@ -1578,7 +1641,7 @@ async def _run_event_loop_inner(
 
             # ── Macro sitout filter (parity with backtest) ────────────
             _macro_scale = 1.0
-            if _macro_sitout is not None and action != "hold":
+            if _macro_sitout is not None and action != "hold" and not evaluator._use_policy_core:
                 try:
                     from datetime import timezone as _tz
                     _bar_dt = datetime.now(tz=_tz.utc)
@@ -1696,7 +1759,7 @@ async def _run_event_loop_inner(
                                 _pct_below = (_ema8 - px) / _ema8
                                 _momentum_scale = max(0.40, 1.0 - _pct_below * 20.0)
                     _funding_scale = 1.0
-                    if _funding_overlay is not None:
+                    if _funding_overlay is not None and not evaluator._use_policy_core:
                         _funding_scale = _funding_overlay.position_scale("buy", datetime.now(tz=timezone.utc))
                     _exp_scale = _expectancy.expectancy_size_scale(regime=_sym_regime or "unknown")
                     # Portfolio correlation: reduce size if already holding another symbol
@@ -1707,7 +1770,7 @@ async def _run_event_loop_inner(
                         _corr_scale = config.portfolio_correlation_scale
                         logger.debug("CORR_SCALE %s — other positions %s, scale=%.2f", symbol, _other_syms, _corr_scale)
                     _tq_scale = 1.0
-                    if _tq_model is not None:
+                    if _tq_model is not None and not evaluator._use_policy_core:
                         from hogan_bot.trade_quality import (
                             build_feature_row_from_live,
                             predict_trade_quality,
@@ -1738,7 +1801,41 @@ async def _run_event_loop_inner(
                             _tq_scale = 0.5 + _tq_prob
                             logger.debug("TQ_SCALE %s LONG — quality_prob=%.3f, tq_scale=%.2f", symbol, _tq_prob, _tq_scale)
 
-                    _long_size = size * sig.eff_long_size_scale * _macro_scale * _momentum_scale * _funding_scale * _wf_scale * _exp_scale * _corr_scale * _tq_scale
+                    _base_long_size = (
+                        size
+                        * sig.eff_long_size_scale
+                        * _macro_scale
+                        * _momentum_scale
+                        * _funding_scale
+                        * _wf_scale
+                        * _exp_scale
+                        * _corr_scale
+                        * _tq_scale
+                    )
+                    _loss_streak_n = 0
+                    for _o in reversed(evaluator._trade_outcomes):
+                        if not _o:
+                            _loss_streak_n += 1
+                        else:
+                            break
+                    _portfolio_scale, _portfolio_attr = compute_portfolio_exposure_scale(
+                        portfolio=portfolio,
+                        symbol=symbol,
+                        candidate_qty=_base_long_size,
+                        candidate_price=px,
+                        equity_usd=equity,
+                        max_gross_exposure_pct=getattr(config, "portfolio_max_gross_exposure_pct", 1.50),
+                        max_symbol_exposure_pct=getattr(config, "portfolio_max_symbol_exposure_pct", 0.50),
+                        loss_streak=_loss_streak_n,
+                        loss_regime_streak=getattr(config, "portfolio_loss_regime_streak", 3),
+                        loss_regime_scale=getattr(config, "portfolio_loss_regime_scale", 0.70),
+                    )
+                    _long_size = _base_long_size * _portfolio_scale
+                    if _portfolio_scale < 0.999:
+                        logger.info(
+                            "PORTFOLIO_SCALE %s LONG scale=%.2f details=%s",
+                            symbol, _portfolio_scale, _portfolio_attr,
+                        )
                     if _long_size <= 0:
                         logger.info("BUY_BLOCK %s — size scaled to zero (base=%.6f eff_scale=%.2f macro=%.2f mom=%.2f fund=%.2f)",
                                     symbol, size, sig.eff_long_size_scale, _macro_scale, _momentum_scale, _funding_scale)
@@ -1778,8 +1875,14 @@ async def _run_event_loop_inner(
                             if notifier:
                                 notifier.notify("buy", {"symbol": symbol, "price": _bj_px,
                                                         "qty": _bj_qty, "ml_up_prob": up_prob})
-                            logger.info("BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s long_scale=%.2f",
-                                        symbol, _bj_px, _bj_qty, up_prob or -1, equity, _sym_regime, sig.eff_long_size_scale)
+                            logger.info(
+                                "BUY %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s "
+                                "scales[long=%.2f macro=%.2f mom=%.2f fund=%.2f wf=%.2f exp=%.2f corr=%.2f tq=%.2f port=%.2f]",
+                                symbol, _bj_px, _bj_qty, up_prob or -1, equity, _sym_regime,
+                                sig.eff_long_size_scale, _macro_scale, _momentum_scale,
+                                _funding_scale, _wf_scale, _exp_scale, _corr_scale,
+                                _tq_scale, _portfolio_scale,
+                            )
                         else:
                             _fail_detail = getattr(res, "error", "") or "unknown"
                             logger.warning("BUY_FAILED %s px=%.2f qty=%.6f — %s",
@@ -1913,7 +2016,7 @@ async def _run_event_loop_inner(
                     if _closed_long_this_bar:
                         _cooldown_remaining = 0
                     _funding_short_scale = 1.0
-                    if _funding_overlay is not None:
+                    if _funding_overlay is not None and not evaluator._use_policy_core:
                         _funding_short_scale = _funding_overlay.position_scale("sell", datetime.now(tz=timezone.utc))
                     _exp_short_scale = _expectancy.expectancy_size_scale(regime=_sym_regime or "unknown")
                     # Portfolio correlation: reduce size if already holding another symbol
@@ -1924,7 +2027,7 @@ async def _run_event_loop_inner(
                         _corr_short_scale = config.portfolio_correlation_scale
                         logger.debug("CORR_SCALE_SHORT %s — other positions %s, scale=%.2f", symbol, _other_short_syms, _corr_short_scale)
                     _tq_short_scale = 1.0
-                    if _tq_model is not None:
+                    if _tq_model is not None and not evaluator._use_policy_core:
                         from hogan_bot.trade_quality import (
                             build_feature_row_from_live,
                             predict_trade_quality,
@@ -1955,7 +2058,40 @@ async def _run_event_loop_inner(
                             _tq_short_scale = 0.5 + _tq_s_prob
                             logger.debug("TQ_SCALE %s SHORT — quality_prob=%.3f, tq_scale=%.2f", symbol, _tq_s_prob, _tq_short_scale)
 
-                    _short_size = size * sig.eff_short_size_scale * _macro_scale * _funding_short_scale * _wf_scale * _exp_short_scale * _corr_short_scale * _tq_short_scale
+                    _base_short_size = (
+                        size
+                        * sig.eff_short_size_scale
+                        * _macro_scale
+                        * _funding_short_scale
+                        * _wf_scale
+                        * _exp_short_scale
+                        * _corr_short_scale
+                        * _tq_short_scale
+                    )
+                    _loss_streak_n = 0
+                    for _o in reversed(evaluator._trade_outcomes):
+                        if not _o:
+                            _loss_streak_n += 1
+                        else:
+                            break
+                    _portfolio_short_scale, _portfolio_short_attr = compute_portfolio_exposure_scale(
+                        portfolio=portfolio,
+                        symbol=symbol,
+                        candidate_qty=_base_short_size,
+                        candidate_price=px,
+                        equity_usd=equity,
+                        max_gross_exposure_pct=getattr(config, "portfolio_max_gross_exposure_pct", 1.50),
+                        max_symbol_exposure_pct=getattr(config, "portfolio_max_symbol_exposure_pct", 0.50),
+                        loss_streak=_loss_streak_n,
+                        loss_regime_streak=getattr(config, "portfolio_loss_regime_streak", 3),
+                        loss_regime_scale=getattr(config, "portfolio_loss_regime_scale", 0.70),
+                    )
+                    _short_size = _base_short_size * _portfolio_short_scale
+                    if _portfolio_short_scale < 0.999:
+                        logger.info(
+                            "PORTFOLIO_SCALE %s SHORT scale=%.2f details=%s",
+                            symbol, _portfolio_short_scale, _portfolio_short_attr,
+                        )
                     if not sig.eff_allow_shorts:
                         logger.info("SHORT_BLOCK %s — regime %s disallows shorts (eff_allow_shorts=False)", symbol, _sym_regime)
                     elif ml_blind_blocks_shorts(evaluator._ml_probs):
@@ -2003,8 +2139,14 @@ async def _run_event_loop_inner(
                             if notifier:
                                 notifier.notify("short", {"symbol": symbol, "price": _sh_px,
                                                           "qty": _sh_qty, "ml_up_prob": up_prob})
-                            logger.info("SHORT %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s short_scale=%.2f",
-                                        symbol, _sh_px, _sh_qty, up_prob or -1, equity, _sym_regime, sig.eff_short_size_scale)
+                            logger.info(
+                                "SHORT %s px=%.2f qty=%.6f ml=%.3f equity=%.2f regime=%s "
+                                "scales[short=%.2f macro=%.2f fund=%.2f wf=%.2f exp=%.2f corr=%.2f tq=%.2f port=%.2f]",
+                                symbol, _sh_px, _sh_qty, up_prob or -1, equity, _sym_regime,
+                                sig.eff_short_size_scale, _macro_scale, _funding_short_scale,
+                                _wf_scale, _exp_short_scale, _corr_short_scale,
+                                _tq_short_scale, _portfolio_short_scale,
+                            )
                         else:
                             _fail_detail = getattr(res, "error", "") or "unknown"
                             logger.warning("SHORT_FAILED %s px=%.2f qty=%.6f — %s",
@@ -2140,36 +2282,29 @@ async def _run_event_loop_inner(
                 and event_count % 240 == 0
             ):
                 try:
-                    import glob as _retrain_glob
-                    _model_files = _retrain_glob.glob(config.ml_model_path)
                     _model_age_h = 999.0
-                    if _model_files:
-                        _model_mtime = os.path.getmtime(_model_files[0])
+                    if os.path.exists(config.ml_model_path):
+                        _model_mtime = os.path.getmtime(config.ml_model_path)
                         _model_age_h = (time.time() - _model_mtime) / 3600.0
                     _schedule_h = getattr(config, "retrain_schedule_hours", 24.0)
                     if _model_age_h > _schedule_h:
-                        with sqlite3.connect(config.db_path) as _retrain_conn:
+                        with get_connection(config.db_path) as _retrain_conn:
                             _candle_count = _retrain_conn.execute(
                                 "SELECT COUNT(*) FROM candles WHERE symbol = ?",
                                 (config.symbols[0] if config.symbols else "BTC/USD",),
                             ).fetchone()[0]
                         _min_candles = getattr(config, "auto_retrain_min_candles", 1000)
                         if _candle_count >= _min_candles:
-                            logger.info(
-                                "AUTO_RETRAIN: model age %.1fh > %.1fh schedule, %d candles available — triggering retrain",
-                                _model_age_h, _schedule_h, _candle_count,
-                            )
-                            from hogan_bot.retrain import retrain_once
-                            _retrain_result = await asyncio.to_thread(
-                                retrain_once,
-                                db_path=config.db_path,
-                                symbol=config.symbols[0] if config.symbols else "BTC/USD",
-                                model_type=getattr(config, "retrain_model_type", "logreg"),
-                                window_bars=getattr(config, "retrain_window_bars", 50000),
-                                min_improvement=getattr(config, "retrain_min_improvement", 0.005),
-                                promotion_metric=getattr(config, "retrain_promotion_metric", "roc_auc"),
-                            )
-                            logger.info("AUTO_RETRAIN result: %s", _retrain_result)
+                            if _task_supervisor.start(
+                                "auto_retrain",
+                                _run_auto_retrain_job(config),
+                            ):
+                                logger.info(
+                                    "AUTO_RETRAIN: model age %.1fh > %.1fh schedule, %d candles available — queued retrain job",
+                                    _model_age_h, _schedule_h, _candle_count,
+                                )
+                            else:
+                                logger.info("AUTO_RETRAIN: job already running — skip new trigger")
                         else:
                             logger.debug(
                                 "AUTO_RETRAIN: insufficient candles (%d < %d), skipping",
@@ -2190,6 +2325,8 @@ async def _run_event_loop_inner(
                     event_count, equity, portfolio.cash_usd, _n_longs, _n_shorts,
                     _current_regime.get(symbol, "unknown"),
                 )
+
+    await _task_supervisor.shutdown(timeout_s=3.0)
 
     # Final expectancy report
     if _expectancy._trades:

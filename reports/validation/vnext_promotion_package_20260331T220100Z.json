@@ -1,0 +1,247 @@
+{
+  "generated_at_utc": "20260331T220100Z",
+  "manifest_path": "reports\\validation\\manifest_20260331T214206Z.json",
+  "wf_matrix": {
+    "required_passes": 3,
+    "actual_passes": 0,
+    "results": [
+      {
+        "scenario": "baseline_no_ml",
+        "exit_code": 0,
+        "passes_gate": false,
+        "report_json": "reports\\validation\\wf_baseline_no_ml_20260331T214206Z.json",
+        "summary": {
+          "n_windows": 2,
+          "n_positive": 0,
+          "n_failed": 2,
+          "total_trades": 0,
+          "mean_return_pct": 0.0,
+          "mean_sharpe": 0.0,
+          "mean_calmar": 0.0,
+          "worst_calmar": 0.0,
+          "mean_drawdown_pct": 0.0,
+          "worst_drawdown_pct": 0.0,
+          "passes_gate": false,
+          "gate_config": {
+            "min_sharpe": 0.5,
+            "min_calmar": 0.0,
+            "max_drawdown_pct": 15.0,
+            "min_total_trades": 25,
+            "min_trades_per_window": 5,
+            "min_windows_positive": 3
+          }
+        }
+      },
+      {
+        "scenario": "ml_filter",
+        "exit_code": 0,
+        "passes_gate": false,
+        "report_json": "reports\\validation\\wf_ml_filter_20260331T214206Z.json",
+        "summary": {
+          "n_windows": 2,
+          "n_positive": 0,
+          "n_failed": 2,
+          "total_trades": 0,
+          "mean_return_pct": 0.0,
+          "mean_sharpe": 0.0,
+          "mean_calmar": 0.0,
+          "worst_calmar": 0.0,
+          "mean_drawdown_pct": 0.0,
+          "worst_drawdown_pct": 0.0,
+          "passes_gate": false,
+          "gate_config": {
+            "min_sharpe": 0.5,
+            "min_calmar": 0.0,
+            "max_drawdown_pct": 15.0,
+            "min_total_trades": 25,
+            "min_trades_per_window": 5,
+            "min_windows_positive": 3
+          }
+        }
+      },
+      {
+        "scenario": "ml_sizer",
+        "exit_code": 0,
+        "passes_gate": false,
+        "report_json": "reports\\validation\\wf_ml_sizer_20260331T214206Z.json",
+        "summary": {
+          "n_windows": 2,
+          "n_positive": 0,
+          "n_failed": 2,
+          "total_trades": 0,
+          "mean_return_pct": 0.0,
+          "mean_sharpe": 0.0,
+          "mean_calmar": 0.0,
+          "worst_calmar": 0.0,
+          "mean_drawdown_pct": 0.0,
+          "worst_drawdown_pct": 0.0,
+          "passes_gate": false,
+          "gate_config": {
+            "min_sharpe": 0.5,
+            "min_calmar": 0.0,
+            "max_drawdown_pct": 15.0,
+            "min_total_trades": 25,
+            "min_trades_per_window": 5,
+            "min_windows_positive": 3
+          }
+        }
+      },
+      {
+        "scenario": "ml_sizer_macro",
+        "exit_code": 0,
+        "passes_gate": false,
+        "report_json": "reports\\validation\\wf_ml_sizer_macro_20260331T214206Z.json",
+        "summary": {
+          "n_windows": 2,
+          "n_positive": 0,
+          "n_failed": 2,
+          "total_trades": 0,
+          "mean_return_pct": 0.0,
+          "mean_sharpe": 0.0,
+          "mean_calmar": 0.0,
+          "worst_calmar": 0.0,
+          "mean_drawdown_pct": 0.0,
+          "worst_drawdown_pct": 0.0,
+          "passes_gate": false,
+          "gate_config": {
+            "min_sharpe": 0.5,
+            "min_calmar": 0.0,
+            "max_drawdown_pct": 15.0,
+            "min_total_trades": 25,
+            "min_trades_per_window": 5,
+            "min_windows_positive": 3
+          }
+        }
+      },
+      {
+        "scenario": "regime_models",
+        "exit_code": 0,
+        "passes_gate": false,
+        "report_json": "reports\\validation\\wf_regime_models_20260331T214206Z.json",
+        "summary": {
+          "n_windows": 2,
+          "n_positive": 0,
+          "n_failed": 2,
+          "total_trades": 0,
+          "mean_return_pct": 0.0,
+          "mean_sharpe": 0.0,
+          "mean_calmar": 0.0,
+          "worst_calmar": 0.0,
+          "mean_drawdown_pct": 0.0,
+          "worst_drawdown_pct": 0.0,
+          "passes_gate": false,
+          "gate_config": {
+            "min_sharpe": 0.5,
+            "min_calmar": 0.0,
+            "max_drawdown_pct": 15.0,
+            "min_total_trades": 25,
+            "min_trades_per_window": 5,
+            "min_windows_positive": 3
+          }
+        }
+      }
+    ]
+  },
+  "swarm_certification": {
+    "present": true,
+    "passed": false,
+    "steps": [
+      {
+        "name": "swarm_certification",
+        "cmd": [
+          "C:\\Program Files\\Python311\\python.exe",
+          "C:\\Users\\15125\\Documents\\Hogan\\Hogan\\scripts\\swarm_certification.py",
+          "--db",
+          "data/hogan.db",
+          "--symbol",
+          "BTC/USD",
+          "--bars",
+          "1000",
+          "--scratch-db"
+        ],
+        "exit_code": 1,
+        "log": "reports\\validation\\cert_20260331T214206Z.log"
+      }
+    ]
+  },
+  "observability": {
+    "alerts": [
+      {
+        "level": "warning",
+        "code": "stale_agent_mode",
+        "message": "Agent 'data_guardian_v1' stuck in 'advisory_only' for 216h \u2014 consider reset"
+      },
+      {
+        "level": "warning",
+        "code": "stale_agent_mode",
+        "message": "Agent 'execution_cost_v1' stuck in 'advisory_only' for 216h \u2014 consider reset"
+      },
+      {
+        "level": "warning",
+        "code": "stale_agent_mode",
+        "message": "Agent 'pipeline_v1' stuck in 'advisory_only' for 216h \u2014 consider reset"
+      },
+      {
+        "level": "warning",
+        "code": "stale_agent_mode",
+        "message": "Agent 'risk_steward_v1' stuck in 'advisory_only' for 216h \u2014 consider reset"
+      },
+      {
+        "level": "info",
+        "code": "large_table",
+        "message": "Table 'candles' has 712,325 rows \u2014 consider pruning"
+      },
+      {
+        "level": "info",
+        "code": "model_retrain_drift",
+        "message": "Model models/hogan_champion.pkl is 233.32h old (consider retrain check)"
+      },
+      {
+        "level": "warning",
+        "code": "swarm_shadow_active_drift",
+        "message": "Shadow/active drift unacceptable: warnings=['Trade count drift 976% exceeds 30% threshold (shadow=2593, active=27913)', 'Veto rate drift 89% exceeds 20% threshold (shadow=10.0%, active=1.1%)']"
+      }
+    ],
+    "critical_alerts": [
+      {
+        "level": "warning",
+        "code": "swarm_shadow_active_drift",
+        "message": "Shadow/active drift unacceptable: warnings=['Trade count drift 976% exceeds 30% threshold (shadow=2593, active=27913)', 'Veto rate drift 89% exceeds 20% threshold (shadow=10.0%, active=1.1%)']"
+      }
+    ],
+    "integrity": {
+      "sqlite_integrity_ok": true,
+      "sqlite_integrity_message": "ok",
+      "orphan_fills": 0,
+      "orphan_decision_links": 0,
+      "invalid_trade_timestamps": 0,
+      "ok": true
+    },
+    "swarm_drift": {
+      "shadow_trade_count": 2593,
+      "active_trade_count": 27913,
+      "shadow_veto_rate": 0.0997,
+      "active_veto_rate": 0.0106,
+      "trade_count_drift_pct": 976.48,
+      "veto_rate_drift_pct": 89.37,
+      "drift_acceptable": false,
+      "warnings": [
+        "Trade count drift 976% exceeds 30% threshold (shadow=2593, active=27913)",
+        "Veto rate drift 89% exceeds 20% threshold (shadow=10.0%, active=1.1%)"
+      ],
+      "shadow_mean_agreement": 0.7318,
+      "active_mean_agreement": 0.8334
+    },
+    "execution": {
+      "total": 0,
+      "failed": 0,
+      "fail_rate": 0.0
+    }
+  },
+  "recommendation": "HOLD",
+  "rationale": [
+    "WF matrix passes 0/3 (FAIL)",
+    "Observability critical alerts: 1 (FAIL)",
+    "Swarm certification: FAIL"
+  ]
+}

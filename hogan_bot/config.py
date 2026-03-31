@@ -219,6 +219,10 @@ class BotConfig:
     # another highly correlated symbol, scale down the new position to avoid
     # doubling effective exposure (BTC/ETH ~0.85 correlation).
     portfolio_correlation_scale: float = 0.60
+    portfolio_max_gross_exposure_pct: float = 1.50
+    portfolio_max_symbol_exposure_pct: float = 0.50
+    portfolio_loss_regime_streak: int = 3
+    portfolio_loss_regime_scale: float = 0.70
 
     # Auto-train forecast models on startup if pkl files are missing.
     # Safe to enable: only trains once if models don't exist, then persists.
@@ -406,6 +410,26 @@ class BotConfig:
             errors.append(f"ohlcv_limit must be >= 50, got {self.ohlcv_limit}")
         if self.aggressive_allocation <= 0 or self.aggressive_allocation > 1.0:
             errors.append(f"aggressive_allocation must be in (0, 1.0], got {self.aggressive_allocation}")
+        if self.portfolio_correlation_scale <= 0 or self.portfolio_correlation_scale > 1.0:
+            errors.append(
+                f"portfolio_correlation_scale must be in (0, 1.0], got {self.portfolio_correlation_scale}"
+            )
+        if self.portfolio_max_gross_exposure_pct <= 0:
+            errors.append(
+                f"portfolio_max_gross_exposure_pct must be > 0, got {self.portfolio_max_gross_exposure_pct}"
+            )
+        if self.portfolio_max_symbol_exposure_pct <= 0:
+            errors.append(
+                f"portfolio_max_symbol_exposure_pct must be > 0, got {self.portfolio_max_symbol_exposure_pct}"
+            )
+        if self.portfolio_loss_regime_streak < 1:
+            errors.append(
+                f"portfolio_loss_regime_streak must be >= 1, got {self.portfolio_loss_regime_streak}"
+            )
+        if self.portfolio_loss_regime_scale <= 0 or self.portfolio_loss_regime_scale > 1.0:
+            errors.append(
+                f"portfolio_loss_regime_scale must be in (0, 1.0], got {self.portfolio_loss_regime_scale}"
+            )
         return errors
 
 
@@ -815,6 +839,11 @@ def load_config() -> BotConfig:
         training_symbols=_split_symbols(
             os.getenv("HOGAN_TRAINING_SYMBOLS", "BTC/USD,ETH/USD,SOL/USD")
         ),
+        portfolio_correlation_scale=_env_float("HOGAN_PORTFOLIO_CORRELATION_SCALE", "0.60"),
+        portfolio_max_gross_exposure_pct=_env_float("HOGAN_PORTFOLIO_MAX_GROSS_EXPOSURE_PCT", "1.50"),
+        portfolio_max_symbol_exposure_pct=_env_float("HOGAN_PORTFOLIO_MAX_SYMBOL_EXPOSURE_PCT", "0.50"),
+        portfolio_loss_regime_streak=_env_int("HOGAN_PORTFOLIO_LOSS_REGIME_STREAK", "3"),
+        portfolio_loss_regime_scale=_env_float("HOGAN_PORTFOLIO_LOSS_REGIME_SCALE", "0.70"),
         use_mtf_extended=os.getenv("HOGAN_USE_MTF_EXTENDED", "true").lower() == "true",
         use_mtf_ensemble=os.getenv("HOGAN_USE_MTF_ENSEMBLE", "false").lower() == "true",
         mtf_timeframes=os.getenv("HOGAN_MTF_TIMEFRAMES", "1m,5m,15m,30m,4h").split(","),

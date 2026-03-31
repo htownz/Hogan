@@ -37,13 +37,13 @@ def run_feature_importance(
     n_repeats: int = 10,
     test_ratio: float = 0.30,
     fee_rate: float = 0.0026,
-    horizon_bars: int = 6,
+    horizon_bars: int = 12,
+    embargo_bars: int | None = None,
 ) -> tuple[list[FeatureScore], dict]:
     """Train champion model, run permutation importance, return ranked scores."""
     from sklearn.inspection import permutation_importance
     from sklearn.linear_model import LogisticRegression
     from sklearn.metrics import roc_auc_score
-    from sklearn.model_selection import train_test_split
     from sklearn.preprocessing import StandardScaler
 
     from hogan_bot.feature_registry import (
@@ -62,9 +62,15 @@ def run_feature_importance(
     logger.info("Training set: %d samples, %d features, %.1f%% positive",
                 len(X), X.shape[1], y.mean() * 100)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_ratio, shuffle=False,
-    )
+    n = len(X)
+    test_n = max(1, int(n * test_ratio))
+    test_start = max(1, n - test_n)
+    emb = horizon_bars if embargo_bars is None else max(0, embargo_bars)
+    train_end = max(1, test_start - emb)
+    X_train = X.iloc[:train_end]
+    y_train = y.iloc[:train_end]
+    X_test = X.iloc[test_start:]
+    y_test = y.iloc[test_start:]
 
     scaler = StandardScaler()
     X_train_s = scaler.fit_transform(X_train)
@@ -124,6 +130,7 @@ def run_feature_importance(
         "test_auc": round(test_auc, 4),
         "train_samples": len(X_train),
         "test_samples": len(X_test),
+        "embargo_bars": emb,
         "positive_rate": round(float(y.mean()), 4),
     }
 
@@ -277,7 +284,7 @@ def print_ict_report(results: dict) -> None:
 
 def main() -> None:
     import argparse
-    import sqlite3
+    from hogan_bot.storage import get_connection
 
     logging.basicConfig(
         level=logging.INFO,
@@ -293,7 +300,7 @@ def main() -> None:
     p.add_argument("--ict-audit", action="store_true", help="Run ICT feature value audit")
     args = p.parse_args()
 
-    conn = sqlite3.connect(args.db)
+    conn = get_connection(args.db)
     query = """
         SELECT ts_ms, open, high, low, close, volume
         FROM candles

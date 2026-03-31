@@ -1187,3 +1187,70 @@ def load_decision_log(
         conn,
         params=params,
     )
+
+
+def storage_integrity_report(conn: sqlite3.Connection) -> dict:
+    """Return core DB integrity checks for trading-critical tables."""
+    report: dict[str, object] = {
+        "sqlite_integrity_ok": True,
+        "sqlite_integrity_message": "ok",
+        "orphan_fills": 0,
+        "orphan_decision_links": 0,
+        "invalid_trade_timestamps": 0,
+    }
+    try:
+        row = conn.execute("PRAGMA integrity_check").fetchone()
+        if row and str(row[0]).lower() != "ok":
+            report["sqlite_integrity_ok"] = False
+            report["sqlite_integrity_message"] = str(row[0])
+    except Exception as exc:
+        report["sqlite_integrity_ok"] = False
+        report["sqlite_integrity_message"] = f"integrity_check_failed: {exc}"
+
+    try:
+        row = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM fills f
+            LEFT JOIN orders o ON o.order_id = f.order_id
+            WHERE o.order_id IS NULL
+            """
+        ).fetchone()
+        report["orphan_fills"] = int(row[0] if row else 0)
+    except Exception:
+        report["orphan_fills"] = -1
+
+    try:
+        row = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM decision_log d
+            LEFT JOIN paper_trades t ON t.trade_id = d.linked_trade_id
+            WHERE d.linked_trade_id IS NOT NULL
+              AND t.trade_id IS NULL
+            """
+        ).fetchone()
+        report["orphan_decision_links"] = int(row[0] if row else 0)
+    except Exception:
+        report["orphan_decision_links"] = -1
+
+    try:
+        row = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM paper_trades
+            WHERE close_ts_ms IS NOT NULL
+              AND close_ts_ms < open_ts_ms
+            """
+        ).fetchone()
+        report["invalid_trade_timestamps"] = int(row[0] if row else 0)
+    except Exception:
+        report["invalid_trade_timestamps"] = -1
+
+    report["ok"] = bool(
+        report["sqlite_integrity_ok"]
+        and report["orphan_fills"] == 0
+        and report["orphan_decision_links"] == 0
+        and report["invalid_trade_timestamps"] == 0
+    )
+    return report

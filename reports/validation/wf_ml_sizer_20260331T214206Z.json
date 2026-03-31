@@ -1,0 +1,75 @@
+{
+  "summary": {
+    "n_windows": 2,
+    "n_positive": 0,
+    "n_failed": 2,
+    "total_trades": 0,
+    "mean_return_pct": 0.0,
+    "mean_sharpe": 0.0,
+    "mean_calmar": 0.0,
+    "worst_calmar": 0.0,
+    "mean_drawdown_pct": 0.0,
+    "worst_drawdown_pct": 0.0,
+    "passes_gate": false,
+    "gate_config": {
+      "min_sharpe": 0.5,
+      "min_calmar": 0.0,
+      "max_drawdown_pct": 15.0,
+      "min_total_trades": 25,
+      "min_trades_per_window": 5,
+      "min_windows_positive": 3
+    }
+  },
+  "exit_lifecycle": {
+    "tail_losses": {
+      "n_trades": 0
+    },
+    "time_in_trade_by_regime": {},
+    "exit_quality_by_regime": {},
+    "hold_duration_vs_pnl": {}
+  },
+  "windows": [
+    {
+      "window_idx": 0,
+      "train_bars": 2000,
+      "test_bars": 7981,
+      "test_start_date": null,
+      "test_end_date": null,
+      "total_return_pct": 0.0,
+      "max_drawdown_pct": 0.0,
+      "sharpe": null,
+      "sortino": null,
+      "calmar": null,
+      "trades": 0,
+      "win_rate": 0.0,
+      "net_positive": false,
+      "train_auc": 0.7096,
+      "error": "Value after * must be an iterable, not float",
+      "signal_funnel": {},
+      "regime_distribution": {},
+      "closed_trades": [],
+      "exit_attribution": {}
+    },
+    {
+      "window_idx": 1,
+      "train_bars": 9981,
+      "test_bars": 7981,
+      "test_start_date": null,
+      "test_end_date": null,
+      "total_return_pct": 0.0,
+      "max_drawdown_pct": 0.0,
+      "sharpe": null,
+      "sortino": null,
+      "calmar": null,
+      "trades": 0,
+      "win_rate": 0.0,
+      "net_positive": false,
+      "train_auc": 0.6359,
+      "error": "Value after * must be an iterable, not float",
+      "signal_funnel": {},
+      "regime_distribution": {},
+      "closed_trades": [],
+      "exit_attribution": {}
+    }
+  ]
+}
