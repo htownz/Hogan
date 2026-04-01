@@ -1,0 +1,94 @@
+2026-03-31 17:29:15,514 INFO Loaded 17963 candles for BTC/USD 1h
+2026-03-31 17:29:15,514 INFO Walk-forward: 5 windows over 17963 bars (15960 total test bars) [no filters]
+2026-03-31 17:29:15,514 INFO   Window 1/5: train[0:2000] (2000 bars) -> test[2000:5192] (3192 bars)
+2026-03-31 17:29:15,555 INFO     [W0] ML filter disabled — technical pipeline only
+2026-03-31 17:29:15,566 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-31 17:29:15,566 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-31 17:29:15,566 INFO CHAMPION_MODE: overriding min_final_confidence = 0.2 -> 0.12
+2026-03-31 17:29:15,566 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 12.0
+2026-03-31 17:29:15,567 INFO Champion mode applied — 4 overrides
+2026-03-31 17:29:15,567 INFO     [W0] Running backtest on 3442 test bars (no ML)...
+2026-03-31 17:29:15,579 INFO Loaded per-symbol config for BTC/USD/1h (16 overrides, sharpe=1.20)
+2026-03-31 17:29:16,969 INFO Loaded forecast model: models\forecast_4h.pkl
+2026-03-31 17:29:16,976 INFO Loaded forecast model: models\forecast_12h.pkl
+2026-03-31 17:29:16,979 INFO Loaded forecast model: models\forecast_24h.pkl
+2026-03-31 17:29:33,674 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.16% >= 1.50%, stop floor at entry 68937.96
+2026-03-31 17:30:03,421 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.88% >= 1.50%, stop floor at entry 64873.53
+2026-03-31 17:30:15,815 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.81% >= 1.50%, stop floor at entry 60746.94
+2026-03-31 17:30:40,624 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 2.42% >= 1.50%, stop floor at entry 58752.63
+2026-03-31 17:30:42,096 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.56% >= 1.50%, stop floor at entry 57048.94
+2026-03-31 17:30:48,942 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.62% >= 1.50%, stop floor at entry 63882.72
+2026-03-31 17:30:59,106 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.60% >= 1.50%, stop floor at entry 67163.78
+2026-03-31 17:30:59,850 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.60% >= 1.50%, stop floor at entry 68089.45
+2026-03-31 17:31:02,697 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.90% >= 1.50%, stop floor at entry 66565.72
+2026-03-31 17:31:14,348 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.52% >= 1.50%, stop floor at entry 65146.38
+2026-03-31 17:31:17,216 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.67% >= 1.50%, stop floor at entry 64117.37
+2026-03-31 17:31:25,207 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.90% >= 1.50%, stop floor at entry 57291.50
+2026-03-31 17:31:28,929 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.52% >= 1.50%, stop floor at entry 59930.76
+2026-03-31 17:31:38,742 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 2.47% >= 1.50%, stop floor at entry 59381.26
+2026-03-31 17:31:49,139 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.66% >= 1.50%, stop floor at entry 59971.15
+2026-03-31 17:31:50,568 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.57% >= 1.50%, stop floor at entry 61359.41
+2026-03-31 17:31:52,179 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.75% >= 1.50%, stop floor at entry 60490.82
+2026-03-31 17:32:15,563 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 3.20% >= 1.50%, stop floor at entry 56450.22
+2026-03-31 17:32:23,949 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.03% >= 1.50%, stop floor at entry 56529.27
+2026-03-31 17:32:27,209 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.83% >= 1.50%, stop floor at entry 57977.40
+2026-03-31 17:32:35,909 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.55% >= 1.50%, stop floor at entry 59728.79
+2026-03-31 17:32:42,854 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.08% >= 1.50%, stop floor at entry 62661.20
+2026-03-31 17:33:18,573 INFO     [W0] Backtest done in 243.0s (total 243.0s)
+2026-03-31 17:33:18,573 INFO     W0: ret=-9.20% dd=9.2% sharpe=-4.51 calmar=-1.00 trades=242 win=40% FAIL
+2026-03-31 17:33:18,573 INFO   Window 2/5: train[0:5192] (5192 bars) -> test[5192:8384] (3192 bars)
+2026-03-31 17:33:18,574 INFO     [W1] ML filter disabled — technical pipeline only
+2026-03-31 17:33:18,590 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-31 17:33:18,590 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-31 17:33:18,590 INFO CHAMPION_MODE: overriding min_final_confidence = 0.2 -> 0.12
+2026-03-31 17:33:18,590 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 12.0
+2026-03-31 17:33:18,590 INFO Champion mode applied — 4 overrides
+2026-03-31 17:33:18,590 INFO     [W1] Running backtest on 3442 test bars (no ML)...
+2026-03-31 17:33:56,367 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.28% >= 1.50%, stop floor at entry 69515.41
+2026-03-31 17:34:09,495 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.86% >= 1.50%, stop floor at entry 70120.94
+2026-03-31 17:34:47,259 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.73% >= 1.50%, stop floor at entry 95112.99
+2026-03-31 17:34:56,598 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.38% >= 1.50%, stop floor at entry 95039.75
+2026-03-31 17:35:03,181 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.20% >= 1.50%, stop floor at entry 99168.29
+2026-03-31 17:35:08,943 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 2.19% >= 1.50%, stop floor at entry 101682.84
+2026-03-31 17:35:21,857 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 2.52% >= 1.50%, stop floor at entry 95234.66
+2026-03-31 17:35:26,979 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 2.46% >= 1.50%, stop floor at entry 95398.87
+2026-03-31 17:35:31,478 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.63% >= 1.50%, stop floor at entry 99385.45
+2026-03-31 17:35:33,159 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.81% >= 1.50%, stop floor at entry 94946.72
+2026-03-31 17:35:42,007 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.01% >= 1.50%, stop floor at entry 93635.70
+2026-03-31 17:36:05,193 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.53% >= 1.50%, stop floor at entry 97654.09
+2026-03-31 17:36:10,628 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 2.19% >= 1.50%, stop floor at entry 105902.23
+2026-03-31 17:36:26,923 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.69% >= 1.50%, stop floor at entry 100336.03
+2026-03-31 17:36:38,824 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.61% >= 1.50%, stop floor at entry 96780.66
+2026-03-31 17:36:40,116 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 2.22% >= 1.50%, stop floor at entry 98872.17
+2026-03-31 17:36:43,588 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.84% >= 1.50%, stop floor at entry 98801.63
+2026-03-31 17:36:52,356 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.51% >= 1.50%, stop floor at entry 97453.79
+2026-03-31 17:36:53,709 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.88% >= 1.50%, stop floor at entry 95342.62
+2026-03-31 17:36:54,802 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.61% >= 1.50%, stop floor at entry 98651.59
+2026-03-31 17:37:06,077 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.59% >= 1.50%, stop floor at entry 96499.35
+2026-03-31 17:37:08,786 INFO     [W1] Backtest done in 230.2s (total 230.2s)
+2026-03-31 17:37:08,787 INFO     W1: ret=-14.55% dd=14.6% sharpe=-7.58 calmar=-1.00 trades=279 win=41% FAIL
+2026-03-31 17:37:08,787 INFO   Window 3/5: train[0:8384] (8384 bars) -> test[8384:11576] (3192 bars)
+2026-03-31 17:37:08,787 INFO     [W2] ML filter disabled — technical pipeline only
+2026-03-31 17:37:08,813 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-31 17:37:08,813 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-31 17:37:08,813 INFO CHAMPION_MODE: overriding min_final_confidence = 0.2 -> 0.12
+2026-03-31 17:37:08,813 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 12.0
+2026-03-31 17:37:08,813 INFO Champion mode applied — 4 overrides
+2026-03-31 17:37:08,814 INFO     [W2] Running backtest on 3442 test bars (no ML)...
+2026-03-31 17:37:17,353 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.59% >= 1.50%, stop floor at entry 96499.35
+2026-03-31 17:37:32,106 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.86% >= 1.50%, stop floor at entry 85101.40
+2026-03-31 17:37:44,953 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 2.37% >= 1.50%, stop floor at entry 81524.90
+2026-03-31 17:37:48,237 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.65% >= 1.50%, stop floor at entry 82950.99
+2026-03-31 17:37:57,586 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.86% >= 1.50%, stop floor at entry 84034.03
+2026-03-31 17:38:21,822 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.52% >= 1.50%, stop floor at entry 84187.21
+2026-03-31 17:38:57,756 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.38% >= 1.50%, stop floor at entry 93305.43
+2026-03-31 17:39:01,957 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.69% >= 1.50%, stop floor at entry 93500.17
+2026-03-31 17:39:14,665 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.47% >= 1.50%, stop floor at entry 93955.10
+2026-03-31 17:39:16,410 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.53% >= 1.50%, stop floor at entry 97195.43
+2026-03-31 17:39:24,770 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.65% >= 1.50%, stop floor at entry 101807.81
+2026-03-31 17:39:34,497 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.79% >= 1.50%, stop floor at entry 102458.18
+2026-03-31 17:39:35,945 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.59% >= 1.50%, stop floor at entry 106156.53
+2026-03-31 17:39:37,824 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 2.36% >= 1.50%, stop floor at entry 108971.53
+2026-03-31 17:40:05,190 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.56% >= 1.50%, stop floor at entry 105594.63
+2026-03-31 17:40:10,533 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.83% >= 1.50%, stop floor at entry 105880.08
+2026-03-31 17:40:21,826 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.55% >= 1.50%, stop floor at entry 104221.84

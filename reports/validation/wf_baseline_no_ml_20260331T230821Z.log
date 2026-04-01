@@ -1,0 +1,196 @@
+2026-03-31 18:08:22,445 INFO Loaded 3000 candles for BTC/USD 1h
+2026-03-31 18:08:22,445 INFO Walk-forward: 2 windows over 3000 bars (1000 total test bars) [no filters]
+2026-03-31 18:08:22,445 INFO   Window 1/2: train[0:2000] (2000 bars) -> test[2000:2500] (500 bars)
+2026-03-31 18:08:22,498 INFO     [W0] ML filter disabled — technical pipeline only
+2026-03-31 18:08:22,508 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-31 18:08:22,508 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-31 18:08:22,508 INFO CHAMPION_MODE: overriding min_final_confidence = 0.2 -> 0.12
+2026-03-31 18:08:22,509 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 12.0
+2026-03-31 18:08:22,509 INFO Champion mode applied — 4 overrides
+2026-03-31 18:08:22,509 INFO     [W0] Running backtest on 750 test bars (no ML)...
+2026-03-31 18:08:22,518 INFO Loaded per-symbol config for BTC/USD/1h (16 overrides, sharpe=1.20)
+2026-03-31 18:08:24,095 INFO Loaded forecast model: models\forecast_4h.pkl
+2026-03-31 18:08:24,099 INFO Loaded forecast model: models\forecast_12h.pkl
+2026-03-31 18:08:24,103 INFO Loaded forecast model: models\forecast_24h.pkl
+2026-03-31 18:08:31,136 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 3.07% >= 1.50%, stop floor at entry 67870.14
+2026-03-31 18:08:38,862 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.91% >= 1.50%, stop floor at entry 69708.92
+2026-03-31 18:08:40,563 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.62% >= 1.50%, stop floor at entry 68891.79
+2026-03-31 18:08:46,324 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.75% >= 1.50%, stop floor at entry 66769.83
+2026-03-31 18:08:57,431 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.52% >= 1.50%, stop floor at entry 66629.79
+2026-03-31 18:08:57,992 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 2.25% >= 1.50%, stop floor at entry 67631.39
+2026-03-31 18:09:03,543 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.42% >= 1.50%, stop floor at entry 65477.48
+2026-03-31 18:09:04,943 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 2.59% >= 1.50%, stop floor at entry 68772.78
+2026-03-31 18:09:05,537 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.97% >= 1.50%, stop floor at entry 66964.47
+2026-03-31 18:09:15,123 INFO     [W0] Backtest done in 52.6s (total 52.6s)
+2026-03-31 18:09:15,123 INFO     W0: ret=-0.81% dd=2.5% sharpe=-1.11 calmar=-0.32 trades=66 win=61% FAIL
+2026-03-31 18:09:15,124 INFO   Window 2/2: train[0:2500] (2500 bars) -> test[2500:3000] (500 bars)
+2026-03-31 18:09:15,124 INFO     [W1] ML filter disabled — technical pipeline only
+2026-03-31 18:09:15,140 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-31 18:09:15,140 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-31 18:09:15,140 INFO CHAMPION_MODE: overriding min_final_confidence = 0.2 -> 0.12
+2026-03-31 18:09:15,140 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 12.0
+2026-03-31 18:09:15,140 INFO Champion mode applied — 4 overrides
+2026-03-31 18:09:15,140 INFO     [W1] Running backtest on 750 test bars (no ML)...
+2026-03-31 18:09:16,823 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.42% >= 1.50%, stop floor at entry 65477.48
+2026-03-31 18:09:18,120 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 2.59% >= 1.50%, stop floor at entry 68772.78
+2026-03-31 18:09:18,710 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.97% >= 1.50%, stop floor at entry 66964.47
+2026-03-31 18:09:33,686 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.56% >= 1.50%, stop floor at entry 69606.65
+2026-03-31 18:09:40,875 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.62% >= 1.50%, stop floor at entry 70667.96
+2026-03-31 18:09:53,862 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.81% >= 1.50%, stop floor at entry 70721.52
+2026-03-31 18:10:05,758 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.71% >= 1.50%, stop floor at entry 66740.35
+2026-03-31 18:10:07,465 INFO     [W1] Backtest done in 52.3s (total 52.3s)
+2026-03-31 18:10:07,466 INFO     W1: ret=-2.89% dd=5.2% sharpe=-5.05 calmar=-0.56 trades=72 win=42% FAIL
+2026-03-31 18:10:07,466 INFO Walk-forward complete in 105.0s: {
+  "n_windows": 2,
+  "n_positive": 0,
+  "n_failed": 0,
+  "total_trades": 138,
+  "mean_return_pct": -1.8496,
+  "mean_sharpe": -3.078,
+  "mean_calmar": -0.4399,
+  "worst_calmar": -0.5594,
+  "mean_drawdown_pct": 3.84,
+  "worst_drawdown_pct": 5.17,
+  "passes_gate": false,
+  "gate_config": {
+    "min_sharpe": 0.5,
+    "min_calmar": 0.0,
+    "max_drawdown_pct": 15.0,
+    "min_total_trades": 25,
+    "min_trades_per_window": 5,
+    "min_windows_positive": 3
+  }
+}
+2026-03-31 18:10:07,473 INFO Report saved to reports\validation\wf_baseline_no_ml_20260331T230821Z.json
+
+============================================================
+WALK-FORWARD GATE: FAIL
+  Windows: 0/2 positive
+  Mean Sharpe: -3.08
+  Mean Calmar: -0.44
+  Worst Calmar: -0.56
+  Mean Return: -1.85%
+  Worst Drawdown: 5.2%
+  Total Trades: 138
+============================================================
+
+==========================================================================================
+PER-WINDOW FUNNEL ANALYSIS
+==========================================================================================
+
+--- W0 (FAIL) | 2026-02-05 12:00:00+00:00 to 2026-03-08 17:00:00+00:00 ---
+  Return: -0.81%  Sharpe: -1.11  Calmar: -0.32  Trades: 66  Win: 61%
+  Bars evaluated:     677
+  Pipeline signals:   buy=71  sell=40
+  Post-ML filter:     buy=71  sell=40  (ML killed 0% of buys)
+  Post-edge gate:     buy=71  sell=40  (edge killed 0)
+  Post-quality gate:  buy=71  sell=40  (quality killed 0)
+  Post-ranging gate:  buy=71  sell=40  (ranging killed 0)
+  Executed:           longs=19  shorts=14
+  Blocked:            regime_long=0  regime_short=0  cooldown=9  already_long=32
+  Regime distribution:
+    ranging            296 bars (44.1%)
+    trending_down      149 bars (22.2%)
+    volatile           140 bars (20.9%)
+    trending_up         86 bars (12.8%)
+  Trade breakdown:    long=19  short=14
+  Avg win: +1.541%  Avg loss: -1.385%  Payoff ratio: 1.11x
+
+--- W1 (FAIL) | 2026-02-26 08:00:00+00:00 to 2026-03-31 22:00:00+00:00 ---
+  Return: -2.89%  Sharpe: -5.05  Calmar: -0.56  Trades: 72  Win: 42%
+  Bars evaluated:     677
+  Pipeline signals:   buy=123  sell=25
+  Post-ML filter:     buy=123  sell=25  (ML killed 0% of buys)
+  Post-edge gate:     buy=123  sell=25  (edge killed 0)
+  Post-quality gate:  buy=123  sell=25  (quality killed 0)
+  Post-ranging gate:  buy=123  sell=25  (ranging killed 0)
+  Executed:           longs=25  shorts=11
+  Blocked:            regime_long=0  regime_short=0  cooldown=24  already_long=71
+  Regime distribution:
+    ranging            305 bars (45.5%)
+    trending_down      166 bars (24.7%)
+    volatile           129 bars (19.2%)
+    trending_up         71 bars (10.6%)
+  Trade breakdown:    long=25  short=11
+  Avg win: +1.073%  Avg loss: -0.941%  Payoff ratio: 1.14x
+
+==========================================================================================
+
+
+==========================================================================================
+EXIT TYPE ATTRIBUTION
+==========================================================================================
+
+  W0 (FAIL, -0.81%):
+    Exit Reason                  Trades  Total PnL    Avg PnL   Win%
+    short_max_hold_time               5    +12.44%     +2.49%   100%
+    signal                            4     +6.65%     +1.66%   100%
+    take_profit                       1     +5.42%     +5.42%   100%
+    proactive_give_back               1     +1.14%     +1.14%   100%
+    proactive_stagnation              2     -0.01%     -0.01%    50%
+    proactive_time_decay              3     -4.31%     -1.44%     0%
+    proactive_trend_reversal         17     -8.53%     -0.50%    47%
+
+  W1 (FAIL, -2.89%):
+    Exit Reason                  Trades  Total PnL    Avg PnL   Win%
+    take_profit                       1     +5.42%     +5.42%   100%
+    signal                            4     +4.88%     +1.22%   100%
+    short_max_hold_time               1     +2.63%     +2.63%   100%
+    max_hold_time                     1     +1.28%     +1.28%   100%
+    proactive_give_back               1     +0.89%     +0.89%   100%
+    proactive_stagnation              2     +0.14%     +0.07%   100%
+    proactive_position_decay          1     +0.09%     +0.09%   100%
+    breakeven_stop                    1     -0.07%     -0.07%     0%
+    short_trailing_stop               1     -1.91%     -1.91%     0%
+    proactive_time_decay              2     -3.16%     -1.58%     0%
+    proactive_trend_reversal         21    -13.85%     -0.66%    19%
+
+  AGGREGATE (69 trades):
+    Exit Reason                  Trades  Total PnL    Avg PnL   Win%
+    -----------------------------------------------------------------
+    short_max_hold_time               6    +15.07%     +2.51%   100%
+    signal                            8    +11.53%     +1.44%   100%
+    take_profit                       2    +10.84%     +5.42%   100%
+    proactive_give_back               2     +2.03%     +1.01%   100%
+    max_hold_time                     1     +1.28%     +1.28%   100%
+    proactive_stagnation              4     +0.13%     +0.03%    75%
+    proactive_position_decay          1     +0.09%     +0.09%   100%
+    breakeven_stop                    1     -0.07%     -0.07%     0%
+    short_trailing_stop               1     -1.91%     -1.91%     0%
+    proactive_time_decay              5     -7.47%     -1.49%     0%
+    proactive_trend_reversal         38    -22.38%     -0.59%    32%
+
+==========================================================================================
+
+
+==========================================================================================
+EXIT LIFECYCLE ANALYSIS
+==========================================================================================
+
+  TAIL LOSSES (69 trades, 34 losers)
+    Worst single loss:  -3.54%
+    Mean loss:          -1.11%
+    Total loss drag:    -37.76%
+    p10_loss_pct: -2.38%
+    p25_loss_pct: -1.91%
+    p5_loss_pct: -2.67%
+    > 1.0% losses: 16
+    > 2.0% losses: 6
+    > 3.0% losses: 2
+    > 5.0% losses: 0
+
+  TIME IN TRADE BY REGIME
+    Regime              N  AvgBars  MedBars   AvgPnL   WinR    Worst
+    ------------------------------------------------------------
+    ranging            51      0.0      0.0   +0.18%   49%   -3.54%
+    trending_down      11      0.0      0.0   -0.18%   45%   -1.91%
+    trending_up         6      0.0      0.0   +0.27%   67%   -0.62%
+    volatile            1      0.0      0.0   +0.26%  100%   +0.26%
+
+  HOLD DURATION vs PNL
+    Bucket        N   AvgPnL   TotalPnL   WinR    Worst
+    --------------------------------------------------
+    0-3h         69   +0.13%     +9.15%   51%   -3.54%
+
+==========================================================================================
+

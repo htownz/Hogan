@@ -41837,3 +41837,352 @@ TypeError: sequence index must be integer, not 'slice'
 2026-03-31 17:27:46,986 INFO Loaded forecast model: models\forecast_24h.pkl
 2026-03-31 17:27:49,169 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
 2026-03-31 17:27:50,428 INFO SHORT BTC/USD px=68004.15 qty=0.006930 ml=0.423 equity=8617.49 regime=volatile scales[short=0.50 macro=1.00 fund=1.00 wf=1.00 exp=1.00 corr=1.00 tq=1.00 port=1.00]
+2026-03-31 17:28:23,282 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 17:28:23,448 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 17:28:23,528 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:29:09,084 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-31 18:29:09,085 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-31 18:29:09,085 INFO CHAMPION_MODE: overriding min_final_confidence = 0.2 -> 0.12
+2026-03-31 18:29:09,085 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 12.0
+2026-03-31 18:29:09,085 INFO Champion mode applied — 4 overrides
+2026-03-31 18:29:09,092 INFO Sweep results applied: trailing_stop=0.025 take_profit=0.054 (from diagnostics/exit_sweep_results.json)
+2026-03-31 18:29:09,097 INFO FETCH_ORCHESTRATOR: starting data refresh (backfill=False, symbols=['BTC/USD'])
+2026-03-31 18:29:09,098 INFO Fetching Fear & Greed Index (today) ...
+2026-03-31 18:29:09,809 INFO   Latest: 2026-03-31  value=11
+2026-03-31 18:29:09,809 INFO   1 records upserted.
+2026-03-31 18:29:09,809 INFO FETCH feargreed: 1 rows
+2026-03-31 18:29:10,846 INFO FETCH derivatives BTC/USD: {'funding_rate': 1, 'open_interest_pct_change': 1}
+2026-03-31 18:29:14,717 INFO Macro candles: wrote 30 1d rows for SPY/USD (S&P 500 ETF)
+2026-03-31 18:29:14,954 INFO Macro candles: wrote 49 1h rows for SPY/USD (S&P 500 ETF)
+2026-03-31 18:29:15,293 INFO Macro candles: wrote 30 1d rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-31 18:29:15,618 INFO Macro candles: wrote 49 1h rows for QQQ/USD (Nasdaq-100 ETF)
+2026-03-31 18:29:16,081 INFO Macro candles: wrote 30 1d rows for GLD/USD (Gold ETF)
+2026-03-31 18:29:16,621 INFO Macro candles: wrote 49 1h rows for GLD/USD (Gold ETF)
+2026-03-31 18:29:17,166 INFO Macro candles: wrote 30 1d rows for SLV/USD (Silver ETF)
+2026-03-31 18:29:17,711 INFO Macro candles: wrote 49 1h rows for SLV/USD (Silver ETF)
+2026-03-31 18:29:18,172 INFO Macro candles: wrote 30 1d rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-31 18:29:18,690 INFO Macro candles: wrote 49 1h rows for TLT/USD (20-Year Treasury Bond ETF)
+2026-03-31 18:29:19,216 INFO Macro candles: wrote 30 1d rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-31 18:29:19,839 INFO Macro candles: wrote 49 1h rows for UUP/USD (Dollar Bull ETF (DXY proxy))
+2026-03-31 18:29:20,343 INFO Macro candles: wrote 30 1d rows for VIX/USD (CBOE Volatility Index)
+2026-03-31 18:29:20,640 INFO Macro candles: wrote 98 1h rows for VIX/USD (CBOE Volatility Index)
+2026-03-31 18:29:20,968 INFO Macro candles: wrote 30 1d rows for TNX/USD (10-Year Treasury Yield)
+2026-03-31 18:29:21,646 INFO Macro candles: wrote 49 1h rows for TNX/USD (10-Year Treasury Yield)
+2026-03-31 18:29:21,646 INFO Macro candle backfill complete: 681 rows across 16 series
+2026-03-31 18:29:21,647 INFO FETCH macro_candles: {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 30, 'VIX/USD_1h': 98, 'TNX/USD_1d': 30, 'TNX/USD_1h': 49}
+2026-03-31 18:29:22,160 WARNING FETCH news_sentiment failed: HTTP 403 fetching CryptoPanic page 1
+2026-03-31 18:29:22,801 INFO FETCH gpr: 15034
+2026-03-31 18:29:22,801 INFO FETCH_ORCHESTRATOR: done in 13.7s — 4 OK, 1 failed, 4 skipped
+2026-03-31 18:29:22,801 INFO Startup data fetch complete: {'feargreed': 1, 'derivatives_BTC/USD': {'funding_rate': 1, 'open_interest_pct_change': 1}, 'macro_candles': {'SPY/USD_1d': 30, 'SPY/USD_1h': 49, 'QQQ/USD_1d': 30, 'QQQ/USD_1h': 49, 'GLD/USD_1d': 30, 'GLD/USD_1h': 49, 'SLV/USD_1d': 30, 'SLV/USD_1h': 49, 'TLT/USD_1d': 30, 'TLT/USD_1h': 49, 'UUP/USD_1d': 30, 'UUP/USD_1h': 49, 'VIX/USD_1d': 30, 'VIX/USD_1h': 98, 'TNX/USD_1d': 30, 'TNX/USD_1h': 49}, 'news_sentiment': 'ERROR: HTTP 403 fetching CryptoPanic page 1', 'gpr': 15034}
+2026-03-31 18:29:22,802 INFO RESTORE: loaded last cash balance 8616.27 from DB (seed was 10000.00)
+2026-03-31 18:29:22,807 INFO Paper mode with realistic fills (slip=5.0bps spread=3.0bps)
+2026-03-31 18:29:22,807 INFO RECONCILE: restored open short BTC/USD qty=0.006930 entry=68004.15
+2026-03-31 18:29:22,808 INFO RECONCILE: restored 1 open position(s) from DB
+2026-03-31 18:29:24,203 INFO Loaded ML model from models/hogan_champion.pkl
+2026-03-31 18:29:24,383 INFO RegimeModelRouter active: 4 regime models (ranging, trending_down, trending_up, volatile) + global fallback
+2026-03-31 18:29:24,410 INFO Trade quality model loaded from models/trade_quality.pkl (threshold=0.40)
+2026-03-31 18:29:24,507 INFO MacroSitout: loaded 2966 Fear & Greed records
+2026-03-31 18:29:24,535 INFO MacroSitout: loaded 3710 VIX hourly records
+2026-03-31 18:29:24,535 INFO Macro sitout filter enabled (greed-only scaling)
+2026-03-31 18:29:24,555 INFO FundingOverlay: loaded 8832 hourly records
+2026-03-31 18:29:24,555 INFO Funding rate overlay enabled
+2026-03-31 18:29:24,559 INFO OnlineLearner initialized (interval=50 bars)
+2026-03-31 18:29:24,570 INFO PerformanceTracker restored 0 trades across 0 regimes from DB snapshot
+2026-03-31 18:29:24,571 INFO PerformanceTracker restored state from DB snapshot
+2026-03-31 18:29:24,606 INFO MTF candle subscriptions: ['1h', '1m', '5m', '15m', '30m', '4h'] (primary=1h)
+2026-03-31 18:29:24,606 INFO Event loop starting: mode=PAPER symbols=BTC/USD timeframe=1h
+2026-03-31 18:29:24,606 INFO STARTUP SUMMARY: balance=10000.00 max_dd=20.0% risk/trade=1.5% trailing_stop=2.5% take_profit=5.4% ML=ON swarm=ON regime=ON policy_core=ON online_learn=ON
+2026-03-31 18:29:24,608 INFO HOGAN_USE_REST_DATA=1 — using REST polling (WebSocket disabled).
+2026-03-31 18:29:24,610 INFO REST polling active: kraken ['BTC/USD'] every 30s
+2026-03-31 18:29:27,090 INFO REST warmup: BTC/USD/1h loaded 200 candles
+2026-03-31 18:29:28,228 INFO REST warmup: BTC/USD/1m loaded 200 candles
+2026-03-31 18:29:29,509 INFO REST warmup: BTC/USD/5m loaded 200 candles
+2026-03-31 18:29:30,523 INFO REST warmup: BTC/USD/15m loaded 200 candles
+2026-03-31 18:29:31,870 INFO REST warmup: BTC/USD/30m loaded 200 candles
+2026-03-31 18:29:32,980 INFO REST warmup: BTC/USD/4h loaded 200 candles
+2026-03-31 18:29:40,307 INFO Loaded per-symbol config for BTC/USD/1h (16 overrides, sharpe=1.20)
+2026-03-31 18:29:40,351 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:29:40,360 INFO Loaded forecast model: models\forecast_4h.pkl
+2026-03-31 18:29:40,366 INFO Loaded forecast model: models\forecast_12h.pkl
+2026-03-31 18:29:40,369 INFO Loaded forecast model: models\forecast_24h.pkl
+2026-03-31 18:29:42,170 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 18:30:16,546 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:30:16,718 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 18:30:16,732 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:30:16,771 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:30:16,943 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 18:30:16,958 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 18:30:17,002 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:30:17,170 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 18:30:17,188 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-31 18:30:17,231 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:30:17,404 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 18:30:17,421 INFO MTF_EVAL BTC/USD/30m → hold (size scaled 0.70x for sub-hour eval)
+2026-03-31 18:31:29,102 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:31:29,396 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:32:05,377 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:32:05,564 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:33:17,972 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:33:18,145 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:34:30,453 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:34:30,645 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:35:06,714 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:35:06,895 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:35:06,927 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:35:07,100 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 18:36:19,290 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:36:19,465 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:37:31,821 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:37:32,059 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:38:08,077 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:38:08,257 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:39:20,478 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:39:20,657 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:40:32,935 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:40:33,144 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:40:33,178 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:40:33,367 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 18:41:09,161 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:41:09,334 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:42:21,666 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:42:21,846 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:43:34,175 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:43:34,357 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:44:10,441 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:44:10,630 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:45:22,851 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:45:23,073 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:45:23,116 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:45:23,317 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 18:45:23,353 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:45:24,703 INFO SWARM auto-quarantined: ['pipeline_v1']
+2026-03-31 18:45:24,704 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-31 18:46:35,256 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:46:35,657 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:47:11,484 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:47:11,675 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:48:23,936 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:48:24,120 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:49:36,579 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:49:36,768 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:50:12,837 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:50:13,023 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:50:13,058 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:50:13,236 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 18:51:25,704 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:51:25,888 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:52:38,182 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:52:38,374 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:53:14,605 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:53:14,796 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:54:27,217 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:54:27,402 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:55:03,528 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:55:03,712 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 18:55:39,847 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:55:40,033 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:56:16,073 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:56:16,261 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:57:28,599 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:57:28,797 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:58:41,100 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:58:41,296 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 18:59:17,392 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 18:59:17,598 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:00:29,823 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:00:30,878 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:00:31,062 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:00:31,092 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:00:31,267 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:00:31,285 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 19:00:31,324 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:00:31,502 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:00:31,518 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-31 19:00:31,561 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:00:31,740 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:00:31,757 INFO MTF_EVAL BTC/USD/30m → hold (size scaled 0.70x for sub-hour eval)
+2026-03-31 19:01:06,047 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:01:06,202 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:01:06,222 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:02:18,599 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:02:18,753 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:02:18,770 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:03:31,200 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:03:31,416 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:03:33,671 INFO SWARM global weight promoted: {'pipeline_v1': 0.247, 'risk_steward_v1': 0.0741, 'data_guardian_v1': 0.0902, 'execution_cost_v1': 0.247, 'volatility_regime_v1': 0.3417}
+2026-03-31 19:03:34,050 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:04:07,478 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:04:07,647 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:04:07,670 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:05:20,001 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:05:20,154 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:05:20,173 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:05:20,186 INFO OnlineLearner: insufficient labeled data for all
+2026-03-31 19:05:20,219 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:05:20,371 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:05:20,390 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 19:06:32,497 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:06:32,653 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:06:32,673 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:07:08,726 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:07:08,876 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:07:08,898 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:08:21,440 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:08:21,617 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:08:21,638 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:09:33,907 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:09:34,067 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:09:34,092 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:10:10,235 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:10:10,380 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:10:10,404 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:10:10,434 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:10:10,577 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:10:10,601 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 19:11:22,853 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:11:23,016 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:11:23,042 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:12:35,418 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:12:35,573 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:12:35,601 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:13:11,742 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:13:11,892 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:13:11,919 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:14:24,399 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:14:24,548 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:14:24,575 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:15:37,063 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:15:37,222 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:15:37,250 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:15:37,285 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:15:37,437 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 19:15:37,466 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 19:15:37,510 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:15:37,700 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-31 19:16:13,329 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:16:13,512 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:17:25,675 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:17:25,857 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:18:38,086 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:18:38,261 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:19:14,299 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:19:14,479 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:20:26,704 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:20:26,874 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:20:26,904 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:20:27,088 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 19:21:39,083 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:21:39,267 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:22:15,257 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:22:16,620 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:23:27,668 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:23:27,857 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:23:57,674 WARNING REST poll error BTC/USD/1h: kraken GET https://api.kraken.com/0/public/OHLC?pair=XXBTZUSD&interval=60
+2026-03-31 19:24:39,999 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:24:40,179 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:25:16,168 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:25:16,341 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:25:16,374 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:25:16,564 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 19:26:28,595 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:26:28,782 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:27:04,749 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:27:04,934 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:28:17,102 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:28:17,290 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:29:29,549 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:29:29,766 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:30:05,718 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:30:05,931 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:30:05,970 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:30:06,182 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 19:30:06,224 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:30:06,434 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-31 19:30:06,471 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:30:06,686 INFO MTF_EVAL BTC/USD/30m → hold (size scaled 0.70x for sub-hour eval)
+2026-03-31 19:31:18,029 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:31:18,210 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:32:30,316 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:32:30,501 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:33:06,465 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:33:06,641 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:34:18,760 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:34:18,948 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:35:31,055 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:35:31,238 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:35:31,268 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:35:31,450 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 19:36:07,185 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:36:07,377 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:37:19,495 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:37:19,679 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:38:31,794 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:38:31,979 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:39:07,956 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:39:08,144 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:40:20,270 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:40:20,469 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:40:20,505 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:40:23,277 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 19:41:32,653 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:41:33,069 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:42:08,766 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:42:08,955 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:43:21,099 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:43:21,289 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:44:33,711 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:44:33,912 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:44:33,923 INFO OnlineLearner: insufficient labeled data for all
+2026-03-31 19:44:33,923 INFO HEARTBEAT [100 events] equity=8615.21 cash=8615.04 longs=0 shorts=1 regime=trending_up
+2026-03-31 19:45:09,882 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:45:10,072 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:45:10,101 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:45:10,292 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 19:45:10,319 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:45:10,517 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-31 19:46:22,214 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:46:22,409 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:47:34,689 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:47:34,876 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:48:10,840 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:48:11,034 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:49:23,132 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:49:23,377 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:50:38,577 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:50:38,769 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:50:38,797 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:50:38,990 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 19:51:14,721 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:51:14,920 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:52:27,094 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:52:27,292 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:53:39,427 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:53:39,621 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:54:15,582 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:54:15,779 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:55:27,918 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:55:28,122 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:55:28,151 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:55:28,356 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 19:56:04,041 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:56:04,236 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:57:18,047 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:57:18,258 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:58:30,349 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:58:30,549 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 19:59:06,499 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 19:59:06,701 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 20:00:18,809 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 20:00:18,949 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 20:00:21,293 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 20:00:21,437 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 20:00:21,459 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-03-31 20:00:21,491 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 20:00:21,636 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 20:00:21,653 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-03-31 20:00:21,683 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 20:00:21,825 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 20:00:21,844 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-03-31 20:00:21,873 INFO MACRO buy: env=neutral conf=0.70 block_longs=False | VIX=25.3 >= 25.0 → caution 0.70x
+2026-03-31 20:00:22,019 WARNING trade_quality predict failed: X has 20 features, but LGBMClassifier is expecting 19 features as input.
+2026-03-31 20:00:22,034 INFO MTF_EVAL BTC/USD/30m → hold (size scaled 0.70x for sub-hour eval)

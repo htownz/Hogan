@@ -1,0 +1,167 @@
+{
+  "period_hours": 24.0,
+  "block_reasons": {
+    "counts": {
+      "ml_blind_blocks_shorts": 684,
+      "swarm_direction_clash": 118,
+      "swarm_blocked_unsigned_signal": 79,
+      "quality_gate_final_conf": 60,
+      "sell_pullback_gate_ranging_support": 46,
+      "pullback_gate_chasing": 37
+    },
+    "rows_scanned": 1005,
+    "rows_with_blocks": 1005,
+    "total_block_events": 1024,
+    "hold_with_no_reason": 0,
+    "action_distribution": {
+      "hold": 986,
+      "buy": 19
+    }
+  },
+  "block_reasons_by_regime": {
+    "ranging": {
+      "ml_blind_blocks_shorts": 576,
+      "swarm_direction_clash": 118,
+      "swarm_blocked_unsigned_signal": 79,
+      "quality_gate_final_conf": 60,
+      "sell_pullback_gate_ranging_support": 46
+    },
+    "volatile": {
+      "ml_blind_blocks_shorts": 108,
+      "pullback_gate_chasing": 37
+    }
+  },
+  "agent_modes": [
+    {
+      "agent_id": "data_guardian_v1",
+      "mode": "active",
+      "age_hours": 1.0,
+      "is_stale": false
+    },
+    {
+      "agent_id": "execution_cost_v1",
+      "mode": "active",
+      "age_hours": 1.0,
+      "is_stale": false
+    },
+    {
+      "agent_id": "pipeline_v1",
+      "mode": "active",
+      "age_hours": 1.0,
+      "is_stale": false
+    },
+    {
+      "agent_id": "risk_steward_v1",
+      "mode": "active",
+      "age_hours": 1.0,
+      "is_stale": false
+    },
+    {
+      "agent_id": "volatility_regime_v1",
+      "mode": "active",
+      "age_hours": 238.2,
+      "is_stale": false
+    }
+  ],
+  "stale_agent_count": 0,
+  "stale_agent_ids": [],
+  "table_stats": [
+    {
+      "table": "decision_log",
+      "rows": 53297
+    },
+    {
+      "table": "swarm_decisions",
+      "rows": 66280
+    },
+    {
+      "table": "swarm_agent_votes",
+      "rows": 296779
+    },
+    {
+      "table": "swarm_weight_snapshots",
+      "rows": 2779
+    },
+    {
+      "table": "swarm_agent_modes",
+      "rows": 18
+    },
+    {
+      "table": "swarm_stall_alerts",
+      "rows": 0
+    },
+    {
+      "table": "swarm_outcomes",
+      "rows": 38572
+    },
+    {
+      "table": "paper_trades",
+      "rows": 38
+    },
+    {
+      "table": "equity_snapshots",
+      "rows": 52388
+    },
+    {
+      "table": "candles",
+      "rows": 712713
+    },
+    {
+      "table": "orders",
+      "rows": 0
+    },
+    {
+      "table": "fills",
+      "rows": 0
+    }
+  ],
+  "integrity": {
+    "sqlite_integrity_ok": true,
+    "sqlite_integrity_message": "ok",
+    "orphan_fills": 0,
+    "orphan_decision_links": 0,
+    "invalid_trade_timestamps": 0,
+    "ok": true
+  },
+  "execution": {
+    "total": 0,
+    "failed": 0,
+    "fail_rate": 0.0
+  },
+  "macro_calendar": {
+    "latest_event_date": "2026-12-10",
+    "days_remaining": 254
+  },
+  "model_drift": {
+    "model_path": "models/hogan_champion.pkl",
+    "exists": true,
+    "age_hours": 1.02
+  },
+  "swarm_drift": {
+    "shadow_trade_count": 2593,
+    "active_trade_count": 27978,
+    "shadow_veto_rate": 0.0997,
+    "active_veto_rate": 0.0106,
+    "trade_count_drift_pct": 978.98,
+    "veto_rate_drift_pct": 89.36,
+    "drift_acceptable": false,
+    "warnings": [
+      "Trade count drift 979% exceeds 30% threshold (shadow=2593, active=27978)",
+      "Veto rate drift 89% exceeds 20% threshold (shadow=10.0%, active=1.1%)"
+    ],
+    "shadow_mean_agreement": 0.7318,
+    "active_mean_agreement": 0.8336
+  },
+  "alerts": [
+    {
+      "level": "info",
+      "code": "large_table",
+      "message": "Table 'candles' has 712,713 rows \u2014 consider pruning"
+    },
+    {
+      "level": "warning",
+      "code": "swarm_shadow_active_drift",
+      "message": "Shadow/active drift unacceptable: warnings=['Trade count drift 979% exceeds 30% threshold (shadow=2593, active=27978)', 'Veto rate drift 89% exceeds 20% threshold (shadow=10.0%, active=1.1%)']"
+    }
+  ]
+}
