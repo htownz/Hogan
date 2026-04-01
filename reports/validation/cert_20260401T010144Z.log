@@ -1,0 +1,69 @@
+2026-03-31 22:24:23,593 INFO CHAMPION_MODE: overriding use_mtf_ensemble = True -> False
+2026-03-31 22:24:23,593 INFO CHAMPION_MODE: overriding use_macro_filter = True -> False
+2026-03-31 22:24:23,593 INFO CHAMPION_MODE: overriding min_final_confidence = 0.2 -> 0.12
+2026-03-31 22:24:23,593 INFO CHAMPION_MODE: overriding max_hold_hours = 0.0 -> 12.0
+2026-03-31 22:24:23,593 INFO Champion mode applied — 4 overrides
+2026-03-31 22:24:23,628 INFO Loaded 3000 candles for BTC/USD 1h
+2026-03-31 22:24:24,586 INFO Loaded ML model from models/hogan_champion.pkl
+2026-03-31 22:24:24,593 INFO MacroSitout: loaded 2967 Fear & Greed records
+2026-03-31 22:24:24,609 INFO MacroSitout: loaded 3710 VIX hourly records
+2026-03-31 22:24:24,609 INFO Macro sitout filter loaded
+2026-03-31 22:24:24,774 INFO Scratch DB: copied data/hogan.db -> C:\Users\15125\AppData\Local\Temp\hogan_swarm_cert_g9_hvelc.db
+2026-03-31 22:24:24,774 INFO Run 1/2: SHADOW mode (baseline)...
+2026-03-31 22:24:24,799 INFO Loaded per-symbol config for BTC/USD/1h (16 overrides, sharpe=1.20)
+2026-03-31 22:24:25,582 INFO Loaded forecast model: models\forecast_4h.pkl
+2026-03-31 22:24:25,586 INFO Loaded forecast model: models\forecast_12h.pkl
+2026-03-31 22:24:25,589 INFO Loaded forecast model: models\forecast_24h.pkl
+2026-03-31 22:24:39,402 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.72% >= 1.50%, stop floor at entry 86118.45
+2026-03-31 22:25:19,134 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.42% >= 1.50%, stop floor at entry 89640.40
+2026-03-31 22:25:43,210 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 2.10% >= 1.50%, stop floor at entry 87592.46
+2026-03-31 22:25:49,292 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.64% >= 1.50%, stop floor at entry 85359.74
+2026-03-31 22:26:19,269 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.11% >= 1.50%, stop floor at entry 87247.97
+2026-03-31 22:26:32,429 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.80% >= 1.50%, stop floor at entry 87529.32
+2026-03-31 22:29:32,363 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.98% >= 1.50%, stop floor at entry 70847.23
+2026-03-31 22:29:58,000 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.91% >= 1.50%, stop floor at entry 69708.92
+2026-03-31 22:30:01,432 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.62% >= 1.50%, stop floor at entry 68891.79
+2026-03-31 22:30:10,679 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.53% >= 1.50%, stop floor at entry 65913.50
+2026-03-31 22:30:26,028 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 2.04% >= 1.50%, stop floor at entry 66088.80
+2026-03-31 22:30:40,766 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.51% >= 1.50%, stop floor at entry 67665.44
+2026-03-31 22:32:42,106 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.72% >= 1.50%, stop floor at entry 65947.26
+2026-03-31 22:32:47,123 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.71% >= 1.50%, stop floor at entry 66740.35
+2026-03-31 22:32:52,630 INFO Shadow done in 508s
+2026-03-31 22:32:52,630 INFO Run 2/2: ACTIVE mode (swarm controls)...
+2026-03-31 22:33:07,162 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.72% >= 1.50%, stop floor at entry 86118.45
+2026-03-31 22:33:51,043 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.42% >= 1.50%, stop floor at entry 89640.40
+2026-03-31 22:34:16,780 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 2.10% >= 1.50%, stop floor at entry 87592.46
+2026-03-31 22:34:22,806 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.64% >= 1.50%, stop floor at entry 85359.74
+2026-03-31 22:34:52,481 INFO BREAKEVEN_LOCK BTC/USD — MFE 2.11% >= 1.50%, stop floor at entry 87247.97
+2026-03-31 22:35:04,488 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.80% >= 1.50%, stop floor at entry 87529.32
+2026-03-31 22:38:06,209 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.98% >= 1.50%, stop floor at entry 70847.23
+2026-03-31 22:38:32,675 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.91% >= 1.50%, stop floor at entry 69708.92
+2026-03-31 22:38:36,637 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.62% >= 1.50%, stop floor at entry 68891.79
+2026-03-31 22:38:47,048 INFO BREAKEVEN_LOCK BTC/USD — MFE 1.53% >= 1.50%, stop floor at entry 65913.50
+2026-03-31 22:39:04,183 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 2.04% >= 1.50%, stop floor at entry 66088.80
+2026-03-31 22:39:20,515 INFO BREAKEVEN_LOCK SHORT BTC/USD — MFE 1.51% >= 1.50%, stop floor at entry 67665.44
+2026-03-31 22:41:32,220 INFO Active done in 520s
+
+============================================================
+SWARM CERTIFICATION BACKTEST
+  3000 bars | BTC/USD | ML: models/hogan_champion.pkl
+============================================================
+
+
+======================================================================
+CERTIFICATION RESULTS
+======================================================================
+Metric                  Shadow (baseline)     Active (swarm)        Delta
+----------------------------------------------------------------------
+Trades                                180                158          -22
+Win Rate                           43.5%             43.2%       -0.3%
+Return %                           -4.67%             -3.84%       +0.83%
+Max Drawdown                        5.01%              4.03%       -0.98%
+Sharpe                              -3.82              -3.26        +0.57
+======================================================================
+
+VERDICT: SWARM IMPROVES PERFORMANCE
+  Consider promoting to active mode (HOGAN_SWARM_MODE=active)
+
+Swarm writes went to scratch DB (deleted on exit): C:\Users\15125\AppData\Local\Temp\hogan_swarm_cert_g9_hvelc.db
+  Production DB unchanged: data/hogan.db
