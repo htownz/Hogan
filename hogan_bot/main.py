@@ -18,7 +18,10 @@ import argparse
 import asyncio
 import logging
 import os
+from pathlib import Path
 import sys
+
+from hogan_bot.instance_lock import InstanceLockError, RuntimeInstanceLock
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +42,13 @@ def run(max_loops: int | None = None) -> None:
     parser.add_argument("--max-events", type=int, default=None, help="Stop after N candle events")
     args, _ = parser.parse_known_args()
     max_events = args.max_events if args.max_events is not None else max_loops
+    lock = RuntimeInstanceLock(lock_path=Path("data") / "hogan_runtime.lock")
     try:
-        asyncio.run(run_event_loop(max_events=max_events))
+        with lock:
+            asyncio.run(run_event_loop(max_events=max_events))
+    except InstanceLockError as exc:
+        logger.critical("Startup aborted: %s", exc)
+        sys.exit(2)
     except KeyboardInterrupt:
         logger.info("Shutdown requested (KeyboardInterrupt).")
     except Exception as exc:

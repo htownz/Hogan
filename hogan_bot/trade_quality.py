@@ -150,7 +150,15 @@ def predict_trade_quality(
     model: TradeQualityModel,
 ) -> float:
     """Return probability that this trade setup will exit profitably."""
-    x = np.array(features, dtype=np.float32).reshape(1, -1)
+    feature_columns = list(getattr(model, "feature_columns", FEATURE_COLUMNS))
+    if len(features) != len(feature_columns):
+        logger.warning(
+            "trade_quality feature length mismatch: got=%d expected=%d",
+            len(features),
+            len(feature_columns),
+        )
+        return 0.5
+    x = pd.DataFrame([features], columns=feature_columns, dtype=np.float32)
     try:
         proba = model.model.predict_proba(x)[0, 1]
         return float(min(max(proba, 0.0), 1.0))
@@ -362,12 +370,38 @@ class _TradeQualityUnpickler(pickle.Unpickler):
         return super().find_class(module, name)
 
 
+def _validate_model_schema(model: TradeQualityModel) -> None:
+    """Hard-validate schema compatibility for runtime safety."""
+    expected = list(FEATURE_COLUMNS)
+    actual = list(getattr(model, "feature_columns", []) or [])
+    if not actual:
+        raise ValueError("trade quality model missing feature_columns metadata")
+    if actual != expected:
+        missing = [col for col in expected if col not in actual]
+        extra = [col for col in actual if col not in expected]
+        order_mismatch = not missing and not extra and actual != expected
+        raise ValueError(
+            "trade quality model schema mismatch: "
+            f"expected={len(expected)} actual={len(actual)} "
+            f"missing={missing or 'none'} extra={extra or 'none'} "
+            f"order_mismatch={order_mismatch}. Retrain model artifact."
+        )
+    n_features = getattr(model.model, "n_features_in_", None)
+    if n_features is not None and int(n_features) != len(expected):
+        raise ValueError(
+            "trade quality estimator feature count mismatch: "
+            f"estimator={int(n_features)} expected={len(expected)}. Retrain model artifact."
+        )
+    model.feature_columns = expected
+
+
 def load_trade_quality_model(model_path: str = DEFAULT_MODEL_PATH) -> TradeQualityModel:
     """Load a saved trade quality model."""
     with open(model_path, "rb") as f:
         model = _TradeQualityUnpickler(f).load()
     if not isinstance(model, TradeQualityModel):
         raise RuntimeError(f"Expected TradeQualityModel, got {type(model)}")
+    _validate_model_schema(model)
     return model
 
 

@@ -68,6 +68,7 @@ from hogan_bot.execution import (
 )
 from hogan_bot.expectancy import ExpectancyTracker
 from hogan_bot.indicators import compute_atr
+from hogan_bot.instance_lock import InstanceLockError, RuntimeInstanceLock
 from hogan_bot.ml import TrainedModel, load_model, predict_up_probability
 from hogan_bot.notifier import make_notifier
 from hogan_bot.paper import PaperPortfolio
@@ -2356,4 +2357,9 @@ def _parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = _parse_args()
-    asyncio.run(run_event_loop(max_events=args.max_events))
+    try:
+        with RuntimeInstanceLock(lock_path=os.path.join("data", "hogan_runtime.lock")):
+            asyncio.run(run_event_loop(max_events=args.max_events))
+    except InstanceLockError as exc:
+        logger.critical("Startup aborted: %s", exc)
+        raise SystemExit(2) from exc

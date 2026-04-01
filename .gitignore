@@ -42,6 +42,7 @@ secrets.txt
 
 # Logs — keep structure but ignore contents
 logs/*.log
+data/hogan_runtime.lock
 .pytest_cache
 mlruns/
 
