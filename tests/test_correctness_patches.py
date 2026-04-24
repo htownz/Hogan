@@ -911,3 +911,200 @@ class TestMacroFilter:
             spy_candles=spy, gld_candles=gld,
         )
         assert r_sell.confidence_mult > r_buy.confidence_mult
+
+
+# ===================================================================
+# Swarm DB isolation — backtests must NEVER write to shared DB tables
+# ===================================================================
+
+
+def _synth_candles(n: int = 200, seed: int = 7) -> pd.DataFrame:
+    """Deterministic OHLCV for policy_core.decide() tests."""
+    rng = np.random.RandomState(seed)
+    base = 50000.0
+    returns = rng.normal(0.0002, 0.008, n)
+    close = base * np.exp(np.cumsum(returns))
+    high = close * (1 + rng.uniform(0.001, 0.005, n))
+    low = close * (1 - rng.uniform(0.001, 0.005, n))
+    open_ = close + rng.randn(n) * close * 0.002
+    volume = rng.uniform(100, 10000, n)
+    ts_ms = np.arange(n) * 3600_000 + 1700000000000
+    return pd.DataFrame({
+        "open": open_, "high": high, "low": low, "close": close,
+        "volume": volume, "ts_ms": ts_ms,
+    })
+
+
+def _in_memory_swarm_db() -> sqlite3.Connection:
+    """Fresh in-memory DB with the full Hogan schema."""
+    from hogan_bot.storage import _create_schema
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    _create_schema(conn)
+    return conn
+
+
+class TestSwarmBacktestDBIsolation:
+    """Regression guard for the `_backtest` → no swarm DB writes contract.
+
+    ``policy_core.decide`` must never insert into ``swarm_decisions``,
+    ``swarm_agent_votes``, ``swarm_weight_snapshots``, or ``swarm_decision_outcomes``
+    when ``config._backtest is True``. Otherwise backtests pollute the shared
+    production/analytics DB (weights get auto-promoted off synthetic data,
+    quarantine decisions are based on backtest outcomes, etc.). See
+    ``AGENTS.md`` — "Swarm weight learning and auto_quarantine_check are
+    disabled when config._backtest is true".
+    """
+
+    def _make_cfg(self, *, backtest: bool):
+        from dataclasses import replace as dc_replace
+
+        from hogan_bot.config import BotConfig
+        cfg = dc_replace(
+            BotConfig(),
+            symbols=["BTC/USD"],
+            timeframe="1h",
+            use_ml_filter=False,
+            paper_mode=True,
+            starting_balance_usd=10000.0,
+            swarm_enabled=True,
+            swarm_mode="shadow",
+            swarm_agents="pipeline_v1,risk_steward_v1,data_guardian_v1,execution_cost_v1",
+            swarm_min_agreement=0.60,
+            swarm_min_vote_margin=0.10,
+            swarm_max_entropy=0.95,
+            swarm_log_full_votes=True,
+            swarm_weight_learning_enabled=True,
+            swarm_weight_learning_interval_bars=1,
+        )
+        # `_backtest` is not a declared dataclass field — it is an optional
+        # attribute set by hogan_bot.backtest at runtime on a SimpleNamespace.
+        # Set it with setattr so the dataclass signature doesn't reject it.
+        setattr(cfg, "_backtest", backtest)
+        return cfg
+
+    def _decide_n_bars(self, cfg, conn, n_bars: int = 10):
+        from hogan_bot.agent_pipeline import AgentPipeline
+        from hogan_bot.policy_core import PolicyState, decide
+
+        candles = _synth_candles(200)
+        pipeline = AgentPipeline(cfg, conn=conn)
+        state = PolicyState()
+        for i in range(n_bars):
+            window = candles.iloc[: 100 + i].copy()
+            decide(
+                symbol="BTC/USD",
+                candles=window,
+                equity_usd=10000.0,
+                config=cfg,
+                pipeline=pipeline,
+                state=state,
+                conn=conn,
+                mode="backtest",
+                peak_equity_usd=10000.0,
+            )
+
+    @staticmethod
+    def _count(conn, table: str) -> int:
+        return conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]  # noqa: S608
+
+    def test_backtest_writes_zero_swarm_rows(self):
+        cfg = self._make_cfg(backtest=True)
+        conn = _in_memory_swarm_db()
+        self._decide_n_bars(cfg, conn, n_bars=10)
+        assert self._count(conn, "swarm_decisions") == 0
+        assert self._count(conn, "swarm_agent_votes") == 0
+        assert self._count(conn, "swarm_weight_snapshots") == 0
+        conn.close()
+
+    def test_live_still_writes_swarm_rows(self):
+        """Mirror check: the guard must only skip on backtest, not live/paper."""
+        cfg = self._make_cfg(backtest=False)
+        conn = _in_memory_swarm_db()
+        self._decide_n_bars(cfg, conn, n_bars=5)
+        assert self._count(conn, "swarm_decisions") >= 1
+        assert self._count(conn, "swarm_agent_votes") >= 1
+        conn.close()
+
+
+# ===================================================================
+# Auto-retrain background job — argparse wiring regression
+# ===================================================================
+
+
+class TestAutoRetrainJobArgs:
+    """Regression guard for ``_build_auto_retrain_args`` in event_loop.
+
+    The old implementation called ``retrain_once(db_path=..., symbol=...)``
+    with kwargs; ``retrain_once`` only accepts an ``argparse.Namespace``, so
+    every scheduled job raised ``TypeError: retrain_once() got an unexpected
+    keyword argument 'db_path'`` and the live model was never refreshed.
+    This test fails if anyone reintroduces the kwargs call shape.
+    """
+
+    def _cfg(self, **overrides):
+        from dataclasses import replace as dc_replace
+
+        from hogan_bot.config import BotConfig
+        return dc_replace(BotConfig(), **overrides)
+
+    def test_namespace_has_all_fields_retrain_once_reads(self):
+        from hogan_bot.event_loop import _build_auto_retrain_args
+        from hogan_bot.retrain import _build_parser
+
+        cfg = self._cfg(
+            symbols=["BTC/USD", "ETH/USD"],
+            timeframe="1h",
+            db_path="data/test.db",
+            ml_model_path="models/hogan_logreg.pkl",
+            retrain_window_bars=12345,
+            retrain_model_type="logreg",
+            retrain_min_improvement=0.007,
+            retrain_promotion_metric="roc_auc",
+        )
+        ns = _build_auto_retrain_args(cfg)
+
+        # Every default the parser would set must be present on the Namespace
+        # so retrain_once's getattr/attribute lookups never raise.
+        parser_defaults = vars(_build_parser().parse_args([]))
+        for key in parser_defaults:
+            assert hasattr(ns, key), f"auto-retrain Namespace missing {key!r}"
+
+        assert ns.symbol == "BTC/USD"
+        assert ns.timeframe == "1h"
+        assert ns.db == "data/test.db"
+        assert ns.from_db is True
+        assert ns.model_path == "models/hogan_logreg.pkl"
+        assert ns.model_type == "logreg"
+        assert ns.window_bars == 12345
+        assert ns.min_improvement == pytest.approx(0.007)
+        assert ns.promotion_metric == "roc_auc"
+        assert ns.horizon_bars is not None and ns.horizon_bars > 0
+        assert ns.oos_gate is True
+
+    def test_run_auto_retrain_job_invokes_retrain_once_with_namespace(self):
+        """Ensure the async wrapper passes a Namespace (positional), not kwargs.
+
+        This is the regression guard for the production log spam
+        ``AUTO_RETRAIN job failed: retrain_once() got an unexpected keyword
+        argument 'db_path'``. Before the fix, the wrapper called
+        ``retrain_once(db_path=..., symbol=...)`` which raised immediately.
+        """
+        import argparse as _argparse
+        import asyncio
+
+        from hogan_bot import event_loop as el
+
+        cfg = self._cfg(db_path="data/test.db", symbols=["BTC/USD"])
+
+        captured: dict = {}
+
+        def _fake_retrain_once(args):
+            captured["args"] = args
+            return {"ok": True}
+
+        with patch("hogan_bot.retrain.retrain_once", _fake_retrain_once):
+            result = asyncio.run(el._run_auto_retrain_job(cfg))
+        assert result == {"ok": True}
+        assert isinstance(captured["args"], _argparse.Namespace)
+        assert captured["args"].db == "data/test.db"
+        assert captured["args"].symbol == "BTC/USD"

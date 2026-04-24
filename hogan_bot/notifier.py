@@ -34,6 +34,37 @@ def _safe_int(value: str, default: int) -> int:
         return default
 
 
+def _redact_webhook_url(url: str) -> str:
+    """Return a log-safe version of a webhook URL.
+
+    Discord webhook URLs have the form
+    ``https://discord.com/api/webhooks/{webhook_id}/{webhook_token}``; the
+    ``webhook_token`` is a **secret** and must never appear in logs or error
+    traces. This helper keeps the scheme + host + ``/webhooks/{id}`` portion
+    (useful for debugging routing) and replaces the token with ``***``. Any
+    other URL shape is reduced to scheme + host so generic Slack/Make webhooks
+    (which often also embed secrets) do not leak either.
+    """
+    if not url:
+        return ""
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        host = parsed.netloc or "<unknown-host>"
+        path = parsed.path or ""
+        parts = [p for p in path.split("/") if p]
+        # Discord pattern: /api/webhooks/<id>/<token>
+        if (
+            len(parts) >= 4
+            and parts[0] == "api"
+            and parts[1] == "webhooks"
+        ):
+            webhook_id = parts[2]
+            return f"{parsed.scheme}://{host}/api/webhooks/{webhook_id}/***"
+        return f"{parsed.scheme}://{host}/***"
+    except Exception:
+        return "<redacted-webhook>"
+
+
 class NullNotifier:
     """A no-op notifier used when notifications are disabled."""
 
@@ -77,7 +108,7 @@ class WebhookNotifier:
             with urllib.request.urlopen(req, timeout=self.timeout_seconds):
                 pass
         except urllib.error.URLError as exc:
-            logger.warning("Webhook POST failed (%s): %s", self.url, exc)
+            logger.warning("Webhook POST failed (%s): %s", _redact_webhook_url(self.url), exc)
         except Exception as exc:  # pragma: no cover
             logger.warning("Unexpected webhook error: %s", exc)
 
@@ -156,7 +187,11 @@ class DiscordNotifier:
                 exc.code, exc.reason, body_text,
             )
         except urllib.error.URLError as exc:
-            logger.warning("Discord webhook failed (%s): %s", self.webhook_url, exc)
+            logger.warning(
+                "Discord webhook failed (%s): %s",
+                _redact_webhook_url(self.webhook_url),
+                exc,
+            )
         except Exception as exc:
             logger.warning("Discord unexpected error: %s", exc)
 

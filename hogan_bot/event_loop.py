@@ -149,19 +149,50 @@ def _compute_data_ages(conn) -> dict[str, float]:
     return ages
 
 
+def _build_auto_retrain_args(config: BotConfig) -> argparse.Namespace:
+    """Construct an argparse Namespace for ``retrain_once`` from the running config.
+
+    ``retrain_once`` expects an ``argparse.Namespace`` (not kwargs) built with the
+    defaults of ``retrain._build_parser``. Calling it directly with kwargs was
+    the cause of the recurring ``AUTO_RETRAIN job failed: retrain_once() got an
+    unexpected keyword argument 'db_path'`` warnings in production — the job
+    never ran and the model was silently never refreshed. Construct the
+    Namespace from the parser defaults and override only the fields the live
+    bot cares about so the running config (symbol, timeframe, db path, model
+    path) stays in sync with the live runtime.
+    """
+    from hogan_bot.retrain import _build_parser
+
+    args = _build_parser().parse_args([])
+    args.symbol = config.symbols[0] if config.symbols else "BTC/USD"
+    args.timeframe = getattr(config, "timeframe", args.timeframe)
+    args.from_db = True
+    args.db = config.db_path
+    args.model_path = getattr(config, "ml_model_path", args.model_path)
+    args.model_type = getattr(config, "retrain_model_type", args.model_type)
+    args.window_bars = int(getattr(config, "retrain_window_bars", args.window_bars))
+    args.min_improvement = float(
+        getattr(config, "retrain_min_improvement", args.min_improvement)
+    )
+    args.promotion_metric = getattr(
+        config, "retrain_promotion_metric", args.promotion_metric
+    )
+    args.horizon_bars = getattr(config, "retrain_horizon_bars", args.horizon_bars)
+    if args.horizon_bars is None:
+        from hogan_bot.timeframe_utils import default_horizon_bars
+
+        args.horizon_bars = default_horizon_bars(args.timeframe, target_hours=6)
+    # Auto-retrain must never overwrite the live model when the OOS gate fails.
+    args.oos_gate = bool(getattr(config, "retrain_oos_gate", True))
+    return args
+
+
 async def _run_auto_retrain_job(config: BotConfig) -> dict:
     """Execute one auto-retrain job in a background thread."""
     from hogan_bot.retrain import retrain_once
 
-    return await asyncio.to_thread(
-        retrain_once,
-        db_path=config.db_path,
-        symbol=config.symbols[0] if config.symbols else "BTC/USD",
-        model_type=getattr(config, "retrain_model_type", "logreg"),
-        window_bars=getattr(config, "retrain_window_bars", 50000),
-        min_improvement=getattr(config, "retrain_min_improvement", 0.005),
-        promotion_metric=getattr(config, "retrain_promotion_metric", "roc_auc"),
-    )
+    args = _build_auto_retrain_args(config)
+    return await asyncio.to_thread(retrain_once, args)
 
 
 def _process_background_outcomes(logger_obj, outcomes: list) -> None:

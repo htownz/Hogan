@@ -2,12 +2,19 @@
 from __future__ import annotations
 
 import json
+import logging
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
 
 import pytest
 
-from hogan_bot.notifier import NullNotifier, WebhookNotifier, make_notifier
+from hogan_bot.notifier import (
+    DiscordNotifier,
+    NullNotifier,
+    WebhookNotifier,
+    _redact_webhook_url,
+    make_notifier,
+)
 
 # ---------------------------------------------------------------------------
 # NullNotifier
@@ -108,3 +115,60 @@ class TestWebhookNotifier:
         assert len(_received) == 2
         assert _received[0]["event"] == "buy"
         assert _received[1]["event"] == "sell"
+
+
+# ---------------------------------------------------------------------------
+# Webhook URL redaction — secrets must never hit the log stream
+# ---------------------------------------------------------------------------
+
+
+_SECRET_TOKEN = "S3CR3T_TOKEN_NEVER_LOG_ME_ABCDEF123456"
+
+
+class TestWebhookRedaction:
+    """Direct unit tests for the redaction helper."""
+
+    def test_discord_url_hides_token_keeps_id(self):
+        url = f"https://discord.com/api/webhooks/1234567890/{_SECRET_TOKEN}"
+        redacted = _redact_webhook_url(url)
+        assert _SECRET_TOKEN not in redacted
+        assert "1234567890" in redacted
+        assert redacted == "https://discord.com/api/webhooks/1234567890/***"
+
+    def test_generic_webhook_hides_path(self):
+        url = f"https://hooks.slack.com/services/T000/B000/{_SECRET_TOKEN}"
+        redacted = _redact_webhook_url(url)
+        assert _SECRET_TOKEN not in redacted
+        assert redacted == "https://hooks.slack.com/***"
+
+    def test_empty_url_is_empty(self):
+        assert _redact_webhook_url("") == ""
+
+    def test_malformed_url_never_raises(self):
+        for bad in ("not a url", "://broken", "://"):
+            out = _redact_webhook_url(bad)
+            assert _SECRET_TOKEN not in out
+
+
+class TestWebhookLogRedaction:
+    """End-to-end: logger output must not contain the secret token."""
+
+    def test_discord_failure_log_redacts_token(self, caplog):
+        # Use a Discord-shaped URL pointing at an unreachable port so the
+        # transport raises URLError — this is the branch that previously
+        # logged ``self.webhook_url`` verbatim and leaked the token.
+        url = f"http://127.0.0.1:1/api/webhooks/1234567890/{_SECRET_TOKEN}"
+        n = DiscordNotifier(url, timeout_seconds=1)
+        with caplog.at_level(logging.WARNING, logger="hogan_bot.notifier"):
+            n.notify("error", {"msg": "probe"})
+        combined = "\n".join(rec.getMessage() for rec in caplog.records)
+        assert _SECRET_TOKEN not in combined
+        assert "1234567890" in combined  # non-secret id still useful for ops
+
+    def test_generic_webhook_failure_log_redacts_token(self, caplog):
+        url = f"https://hooks.example.com/services/{_SECRET_TOKEN}"
+        n = WebhookNotifier(url, timeout_seconds=1)
+        with caplog.at_level(logging.WARNING, logger="hogan_bot.notifier"):
+            n.notify("ping", {})
+        combined = "\n".join(rec.getMessage() for rec in caplog.records)
+        assert _SECRET_TOKEN not in combined

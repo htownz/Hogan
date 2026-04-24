@@ -888,7 +888,15 @@ def decide(
                     config=config,
                 )
 
-                if conn is not None and not state.swarm_weights_logged:
+                # Guard: skip the initial `static_init` weight snapshot during
+                # backtest so synthetic runs never write to the shared swarm
+                # history (otherwise weight-learning downstream can train on
+                # backtest-seeded snapshots).
+                if (
+                    conn is not None
+                    and not state.swarm_weights_logged
+                    and not getattr(config, "_backtest", False)
+                ):
                     try:
                         from hogan_bot.swarm_decision.logging import log_weight_snapshot
                         _bar_ts_ms_sw = int(candles["ts_ms"].iloc[-1]) if "ts_ms" in candles.columns else 0
@@ -953,7 +961,12 @@ def decide(
                             swarm_decision.final_confidence,
                         )
 
-                if conn is not None:
+                # Swarm persistence (decision log, agent votes, outcome backfill,
+                # weight learning, auto-quarantine) MUST be skipped during backtest
+                # so synthetic history never pollutes the shared production DB.
+                # Mirrors the quarantine-skip guard at the top of this function
+                # (`_skip_quarantine`) and the rule documented in AGENTS.md.
+                if conn is not None and not getattr(config, "_backtest", False):
                     try:
                         _bar_ts_ms = int(candles["ts_ms"].iloc[-1]) if "ts_ms" in candles.columns else 0
                         from hogan_bot.swarm_decision.logging import (
