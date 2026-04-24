@@ -1,0 +1,149 @@
+{
+  "stamp_utc": "20260401T230749Z",
+  "db": "data/hogan.db",
+  "steps": [
+    {
+      "name": "walk_forward",
+      "scenario": "baseline_no_ml",
+      "cmd": [
+        "python",
+        "-m",
+        "hogan_bot.walk_forward"
+      ],
+      "exit_code": 0,
+      "passes_gate": false,
+      "scenario_ok": false,
+      "report_json": "reports/validation/fast2/wf_baseline_no_ml_20260401T203543Z.json",
+      "log": "reports/validation/fast2/wf_baseline_no_ml_20260401T203543Z.log"
+    },
+    {
+      "name": "walk_forward",
+      "scenario": "ml_filter",
+      "cmd": [
+        "python",
+        "-m",
+        "hogan_bot.walk_forward"
+      ],
+      "exit_code": 0,
+      "passes_gate": false,
+      "scenario_ok": false,
+      "report_json": "reports/validation/fast2/wf_ml_filter_20260401T203543Z.json",
+      "log": "reports/validation/fast2/wf_ml_filter_20260401T203543Z.log"
+    },
+    {
+      "name": "walk_forward",
+      "scenario": "ml_sizer",
+      "cmd": [
+        "python",
+        "-m",
+        "hogan_bot.walk_forward"
+      ],
+      "exit_code": 0,
+      "passes_gate": false,
+      "scenario_ok": false,
+      "report_json": "reports/validation/fast2/wf_ml_sizer_20260401T203543Z.json",
+      "log": "reports/validation/fast2/wf_ml_sizer_20260401T203543Z.log"
+    },
+    {
+      "name": "walk_forward",
+      "scenario": "ml_sizer_macro",
+      "cmd": [
+        "python",
+        "-m",
+        "hogan_bot.walk_forward"
+      ],
+      "exit_code": 0,
+      "passes_gate": false,
+      "scenario_ok": false,
+      "report_json": "reports/validation/fast2/wf_ml_sizer_macro_20260401T203543Z.json",
+      "log": "reports/validation/fast2/wf_ml_sizer_macro_20260401T203543Z.log"
+    },
+    {
+      "name": "walk_forward",
+      "scenario": "regime_models",
+      "cmd": [
+        "python",
+        "-m",
+        "hogan_bot.walk_forward"
+      ],
+      "exit_code": 0,
+      "passes_gate": false,
+      "scenario_ok": false,
+      "report_json": "reports/validation/fast2/wf_regime_models_fastfix.json",
+      "log": "reports/validation/fast2/wf_regime_models_fastfix.log"
+    }
+  ],
+  "wf_matrix": {
+    "single_wf": false,
+    "required_passes": 3,
+    "actual_passes": 0,
+    "total": 5,
+    "results": [
+      {
+        "scenario": "baseline_no_ml",
+        "cmd": [
+          "python",
+          "-m",
+          "hogan_bot.walk_forward"
+        ],
+        "exit_code": 0,
+        "passes_gate": false,
+        "scenario_ok": false,
+        "report_json": "reports/validation/fast2/wf_baseline_no_ml_20260401T203543Z.json",
+        "log": "reports/validation/fast2/wf_baseline_no_ml_20260401T203543Z.log"
+      },
+      {
+        "scenario": "ml_filter",
+        "cmd": [
+          "python",
+          "-m",
+          "hogan_bot.walk_forward"
+        ],
+        "exit_code": 0,
+        "passes_gate": false,
+        "scenario_ok": false,
+        "report_json": "reports/validation/fast2/wf_ml_filter_20260401T203543Z.json",
+        "log": "reports/validation/fast2/wf_ml_filter_20260401T203543Z.log"
+      },
+      {
+        "scenario": "ml_sizer",
+        "cmd": [
+          "python",
+          "-m",
+          "hogan_bot.walk_forward"
+        ],
+        "exit_code": 0,
+        "passes_gate": false,
+        "scenario_ok": false,
+        "report_json": "reports/validation/fast2/wf_ml_sizer_20260401T203543Z.json",
+        "log": "reports/validation/fast2/wf_ml_sizer_20260401T203543Z.log"
+      },
+      {
+        "scenario": "ml_sizer_macro",
+        "cmd": [
+          "python",
+          "-m",
+          "hogan_bot.walk_forward"
+        ],
+        "exit_code": 0,
+        "passes_gate": false,
+        "scenario_ok": false,
+        "report_json": "reports/validation/fast2/wf_ml_sizer_macro_20260401T203543Z.json",
+        "log": "reports/validation/fast2/wf_ml_sizer_macro_20260401T203543Z.log"
+      },
+      {
+        "scenario": "regime_models",
+        "cmd": [
+          "python",
+          "-m",
+          "hogan_bot.walk_forward"
+        ],
+        "exit_code": 0,
+        "passes_gate": false,
+        "scenario_ok": false,
+        "report_json": "reports/validation/fast2/wf_regime_models_fastfix.json",
+        "log": "reports/validation/fast2/wf_regime_models_fastfix.log"
+      }
+    ]
+  }
+}

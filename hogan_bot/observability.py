@@ -367,12 +367,16 @@ def model_drift_status(model_path: str = "models/hogan_champion.pkl") -> dict[st
         return {"model_path": model_path, "exists": False, "age_hours": None}
 
 
-def swarm_shadow_active_drift(conn: sqlite3.Connection) -> dict[str, Any]:
+def swarm_shadow_active_drift(
+    conn: sqlite3.Connection,
+    *,
+    since_ms: int | None = None,
+) -> dict[str, Any]:
     """Return shadow vs active drift snapshot from swarm_authority."""
     try:
         from hogan_bot.swarm_authority import compute_shadow_active_drift
 
-        return compute_shadow_active_drift(conn=conn).to_dict()
+        return compute_shadow_active_drift(conn=conn, since_ms=since_ms).to_dict()
     except Exception as exc:
         logger.debug("swarm_shadow_active_drift failed: %s", exc)
         return {
@@ -405,7 +409,7 @@ def observability_health_report(
     execution = execution_failure_stats(conn, since_ms=since_ms)
     macro_calendar = macro_calendar_status()
     model_drift = model_drift_status()
-    swarm_drift = swarm_shadow_active_drift(conn)
+    swarm_drift = swarm_shadow_active_drift(conn, since_ms=since_ms)
 
     stale_agents = [a for a in agent_modes if a.is_stale]
 

@@ -1,0 +1,47 @@
+Setup (once per machine)
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env
+Run the bot (canonical)
+python -m hogan_bot.main
+python -m hogan_bot.trader_service
+python -m hogan_bot.main --max-events 100
+ML training
+# Champion production path (8-feature subset)
+python -m hogan_bot.train --champion
+# General training / CV (examples from README)
+python -m hogan_bot.train --symbol BTC/USD --timeframe 1h --limit 5000 --cv --cv-splits 5
+python -m hogan_bot.train --symbol BTC/USD --timeframe 1h --limit 5000 --horizon-bars 3 --model-path models/hogan_logreg.pkl
+python -m hogan_bot.train --symbol BTC/USD --timeframe 1h --limit 5000 --model-type random_forest --model-path models/hogan_rf.pkl
+Backtests
+python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000
+python -m hogan_bot.backtest_cli --symbol BTC/USD --limit 5000 --use-ml
+python -m hogan_bot.backtest_cli --profile canonical
+Walk-forward validation
+python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5
+python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --no-ml
+python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --no-ml --macro-sitout
+python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --ml-sizer --macro-sitout
+python -m hogan_bot.walk_forward --db data/hogan.db --n-splits 5 --regime-models
+Trade quality model
+python -m hogan_bot.trade_quality --db data/hogan.db --train
+python -m hogan_bot.trade_quality --db data/hogan.db --validate
+Diagnostics & audits
+python diagnostics/exit_sweep.py
+python diagnostics/short_hold_sweep.py
+python -m hogan_bot.feature_importance --db data/hogan.db
+Operator / hygiene scripts (examples)
+python scripts/db_hygiene.py
+python scripts/reset_swarm_agent_modes.py --dry-run
+python scripts/swarm_certification.py --scratch-db
+python scripts/run_validation_battery.py --db data/hogan.db
+Data fetch (multi-exchange example from README)
+python -m hogan_bot.fetch_data --exchange binance --symbol BTC/USDT ETH/USDT --limit 10000
+Tests and lint (CI-aligned)
+pytest tests/ -v
+python -m pytest tests/test_champion.py tests/test_ml.py tests/test_exchange.py tests/test_agent_quarantine.py tests/test_swarm_certification.py::TestSwarmGatedMerge tests/test_swarm_certification.py::TestShadowParity tests/test_decision_parity.py::TestPolicyCoreEquivalence tests/test_observability_scripts.py::TestConfigDefaults tests/test_swarm_policy_observability.py -q
+python -m ruff check hogan_bot/ tests/ scripts/ diagnostics/ --select E,F,I,B007,B904 --ignore E501
+Windows note: Use .\.venv\Scripts\activate instead of source .venv/bin/activate. Prefix one-off env vars with $env:VAR = "value"; in PowerShell (e.g. $env:HOGAN_EXCHANGE = "binance"; python -m hogan_bot.backtest_cli ...).
+
+If you tell me your typical workflow (paper only, Oanda, backtest-only, etc.), the list can be trimmed to just what you use.

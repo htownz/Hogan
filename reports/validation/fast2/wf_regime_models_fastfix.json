@@ -1,0 +1,4053 @@
+{
+  "summary": {
+    "n_windows": 2,
+    "n_positive": 0,
+    "n_failed": 0,
+    "total_trades": 849,
+    "mean_return_pct": -9.3196,
+    "mean_sharpe": -4.4129,
+    "mean_calmar": -0.953,
+    "worst_calmar": -0.9726,
+    "mean_drawdown_pct": 9.73,
+    "worst_drawdown_pct": 12.36,
+    "passes_gate": false,
+    "gate_config": {
+      "min_sharpe": 0.5,
+      "min_calmar": 0.0,
+      "max_drawdown_pct": 15.0,
+      "min_total_trades": 25,
+      "min_trades_per_window": 5,
+      "min_windows_positive": 3
+    }
+  },
+  "exit_lifecycle": {
+    "tail_losses": {
+      "n_trades": 422,
+      "n_losses": 252,
+      "loss_rate": 0.5972,
+      "worst_loss_pct": -6.9517,
+      "mean_loss_pct": -0.992,
+      "total_loss_drag_pct": -249.9919,
+      "p5_loss_pct": -2.8633,
+      "p10_loss_pct": -2.2163,
+      "p25_loss_pct": -1.3837,
+      "losses_beyond_1.0pct": 92,
+      "losses_beyond_2.0pct": 36,
+      "losses_beyond_3.0pct": 12,
+      "losses_beyond_5.0pct": 1
+    },
+    "time_in_trade_by_regime": {
+      "ranging": {
+        "n_trades": 310,
+        "avg_bars_held": 0.0,
+        "median_bars_held": 0.0,
+        "max_bars_held": 0,
+        "avg_pnl_pct": -0.0759,
+        "total_pnl_pct": -23.5391,
+        "win_rate": 0.4,
+        "avg_win_pct": 1.2947,
+        "avg_loss_pct": -0.9897,
+        "worst_loss_pct": -6.9517
+      },
+      "trending_down": {
+        "n_trades": 47,
+        "avg_bars_held": 0.0,
+        "median_bars_held": 0.0,
+        "max_bars_held": 0,
+        "avg_pnl_pct": -0.2377,
+        "total_pnl_pct": -11.1696,
+        "win_rate": 0.4043,
+        "avg_win_pct": 1.2531,
+        "avg_loss_pct": -1.2492,
+        "worst_loss_pct": -3.6327
+      },
+      "trending_up": {
+        "n_trades": 42,
+        "avg_bars_held": 0.0,
+        "median_bars_held": 0.0,
+        "max_bars_held": 0,
+        "avg_pnl_pct": -0.0296,
+        "total_pnl_pct": -1.2442,
+        "win_rate": 0.381,
+        "avg_win_pct": 1.1191,
+        "avg_loss_pct": -0.7366,
+        "worst_loss_pct": -2.4565
+      },
+      "volatile": {
+        "n_trades": 23,
+        "avg_bars_held": 0.0,
+        "median_bars_held": 0.0,
+        "max_bars_held": 0,
+        "avg_pnl_pct": 0.1845,
+        "total_pnl_pct": 4.2427,
+        "win_rate": 0.4783,
+        "avg_win_pct": 1.4568,
+        "avg_loss_pct": -0.9819,
+        "worst_loss_pct": -2.1191
+      }
+    },
+    "exit_quality_by_regime": {
+      "ranging": {
+        "proactive_trend_reversal": {
+          "count": 181,
+          "total_pnl_pct": -144.3107,
+          "avg_pnl_pct": -0.7973
+        },
+        "proactive_drawdown_exceeded": {
+          "count": 3,
+          "total_pnl_pct": -9.9762,
+          "avg_pnl_pct": -3.3254
+        },
+        "proactive_time_decay": {
+          "count": 8,
+          "total_pnl_pct": -5.0668,
+          "avg_pnl_pct": -0.6333
+        },
+        "trailing_stop": {
+          "count": 1,
+          "total_pnl_pct": -1.7026,
+          "avg_pnl_pct": -1.7026
+        },
+        "short_breakeven_stop": {
+          "count": 1,
+          "total_pnl_pct": -0.7805,
+          "avg_pnl_pct": -0.7805
+        },
+        "breakeven_stop": {
+          "count": 1,
+          "total_pnl_pct": -0.7622,
+          "avg_pnl_pct": -0.7622
+        },
+        "proactive_volatility_contraction": {
+          "count": 1,
+          "total_pnl_pct": 0.2053,
+          "avg_pnl_pct": 0.2053
+        },
+        "proactive_stagnation": {
+          "count": 27,
+          "total_pnl_pct": 1.1921,
+          "avg_pnl_pct": 0.0442
+        },
+        "proactive_position_decay": {
+          "count": 8,
+          "total_pnl_pct": 2.798,
+          "avg_pnl_pct": 0.3498
+        },
+        "short_take_profit": {
+          "count": 1,
+          "total_pnl_pct": 5.7417,
+          "avg_pnl_pct": 5.7417
+        },
+        "max_hold_time": {
+          "count": 5,
+          "total_pnl_pct": 10.3516,
+          "avg_pnl_pct": 2.0703
+        },
+        "proactive_give_back": {
+          "count": 16,
+          "total_pnl_pct": 11.3185,
+          "avg_pnl_pct": 0.7074
+        },
+        "proactive_volatility_expansion": {
+          "count": 16,
+          "total_pnl_pct": 21.9978,
+          "avg_pnl_pct": 1.3749
+        },
+        "signal": {
+          "count": 20,
+          "total_pnl_pct": 38.6271,
+          "avg_pnl_pct": 1.9314
+        },
+        "short_max_hold_time": {
+          "count": 21,
+          "total_pnl_pct": 46.8277,
+          "avg_pnl_pct": 2.2299
+        }
+      },
+      "trending_down": {
+        "proactive_trend_reversal": {
+          "count": 23,
+          "total_pnl_pct": -25.8246,
+          "avg_pnl_pct": -1.1228
+        },
+        "breakeven_stop": {
+          "count": 1,
+          "total_pnl_pct": -3.6327,
+          "avg_pnl_pct": -3.6327
+        },
+        "proactive_time_decay": {
+          "count": 2,
+          "total_pnl_pct": -2.9455,
+          "avg_pnl_pct": -1.4728
+        },
+        "proactive_drawdown_exceeded": {
+          "count": 1,
+          "total_pnl_pct": -2.2117,
+          "avg_pnl_pct": -2.2117
+        },
+        "proactive_stagnation": {
+          "count": 3,
+          "total_pnl_pct": 0.3254,
+          "avg_pnl_pct": 0.1085
+        },
+        "proactive_position_decay": {
+          "count": 3,
+          "total_pnl_pct": 0.7185,
+          "avg_pnl_pct": 0.2395
+        },
+        "proactive_momentum_exhaustion": {
+          "count": 1,
+          "total_pnl_pct": 0.8408,
+          "avg_pnl_pct": 0.8408
+        },
+        "proactive_give_back": {
+          "count": 4,
+          "total_pnl_pct": 2.3067,
+          "avg_pnl_pct": 0.5767
+        },
+        "short_max_hold_time": {
+          "count": 1,
+          "total_pnl_pct": 3.0695,
+          "avg_pnl_pct": 3.0695
+        },
+        "signal": {
+          "count": 2,
+          "total_pnl_pct": 4.2404,
+          "avg_pnl_pct": 2.1202
+        },
+        "max_hold_time": {
+          "count": 4,
+          "total_pnl_pct": 5.7475,
+          "avg_pnl_pct": 1.4369
+        },
+        "proactive_volatility_expansion": {
+          "count": 2,
+          "total_pnl_pct": 6.196,
+          "avg_pnl_pct": 3.098
+        }
+      },
+      "trending_up": {
+        "proactive_trend_reversal": {
+          "count": 29,
+          "total_pnl_pct": -16.37,
+          "avg_pnl_pct": -0.5645
+        },
+        "proactive_time_decay": {
+          "count": 2,
+          "total_pnl_pct": -0.5399,
+          "avg_pnl_pct": -0.27
+        },
+        "proactive_stagnation": {
+          "count": 3,
+          "total_pnl_pct": 0.4149,
+          "avg_pnl_pct": 0.1383
+        },
+        "proactive_give_back": {
+          "count": 2,
+          "total_pnl_pct": 1.9212,
+          "avg_pnl_pct": 0.9606
+        },
+        "short_trailing_stop": {
+          "count": 1,
+          "total_pnl_pct": 2.6019,
+          "avg_pnl_pct": 2.6019
+        },
+        "short_max_hold_time": {
+          "count": 5,
+          "total_pnl_pct": 10.7277,
+          "avg_pnl_pct": 2.1455
+        }
+      },
+      "volatile": {
+        "proactive_trend_reversal": {
+          "count": 6,
+          "total_pnl_pct": -6.9049,
+          "avg_pnl_pct": -1.1508
+        },
+        "proactive_time_decay": {
+          "count": 3,
+          "total_pnl_pct": -2.3828,
+          "avg_pnl_pct": -0.7943
+        },
+        "proactive_drawdown_exceeded": {
+          "count": 1,
+          "total_pnl_pct": -2.1191,
+          "avg_pnl_pct": -2.1191
+        },
+        "proactive_stagnation": {
+          "count": 5,
+          "total_pnl_pct": 0.0856,
+          "avg_pnl_pct": 0.0171
+        },
+        "proactive_position_decay": {
+          "count": 1,
+          "total_pnl_pct": 0.1378,
+          "avg_pnl_pct": 0.1378
+        },
+        "proactive_give_back": {
+          "count": 2,
+          "total_pnl_pct": 0.7244,
+          "avg_pnl_pct": 0.3622
+        },
+        "signal": {
+          "count": 1,
+          "total_pnl_pct": 0.7734,
+          "avg_pnl_pct": 0.7734
+        },
+        "short_max_hold_time": {
+          "count": 1,
+          "total_pnl_pct": 2.2686,
+          "avg_pnl_pct": 2.2686
+        },
+        "max_hold_time": {
+          "count": 3,
+          "total_pnl_pct": 11.6598,
+          "avg_pnl_pct": 3.8866
+        }
+      }
+    },
+    "hold_duration_vs_pnl": {
+      "0-3h": {
+        "n_trades": 422,
+        "avg_pnl_pct": -0.0751,
+        "total_pnl_pct": -31.7102,
+        "win_rate": 0.4028,
+        "worst_pct": -6.9517
+      }
+    }
+  },
+  "windows": [
+    {
+      "window_idx": 0,
+      "train_bars": 2000,
+      "test_bars": 7991,
+      "test_start_date": "2024-05-23 00:00:00+00:00",
+      "test_end_date": "2025-05-01 09:00:00+00:00",
+      "total_return_pct": -12.0187,
+      "max_drawdown_pct": 12.36,
+      "sharpe": -4.4532,
+      "sortino": -5.7086,
+      "calmar": -0.9726,
+      "trades": 480,
+      "win_rate": 0.4174,
+      "net_positive": "False",
+      "train_auc": 0.7096,
+      "error": null,
+      "signal_funnel": {
+        "bars_evaluated": 8168,
+        "pipeline_buy": 369,
+        "pipeline_sell": 269,
+        "post_ml_buy": 369,
+        "post_ml_sell": 269,
+        "post_edge_buy": 369,
+        "post_edge_sell": 269,
+        "post_quality_buy": 369,
+        "post_quality_sell": 269,
+        "post_ranging_buy": 369,
+        "post_ranging_sell": 269,
+        "executed_buy": 142,
+        "blocked_already_long": 166,
+        "blocked_cooldown": 77,
+        "blocked_regime_no_longs": 0,
+        "blocked_regime_no_shorts": 0,
+        "executed_short_entry": 96,
+        "blocked_already_short": 125,
+        "short_covered_signal": 0,
+        "short_covered_stop": 2,
+        "short_covered_tp": 1,
+        "short_covered_max_hold": 16,
+        "edge_blocked_atr": 0,
+        "edge_blocked_tp": 0,
+        "edge_blocked_forecast": 0,
+        "edge_blocked_spread": 0,
+        "ranging_blocked_tech": 0,
+        "ranging_blocked_ml": 0,
+        "ranging_blocked_whipsaw": 0,
+        "mtf_thesis_created": 0,
+        "mtf_thesis_executed": 0,
+        "mtf_thesis_expired": 0,
+        "mtf_15m_entry_used": 0,
+        "blocked_short_ml_blind": 0,
+        "loss_streak_scaled": 0,
+        "ml_filter_buy": 880,
+        "regime_transition_bars": 1643,
+        "edge_gate_atr_low": 669,
+        "proactive_exit_long": 121,
+        "ml_filter_sell": 718,
+        "quality_gate_final_conf": 449,
+        "proactive_exit_short": 77,
+        "pullback_gate_ranging_resistance": 33,
+        "pullback_gate_chasing": 15,
+        "sell_pullback_gate_chasing": 29,
+        "sell_pullback_gate_trending_down_support": 7,
+        "sell_pullback_gate_ranging_support": 18,
+        "pullback_gate_trending_up_resistance": 7,
+        "edge_gate_illiquid": 21,
+        "ml_prob_stats": {
+          "mean": 0.4167,
+          "std": 0.342,
+          "min": 0.0,
+          "p10": 0.0225,
+          "p25": 0.0911,
+          "median": 0.3314,
+          "p75": 0.7391,
+          "p90": 0.9427,
+          "max": 1.0,
+          "pct_above_buy_thresh": 38.53,
+          "pct_below_sell_thresh": 60.28
+        },
+        "regime_distribution": {
+          "trending_up": 1511,
+          "ranging": 3727,
+          "volatile": 1699,
+          "trending_down": 1225
+        }
+      },
+      "regime_distribution": {
+        "trending_up": 1511,
+        "ranging": 3727,
+        "volatile": 1699,
+        "trending_down": 1225
+      },
+      "closed_trades": [
+        {
+          "side": "long",
+          "pnl_pct": -0.3094,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 92
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.4075,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 121
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.9423,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 145
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.6883,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 159
+        },
+        {
+          "side": "short",
+          "pnl_pct": 1.3802,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 185
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.2882,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 199
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.3085,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 249
+        },
+        {
+          "side": "long",
+          "pnl_pct": 2.2214,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 296
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.9189,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 377
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.0895,
+          "regime": "trending_down",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 420
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.6428,
+          "regime": "volatile",
+          "exit_reason": "proactive_time_decay",
+          "bars_held": 0,
+          "entry_bar": 519
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.036,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 543
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.0344,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 607
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.4485,
+          "regime": "trending_down",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 614
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.4143,
+          "regime": "ranging",
+          "exit_reason": "proactive_position_decay",
+          "bars_held": 0,
+          "entry_bar": 663
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.8185,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 696
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.4158,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 760
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.2652,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 766
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.1792,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 807
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.5425,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 826
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.2545,
+          "regime": "ranging",
+          "exit_reason": "max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 839
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.8408,
+          "regime": "trending_down",
+          "exit_reason": "proactive_momentum_exhaustion",
+          "bars_held": 0,
+          "entry_bar": 887
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.9702,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 968
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.1291,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 979
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.672,
+          "regime": "ranging",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 1104
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.0494,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1134
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.6937,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1147
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.987,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1158
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.0464,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 1169
+        },
+        {
+          "side": "short",
+          "pnl_pct": 2.3033,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 1187
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.213,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1199
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.0836,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1214
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.0086,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1332
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.2027,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 1359
+        },
+        {
+          "side": "short",
+          "pnl_pct": -2.4393,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1381
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.5473,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 1453
+        },
+        {
+          "side": "short",
+          "pnl_pct": 1.7444,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 1460
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.8947,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1476
+        },
+        {
+          "side": "short",
+          "pnl_pct": 3.4312,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 1505
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.7795,
+          "regime": "volatile",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1582
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.3359,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1611
+        },
+        {
+          "side": "short",
+          "pnl_pct": 1.2489,
+          "regime": "trending_up",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 1675
+        },
+        {
+          "side": "short",
+          "pnl_pct": 2.2686,
+          "regime": "volatile",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 1711
+        },
+        {
+          "side": "short",
+          "pnl_pct": 3.3814,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 1836
+        },
+        {
+          "side": "short",
+          "pnl_pct": -2.8283,
+          "regime": "ranging",
+          "exit_reason": "proactive_drawdown_exceeded",
+          "bars_held": 0,
+          "entry_bar": 1858
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.0714,
+          "regime": "ranging",
+          "exit_reason": "proactive_time_decay",
+          "bars_held": 0,
+          "entry_bar": 1905
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.6129,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1932
+        },
+        {
+          "side": "long",
+          "pnl_pct": -2.1579,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1938
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.1039,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1944
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.5219,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2011
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.2824,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2017
+        },
+        {
+          "side": "short",
+          "pnl_pct": 3.0695,
+          "regime": "trending_down",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 2029
+        },
+        {
+          "side": "short",
+          "pnl_pct": -2.2168,
+          "regime": "ranging",
+          "exit_reason": "proactive_time_decay",
+          "bars_held": 0,
+          "entry_bar": 2051
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.4149,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2062
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.2057,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2113
+        },
+        {
+          "side": "short",
+          "pnl_pct": -2.6057,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2130
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.2545,
+          "regime": "volatile",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 2177
+        },
+        {
+          "side": "short",
+          "pnl_pct": 1.4156,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 2194
+        },
+        {
+          "side": "long",
+          "pnl_pct": 2.1466,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 2207
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.2249,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2286
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.3145,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2294
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.3185,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2301
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.8693,
+          "regime": "trending_down",
+          "exit_reason": "proactive_time_decay",
+          "bars_held": 0,
+          "entry_bar": 2363
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.9838,
+          "regime": "trending_down",
+          "exit_reason": "max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 2390
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.8514,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2419
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.5403,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2432
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.1553,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2462
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.5196,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2495
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.8719,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2528
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.5443,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 2604
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.2589,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2619
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.1803,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2626
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.8709,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2669
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.9363,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2688
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.6593,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 2705
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.2343,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2727
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.4052,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2776
+        },
+        {
+          "side": "long",
+          "pnl_pct": 4.7775,
+          "regime": "volatile",
+          "exit_reason": "max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 2850
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.8438,
+          "regime": "trending_down",
+          "exit_reason": "max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 2897
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.4706,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2929
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.5044,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 2941
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.3102,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2965
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.4397,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2996
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.7242,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3012
+        },
+        {
+          "side": "long",
+          "pnl_pct": 3.5774,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 3024
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.3798,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3047
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.1268,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3063
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.1855,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 3103
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.4805,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3121
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.2959,
+          "regime": "trending_down",
+          "exit_reason": "proactive_position_decay",
+          "bars_held": 0,
+          "entry_bar": 3199
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.4343,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3232
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.0406,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 3264
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.3753,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3318
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.1037,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3348
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.2314,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3356
+        },
+        {
+          "side": "long",
+          "pnl_pct": 2.5896,
+          "regime": "trending_down",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 3446
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.599,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3534
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.2675,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3553
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.123,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 3591
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.4862,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3633
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.2342,
+          "regime": "trending_down",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 3656
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.7889,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3679
+        },
+        {
+          "side": "long",
+          "pnl_pct": 2.1722,
+          "regime": "trending_down",
+          "exit_reason": "max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 3687
+        },
+        {
+          "side": "long",
+          "pnl_pct": 4.6545,
+          "regime": "volatile",
+          "exit_reason": "max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 3811
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.7638,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3879
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.0284,
+          "regime": "volatile",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 3905
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.2975,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3926
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.8836,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3990
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.8743,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4000
+        },
+        {
+          "side": "long",
+          "pnl_pct": 3.8873,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 4096
+        },
+        {
+          "side": "short",
+          "pnl_pct": -3.4702,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4189
+        },
+        {
+          "side": "long",
+          "pnl_pct": 3.0868,
+          "regime": "trending_down",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 4228
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.8183,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4241
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.1195,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4249
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.1832,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4263
+        },
+        {
+          "side": "long",
+          "pnl_pct": 2.1727,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 4292
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.7805,
+          "regime": "ranging",
+          "exit_reason": "short_breakeven_stop",
+          "bars_held": 0,
+          "entry_bar": 4304
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.5898,
+          "regime": "ranging",
+          "exit_reason": "proactive_time_decay",
+          "bars_held": 0,
+          "entry_bar": 4326
+        },
+        {
+          "side": "short",
+          "pnl_pct": 1.4475,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4338
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.4632,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4355
+        },
+        {
+          "side": "short",
+          "pnl_pct": -2.791,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4369
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.5912,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4385
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.4118,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4394
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.4218,
+          "regime": "ranging",
+          "exit_reason": "proactive_position_decay",
+          "bars_held": 0,
+          "entry_bar": 4411
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.562,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4426
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.4818,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4451
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.8558,
+          "regime": "volatile",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4482
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.1378,
+          "regime": "volatile",
+          "exit_reason": "proactive_position_decay",
+          "bars_held": 0,
+          "entry_bar": 4500
+        },
+        {
+          "side": "short",
+          "pnl_pct": -2.1353,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4522
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.0798,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4530
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.5199,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4574
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.1304,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 4594
+        },
+        {
+          "side": "long",
+          "pnl_pct": 2.1198,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 4669
+        },
+        {
+          "side": "long",
+          "pnl_pct": 4.0693,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 4696
+        },
+        {
+          "side": "short",
+          "pnl_pct": -2.2117,
+          "regime": "trending_down",
+          "exit_reason": "proactive_drawdown_exceeded",
+          "bars_held": 0,
+          "entry_bar": 4742
+        },
+        {
+          "side": "short",
+          "pnl_pct": 1.6109,
+          "regime": "trending_up",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 4748
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.0215,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 4764
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.6215,
+          "regime": "ranging",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 4785
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.7622,
+          "regime": "ranging",
+          "exit_reason": "breakeven_stop",
+          "bars_held": 0,
+          "entry_bar": 4809
+        },
+        {
+          "side": "short",
+          "pnl_pct": -3.2255,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4855
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.8042,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4865
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.2991,
+          "regime": "ranging",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 4898
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.4753,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4912
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.4652,
+          "regime": "ranging",
+          "exit_reason": "proactive_position_decay",
+          "bars_held": 0,
+          "entry_bar": 4922
+        },
+        {
+          "side": "long",
+          "pnl_pct": 2.0137,
+          "regime": "ranging",
+          "exit_reason": "max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 4937
+        },
+        {
+          "side": "long",
+          "pnl_pct": -2.8251,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5035
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.29,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5089
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.0195,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5109
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.7558,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5127
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.1609,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5137
+        },
+        {
+          "side": "short",
+          "pnl_pct": -2.906,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5173
+        },
+        {
+          "side": "short",
+          "pnl_pct": 3.7756,
+          "regime": "trending_up",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 5207
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.0689,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5219
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.5871,
+          "regime": "ranging",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 5239
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.3681,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5340
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.0203,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 5439
+        },
+        {
+          "side": "long",
+          "pnl_pct": -3.4674,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5508
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.5555,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5574
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.213,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 5623
+        },
+        {
+          "side": "long",
+          "pnl_pct": -2.0725,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5648
+        },
+        {
+          "side": "short",
+          "pnl_pct": -2.5487,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5664
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.292,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5676
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.7734,
+          "regime": "volatile",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 5729
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.86,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5739
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.037,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5745
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.2174,
+          "regime": "trending_up",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 5774
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.5866,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5786
+        },
+        {
+          "side": "short",
+          "pnl_pct": 5.7417,
+          "regime": "ranging",
+          "exit_reason": "short_take_profit",
+          "bars_held": 0,
+          "entry_bar": 5802
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.4541,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5865
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.4868,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5911
+        },
+        {
+          "side": "short",
+          "pnl_pct": 1.9049,
+          "regime": "trending_up",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 5920
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.1692,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 5932
+        },
+        {
+          "side": "long",
+          "pnl_pct": -3.363,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5973
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.578,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6001
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.1733,
+          "regime": "trending_up",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 6009
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.521,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6044
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.1236,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6050
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.2906,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6073
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.0921,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6104
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.8308,
+          "regime": "ranging",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 6188
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.7809,
+          "regime": "ranging",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 6213
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.1662,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 6231
+        },
+        {
+          "side": "short",
+          "pnl_pct": 2.2434,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 6252
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.5975,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6264
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.3742,
+          "regime": "ranging",
+          "exit_reason": "proactive_position_decay",
+          "bars_held": 0,
+          "entry_bar": 6275
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.5176,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 6300
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.3765,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6324
+        },
+        {
+          "side": "short",
+          "pnl_pct": 1.5186,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 6386
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.2133,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6462
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.1574,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6469
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.3695,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 6509
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.1807,
+          "regime": "trending_down",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 6607
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.6639,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6628
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.0958,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6639
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.5158,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6767
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.0241,
+          "regime": "trending_up",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 6775
+        },
+        {
+          "side": "short",
+          "pnl_pct": -6.9517,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6806
+        },
+        {
+          "side": "long",
+          "pnl_pct": -3.6327,
+          "regime": "trending_down",
+          "exit_reason": "breakeven_stop",
+          "bars_held": 0,
+          "entry_bar": 6904
+        },
+        {
+          "side": "long",
+          "pnl_pct": -2.106,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6968
+        },
+        {
+          "side": "short",
+          "pnl_pct": 2.6019,
+          "regime": "trending_up",
+          "exit_reason": "short_trailing_stop",
+          "bars_held": 0,
+          "entry_bar": 6996
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.477,
+          "regime": "ranging",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 7042
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.9871,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 7054
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.8672,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7084
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.2641,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7094
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.1792,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7101
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.7667,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7136
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.2495,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 7148
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.4246,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7168
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.2031,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7181
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.5748,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7249
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.0774,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 7286
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.5523,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7404
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.4761,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7426
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.3655,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7484
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.256,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7525
+        },
+        {
+          "side": "long",
+          "pnl_pct": 3.0811,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 7540
+        },
+        {
+          "side": "short",
+          "pnl_pct": 2.4082,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7551
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.0031,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 7619
+        },
+        {
+          "side": "long",
+          "pnl_pct": -2.4465,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7643
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.7834,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7698
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.0845,
+          "regime": "trending_down",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 7704
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.6265,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7761
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.2569,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7814
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.0953,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 7835
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.5752,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7865
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.6417,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7871
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.0296,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 7885
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.8776,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 7934
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.8766,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7974
+        },
+        {
+          "side": "long",
+          "pnl_pct": 3.6064,
+          "regime": "trending_down",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 7980
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.1852,
+          "regime": "volatile",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 8005
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.6374,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 8066
+        },
+        {
+          "side": "long",
+          "pnl_pct": 2.3239,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 8092
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.2455,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 8102
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.2035,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 8119
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.4983,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 8138
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.6017,
+          "regime": "ranging",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 8159
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.292,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 8205
+        }
+      ],
+      "exit_attribution": {
+        "short_max_hold_time": {
+          "count": 16,
+          "total_pnl_pct": 32.5049,
+          "avg_pnl_pct": 2.0316,
+          "win_rate": 1.0
+        },
+        "signal": {
+          "count": 14,
+          "total_pnl_pct": 28.3408,
+          "avg_pnl_pct": 2.0243,
+          "win_rate": 0.9286
+        },
+        "max_hold_time": {
+          "count": 7,
+          "total_pnl_pct": 16.7001,
+          "avg_pnl_pct": 2.3857,
+          "win_rate": 1.0
+        },
+        "proactive_volatility_expansion": {
+          "count": 10,
+          "total_pnl_pct": 16.1981,
+          "avg_pnl_pct": 1.6198,
+          "win_rate": 0.9
+        },
+        "proactive_give_back": {
+          "count": 11,
+          "total_pnl_pct": 6.6576,
+          "avg_pnl_pct": 0.6052,
+          "win_rate": 1.0
+        },
+        "short_take_profit": {
+          "count": 1,
+          "total_pnl_pct": 5.7417,
+          "avg_pnl_pct": 5.7417,
+          "win_rate": 1.0
+        },
+        "short_trailing_stop": {
+          "count": 1,
+          "total_pnl_pct": 2.6019,
+          "avg_pnl_pct": 2.6019,
+          "win_rate": 1.0
+        },
+        "proactive_position_decay": {
+          "count": 6,
+          "total_pnl_pct": 2.1093,
+          "avg_pnl_pct": 0.3515,
+          "win_rate": 1.0
+        },
+        "proactive_stagnation": {
+          "count": 23,
+          "total_pnl_pct": 1.9192,
+          "avg_pnl_pct": 0.0834,
+          "win_rate": 0.7391
+        },
+        "proactive_momentum_exhaustion": {
+          "count": 1,
+          "total_pnl_pct": 0.8408,
+          "avg_pnl_pct": 0.8408,
+          "win_rate": 1.0
+        },
+        "short_breakeven_stop": {
+          "count": 1,
+          "total_pnl_pct": -0.7805,
+          "avg_pnl_pct": -0.7805,
+          "win_rate": 0.0
+        },
+        "breakeven_stop": {
+          "count": 2,
+          "total_pnl_pct": -4.395,
+          "avg_pnl_pct": -2.1975,
+          "win_rate": 0.0
+        },
+        "proactive_drawdown_exceeded": {
+          "count": 2,
+          "total_pnl_pct": -5.04,
+          "avg_pnl_pct": -2.52,
+          "win_rate": 0.0
+        },
+        "proactive_time_decay": {
+          "count": 5,
+          "total_pnl_pct": -5.3901,
+          "avg_pnl_pct": -1.078,
+          "win_rate": 0.0
+        },
+        "proactive_trend_reversal": {
+          "count": 138,
+          "total_pnl_pct": -116.385,
+          "avg_pnl_pct": -0.8434,
+          "win_rate": 0.1159
+        }
+      }
+    },
+    {
+      "window_idx": 1,
+      "train_bars": 9991,
+      "test_bars": 7991,
+      "test_start_date": "2025-04-21 00:00:00+00:00",
+      "test_end_date": "2026-04-01 17:00:00+00:00",
+      "total_return_pct": -6.6205,
+      "max_drawdown_pct": 7.09,
+      "sharpe": -4.3725,
+      "sortino": -5.1444,
+      "calmar": -0.9334,
+      "trades": 369,
+      "win_rate": 0.3946,
+      "net_positive": "False",
+      "train_auc": 0.6346,
+      "error": null,
+      "signal_funnel": {
+        "bars_evaluated": 8168,
+        "pipeline_buy": 253,
+        "pipeline_sell": 139,
+        "post_ml_buy": 253,
+        "post_ml_sell": 139,
+        "post_edge_buy": 253,
+        "post_edge_sell": 139,
+        "post_quality_buy": 253,
+        "post_quality_sell": 139,
+        "post_ranging_buy": 253,
+        "post_ranging_sell": 139,
+        "executed_buy": 126,
+        "blocked_already_long": 101,
+        "blocked_cooldown": 33,
+        "blocked_regime_no_longs": 0,
+        "blocked_regime_no_shorts": 0,
+        "executed_short_entry": 58,
+        "blocked_already_short": 54,
+        "short_covered_signal": 0,
+        "short_covered_stop": 0,
+        "short_covered_tp": 0,
+        "short_covered_max_hold": 12,
+        "edge_blocked_atr": 0,
+        "edge_blocked_tp": 0,
+        "edge_blocked_forecast": 0,
+        "edge_blocked_spread": 0,
+        "ranging_blocked_tech": 0,
+        "ranging_blocked_ml": 0,
+        "ranging_blocked_whipsaw": 0,
+        "mtf_thesis_created": 0,
+        "mtf_thesis_executed": 0,
+        "mtf_thesis_expired": 0,
+        "mtf_15m_entry_used": 0,
+        "blocked_short_ml_blind": 0,
+        "loss_streak_scaled": 0,
+        "regime_transition_bars": 1841,
+        "edge_gate_atr_low": 806,
+        "ml_filter_sell": 778,
+        "quality_gate_final_conf": 247,
+        "proactive_exit_short": 46,
+        "ml_filter_buy": 1173,
+        "pullback_gate_ranging_resistance": 34,
+        "proactive_exit_long": 112,
+        "edge_gate_illiquid": 18,
+        "pullback_gate_chasing": 16,
+        "sell_pullback_gate_ranging_support": 18,
+        "sell_pullback_gate_trending_down_support": 12,
+        "pullback_gate_trending_up_resistance": 23,
+        "sell_pullback_gate_chasing": 16,
+        "ml_prob_stats": {
+          "mean": 0.4411,
+          "std": 0.2299,
+          "min": 0.0011,
+          "p10": 0.1411,
+          "p25": 0.2564,
+          "median": 0.4274,
+          "p75": 0.6138,
+          "p90": 0.7609,
+          "max": 0.9948,
+          "pct_above_buy_thresh": 38.21,
+          "pct_below_sell_thresh": 58.84
+        },
+        "regime_distribution": {
+          "trending_down": 1331,
+          "ranging": 3696,
+          "volatile": 1880,
+          "trending_up": 1255
+        }
+      },
+      "regime_distribution": {
+        "trending_down": 1331,
+        "ranging": 3696,
+        "volatile": 1880,
+        "trending_up": 1255
+      },
+      "closed_trades": [
+        {
+          "side": "long",
+          "pnl_pct": 1.7477,
+          "regime": "trending_down",
+          "exit_reason": "max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 80
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.8959,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 110
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.0874,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 133
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.0119,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 156
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.9887,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 229
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.7812,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 290
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.5014,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 312
+        },
+        {
+          "side": "long",
+          "pnl_pct": 3.0164,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 370
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.2168,
+          "regime": "volatile",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 411
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.1747,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 518
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.68,
+          "regime": "ranging",
+          "exit_reason": "max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 531
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.7437,
+          "regime": "ranging",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 583
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.0623,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 633
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.3816,
+          "regime": "ranging",
+          "exit_reason": "proactive_position_decay",
+          "bars_held": 0,
+          "entry_bar": 696
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.0413,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 715
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.2638,
+          "regime": "ranging",
+          "exit_reason": "proactive_time_decay",
+          "bars_held": 0,
+          "entry_bar": 725
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.7814,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 815
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.6664,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 890
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.0857,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 903
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.3187,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 927
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.7098,
+          "regime": "ranging",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 994
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.7691,
+          "regime": "ranging",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 1017
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.2241,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 1057
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.3073,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1086
+        },
+        {
+          "side": "long",
+          "pnl_pct": 2.7975,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 1180
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.914,
+          "regime": "volatile",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1371
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.1966,
+          "regime": "ranging",
+          "exit_reason": "proactive_time_decay",
+          "bars_held": 0,
+          "entry_bar": 1430
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.1805,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1457
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.0913,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1541
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.2766,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1608
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.1146,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 1677
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.0703,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 1694
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.3589,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1712
+        },
+        {
+          "side": "long",
+          "pnl_pct": 2.2278,
+          "regime": "volatile",
+          "exit_reason": "max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 1734
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.967,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1780
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.0846,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1793
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.2076,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 1862
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.2371,
+          "regime": "volatile",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 1916
+        },
+        {
+          "side": "long",
+          "pnl_pct": -2.0768,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2039
+        },
+        {
+          "side": "short",
+          "pnl_pct": 1.2212,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 2084
+        },
+        {
+          "side": "short",
+          "pnl_pct": 2.2898,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 2116
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.1889,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2128
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.1424,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 2136
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.5403,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 2171
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.2497,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 2207
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.6156,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2239
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.3391,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2283
+        },
+        {
+          "side": "short",
+          "pnl_pct": -2.1191,
+          "regime": "volatile",
+          "exit_reason": "proactive_drawdown_exceeded",
+          "bars_held": 0,
+          "entry_bar": 2294
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.0169,
+          "regime": "trending_down",
+          "exit_reason": "proactive_position_decay",
+          "bars_held": 0,
+          "entry_bar": 2369
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.3963,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2442
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.4353,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2551
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.4507,
+          "regime": "ranging",
+          "exit_reason": "proactive_position_decay",
+          "bars_held": 0,
+          "entry_bar": 2632
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.8101,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 2665
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.4395,
+          "regime": "trending_down",
+          "exit_reason": "proactive_position_decay",
+          "bars_held": 0,
+          "entry_bar": 2715
+        },
+        {
+          "side": "long",
+          "pnl_pct": 3.2594,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 2740
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.9713,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2772
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.7269,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2855
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.618,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 2893
+        },
+        {
+          "side": "long",
+          "pnl_pct": 2.7536,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 2963
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.4617,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3005
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.1882,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3019
+        },
+        {
+          "side": "long",
+          "pnl_pct": -2.4036,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3120
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.6666,
+          "regime": "volatile",
+          "exit_reason": "proactive_time_decay",
+          "bars_held": 0,
+          "entry_bar": 3140
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.8594,
+          "regime": "ranging",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 3213
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.796,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3269
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.6222,
+          "regime": "ranging",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 3281
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.5368,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 3361
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.2502,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3386
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.3148,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 3517
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.5393,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3589
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.6397,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3628
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.7357,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3637
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.125,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3688
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.908,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 3769
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.3472,
+          "regime": "volatile",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 3955
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.0292,
+          "regime": "trending_up",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 4001
+        },
+        {
+          "side": "long",
+          "pnl_pct": 2.4717,
+          "regime": "ranging",
+          "exit_reason": "max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 4026
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.7026,
+          "regime": "ranging",
+          "exit_reason": "trailing_stop",
+          "bars_held": 0,
+          "entry_bar": 4111
+        },
+        {
+          "side": "long",
+          "pnl_pct": -2.017,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4143
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.4699,
+          "regime": "volatile",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 4149
+        },
+        {
+          "side": "short",
+          "pnl_pct": 3.5919,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 4219
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.2494,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4231
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.9016,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4260
+        },
+        {
+          "side": "short",
+          "pnl_pct": 2.6806,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 4278
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.3795,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4395
+        },
+        {
+          "side": "long",
+          "pnl_pct": 2.7345,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 4437
+        },
+        {
+          "side": "short",
+          "pnl_pct": 1.3835,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4457
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.0763,
+          "regime": "trending_down",
+          "exit_reason": "proactive_time_decay",
+          "bars_held": 0,
+          "entry_bar": 4564
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.8433,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4599
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.7387,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4643
+        },
+        {
+          "side": "long",
+          "pnl_pct": -2.1498,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4704
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.1771,
+          "regime": "trending_up",
+          "exit_reason": "proactive_time_decay",
+          "bars_held": 0,
+          "entry_bar": 4772
+        },
+        {
+          "side": "short",
+          "pnl_pct": 1.006,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4820
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.8391,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 4827
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.037,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 4839
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.1327,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4908
+        },
+        {
+          "side": "long",
+          "pnl_pct": -3.173,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4929
+        },
+        {
+          "side": "long",
+          "pnl_pct": -2.7135,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 4959
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.0724,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 5013
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.8254,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5032
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.9216,
+          "regime": "volatile",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5059
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.892,
+          "regime": "trending_up",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 5084
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.7273,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 5104
+        },
+        {
+          "side": "short",
+          "pnl_pct": 5.3723,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 5116
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.6536,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5128
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.6696,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5185
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.3422,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5199
+        },
+        {
+          "side": "long",
+          "pnl_pct": 2.8798,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 5222
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.1309,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5227
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.217,
+          "regime": "ranging",
+          "exit_reason": "proactive_position_decay",
+          "bars_held": 0,
+          "entry_bar": 5233
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.1372,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 5245
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.2173,
+          "regime": "volatile",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5278
+        },
+        {
+          "side": "short",
+          "pnl_pct": -2.4565,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5406
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.2591,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5416
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.2777,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5445
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.0323,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5460
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.7281,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5481
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.0638,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_expansion",
+          "bars_held": 0,
+          "entry_bar": 5533
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.8578,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5550
+        },
+        {
+          "side": "short",
+          "pnl_pct": 1.5884,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5584
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.0762,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 5604
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.2421,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5623
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.0731,
+          "regime": "ranging",
+          "exit_reason": "proactive_position_decay",
+          "bars_held": 0,
+          "entry_bar": 5632
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.545,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5655
+        },
+        {
+          "side": "long",
+          "pnl_pct": -2.2638,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5726
+        },
+        {
+          "side": "short",
+          "pnl_pct": 3.0449,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 5774
+        },
+        {
+          "side": "short",
+          "pnl_pct": 2.8915,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 5798
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.3628,
+          "regime": "trending_up",
+          "exit_reason": "proactive_time_decay",
+          "bars_held": 0,
+          "entry_bar": 5823
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.9938,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 5907
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.1035,
+          "regime": "ranging",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 5975
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.0389,
+          "regime": "volatile",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 6060
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.6328,
+          "regime": "trending_down",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 6073
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.0873,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6113
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.0734,
+          "regime": "volatile",
+          "exit_reason": "proactive_time_decay",
+          "bars_held": 0,
+          "entry_bar": 6258
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.2464,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6279
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.1049,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6290
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.1688,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6424
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.1427,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 6529
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.1253,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6552
+        },
+        {
+          "side": "long",
+          "pnl_pct": -2.0813,
+          "regime": "trending_down",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6576
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.156,
+          "regime": "ranging",
+          "exit_reason": "proactive_stagnation",
+          "bars_held": 0,
+          "entry_bar": 6640
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.7124,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 6657
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.4199,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6698
+        },
+        {
+          "side": "long",
+          "pnl_pct": 2.9316,
+          "regime": "ranging",
+          "exit_reason": "max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 6761
+        },
+        {
+          "side": "short",
+          "pnl_pct": 2.1874,
+          "regime": "trending_up",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 6785
+        },
+        {
+          "side": "long",
+          "pnl_pct": -4.0499,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6806
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.2823,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6906
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.8219,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 6912
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.4093,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 6928
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.4451,
+          "regime": "ranging",
+          "exit_reason": "proactive_time_decay",
+          "bars_held": 0,
+          "entry_bar": 7030
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.4184,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7044
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.1905,
+          "regime": "ranging",
+          "exit_reason": "proactive_time_decay",
+          "bars_held": 0,
+          "entry_bar": 7050
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.7523,
+          "regime": "ranging",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 7070
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.8472,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7090
+        },
+        {
+          "side": "short",
+          "pnl_pct": -3.0632,
+          "regime": "ranging",
+          "exit_reason": "proactive_drawdown_exceeded",
+          "bars_held": 0,
+          "entry_bar": 7160
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.1384,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7169
+        },
+        {
+          "side": "short",
+          "pnl_pct": 1.141,
+          "regime": "trending_down",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 7236
+        },
+        {
+          "side": "short",
+          "pnl_pct": 2.8187,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 7250
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.5486,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7263
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.3371,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 7273
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.4321,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7319
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.2053,
+          "regime": "ranging",
+          "exit_reason": "proactive_volatility_contraction",
+          "bars_held": 0,
+          "entry_bar": 7342
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.9264,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7385
+        },
+        {
+          "side": "short",
+          "pnl_pct": -3.5379,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7452
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.1537,
+          "regime": "trending_down",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 7481
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.5548,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7500
+        },
+        {
+          "side": "long",
+          "pnl_pct": -3.4555,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7506
+        },
+        {
+          "side": "long",
+          "pnl_pct": 0.1863,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7548
+        },
+        {
+          "side": "short",
+          "pnl_pct": 2.6294,
+          "regime": "ranging",
+          "exit_reason": "short_max_hold_time",
+          "bars_held": 0,
+          "entry_bar": 7585
+        },
+        {
+          "side": "long",
+          "pnl_pct": 1.9438,
+          "regime": "ranging",
+          "exit_reason": "signal",
+          "bars_held": 0,
+          "entry_bar": 7597
+        },
+        {
+          "side": "short",
+          "pnl_pct": -4.0847,
+          "regime": "ranging",
+          "exit_reason": "proactive_drawdown_exceeded",
+          "bars_held": 0,
+          "entry_bar": 7610
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.1655,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7649
+        },
+        {
+          "side": "long",
+          "pnl_pct": -2.4612,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7667
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.4316,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7747
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.3863,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7779
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.0928,
+          "regime": "ranging",
+          "exit_reason": "proactive_time_decay",
+          "bars_held": 0,
+          "entry_bar": 7812
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.3993,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7824
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.9417,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7831
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.1895,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7846
+        },
+        {
+          "side": "short",
+          "pnl_pct": -1.2792,
+          "regime": "trending_up",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7894
+        },
+        {
+          "side": "long",
+          "pnl_pct": -0.2508,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 7958
+        },
+        {
+          "side": "short",
+          "pnl_pct": 0.8883,
+          "regime": "ranging",
+          "exit_reason": "proactive_give_back",
+          "bars_held": 0,
+          "entry_bar": 8040
+        },
+        {
+          "side": "long",
+          "pnl_pct": -1.8095,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 8084
+        },
+        {
+          "side": "short",
+          "pnl_pct": -0.0982,
+          "regime": "ranging",
+          "exit_reason": "proactive_trend_reversal",
+          "bars_held": 0,
+          "entry_bar": 8231
+        }
+      ],
+      "exit_attribution": {
+        "short_max_hold_time": {
+          "count": 12,
+          "total_pnl_pct": 30.3886,
+          "avg_pnl_pct": 2.5324,
+          "win_rate": 1.0
+        },
+        "signal": {
+          "count": 9,
+          "total_pnl_pct": 15.3001,
+          "avg_pnl_pct": 1.7,
+          "win_rate": 0.8889
+        },
+        "proactive_volatility_expansion": {
+          "count": 8,
+          "total_pnl_pct": 11.9957,
+          "avg_pnl_pct": 1.4995,
+          "win_rate": 0.875
+        },
+        "max_hold_time": {
+          "count": 5,
+          "total_pnl_pct": 11.0589,
+          "avg_pnl_pct": 2.2118,
+          "win_rate": 1.0
+        },
+        "proactive_give_back": {
+          "count": 13,
+          "total_pnl_pct": 9.6133,
+          "avg_pnl_pct": 0.7395,
+          "win_rate": 1.0
+        },
+        "proactive_position_decay": {
+          "count": 6,
+          "total_pnl_pct": 1.545,
+          "avg_pnl_pct": 0.2575,
+          "win_rate": 0.8333
+        },
+        "proactive_volatility_contraction": {
+          "count": 1,
+          "total_pnl_pct": 0.2053,
+          "avg_pnl_pct": 0.2053,
+          "win_rate": 1.0
+        },
+        "proactive_stagnation": {
+          "count": 15,
+          "total_pnl_pct": 0.0988,
+          "avg_pnl_pct": 0.0066,
+          "win_rate": 0.5333
+        },
+        "trailing_stop": {
+          "count": 1,
+          "total_pnl_pct": -1.7026,
+          "avg_pnl_pct": -1.7026,
+          "win_rate": 0.0
+        },
+        "proactive_time_decay": {
+          "count": 10,
+          "total_pnl_pct": -5.5449,
+          "avg_pnl_pct": -0.5545,
+          "win_rate": 0.0
+        },
+        "proactive_drawdown_exceeded": {
+          "count": 3,
+          "total_pnl_pct": -9.267,
+          "avg_pnl_pct": -3.089,
+          "win_rate": 0.0
+        },
+        "proactive_trend_reversal": {
+          "count": 101,
+          "total_pnl_pct": -77.0251,
+          "avg_pnl_pct": -0.7626,
+          "win_rate": 0.1287
+        }
+      }
+    }
+  ]
+}

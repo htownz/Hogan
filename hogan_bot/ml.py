@@ -1450,7 +1450,13 @@ def predict_up_probability(
         latest_arr = scaler.transform(latest)
         proba = trained_model.model.predict_proba(latest_arr)[0][1]
     else:
-        proba = trained_model.model.predict_proba(latest)[0][1]
+        # Some sklearn estimators in historical artifacts were fitted without
+        # feature-name metadata; passing a DataFrame at inference can trigger
+        # noisy per-row warnings and materially slow long walk-forward runs.
+        if hasattr(trained_model.model, "feature_names_in_"):
+            proba = trained_model.model.predict_proba(latest)[0][1]
+        else:
+            proba = trained_model.model.predict_proba(latest.to_numpy(dtype=float, copy=False))[0][1]
     return float(min(max(proba, 0.0), 1.0))
 
 

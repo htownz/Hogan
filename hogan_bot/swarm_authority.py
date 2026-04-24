@@ -166,6 +166,8 @@ def compute_shadow_active_drift(
     conn: sqlite3.Connection,
     *,
     symbol: str | None = None,
+    since_ms: int | None = None,
+    min_decisions_per_mode: int = 50,
     max_trade_drift_pct: float = 30.0,
     max_veto_drift_pct: float = 20.0,
 ) -> DriftReport:
@@ -176,27 +178,35 @@ def compute_shadow_active_drift(
     the shadow → conditional → active transition.
     """
     rpt = DriftReport()
-    sym = "AND symbol = ?" if symbol else ""
-    params: tuple = (symbol,) if symbol else ()
+    clauses: list[str] = []
+    params_base: list = []
+    if symbol:
+        clauses.append("symbol = ?")
+        params_base.append(symbol)
+    if since_ms is not None:
+        clauses.append("ts_ms >= ?")
+        params_base.append(int(since_ms))
+    where_tail = (" AND " + " AND ".join(clauses)) if clauses else ""
 
     def _query_mode(mode: str) -> tuple[int, int, int, float]:
+        params = [mode, *params_base]
         total = conn.execute(
-            f"SELECT COUNT(*) FROM swarm_decisions WHERE mode=? {sym}",
-            (mode, *params),
+            f"SELECT COUNT(*) FROM swarm_decisions WHERE mode=?{where_tail}",
+            params,
         ).fetchone()[0]
         trades = conn.execute(
             f"SELECT COUNT(*) FROM swarm_decisions "
-            f"WHERE mode=? AND final_action IN ('buy','sell') {sym}",
-            (mode, *params),
+            f"WHERE mode=? AND final_action IN ('buy','sell'){where_tail}",
+            params,
         ).fetchone()[0]
         vetoes = conn.execute(
             f"SELECT COUNT(*) FROM swarm_decisions "
-            f"WHERE mode=? AND vetoed=1 {sym}",
-            (mode, *params),
+            f"WHERE mode=? AND vetoed=1{where_tail}",
+            params,
         ).fetchone()[0]
         row = conn.execute(
-            f"SELECT AVG(agreement) FROM swarm_decisions WHERE mode=? {sym}",
-            (mode, *params),
+            f"SELECT AVG(agreement) FROM swarm_decisions WHERE mode=?{where_tail}",
+            params,
         ).fetchone()
         avg_agree = float(row[0] or 0.0)
         return total, trades, vetoes, avg_agree
@@ -220,6 +230,13 @@ def compute_shadow_active_drift(
     rpt.active_veto_rate = a_vetoes / a_total if a_total > 0 else 0.0
     rpt.shadow_mean_agreement = s_agree
     rpt.active_mean_agreement = a_agree
+
+    if since_ms is not None and (s_total < min_decisions_per_mode or a_total < min_decisions_per_mode):
+        rpt.warnings.append(
+            "Insufficient recent paired evidence for drift check "
+            f"(shadow={s_total}, active={a_total}, min={min_decisions_per_mode})"
+        )
+        return rpt
 
     if s_trades > 0:
         rpt.trade_count_drift_pct = abs(a_trades - s_trades) / s_trades * 100

@@ -1,0 +1,193 @@
+{
+  "generated_at_utc": "20260401T230802Z",
+  "manifest_path": "reports\\validation\\fast2\\manifest_fast2_mixed.json",
+  "wf_matrix": {
+    "required_passes": 3,
+    "actual_passes": 0,
+    "results": [
+      {
+        "scenario": "baseline_no_ml",
+        "exit_code": 0,
+        "passes_gate": false,
+        "report_json": "reports/validation/fast2/wf_baseline_no_ml_20260401T203543Z.json",
+        "summary": {
+          "n_windows": 2,
+          "n_positive": 0,
+          "n_failed": 0,
+          "total_trades": 971,
+          "mean_return_pct": -19.9072,
+          "mean_sharpe": -5.7803,
+          "mean_calmar": -0.9923,
+          "worst_calmar": -0.9984,
+          "mean_drawdown_pct": 20.06,
+          "worst_drawdown_pct": 20.11,
+          "passes_gate": false,
+          "gate_config": {
+            "min_sharpe": 0.5,
+            "min_calmar": 0.0,
+            "max_drawdown_pct": 15.0,
+            "min_total_trades": 25,
+            "min_trades_per_window": 5,
+            "min_windows_positive": 3
+          }
+        }
+      },
+      {
+        "scenario": "ml_filter",
+        "exit_code": 0,
+        "passes_gate": false,
+        "report_json": "reports/validation/fast2/wf_ml_filter_20260401T203543Z.json",
+        "summary": {
+          "n_windows": 2,
+          "n_positive": 0,
+          "n_failed": 0,
+          "total_trades": 506,
+          "mean_return_pct": -3.2671,
+          "mean_sharpe": -4.2829,
+          "mean_calmar": -0.9587,
+          "worst_calmar": -0.9913,
+          "mean_drawdown_pct": 3.38,
+          "worst_drawdown_pct": 4.33,
+          "passes_gate": false,
+          "gate_config": {
+            "min_sharpe": 0.5,
+            "min_calmar": 0.0,
+            "max_drawdown_pct": 15.0,
+            "min_total_trades": 25,
+            "min_trades_per_window": 5,
+            "min_windows_positive": 3
+          }
+        }
+      },
+      {
+        "scenario": "ml_sizer",
+        "exit_code": 0,
+        "passes_gate": false,
+        "report_json": "reports/validation/fast2/wf_ml_sizer_20260401T203543Z.json",
+        "summary": {
+          "n_windows": 2,
+          "n_positive": 0,
+          "n_failed": 0,
+          "total_trades": 1127,
+          "mean_return_pct": -18.6564,
+          "mean_sharpe": -5.8423,
+          "mean_calmar": -0.9899,
+          "worst_calmar": -0.9979,
+          "mean_drawdown_pct": 18.84,
+          "worst_drawdown_pct": 20.01,
+          "passes_gate": false,
+          "gate_config": {
+            "min_sharpe": 0.5,
+            "min_calmar": 0.0,
+            "max_drawdown_pct": 15.0,
+            "min_total_trades": 25,
+            "min_trades_per_window": 5,
+            "min_windows_positive": 3
+          }
+        }
+      },
+      {
+        "scenario": "ml_sizer_macro",
+        "exit_code": 0,
+        "passes_gate": false,
+        "report_json": "reports/validation/fast2/wf_ml_sizer_macro_20260401T203543Z.json",
+        "summary": {
+          "n_windows": 2,
+          "n_positive": 0,
+          "n_failed": 0,
+          "total_trades": 1085,
+          "mean_return_pct": -17.5435,
+          "mean_sharpe": -5.6875,
+          "mean_calmar": -0.9879,
+          "worst_calmar": -0.9979,
+          "mean_drawdown_pct": 17.74,
+          "worst_drawdown_pct": 20.04,
+          "passes_gate": false,
+          "gate_config": {
+            "min_sharpe": 0.5,
+            "min_calmar": 0.0,
+            "max_drawdown_pct": 15.0,
+            "min_total_trades": 25,
+            "min_trades_per_window": 5,
+            "min_windows_positive": 3
+          }
+        }
+      },
+      {
+        "scenario": "regime_models",
+        "exit_code": 0,
+        "passes_gate": false,
+        "report_json": "reports/validation/fast2/wf_regime_models_fastfix.json",
+        "summary": {
+          "n_windows": 2,
+          "n_positive": 0,
+          "n_failed": 0,
+          "total_trades": 849,
+          "mean_return_pct": -9.3196,
+          "mean_sharpe": -4.4129,
+          "mean_calmar": -0.953,
+          "worst_calmar": -0.9726,
+          "mean_drawdown_pct": 9.73,
+          "worst_drawdown_pct": 12.36,
+          "passes_gate": false,
+          "gate_config": {
+            "min_sharpe": 0.5,
+            "min_calmar": 0.0,
+            "max_drawdown_pct": 15.0,
+            "min_total_trades": 25,
+            "min_trades_per_window": 5,
+            "min_windows_positive": 3
+          }
+        }
+      }
+    ]
+  },
+  "swarm_certification": {
+    "present": false,
+    "passed": true,
+    "steps": []
+  },
+  "observability": {
+    "alerts": [
+      {
+        "level": "info",
+        "code": "large_table",
+        "message": "Table 'candles' has 714,155 rows \u2014 consider pruning"
+      }
+    ],
+    "critical_alerts": [],
+    "integrity": {
+      "sqlite_integrity_ok": true,
+      "sqlite_integrity_message": "ok",
+      "orphan_fills": 0,
+      "orphan_decision_links": 0,
+      "invalid_trade_timestamps": 0,
+      "ok": true
+    },
+    "swarm_drift": {
+      "shadow_trade_count": 0,
+      "active_trade_count": 0,
+      "shadow_veto_rate": 0.0,
+      "active_veto_rate": 1.0,
+      "trade_count_drift_pct": 0.0,
+      "veto_rate_drift_pct": 0.0,
+      "drift_acceptable": true,
+      "warnings": [
+        "Insufficient recent paired evidence for drift check (shadow=0, active=2371, min=50)"
+      ],
+      "shadow_mean_agreement": 0.0,
+      "active_mean_agreement": 1.0
+    },
+    "execution": {
+      "total": 0,
+      "failed": 0,
+      "fail_rate": 0.0
+    }
+  },
+  "recommendation": "HOLD",
+  "rationale": [
+    "WF matrix passes 0/3 (FAIL)",
+    "Observability critical alerts: 0 (OK)",
+    "Swarm certification: PASS"
+  ]
+}

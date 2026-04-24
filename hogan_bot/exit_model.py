@@ -48,7 +48,7 @@ class ExitEvaluator:
 
     def __init__(
         self,
-        trend_reversal_threshold: float = 0.6,
+        trend_reversal_threshold: float = 0.68,
         max_consolidation_bars: int = 12,
         drawdown_panic_pct: float = 0.03,
         volatility_expansion_threshold: float = 2.0,
@@ -90,25 +90,25 @@ class ExitEvaluator:
             "drawdown_panic_pct": 0.042,       # wider: tolerate vol noise
             "time_decay_threshold": 0.65,      # faster exit: vol can reverse
             "stagnation_bars_mult": 0.75,      # shorter patience in chop
-            "trend_reversal_threshold": 0.48,  # easier reversal trigger
+            "trend_reversal_threshold": 0.56,  # less hair-trigger in noisy volatility
         },
         "trending_up": {
             "drawdown_panic_pct": 0.036,       # slightly wider than base
             "time_decay_threshold": 0.75,      # standard
             "stagnation_bars_mult": 1.00,
-            "trend_reversal_threshold": 0.60,  # strict: stay in trend
+            "trend_reversal_threshold": 0.68,  # strict: stay in trend
         },
         "trending_down": {
             "drawdown_panic_pct": 0.030,       # tighter: protect capital
             "time_decay_threshold": 0.68,      # faster
             "stagnation_bars_mult": 0.85,
-            "trend_reversal_threshold": 0.54,  # easier trigger
+            "trend_reversal_threshold": 0.62,  # reduce premature exits
         },
         "ranging": {
             "drawdown_panic_pct": 0.038,       # wider: mean-reversion needs room for pullbacks
             "time_decay_threshold": 0.80,      # patient: let mean-reversion thesis fully develop
             "stagnation_bars_mult": 1.20,      # extended stagnation window for ranging trades
-            "trend_reversal_threshold": 0.70,  # harder to call reversal in noise
+            "trend_reversal_threshold": 0.78,  # much harder to call reversal in noise
         },
     }
 
@@ -182,8 +182,24 @@ class ExitEvaluator:
         stag_bars = max(3, int(stag_bars * _ease))
 
         # 1. Trend persistence check: has the trend actually reversed?
+        # Guard against "micro-flip exits" right after entry:
+        # require either enough bars in trade, a hard reversal, or
+        # meaningful unrealized weakness before exiting on trend reversal.
         trend_score = self._trend_persistence(close, side)
         if trend_score < -trend_rev_thresh:
+            hard_reversal = trend_score < -(trend_rev_thresh + 0.20)
+            min_trend_bars = 5 if is_short else 6
+            if regime == "ranging":
+                min_trend_bars += 2
+            reversal_allowed = bars_held >= min_trend_bars or hard_reversal
+            # If still green and no meaningful run-up, avoid early churn exits.
+            if upnl_pct > 0 and max_favorable_pct < 0.01 and hold_ratio < 0.50:
+                reversal_allowed = False
+            # If mildly red very early in hold, require stronger confirmation.
+            if upnl_pct > -0.001 and hold_ratio < 0.35 and not hard_reversal:
+                reversal_allowed = False
+            if not reversal_allowed:
+                return ExitDecision()
             logger.debug("EXIT_MODEL: trend reversed (score=%.2f, thresh=%.2f, side=%s, hold_ratio=%.2f)",
                          trend_score, trend_rev_thresh, side, hold_ratio)
             return ExitDecision(
@@ -346,7 +362,8 @@ class ExitEvaluator:
             ret_std = float(recent_returns.std())
             momentum_z = ret_mean / max(ret_std, 0.001) if ret_std > 1e-9 else 0.0
 
-        raw = ma_spread_z * 0.6 + momentum_z * 0.4
+        # Favor MA structure over short-window momentum to reduce whipsaw exits.
+        raw = ma_spread_z * 0.75 + momentum_z * 0.25
 
         if side != "long":
             raw = -raw
