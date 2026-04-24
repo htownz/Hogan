@@ -8,6 +8,43 @@ logger = logging.getLogger(__name__)
 _MAX_CONFIDENCE_SCALE = 1.50
 
 
+def kelly_fraction(
+    p_win: float,
+    win_loss_ratio: float,
+    kelly_fraction_of_full: float = 0.25,
+    clamp: tuple[float, float] = (0.0, 1.0),
+) -> float:
+    """Fractional-Kelly position multiplier.
+
+    Parameters
+    ----------
+    p_win:
+        Estimated probability of a winning trade (0-1). Typically the
+        calibrated ML up-probability for longs, or ``1 - p_up`` for shorts.
+    win_loss_ratio:
+        Average win size divided by average loss size (``b`` in the classic
+        Kelly formula :math:`f^* = p - (1-p)/b`). Must be > 0.
+    kelly_fraction_of_full:
+        Shrinkage factor. Full Kelly is wildly aggressive and unstable when
+        ``p_win`` is mis-estimated; classic practice is to take 1/4 to 1/2
+        of full Kelly to keep the equity curve tolerable. Default 0.25.
+    clamp:
+        ``(lo, hi)`` range for the returned multiplier.
+
+    Returns
+    -------
+    float in ``clamp`` — 0 means "skip", 1 means "use the full base size".
+    """
+    if p_win <= 0 or p_win >= 1 or win_loss_ratio <= 0:
+        return 0.0
+    full_kelly = p_win - (1.0 - p_win) / win_loss_ratio
+    if full_kelly <= 0:
+        return 0.0
+    scaled = full_kelly * max(0.0, kelly_fraction_of_full)
+    lo, hi = clamp
+    return float(min(max(scaled, lo), hi))
+
+
 def calculate_position_size(
     equity_usd: float,
     price: float,
@@ -18,6 +55,12 @@ def calculate_position_size(
     fee_rate: float = 0.0,
     atr_pct: float = 0.0,
     avg_atr_pct: float = 0.0,
+    *,
+    vol_target_pct: float | None = None,
+    realized_vol_pct: float | None = None,
+    kelly_p_win: float | None = None,
+    kelly_win_loss_ratio: float | None = None,
+    kelly_fraction_of_full: float = 0.25,
 ) -> float:
     """Return coin amount based on risk and allocation constraints.
 
@@ -35,6 +78,20 @@ def calculate_position_size(
     scaling) to keep dollar-risk constant; in low-vol periods it can grow
     slightly (up to 1.30x).  This keeps the *dollar volatility* of each
     position roughly constant regardless of market conditions.
+
+    *vol_target_pct* / *realized_vol_pct* — explicit **volatility targeting**.
+    When both are provided, we scale the position by ``vol_target /
+    realized_vol`` (clamped to ``[0.25, 2.0]``) so that the *portfolio*
+    realised vol tracks a target (e.g. 15% annualised). This is applied on
+    top of the ATR-ratio heuristic above and is the preferred knob for
+    running multiple strategies at comparable risk.
+
+    *kelly_p_win* / *kelly_win_loss_ratio* / *kelly_fraction_of_full* —
+    opt-in **fractional-Kelly** shrinkage. When ``kelly_p_win`` and
+    ``kelly_win_loss_ratio`` are provided, the size is further multiplied by
+    ``kelly_fraction(p_win, b, kelly_fraction_of_full)`` so that edgier
+    setups get bigger size and uncertain setups get much smaller size.
+    Disabled by default; pass ``kelly_p_win=None`` to skip.
     """
     if any(math.isnan(v) or math.isinf(v) for v in
            (equity_usd, price, stop_distance_pct, max_risk_per_trade,
@@ -80,6 +137,37 @@ def calculate_position_size(
             logger.debug(
                 "VOL_SIZE_ADJUST: atr=%.4f avg=%.4f ratio=%.2f scale=%.2f",
                 atr_pct, avg_atr_pct, vol_ratio, vol_scale,
+            )
+
+    # Explicit volatility targeting — independent of the ATR-ratio heuristic.
+    # target / realised, clamped to a sane band so a flash-quiet tape doesn't
+    # balloon size and a flash-vol event doesn't zero it out entirely.
+    if (
+        vol_target_pct is not None
+        and realized_vol_pct is not None
+        and vol_target_pct > 0
+        and realized_vol_pct > 0
+    ):
+        _vt_scale = max(0.25, min(2.0, vol_target_pct / realized_vol_pct))
+        raw *= _vt_scale
+        if _vt_scale < 0.70 or _vt_scale > 1.40:
+            logger.debug(
+                "VOL_TARGET: target=%.4f realized=%.4f scale=%.2f",
+                vol_target_pct, realized_vol_pct, _vt_scale,
+            )
+
+    # Fractional-Kelly shrinkage — opt-in.
+    if kelly_p_win is not None and kelly_win_loss_ratio is not None:
+        _k = kelly_fraction(
+            p_win=kelly_p_win,
+            win_loss_ratio=kelly_win_loss_ratio,
+            kelly_fraction_of_full=kelly_fraction_of_full,
+        )
+        raw *= _k
+        if _k < 1.0:
+            logger.debug(
+                "KELLY: p=%.3f b=%.2f frac=%.2f -> scale=%.3f",
+                kelly_p_win, kelly_win_loss_ratio, kelly_fraction_of_full, _k,
             )
 
     return raw * max(0.0, min(_MAX_CONFIDENCE_SCALE, confidence_scale))

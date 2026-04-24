@@ -403,8 +403,41 @@ def _build_regime_overrides() -> dict[str, dict]:
             "allow_shorts": rc.allow_shorts,
             "long_size_scale": rc.long_size_scale,
             "short_size_scale": rc.short_size_scale,
+            # E6: trade-quality gate per regime
+            "trade_quality_threshold": rc.trade_quality_threshold,
+            "trade_quality_threshold_mult": rc.trade_quality_threshold_mult,
         }
     return out
+
+
+def effective_trade_quality_threshold(
+    state: "RegimeState",
+    config,
+    *,
+    min_confidence: float = 0.50,
+) -> float:
+    """Resolve the effective trade-quality gate for this bar.
+
+    Priority (first non-None wins):
+
+    1. Regime override ``RegimeConfig.trade_quality_threshold`` when defined
+       and regime confidence clears ``min_confidence``.
+    2. ``config.trade_quality_threshold`` × regime ``trade_quality_threshold_mult``
+       (default 1.0). The multiplier path is the cheap "make volatile stricter"
+       knob; the absolute override is for rare overrides.
+    3. ``config.trade_quality_threshold``.
+    """
+    base = float(getattr(config, "trade_quality_threshold", 0.40))
+    if not getattr(config, "use_regime_detection", False):
+        return base
+    overrides = _REGIME_OVERRIDES.get(getattr(state, "regime", ""), {})
+    if not overrides or state.confidence < min_confidence:
+        return base
+    absolute = overrides.get("trade_quality_threshold")
+    if absolute is not None:
+        return float(absolute)
+    mult = float(overrides.get("trade_quality_threshold_mult", 1.0) or 1.0)
+    return float(min(0.99, max(0.0, base * mult)))
 
 
 _REGIME_OVERRIDES: dict[str, dict[str, float]] = _build_regime_overrides()

@@ -39,6 +39,7 @@ def label_closed_trade(
     symbol: str,
     horizon_bars: int = 3,
     profit_threshold: float = _DEFAULT_PROFIT_THRESHOLD,
+    position_side: str | None = None,
 ) -> dict | None:
     """Score a completed trade and write a labeled row.
 
@@ -58,6 +59,10 @@ def label_closed_trade(
         How many bars the trade was held (informational).
     profit_threshold:
         Minimum P&L % to be labelled as 1 (profitable).  Defaults to 0.
+    position_side:
+        ``"long"`` or ``"short"`` — the side that opened the position. When
+        omitted it is inferred from the closing fill: ``sell`` close closes a
+        long, ``buy`` close closes a short.
 
     Returns
     -------
@@ -74,14 +79,29 @@ def label_closed_trade(
 
     side, amount, close_price, fee = row
 
-    # Retrieve entry price from the corresponding buy fill
+    # Infer the direction of the position that this fill closed when the
+    # caller did not tell us explicitly. A *buy* fill can only close a short
+    # (you buy to cover); a *sell* fill can only close a long.
+    if position_side is None:
+        position_side = "short" if side == "buy" else "long"
+    position_side = position_side.lower()
+    if position_side not in ("long", "short"):
+        logger.warning(
+            "labeler: invalid position_side=%r for fill_id=%s; defaulting to long",
+            position_side,
+            fill_id,
+        )
+        position_side = "long"
+
+    # The opening fill is on the *opposite* side of the closing fill.
+    entry_side = "buy" if position_side == "long" else "sell"
     entry_cur = conn.execute(
         """
         SELECT price FROM fills
-        WHERE symbol=? AND side='buy' AND ts_ms <= ?
+        WHERE symbol=? AND side=? AND ts_ms <= ?
         ORDER BY ts_ms DESC LIMIT 1
         """,
-        (symbol, entry_ts_ms + 60_000),
+        (symbol, entry_side, entry_ts_ms + 60_000),
     )
     entry_row = entry_cur.fetchone()
     entry_price = entry_row[0] if entry_row else close_price
@@ -90,11 +110,11 @@ def label_closed_trade(
         logger.warning("labeler: entry_price=0 for fill_id=%s, skipping.", fill_id)
         return None
 
+    # Raw long-side return; flip for shorts so that "profit ⇒ positive pnl_pct"
+    # holds in both directions.
     pnl_pct = (close_price - entry_price) / entry_price * 100.0
-    if side == "sell":
-        pass  # long trade: sell close = profit if close > entry
-    else:
-        pnl_pct = -pnl_pct  # short trade logic (future use)
+    if position_side == "short":
+        pnl_pct = -pnl_pct
 
     label = 1 if pnl_pct > profit_threshold else 0
     features_json = json.dumps([round(float(f), 8) for f in entry_features])
@@ -153,39 +173,45 @@ def label_pending_trades(
 
     labeled = 0
     for row_id, symbol, ts_ms, _features_json, _horizon_bars in pending:
-        # Find the first sell fill after this entry
-        sell_cur = conn.execute(
+        # Find the *earliest* close fill after this entry — either side. The
+        # closing side tells us whether the position was long (closed by sell)
+        # or short (closed by buy). Previously this only looked for sell fills,
+        # which silently discarded every short trade.
+        close_cur = conn.execute(
             """
-            SELECT fill_id, price, ts_ms FROM fills
-            WHERE symbol=? AND side='sell' AND ts_ms > ?
+            SELECT fill_id, price, ts_ms, side FROM fills
+            WHERE symbol=? AND ts_ms > ?
             ORDER BY ts_ms ASC LIMIT 1
             """,
             (symbol, ts_ms),
         )
-        sell_row = sell_cur.fetchone()
-        if sell_row is None:
+        close_row = close_cur.fetchone()
+        if close_row is None:
             continue
 
-        fill_id, close_price, fill_ts_ms = sell_row
+        fill_id, close_price, fill_ts_ms, close_side = close_row
+        position_side = "short" if close_side == "buy" else "long"
+        entry_side = "buy" if position_side == "long" else "sell"
 
-        # Find entry price from a buy fill near ts_ms
-        buy_cur = conn.execute(
+        entry_cur = conn.execute(
             """
             SELECT price FROM fills
-            WHERE symbol=? AND side='buy' AND ts_ms <= ?
+            WHERE symbol=? AND side=? AND ts_ms <= ?
             ORDER BY ts_ms DESC LIMIT 1
             """,
-            (symbol, ts_ms + 60_000),
+            (symbol, entry_side, ts_ms + 60_000),
         )
-        buy_row = buy_cur.fetchone()
-        if not buy_row:
+        entry_row = entry_cur.fetchone()
+        if not entry_row:
             continue
-        entry_price = buy_row[0]
+        entry_price = entry_row[0]
 
         if entry_price <= 0:
             continue
 
         pnl_pct = (close_price - entry_price) / entry_price * 100.0
+        if position_side == "short":
+            pnl_pct = -pnl_pct
         label = 1 if pnl_pct > min_pnl_threshold else 0
 
         conn.execute(

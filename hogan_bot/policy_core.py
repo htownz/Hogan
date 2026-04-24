@@ -701,6 +701,37 @@ def decide(
                 predict_trade_quality,
             )
 
+            # Train/serve parity: the training pipeline enriches trades with
+            # `local_range_position` (0=entered at low, 1=entered at high) and
+            # `run_up_before_entry` (% price change over the lookback window)
+            # via `enrich_trades_with_entry_context`. Live inference must feed
+            # the same quantities or the model sees a skewed feature
+            # distribution (constant 0.5 / 0.0) and silently loses edge.
+            _local_range_position = 0.5
+            _run_up_before_entry = 0.0
+            try:
+                _lookback = 12
+                if len(candles) > 1:
+                    _lb = min(_lookback, len(candles) - 1)
+                    _slice = candles.iloc[-(_lb + 1):]
+                    _entry_px = float(_slice["close"].iloc[-1])
+                    _hi_col = "high" if "high" in _slice.columns else "close"
+                    _lo_col = "low" if "low" in _slice.columns else "close"
+                    _local_high = float(_slice[_hi_col].max())
+                    _local_low = float(_slice[_lo_col].min())
+                    _local_range = max(_local_high - _local_low, 1e-9)
+                    _local_range_position = round(
+                        (_entry_px - _local_low) / _local_range, 3
+                    )
+                    _lb_start_close = float(_slice["close"].iloc[0])
+                    if _lb_start_close > 0:
+                        _run_up_before_entry = round(
+                            (_entry_px - _lb_start_close) / _lb_start_close * 100.0,
+                            3,
+                        )
+            except Exception as _lrp_exc:
+                logger.debug("local_range/run_up compute error: %s", _lrp_exc)
+
             _tq_features = build_feature_row_from_live(
                 tech_confidence=_tech_conf or 0.0,
                 final_confidence=signal.confidence or 0.0,
@@ -715,11 +746,23 @@ def decide(
                 momentum_scale=momentum_scale,
                 conf_scale=conf_scale,
                 whipsaw_count=recent_whipsaw_count,
+                local_range_position=_local_range_position,
+                run_up_before_entry=_run_up_before_entry,
                 spread_est=spread_est,
                 side="short" if action == "sell" else "long",
             )
             trade_quality_prob = predict_trade_quality(_tq_features, trade_quality_model)
-            _tq_threshold = float(getattr(cfg, "trade_quality_threshold", 0.40))
+            # E6: per-regime TQ gate — volatile demands higher conviction,
+            # trending regimes can be slightly more permissive. Falls back to
+            # the global cfg.trade_quality_threshold when regime detection is
+            # off or confidence is too low.
+            try:
+                from hogan_bot.regime import effective_trade_quality_threshold
+                _tq_threshold = float(
+                    effective_trade_quality_threshold(_rstate, cfg)
+                )
+            except Exception:
+                _tq_threshold = float(getattr(cfg, "trade_quality_threshold", 0.40))
             if trade_quality_prob < _tq_threshold:
                 action = "hold"
                 block_reasons.append("trade_quality_threshold")
@@ -727,7 +770,18 @@ def decide(
             else:
                 trade_quality_scale = 0.5 + trade_quality_prob
         except Exception as _tq_exc:
-            logger.warning("Trade quality inference error: %s", _tq_exc)
+            # Fail CLOSED: if the trade-quality model can't score the setup, we
+            # must not silently let the gate become a no-op — that's exactly
+            # how a corrupted/outdated TQ model would "pass through" bad
+            # trades. Hold the bar and record the reason for observability.
+            logger.warning(
+                "Trade quality inference error: %s — holding (fail-closed)",
+                _tq_exc,
+            )
+            action = "hold"
+            block_reasons.append("trade_quality_error")
+            trade_quality_prob = None
+            trade_quality_scale = 0.0
 
     # Funding overlay (crowded positioning): scale size, don't flip direction
     funding_scale = 1.0

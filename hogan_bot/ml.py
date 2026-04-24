@@ -557,9 +557,15 @@ def build_training_set(
     """
     frame = _feature_frame(candles)
 
+    # Hoist MACRO_FEATURE_NAMES import out of the try/except so the error-recovery
+    # branch can always reference it. Previously, if `macro_features` itself
+    # failed to import, the except block would raise UnboundLocalError on
+    # `MACRO_FEATURE_NAMES` and mask the real import error.
+    from hogan_bot.macro_features import MACRO_FEATURE_NAMES
+
     if db_conn is not None:
         try:
-            from hogan_bot.macro_features import MACRO_FEATURE_NAMES, add_macro_features
+            from hogan_bot.macro_features import add_macro_features
             frame = add_macro_features(frame, db_conn)
         except Exception as exc:
             import logging
@@ -570,7 +576,6 @@ def build_training_set(
                 if col not in frame.columns:
                     frame[col] = 0.0
     else:
-        from hogan_bot.macro_features import MACRO_FEATURE_NAMES
         for col in MACRO_FEATURE_NAMES:
             frame[col] = 0.0
 
@@ -1397,6 +1402,140 @@ def load_model(model_path: str) -> TrainedModel:
     if not isinstance(model, TrainedModel):
         raise RuntimeError("Invalid model artifact format")
     return model
+
+
+def assert_model_feature_parity(
+    trained_model: TrainedModel,
+    *,
+    is_champion: bool | None = None,
+    strict: bool = False,
+) -> dict:
+    """Verify a loaded model's ``feature_columns`` still matches the live
+    feature registry.
+
+    Why this exists
+    ---------------
+    ``build_training_set`` and ``build_feature_row`` both route through
+    :func:`feature_registry.get_feature_columns`, so train-time and serve-time
+    feature *construction* stays in lockstep. But a *saved* model captures the
+    feature ordering that existed **at training time**. If someone later adds,
+    removes, or reorders entries in the registry, calls like
+    ``trained_model.model.predict_proba`` still work — they just silently
+    consume the wrong columns, producing garbage probabilities with no error.
+
+    This helper is the cheap compile-time-style check we can run at load to
+    surface that drift:
+
+    * returns a ``dict`` with ``ok``, ``missing``, ``extra``, ``reordered``
+      and the expected/actual columns;
+    * when ``strict=True`` and parity fails, raises ``ValueError`` so the
+      live loop refuses to start on a stale artifact (champion mode).
+
+    Parameters
+    ----------
+    trained_model:
+        Loaded :class:`TrainedModel` or anything exposing ``feature_columns``.
+    is_champion:
+        Whether to compare against the champion subset or the full registry.
+        When ``None``, infer from ``HOGAN_CHAMPION_MODE`` / model size.
+    strict:
+        Raise instead of just returning a report when parity breaks.
+    """
+    # RegimeModelRouter: check the global fallback *and* every sub-model.
+    # A drifted per-regime model is just as bad as a drifted global — maybe
+    # worse, because it only fires in one regime so drift is easy to miss.
+    regime_models = getattr(trained_model, "_regime_models", None)
+    if regime_models is not None and getattr(
+        trained_model, "has_regime_models", False
+    ):
+        global_model = getattr(trained_model, "_global", trained_model)
+        reports: dict[str, dict] = {"global": _single_model_parity(
+            global_model, is_champion=is_champion, strict=False,
+        )}
+        for regime_name, sub in regime_models.items():
+            reports[f"regime:{regime_name}"] = _single_model_parity(
+                sub, is_champion=is_champion, strict=False,
+            )
+        all_ok = all(r["ok"] for r in reports.values())
+        combined = {
+            "ok": all_ok,
+            "routed": True,
+            "sub_reports": reports,
+            "failed": [k for k, r in reports.items() if not r["ok"]],
+        }
+        if not all_ok:
+            # Surface every failing sub-model in the message so you don't have
+            # to re-check one-by-one. Strict mode fails the whole router.
+            details = "; ".join(
+                f"{k}: missing={r['missing'] or 'none'} "
+                f"extra={r['extra'] or 'none'} reordered={r['reordered']}"
+                for k, r in reports.items() if not r["ok"]
+            )
+            msg = f"Feature-registry drift in routed model — {details}"
+            if strict:
+                raise ValueError(msg + " — retrain required before live start.")
+            logger.warning(msg)
+        return combined
+
+    return _single_model_parity(
+        trained_model, is_champion=is_champion, strict=strict,
+    )
+
+
+def _single_model_parity(
+    trained_model,
+    *,
+    is_champion: bool | None,
+    strict: bool,
+) -> dict:
+    """Parity check for a single (non-routed) trained model. See
+    :func:`assert_model_feature_parity` for the contract; this helper exists
+    so the router path and the scalar path share one implementation.
+    """
+    from hogan_bot.feature_registry import get_feature_columns
+
+    actual = list(getattr(trained_model, "feature_columns", []) or [])
+    if is_champion is None:
+        env_says = False
+        try:
+            from hogan_bot.champion import is_champion_mode
+            env_says = bool(is_champion_mode())
+        except Exception:
+            env_says = False
+        is_champion = env_says or len(actual) == 8
+    expected = get_feature_columns(bool(is_champion))
+
+    missing = [c for c in expected if c not in actual]
+    extra = [c for c in actual if c not in expected]
+    reordered = (
+        not missing
+        and not extra
+        and actual != expected
+    )
+    ok = not missing and not extra and not reordered
+
+    report = {
+        "ok": bool(ok),
+        "is_champion": bool(is_champion),
+        "expected_count": len(expected),
+        "actual_count": len(actual),
+        "missing": missing,
+        "extra": extra,
+        "reordered": reordered,
+    }
+
+    if not ok:
+        msg = (
+            "Feature-registry drift vs loaded model: "
+            f"expected={len(expected)} actual={len(actual)} "
+            f"missing={missing or 'none'} extra={extra or 'none'} "
+            f"reordered={reordered}"
+        )
+        if strict:
+            raise ValueError(msg + " — retrain required before live start.")
+        logger.warning(msg)
+
+    return report
 
 
 def predict_up_probability(

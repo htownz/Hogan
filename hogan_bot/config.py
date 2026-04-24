@@ -430,6 +430,32 @@ class BotConfig:
             errors.append(
                 f"portfolio_loss_regime_scale must be in (0, 1.0], got {self.portfolio_loss_regime_scale}"
             )
+
+        # ML gate sanity: if the "buy" threshold is not strictly above the
+        # "sell" threshold the directional gate becomes a no-op (or worse,
+        # flips: every score passes *both* buy and sell). This is an easy
+        # config-override footgun so we fail fast at startup.
+        _buy_thr = getattr(self, "ml_buy_threshold", None)
+        _sell_thr = getattr(self, "ml_sell_threshold", None)
+        if (
+            _buy_thr is not None
+            and _sell_thr is not None
+            and _buy_thr <= _sell_thr
+        ):
+            errors.append(
+                f"ml_buy_threshold ({_buy_thr}) must be > ml_sell_threshold "
+                f"({_sell_thr}); otherwise the directional gate is degenerate"
+            )
+
+        # Short tail-loss cap must sit inside (0, 1] if defined.
+        _short_max_loss = getattr(self, "short_max_loss_pct", None)
+        if _short_max_loss is not None and (
+            _short_max_loss <= 0 or _short_max_loss > 1.0
+        ):
+            errors.append(
+                f"short_max_loss_pct must be in (0, 1.0], got {_short_max_loss}"
+            )
+
         return errors
 
 
@@ -469,6 +495,16 @@ class RegimeConfig:
     long_size_scale: float = 1.0
     short_size_scale: float = 1.0
 
+    # Trade-quality gate override (E6): lets each regime demand a different
+    # setup-quality bar. Prefer ``trade_quality_threshold_mult`` unless you
+    # really want an absolute value. ``None`` means "fall back to the global
+    # cfg.trade_quality_threshold".
+    #   trending_up  → lower bar OK, trend carries setups
+    #   ranging      → slightly higher (more false starts)
+    #   volatile     → much higher (need conviction to fight whipsaw)
+    trade_quality_threshold: float | None = None
+    trade_quality_threshold_mult: float = 1.0
+
 
 DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
     "trending_up": RegimeConfig(
@@ -490,6 +526,7 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         allow_shorts=True,
         long_size_scale=1.00,
         short_size_scale=0.25,
+        trade_quality_threshold_mult=0.90,
     ),
     "trending_down": RegimeConfig(
         volume_threshold_mult=0.55,
@@ -510,6 +547,7 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         allow_shorts=True,
         long_size_scale=0.40,
         short_size_scale=1.00,
+        trade_quality_threshold_mult=0.90,
     ),
     "ranging": RegimeConfig(
         volume_threshold_mult=1.10,
@@ -530,6 +568,7 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         allow_shorts=True,
         long_size_scale=0.70,
         short_size_scale=0.40,
+        trade_quality_threshold_mult=1.10,
     ),
     "volatile": RegimeConfig(
         volume_threshold_mult=0.70,
@@ -550,6 +589,7 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         allow_shorts=True,
         long_size_scale=0.50,
         short_size_scale=0.50,
+        trade_quality_threshold_mult=1.30,
     ),
 }
 

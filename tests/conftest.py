@@ -24,3 +24,38 @@ def _isolate_env():
     yield
     os.environ.clear()
     os.environ.update(snapshot)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_regime_history():
+    """Clear :data:`hogan_bot.regime._REGIME_HISTORY` before and after each test.
+
+    ``detect_regime`` stores a per-symbol rolling buffer of observed regimes
+    at module level to drive hysteresis (N-bar confirmation before a regime
+    switch). When one test runs ``policy_core.decide`` several times it pushes
+    entries into that buffer — and any **subsequent** test that depends on a
+    freshly-warmed regime path then sees residual history.
+
+    Concrete failure this prevents:
+    ``test_correctness_patches.TestSwarmBacktestDBIsolation::test_live_still_writes_swarm_rows``
+    ran ``decide`` 5× on a BTC/USD tape that ended in the ranging regime, which
+    pre-loaded the hysteresis buffer before
+    ``test_decision_parity.TestPolicyCoreEquivalence::test_decide_deterministic``.
+    Between that test's two ``decide()`` calls the buffer grew one more entry,
+    flipping the smoothed regime on the second call and producing a different
+    confidence (0.127 vs 0.099). The individual tests were each correct; only
+    their shared module-level state was broken.
+
+    Importing ``reset_regime_history`` is cheap and safe — the function is a
+    one-line ``dict.clear``.
+    """
+    try:
+        from hogan_bot.regime import reset_regime_history
+    except Exception:
+        # regime module not importable in this collection (e.g. bare unit tests
+        # that only touch utility modules) — fixture becomes a no-op.
+        yield
+        return
+    reset_regime_history()
+    yield
+    reset_regime_history()

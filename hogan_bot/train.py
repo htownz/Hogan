@@ -38,8 +38,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--calibrate",
-        action="store_true",
-        help="After training, apply probability calibration (Platt scaling) to the saved model",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Apply probability calibration to the saved model after training. "
+            "Defaults to *on* in champion mode (to keep p(up) honest for gate "
+            "thresholds) and *off* otherwise. Use --no-calibrate to disable."
+        ),
     )
     parser.add_argument(
         "--calibration-method",
@@ -105,6 +110,21 @@ def main() -> None:
         if args.model_path == "models/hogan_logreg.pkl":
             args.model_path = "models/hogan_champion.pkl"
         print("Champion mode: training on 8-feature subset ->", args.model_path)
+        # Champion is a locked production artifact — uncalibrated probabilities
+        # have historically drifted away from the static gate thresholds. When
+        # the operator did not pass an explicit --calibrate/--no-calibrate, we
+        # opt *in* so p(up)=0.6 from the model actually means ~60% base rate.
+        if args.calibrate is None:
+            args.calibrate = True
+            print(
+                f"Champion mode: enabling calibration "
+                f"(method={args.calibration_method}). Pass --no-calibrate to disable."
+            )
+
+    # Non-champion default remains opt-in (backward compat): only calibrate
+    # when the user explicitly passes --calibrate.
+    if args.calibrate is None:
+        args.calibrate = False
 
     train_db_conn = None
     if getattr(args, "from_db", False):

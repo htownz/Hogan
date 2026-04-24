@@ -149,22 +149,29 @@ def predict_trade_quality(
     features: list[float],
     model: TradeQualityModel,
 ) -> float:
-    """Return probability that this trade setup will exit profitably."""
+    """Return probability that this trade setup will exit profitably.
+
+    Fails **closed** on any error (feature-length mismatch, estimator failure,
+    etc.) by returning ``0.0``. Returning the neutral 0.5 here would silently
+    bypass the TQ gate — the default ``trade_quality_threshold`` of ``0.40``
+    treats 0.5 as "accept", meaning a broken/stale model would look just like
+    a model that approves every trade.
+    """
     feature_columns = list(getattr(model, "feature_columns", FEATURE_COLUMNS))
     if len(features) != len(feature_columns):
         logger.warning(
-            "trade_quality feature length mismatch: got=%d expected=%d",
+            "trade_quality feature length mismatch: got=%d expected=%d — fail-closed (0.0)",
             len(features),
             len(feature_columns),
         )
-        return 0.5
+        return 0.0
     x = pd.DataFrame([features], columns=feature_columns, dtype=np.float32)
     try:
         proba = model.model.predict_proba(x)[0, 1]
         return float(min(max(proba, 0.0), 1.0))
     except Exception as exc:
-        logger.warning("trade_quality predict failed: %s", exc)
-        return 0.5
+        logger.warning("trade_quality predict failed: %s — fail-closed (0.0)", exc)
+        return 0.0
 
 
 def generate_training_data(

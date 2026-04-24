@@ -817,6 +817,33 @@ async def _run_event_loop_inner(
         try:
             ml_model = load_model(config.ml_model_path)
             logger.info("Loaded ML model from %s", config.ml_model_path)
+            # Feature-registry parity: catch silent train/serve drift *before*
+            # the loop starts scoring bars. Champion mode is the locked prod
+            # artifact — refuse to start on drift. Full-feature mode degrades
+            # to a loud warning so you can still run experiments.
+            try:
+                from hogan_bot.champion import is_champion_mode
+                from hogan_bot.ml import assert_model_feature_parity
+
+                _is_champ = is_champion_mode()
+                _parity = assert_model_feature_parity(
+                    ml_model, is_champion=_is_champ, strict=_is_champ,
+                )
+                if _parity.get("ok"):
+                    if _parity.get("routed"):
+                        logger.info(
+                            "Feature parity OK (routed: %d sub-models)",
+                            len(_parity.get("sub_reports", {})),
+                        )
+                    else:
+                        logger.info(
+                            "Feature parity OK (%d features, champion=%s)",
+                            _parity.get("actual_count", 0),
+                            _parity.get("is_champion", False),
+                        )
+            except ValueError as _fp_exc:
+                logger.error("FEATURE PARITY FAIL: %s", _fp_exc)
+                raise
         except FileNotFoundError:
             logger.warning(
                 "ML model not found at %s — running in DEGRADED mode (no ML filter/sizer). "

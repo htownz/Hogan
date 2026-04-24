@@ -167,9 +167,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--oos-gate",
-        action="store_true",
-        default=False,
-        help="Enforce OOS validation gate: candidate must pass min Sharpe, max drawdown, and min trades",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Enforce OOS validation gate on the promotion candidate. Default is "
+            "ON so scheduled/auto-retrain runs cannot ship a model that fails "
+            "min Sharpe / max drawdown / min trades. Pass --no-oos-gate for "
+            "deliberate experimentation."
+        ),
     )
     p.add_argument("--oos-min-sharpe", type=float, default=0.0, help="Min OOS Sharpe to pass gate")
     p.add_argument("--oos-max-drawdown", type=float, default=25.0, help="Max OOS drawdown %% to pass gate")
