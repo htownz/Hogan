@@ -52,6 +52,16 @@ _HORIZONS = {"4h": 4, "12h": 12, "24h": 24}
 _model_cache: dict[str, object] = {}
 
 
+def clear_forecast_model_cache() -> None:
+    """Clear cached forecast model artifacts.
+
+    Forecast models are cached after first load to avoid repeated disk IO in
+    live mode. Tests often monkeypatch model paths/files, so expose a small
+    reset hook instead of requiring tests to reach into ``_model_cache``.
+    """
+    _model_cache.clear()
+
+
 @dataclass
 class ForecastResult:
     """Structured forecast output for the policy layer."""

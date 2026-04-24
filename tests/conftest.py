@@ -59,3 +59,31 @@ def _isolate_regime_history():
     reset_regime_history()
     yield
     reset_regime_history()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_module_caches():
+    """Clear lightweight Hogan module caches between tests.
+
+    These caches are correct in live/runtime code, but tests often patch the
+    filesystem or model artifacts. Without a reset, one test can poison the
+    next with stale "file missing" entries or stale per-symbol Optuna
+    overrides.
+    """
+    resetters = []
+    try:
+        from hogan_bot.config import reload_symbol_configs
+        resetters.append(reload_symbol_configs)
+    except Exception:
+        pass
+    try:
+        from hogan_bot.forecast import clear_forecast_model_cache
+        resetters.append(clear_forecast_model_cache)
+    except Exception:
+        pass
+
+    for reset in resetters:
+        reset()
+    yield
+    for reset in resetters:
+        reset()

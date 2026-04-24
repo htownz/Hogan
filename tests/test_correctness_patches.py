@@ -515,6 +515,44 @@ class TestPerSymbolConfig:
         assert r1 is r2
 
 
+# ===================================================================
+# Test isolation: module-level runtime caches
+# ===================================================================
+
+
+class TestModuleCacheIsolation:
+    """Regression guard for hidden module-level state in tests.
+
+    Runtime caches are fine in live code, but test cases patch model files and
+    per-symbol config paths. The autouse fixture in ``tests.conftest`` must
+    clear them before the next test starts.
+    """
+
+    def test_1_seed_runtime_caches(self):
+        from hogan_bot import config as cfg_mod
+        from hogan_bot import forecast as forecast_mod
+
+        cfg_mod._symbol_config_cache["BTC/USD_1h"] = {"short_ma_window": 123}
+        forecast_mod._model_cache["4h"] = object()
+
+        assert cfg_mod._symbol_config_cache
+        assert forecast_mod._model_cache
+
+    def test_2_autouse_fixture_clears_runtime_caches(self):
+        from hogan_bot import config as cfg_mod
+        from hogan_bot import forecast as forecast_mod
+
+        assert cfg_mod._symbol_config_cache == {}
+        assert forecast_mod._model_cache == {}
+
+    def test_clear_forecast_model_cache_public_helper(self):
+        from hogan_bot import forecast as forecast_mod
+
+        forecast_mod._model_cache["24h"] = object()
+        forecast_mod.clear_forecast_model_cache()
+        assert forecast_mod._model_cache == {}
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 6. Regime multiplier-based overrides
 # ═══════════════════════════════════════════════════════════════════════════

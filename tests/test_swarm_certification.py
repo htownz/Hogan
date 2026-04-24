@@ -33,10 +33,10 @@ def clear_forecast_cache():
     a module-level dict.  Consecutive calls with different candles can
     produce different signals if the cached model has internal state.
     """
-    from hogan_bot.forecast import _model_cache
-    _model_cache.clear()
+    from hogan_bot.forecast import clear_forecast_model_cache
+    clear_forecast_model_cache()
     yield
-    _model_cache.clear()
+    clear_forecast_model_cache()
 
 
 # ---------------------------------------------------------------------------
