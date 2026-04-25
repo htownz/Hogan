@@ -1,13 +1,11 @@
-version: "3.8"
-
 services:
   prometheus:
-    image: prom/prometheus:latest
+    image: "${HOGAN_PROMETHEUS_IMAGE:-prom/prometheus:v3.4.0}"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -16,14 +14,14 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:latest
+    image: "${HOGAN_GRAFANA_IMAGE:-grafana/grafana:11.5.2}"
     ports:
-      - "3000:3000"
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
     depends_on:
       - prometheus
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=hogan
-      - GF_USERS_ALLOW_SIGN_UP=false
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro

@@ -169,7 +169,8 @@ is degrading, and triggers a retrain or parameter re-optimization automatically.
 | P3 | Event-driven architecture cleanup | **DONE** | Medium |
 | P3 | Champion-specific retrain path (BTC 1h only) | Next | High |
 | P3 | Data freshness enforcement in live loop | Next | Medium |
-| P3 | Containerization (Dockerfile) | Planned | Medium |
+| P3 | Containerization + VPS Compose baseline | **DONE** | Medium |
+| P3 | Docker image publishing + deploy automation | Planned | Medium |
 | P3 | Live reconciliation loop | Planned | High |
 | P3 | MLflow model governance | Planned | Medium |
 | P3 | OpenBB analyst cockpit | Planned | Medium |
@@ -203,3 +204,8 @@ audit (`hogan_bot/feature_importance.py`) are complete. Walk-forward provides ro
 N-fold OOS validation with a structured promotion gate (min Sharpe, max drawdown,
 min positive windows). Feature importance uses permutation importance to rank the 15
 champion features and flag noise/harmful ones for removal.*
+
+*VPS update (2026-04-24): Dockerfile, root Compose stack (bot + TimescaleDB +
+Prometheus + Grafana), Docker deployment runbook, and CI Docker build/Compose
+validation are in place. Registry publishing and automated VPS deploys remain
+planned follow-up work.*

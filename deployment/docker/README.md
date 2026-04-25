@@ -25,6 +25,9 @@ HOGAN_LIVE_ACK=false
 HOGAN_METRICS_PORT=8000
 POSTGRES_PASSWORD=<strong-unique-password>
 GRAFANA_ADMIN_PASSWORD=<strong-unique-password>
+HOGAN_TIMESCALE_IMAGE=timescale/timescaledb:2.16.1-pg16
+HOGAN_PROMETHEUS_IMAGE=prom/prometheus:v3.4.0
+HOGAN_GRAFANA_IMAGE=grafana/grafana:11.5.2
 ```
 
 Timescale is available to the bot when you opt in:
@@ -36,6 +39,18 @@ HOGAN_DATABASE_URL=postgresql://hogan:<strong-unique-password>@timescaledb:5432/
 
 SQLite remains the default local/runtime backend until the candle migration is
 validated.
+
+## Image Versions
+
+The Compose files use pinned defaults for TimescaleDB, Prometheus, and Grafana
+so a routine restart does not silently pull a new major/minor release. Override
+these only during an intentional upgrade:
+
+```env
+HOGAN_TIMESCALE_IMAGE=timescale/timescaledb:2.16.1-pg16
+HOGAN_PROMETHEUS_IMAGE=prom/prometheus:v3.4.0
+HOGAN_GRAFANA_IMAGE=grafana/grafana:11.5.2
+```
 
 ## Ports
 
@@ -74,6 +89,17 @@ docker compose down
 
 Run exactly one `hogan-bot` container per account/strategy unless the runtime
 lock and execution ownership model are redesigned.
+
+## Monitoring-Only Stack
+
+Use the root `docker-compose.yml` for VPS deployment: it runs the bot,
+TimescaleDB, Prometheus, and Grafana on one Docker network, and Prometheus
+scrapes `hogan-bot:8000`.
+
+Use `monitoring/docker-compose.monitoring.yml` only when the bot is running on
+the host instead of in Docker. That stack uses `monitoring/prometheus.yml`,
+which scrapes `host.docker.internal:8000`, and binds Prometheus/Grafana to
+`127.0.0.1` for local SSH-tunnel or VPN access.
 
 ## Models
 

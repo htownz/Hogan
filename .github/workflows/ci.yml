@@ -61,3 +61,39 @@ jobs:
 
       - name: Check formatting, imports, and bugbear hygiene
         run: ruff check hogan_bot/ tests/ scripts/ diagnostics/ --select E,F,I,B007,B904 --ignore E501
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t hogan-bot:ci .
+
+      - name: Smoke-test image contents
+        run: docker run --rm --entrypoint python hogan-bot:ci -m compileall -q hogan_bot scripts diagnostics
+
+      - name: Prepare Compose environment
+        run: |
+          cat > .env <<'EOF'
+          HOGAN_PAPER_MODE=true
+          HOGAN_LIVE_MODE=false
+          HOGAN_LIVE_ACK=false
+          HOGAN_METRICS_PORT=8000
+          HOGAN_STORAGE_BACKEND=sqlite
+          POSTGRES_DB=hogan
+          POSTGRES_USER=hogan
+          POSTGRES_PASSWORD=ci-postgres-password
+          GRAFANA_ADMIN_PASSWORD=ci-grafana-password
+          EOF
+
+      - name: Validate Compose configuration
+        env:
+          POSTGRES_DB: hogan
+          POSTGRES_USER: hogan
+          POSTGRES_PASSWORD: ci-postgres-password
+          GRAFANA_ADMIN_PASSWORD: ci-grafana-password
+        run: |
+          docker compose config --quiet
+          docker compose -f monitoring/docker-compose.monitoring.yml config --quiet

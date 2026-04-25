@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
 
   timescaledb:
-    image: timescale/timescaledb:latest-pg16
+    image: "${HOGAN_TIMESCALE_IMAGE:-timescale/timescaledb:2.16.1-pg16}"
     container_name: hogan-timescaledb
     environment:
       POSTGRES_DB: "${POSTGRES_DB:-hogan}"
@@ -42,7 +42,7 @@ services:
     restart: unless-stopped
 
   prometheus:
-    image: prom/prometheus:latest
+    image: "${HOGAN_PROMETHEUS_IMAGE:-prom/prometheus:v3.4.0}"
     container_name: hogan-prometheus
     volumes:
       - ./deployment/docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
@@ -58,7 +58,7 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:latest
+    image: "${HOGAN_GRAFANA_IMAGE:-grafana/grafana:11.5.2}"
     container_name: hogan-grafana
     environment:
       GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}"
