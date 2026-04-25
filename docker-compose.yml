@@ -8,15 +8,15 @@ services:
     env_file:
       - .env
     environment:
-      HOGAN_METRICS_PORT: "${HOGAN_METRICS_PORT:-8000}"
+      HOGAN_METRICS_PORT: "8000"
       HOGAN_STORAGE_BACKEND: "${HOGAN_STORAGE_BACKEND:-sqlite}"
-      HOGAN_DATABASE_URL: "${HOGAN_DATABASE_URL:-postgresql://hogan:hogan@timescaledb:5432/hogan}"
+      HOGAN_DATABASE_URL: "${HOGAN_DATABASE_URL:-postgresql://${POSTGRES_USER:-hogan}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@timescaledb:5432/${POSTGRES_DB:-hogan}}"
     volumes:
       - ./data:/app/data
       - ./models:/app/models:ro
       - ./reports:/app/reports
     ports:
-      - "${HOGAN_METRICS_PORT:-8000}:${HOGAN_METRICS_PORT:-8000}"
+      - "127.0.0.1:${HOGAN_METRICS_PORT:-8000}:8000"
     depends_on:
       timescaledb:
         condition: service_healthy
@@ -28,12 +28,12 @@ services:
     environment:
       POSTGRES_DB: "${POSTGRES_DB:-hogan}"
       POSTGRES_USER: "${POSTGRES_USER:-hogan}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-hogan}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
     volumes:
       - timescale_data:/var/lib/postgresql/data
       - ./deployment/timescale/init:/docker-entrypoint-initdb.d:ro
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hogan} -d ${POSTGRES_DB:-hogan}"]
       interval: 10s
@@ -48,12 +48,11 @@ services:
       - ./deployment/docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=30d"
-      - "--web.enable-lifecycle"
     depends_on:
       - hogan-bot
     restart: unless-stopped
@@ -62,13 +61,13 @@ services:
     image: grafana/grafana:latest
     container_name: hogan-grafana
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-hogan}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}"
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
-      - "${GRAFANA_PORT:-3000}:3000"
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
     depends_on:
       - prometheus
     restart: unless-stopped

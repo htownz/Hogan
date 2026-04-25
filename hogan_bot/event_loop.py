@@ -441,7 +441,11 @@ class SignalEvaluator:
                     logger.debug("MTF features fallback: %s", exc)
             if hasattr(self.ml_model, "set_regime"):
                 self.ml_model.set_regime(regime_name)
-            up_prob = predict_up_probability(candles, self.ml_model)
+            up_prob = predict_up_probability(
+                candles,
+                self.ml_model,
+                db_conn=self.pipeline.conn,
+            )
             self._ml_probs.append(up_prob)
             if cfg.use_ml_as_sizer:
                 conf_scale = ml_probability_sizer(action, up_prob)
@@ -1171,13 +1175,22 @@ async def _run_event_loop_inner(
                         "close": _mtf_cd.get("close", 0),
                         "volume": _mtf_cd.get("volume", 0),
                     }
-                    candle_store.upsert_candles(symbol, tf, pd.DataFrame([_mtf_row]))
-                except Exception:
-                    pass
+                    await asyncio.to_thread(
+                        candle_store.upsert_candles,
+                        symbol,
+                        tf,
+                        pd.DataFrame([_mtf_row]),
+                    )
+                except Exception as _persist_err:
+                    logger.warning("candle persist %s/%s failed: %s", symbol, tf, _persist_err)
                 # Sub-hourly candles trigger a re-evaluation using the
                 # buffered 1h data so the bot can react faster than once/hour
-                _EVAL_TIMEFRAMES = ("1m", "5m", "15m", "30m")
-                if tf not in _EVAL_TIMEFRAMES:
+                try:
+                    from hogan_bot.timeframe_utils import parse_timeframe_to_seconds
+                    _should_eval_fast = parse_timeframe_to_seconds(tf) < 3600
+                except Exception:
+                    _should_eval_fast = tf in ("1m", "5m", "15m", "30m")
+                if not _should_eval_fast:
                     continue
                 _primary_df = buffer.to_df(symbol, config.timeframe)
                 if _primary_df.empty or len(_primary_df) < max(config.long_ma_window, 20):
@@ -1201,7 +1214,12 @@ async def _run_event_loop_inner(
                         "close": _candle_dict.get("close", 0),
                         "volume": _candle_dict.get("volume", 0),
                     }
-                    candle_store.upsert_candles(symbol, tf, pd.DataFrame([_persist_row]))
+                    await asyncio.to_thread(
+                        candle_store.upsert_candles,
+                        symbol,
+                        tf,
+                        pd.DataFrame([_persist_row]),
+                    )
                 except Exception as _persist_err:
                     logger.debug("candle persist %s/%s: %s", symbol, tf, _persist_err)
 

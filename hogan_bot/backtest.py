@@ -1715,7 +1715,7 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
             if ml_model is not None:
                 if hasattr(ml_model, "set_regime"):
                     ml_model.set_regime(_current_regime)
-                up_prob = predict_up_probability(window, ml_model)
+                up_prob = predict_up_probability(window, ml_model, db_conn=_bt_conn)
                 _ml_probs.append(up_prob)
                 if use_ml_as_sizer:
                     conf_scale *= ml_probability_sizer(action, up_prob)

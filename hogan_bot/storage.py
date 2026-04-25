@@ -559,7 +559,7 @@ def upsert_candles(
     """
     rows = []
     for _, row in df.iterrows():
-        ts = row["timestamp"]
+        ts = row["timestamp"] if "timestamp" in row else row["ts_ms"]
         if hasattr(ts, "timestamp"):
             ts_ms = int(ts.timestamp() * 1000)
         else:

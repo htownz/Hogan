@@ -13,8 +13,7 @@ This Compose stack runs:
 cp .env.example .env  # if you maintain one; otherwise create .env manually
 mkdir -p data models reports
 docker compose build
-docker compose up -d timescaledb prometheus grafana
-docker compose up -d hogan-bot
+docker compose up -d
 ```
 
 Keep the first VPS boot in paper mode:
@@ -24,13 +23,15 @@ HOGAN_PAPER_MODE=true
 HOGAN_LIVE_MODE=false
 HOGAN_LIVE_ACK=false
 HOGAN_METRICS_PORT=8000
+POSTGRES_PASSWORD=<strong-unique-password>
+GRAFANA_ADMIN_PASSWORD=<strong-unique-password>
 ```
 
 Timescale is available to the bot when you opt in:
 
 ```env
 HOGAN_STORAGE_BACKEND=timescale
-HOGAN_DATABASE_URL=postgresql://hogan:hogan@timescaledb:5432/hogan
+HOGAN_DATABASE_URL=postgresql://hogan:<strong-unique-password>@timescaledb:5432/hogan
 ```
 
 SQLite remains the default local/runtime backend until the candle migration is
@@ -41,10 +42,12 @@ validated.
 - Hogan metrics: `8000`
 - Prometheus: `9090`
 - Grafana: `3000`
-- Timescale/Postgres: `5432`
+- Timescale/Postgres: `5432` on `127.0.0.1`
 
-Bind these behind a firewall on a VPS. Do not expose exchange credentials,
-database credentials, or live trading endpoints to the public internet.
+The Compose file binds service ports to `127.0.0.1` by default. Keep them
+behind SSH tunnels, a private VPN, or a reverse proxy with authentication. Do
+not expose exchange credentials, database credentials, metrics, or live trading
+endpoints to the public internet.
 
 ## Volumes and Backups
 
@@ -71,3 +74,10 @@ docker compose down
 
 Run exactly one `hogan-bot` container per account/strategy unless the runtime
 lock and execution ownership model are redesigned.
+
+## Models
+
+The image intentionally does not bake in `models/`; the bot mounts `./models`
+read-only. Copy champion/challenger artifacts to the VPS before starting any
+ML-enabled profile, or keep `HOGAN_USE_ML_FILTER=false` / `HOGAN_ML_AS_SIZER=false`
+until models are trained in-place.

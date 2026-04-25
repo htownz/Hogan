@@ -504,6 +504,7 @@ def build_feature_row_checked(
     db_conn=None,
     data_ages_hours: dict[str, float] | None = None,
     use_champion_features: bool | None = None,
+    include_experimental_features: bool | None = None,
 ):
     """Like :func:`build_feature_row` but returns a :class:`FeatureResult`
     with staleness metadata.
@@ -532,11 +533,24 @@ def build_feature_row_checked(
         get_feature_columns,
     )
 
-    values = build_feature_row(candles, db_conn=db_conn, use_champion_features=use_champion_features)
+    include_exp = (
+        os.getenv("HOGAN_USE_EXPERIMENTAL_FEATURES", "false").lower() == "true"
+        if include_experimental_features is None
+        else include_experimental_features
+    )
+    values = build_feature_row(
+        candles,
+        db_conn=db_conn,
+        use_champion_features=use_champion_features,
+        include_experimental_features=include_exp,
+    )
     if values is None:
         return None
 
-    cols = get_feature_columns(use_champion_features)
+    cols = get_feature_columns(
+        use_champion_features,
+        include_experimental=include_exp,
+    )
     return check_staleness(cols, values, data_ages_hours)
 
 
@@ -1365,7 +1379,7 @@ def walk_forward_cv(
         if len(x_test) < 10:
             continue
 
-        use_scaler = model_type == "logreg"
+        use_scaler = model_type in ("logreg", "neural_net", "mlp")
         scaler = None
         if use_scaler:
             scaler = StandardScaler()
@@ -1537,7 +1551,10 @@ def _single_model_parity(
     :func:`assert_model_feature_parity` for the contract; this helper exists
     so the router path and the scalar path share one implementation.
     """
-    from hogan_bot.feature_registry import get_feature_columns
+    from hogan_bot.feature_registry import (
+        EXPERIMENTAL_FEATURE_COLUMNS,
+        get_feature_columns,
+    )
 
     actual = list(getattr(trained_model, "feature_columns", []) or [])
     if is_champion is None:
@@ -1548,7 +1565,11 @@ def _single_model_parity(
         except Exception:
             env_says = False
         is_champion = env_says or len(actual) == 8
-    expected = get_feature_columns(bool(is_champion))
+    include_exp = (
+        not bool(is_champion)
+        and any(col in actual for col in EXPERIMENTAL_FEATURE_COLUMNS)
+    )
+    expected = get_feature_columns(bool(is_champion), include_experimental=include_exp)
 
     missing = [c for c in expected if c not in actual]
     extra = [c for c in actual if c not in expected]
@@ -1564,6 +1585,7 @@ def _single_model_parity(
         "is_champion": bool(is_champion),
         "expected_count": len(expected),
         "actual_count": len(actual),
+        "include_experimental": bool(include_exp),
         "missing": missing,
         "extra": extra,
         "reordered": reordered,
@@ -1624,6 +1646,24 @@ def predict_up_probability(
                     frame[col] = 0.0
         else:
             for col in macro_cols_needed:
+                frame[col] = 0.0
+
+    from hogan_bot.feature_registry import EXPERIMENTAL_FEATURE_COLUMNS
+    exp_cols_needed = [c for c in feature_cols if c in EXPERIMENTAL_FEATURE_COLUMNS]
+    if exp_cols_needed:
+        if db_conn is not None:
+            try:
+                from hogan_bot.social_whale_features import add_social_whale_features
+                frame = add_social_whale_features(frame, db_conn)
+            except Exception as exc:
+                logger.warning(
+                    "predict_up_probability: social/whale fetch failed (%s) — using zeros",
+                    exc,
+                )
+                for col in exp_cols_needed:
+                    frame[col] = 0.0
+        else:
+            for col in exp_cols_needed:
                 frame[col] = 0.0
 
     latest = frame[feature_cols].tail(1)

@@ -182,6 +182,8 @@ def _train_regime_models(candles, args, db_conn, label_mode: str, global_metrics
         horizon_bars=args.horizon_bars,
         db_conn=db_conn,
         label_mode=label_mode,
+        use_champion_features=getattr(args, "champion", False),
+        include_experimental_features=getattr(args, "experimental_features", False),
     )
     if X is None or len(X) == 0:
         print("No training data for regime models")

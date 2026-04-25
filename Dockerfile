@@ -28,11 +28,6 @@ RUN mkdir -p /app/data /app/models /app/reports
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD python - <<'PY' || exit 1
-import os
-import urllib.request
-port = int(os.getenv("HOGAN_METRICS_PORT", "8000"))
-urllib.request.urlopen(f"http://127.0.0.1:{port}", timeout=3).read(256)
-PY
+    CMD python -c "import os, urllib.request; port=int(os.getenv('HOGAN_METRICS_PORT','8000')); urllib.request.urlopen(f'http://127.0.0.1:{port}', timeout=3).read(256)"
 
 CMD ["python", "-m", "hogan_bot.main"]

@@ -126,7 +126,7 @@ class TimescaleCandleStore:
             cur.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_candles_symbol_tf_ts
-                ON candles (symbol, timeframe, ts DESC)
+                ON candles (symbol, timeframe, ts_ms DESC)
                 """
             )
         self.conn.commit()
