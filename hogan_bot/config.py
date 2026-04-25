@@ -40,6 +40,8 @@ class BotConfig:
 
     # Persistence
     db_path: str = "data/hogan.db"
+    storage_backend: str = "sqlite"
+    database_url: str = "postgresql://hogan:hogan@localhost:5432/hogan"
 
     # Live trading safety latch (must be true AND HOGAN_LIVE_ACK set)
     live_mode: bool = False
@@ -55,6 +57,7 @@ class BotConfig:
     ml_sell_threshold: float = 0.45
     use_regime_models: bool = False
     regime_model_dir: str = "models/regime"
+    use_experimental_features: bool = False
 
     # Trade Quality Classifier — replaces directional ML with setup quality gate
     use_trade_quality: bool = False
@@ -456,6 +459,15 @@ class BotConfig:
                 f"short_max_loss_pct must be in (0, 1.0], got {_short_max_loss}"
             )
 
+        _storage_backend = str(getattr(self, "storage_backend", "sqlite")).lower()
+        if _storage_backend not in {"sqlite", "timescale", "postgres", "postgresql"}:
+            errors.append(
+                "storage_backend must be one of sqlite/timescale/postgres/postgresql, "
+                f"got {_storage_backend!r}"
+            )
+        if _storage_backend != "sqlite" and not getattr(self, "database_url", ""):
+            errors.append("database_url is required when storage_backend is not sqlite")
+
         return errors
 
 
@@ -785,6 +797,11 @@ def load_config() -> BotConfig:
         trade_weekends=os.getenv("HOGAN_TRADE_WEEKENDS", "false").lower() == "true",
         paper_mode=os.getenv("HOGAN_PAPER_MODE", "true").lower() == "true",
         db_path=os.getenv("HOGAN_DB_PATH", "data/hogan.db"),
+        storage_backend=os.getenv("HOGAN_STORAGE_BACKEND", "sqlite").lower(),
+        database_url=os.getenv(
+            "HOGAN_DATABASE_URL",
+            "postgresql://hogan:hogan@localhost:5432/hogan",
+        ),
         live_mode=os.getenv("HOGAN_LIVE_MODE", "false").lower() == "true",
         short_max_loss_pct=_env_float("HOGAN_SHORT_MAX_LOSS_PCT", "0.10"),
         use_ml_filter=os.getenv("HOGAN_USE_ML_FILTER", "false").lower() == "true",
@@ -794,6 +811,9 @@ def load_config() -> BotConfig:
         ml_sell_threshold=_env_float("HOGAN_ML_SELL_THRESHOLD", "0.45"),
         use_regime_models=os.getenv("HOGAN_USE_REGIME_MODELS", "false").lower() == "true",
         regime_model_dir=os.getenv("HOGAN_REGIME_MODEL_DIR", "models/regime"),
+        use_experimental_features=os.getenv(
+            "HOGAN_USE_EXPERIMENTAL_FEATURES", "false"
+        ).lower() == "true",
         use_trade_quality=os.getenv("HOGAN_USE_TRADE_QUALITY", "false").lower() == "true",
         trade_quality_model_path=os.getenv("HOGAN_TRADE_QUALITY_MODEL", "models/trade_quality.pkl"),
         trade_quality_threshold=_env_float("HOGAN_TRADE_QUALITY_THRESHOLD", "0.40"),

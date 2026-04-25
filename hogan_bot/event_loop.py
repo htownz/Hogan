@@ -83,7 +83,6 @@ from hogan_bot.storage import (
     log_decision,
     open_paper_trade,
     record_equity,
-    upsert_candles,
 )
 
 logger = logging.getLogger(__name__)
@@ -680,6 +679,8 @@ async def run_event_loop(
         raise ValueError(f"Invalid configuration — {len(_cfg_errors)} error(s): {'; '.join(_cfg_errors)}")
 
     conn = get_connection(config.db_path)
+    from hogan_bot.candle_store import open_candle_store
+    candle_store = open_candle_store(config, conn=conn)
 
     # ── Startup data refresh: populate sentiment/macro/derivatives tables ──
     _skip_fetch = os.getenv("HOGAN_SKIP_FETCH", "").strip().lower() in ("1", "true", "yes")
@@ -698,8 +699,10 @@ async def run_event_loop(
         logger.info("Startup data fetch skipped (HOGAN_SKIP_FETCH=true)")
 
     try:
-        await _run_event_loop_inner(config, conn, max_events)
+        await _run_event_loop_inner(config, conn, max_events, candle_store=candle_store)
     finally:
+        if getattr(config, "storage_backend", "sqlite") != "sqlite":
+            candle_store.close()
         conn.close()
         logger.info("Database connection closed.")
 
@@ -708,7 +711,11 @@ async def _run_event_loop_inner(
     config: BotConfig,
     conn,
     max_events: int | None,
+    candle_store=None,
 ) -> None:
+    if candle_store is None:
+        from hogan_bot.candle_store import SQLiteCandleStore
+        candle_store = SQLiteCandleStore(conn)
     notifier = make_notifier(config.webhook_url or None)
 
     live_ack = (os.getenv("HOGAN_LIVE_ACK", "") or "").strip()
@@ -1164,7 +1171,7 @@ async def _run_event_loop_inner(
                         "close": _mtf_cd.get("close", 0),
                         "volume": _mtf_cd.get("volume", 0),
                     }
-                    upsert_candles(conn, symbol, tf, pd.DataFrame([_mtf_row]))
+                    candle_store.upsert_candles(symbol, tf, pd.DataFrame([_mtf_row]))
                 except Exception:
                     pass
                 # Sub-hourly candles trigger a re-evaluation using the
@@ -1194,7 +1201,7 @@ async def _run_event_loop_inner(
                         "close": _candle_dict.get("close", 0),
                         "volume": _candle_dict.get("volume", 0),
                     }
-                    upsert_candles(conn, symbol, tf, pd.DataFrame([_persist_row]))
+                    candle_store.upsert_candles(symbol, tf, pd.DataFrame([_persist_row]))
                 except Exception as _persist_err:
                     logger.debug("candle persist %s/%s: %s", symbol, tf, _persist_err)
 

@@ -1,0 +1,32 @@
+.git
+.github
+.cursor
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Runtime state is mounted into the container.
+data/
+reports/
+mlruns/
+models/
+*.log
+
+# Local secrets and machine-specific setup.
+.env
+.env.*
+credentials*.json
+Setup (once per machine).txt
+
+# Large or generated artifacts.
+*.pkl
+*.joblib
+*.parquet
+*.feather
+*.sqlite
+*.db
+*.db-*

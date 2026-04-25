@@ -6,37 +6,81 @@ and config (hour-to-bar conversion).
 
 from __future__ import annotations
 
+import math
+
 import pandas as pd
 
-_TF_MINUTES: dict[str, int] = {
+_TF_SECONDS: dict[str, int] = {
+    "1s": 1,
+    "5s": 5,
+    "10s": 10,
+    "15s": 15,
+    "30s": 30,
     "1m": 1,
-    "5m": 5,
-    "10m": 10,
-    "15m": 15,
-    "30m": 30,
-    "45m": 45,
-    "1h": 60,
-    "2h": 120,
-    "4h": 240,
-    "1d": 1440,
+    "5m": 5 * 60,
+    "10m": 10 * 60,
+    "15m": 15 * 60,
+    "30m": 30 * 60,
+    "45m": 45 * 60,
+    "1h": 60 * 60,
+    "2h": 2 * 60 * 60,
+    "4h": 4 * 60 * 60,
+    "1d": 24 * 60 * 60,
+}
+
+_TF_MINUTES: dict[str, int] = {
+    tf: max(1, seconds // 60) for tf, seconds in _TF_SECONDS.items()
+    if seconds >= 60
 }
 
 
-def parse_timeframe_to_minutes(timeframe: str) -> int:
+def parse_timeframe_to_seconds(timeframe: str) -> int:
+    """Return seconds per bar for strings like ``10s``, ``1m``, ``1h``.
+
+    Raises ``ValueError`` instead of silently mapping unknown values to 5m.
+    This is important for sub-minute ingestion: a typo like ``10sec`` should
+    not accidentally become a 5-minute feature horizon.
+    """
+    tf = str(timeframe).strip().lower()
+    if tf in _TF_SECONDS:
+        return _TF_SECONDS[tf]
+    if len(tf) < 2:
+        raise ValueError(f"invalid timeframe: {timeframe!r}")
+    unit = tf[-1]
+    try:
+        value = int(tf[:-1])
+    except ValueError as exc:
+        raise ValueError(f"invalid timeframe: {timeframe!r}") from exc
+    if value <= 0:
+        raise ValueError(f"timeframe must be positive: {timeframe!r}")
+    if unit == "s":
+        return value
+    if unit == "m":
+        return value * 60
+    if unit == "h":
+        return value * 60 * 60
+    if unit == "d":
+        return value * 24 * 60 * 60
+    raise ValueError(f"unsupported timeframe unit in {timeframe!r}")
+
+
+def parse_timeframe_to_minutes(timeframe: str) -> float:
     """Return the number of minutes per bar for the given timeframe string.
 
-    Examples: '5m' -> 5, '1h' -> 60, '1d' -> 1440.
-    Falls back to 5 if unrecognised.
+    Examples: '10s' -> 0.1666..., '5m' -> 5, '1h' -> 60.
+    Legacy callers expect unknown values to fall back to 5 minutes; strict
+    validation for new sub-minute paths lives in ``parse_timeframe_to_seconds``.
     """
-    return _TF_MINUTES.get(timeframe, 5)
+    try:
+        return parse_timeframe_to_seconds(timeframe) / 60.0
+    except ValueError:
+        return 5
 
 
 def bars_per_day(timeframe: str) -> int:
     """Return the number of bars per UTC calendar day for the given timeframe."""
-    minutes = parse_timeframe_to_minutes(timeframe)
-    if minutes <= 0:
-        return 288  # fallback to 5m-equivalent
-    return 24 * 60 // minutes
+    seconds = parse_timeframe_to_seconds(timeframe)
+    return int((24 * 60 * 60) // seconds)
 
 
 def bars_per_year(timeframe: str, days: int = 365) -> float:
@@ -46,10 +90,8 @@ def bars_per_year(timeframe: str, days: int = 365) -> float:
 
 def hours_to_bars(hours: float, timeframe: str) -> int:
     """Convert real-world hours to bar count for the given timeframe."""
-    minutes = parse_timeframe_to_minutes(timeframe)
-    if minutes <= 0:
-        return max(1, int(hours * 12))  # 5m fallback: 12 bars/hour
-    return max(1, int(hours * 60 / minutes))
+    seconds = parse_timeframe_to_seconds(timeframe)
+    return max(1, int(hours * 60 * 60 / seconds))
 
 
 def infer_timeframe_from_candles(candles: pd.DataFrame) -> str | None:
@@ -73,7 +115,7 @@ def infer_timeframe_from_candles(candles: pd.DataFrame) -> str | None:
         median_diff_ms = diffs_ms.median()
         if pd.isna(median_diff_ms) or median_diff_ms <= 0:
             return None
-        minutes = int(round(median_diff_ms / 60_000))
+        seconds = int(round(median_diff_ms / 1000))
     else:
         ts_parsed = pd.to_datetime(ts, utc=True)
         diffs = ts_parsed.diff().dropna()
@@ -82,14 +124,21 @@ def infer_timeframe_from_candles(candles: pd.DataFrame) -> str | None:
         median_diff = diffs.median()
         if pd.isna(median_diff):
             return None
-        minutes = int(round(median_diff.total_seconds() / 60))
+        seconds = int(round(median_diff.total_seconds()))
 
-    if minutes <= 0:
+    if seconds <= 0:
         return None
 
-    # Map minutes to standard timeframe string
-    rev_map = {v: k for k, v in _TF_MINUTES.items()}
-    return rev_map.get(minutes, f"{minutes}m")
+    rev_map = {v: k for k, v in _TF_SECONDS.items()}
+    if seconds in rev_map:
+        return rev_map[seconds]
+    if seconds % 86400 == 0:
+        return f"{seconds // 86400}d"
+    if seconds % 3600 == 0:
+        return f"{seconds // 3600}h"
+    if seconds % 60 == 0:
+        return f"{seconds // 60}m"
+    return f"{seconds}s"
 
 
 def default_horizon_bars(timeframe: str, target_hours: float = 6.0) -> int:
@@ -99,6 +148,8 @@ def default_horizon_bars(timeframe: str, target_hours: float = 6.0) -> int:
     E.g. 6 hours = 72 bars at 5m, 12 bars at 30m, 6 bars at 1h.
     Falls back to 12 for unrecognised timeframes (legacy retrain behavior).
     """
-    if timeframe not in _TF_MINUTES:
+    try:
+        seconds = parse_timeframe_to_seconds(timeframe)
+    except ValueError:
         return 12
-    return max(1, hours_to_bars(target_hours, timeframe))
+    return max(1, int(math.ceil(target_hours * 60 * 60 / seconds)))

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import pickle
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -442,6 +443,7 @@ def build_feature_row(
     candles: pd.DataFrame,
     db_conn=None,
     use_champion_features: bool | None = None,
+    include_experimental_features: bool | None = None,
 ) -> list[float] | None:
     """Return the feature vector for the **last bar** in *candles*.
 
@@ -476,7 +478,18 @@ def build_feature_row(
             for col in MACRO_FEATURE_NAMES:
                 frame[col] = 0.0
 
-        cols = get_feature_columns(use_champion_features)
+        include_exp = (
+            os.getenv("HOGAN_USE_EXPERIMENTAL_FEATURES", "false").lower() == "true"
+            if include_experimental_features is None
+            else include_experimental_features
+        )
+        if include_exp and db_conn is not None:
+            from hogan_bot.social_whale_features import add_social_whale_features
+            frame = add_social_whale_features(frame, db_conn)
+        cols = get_feature_columns(
+            use_champion_features,
+            include_experimental=include_exp,
+        )
         last = frame[cols].iloc[-1]
         if last.isna().any():
             return None
@@ -534,6 +547,7 @@ def build_training_set(
     fee_rate: float = 0.0026,
     label_mode: str = "fee_threshold",
     use_champion_features: bool | None = None,
+    include_experimental_features: bool | None = None,
 ) -> tuple[pd.DataFrame | None, pd.Series | None, list[str], pd.Series | None]:
     """Construct feature matrix *X* and label vector *y* from *candles*.
 
@@ -579,6 +593,23 @@ def build_training_set(
         for col in MACRO_FEATURE_NAMES:
             frame[col] = 0.0
 
+    include_exp = (
+        os.getenv("HOGAN_USE_EXPERIMENTAL_FEATURES", "false").lower() == "true"
+        if include_experimental_features is None
+        else include_experimental_features
+    )
+    if include_exp and db_conn is not None:
+        try:
+            from hogan_bot.social_whale_features import add_social_whale_features
+            frame = add_social_whale_features(frame, db_conn)
+        except Exception as exc:
+            logger.warning("Social/whale feature join failed: %s — using zeros", exc)
+    if include_exp:
+        from hogan_bot.social_whale_features import SOCIAL_WHALE_FEATURE_NAMES
+        for col in SOCIAL_WHALE_FEATURE_NAMES:
+            if col not in frame.columns:
+                frame[col] = 0.0
+
     if label_mode == "enhanced_triple_barrier":
         from hogan_bot.ml_advanced import triple_barrier_labels_enhanced
         tb_result = triple_barrier_labels_enhanced(
@@ -605,7 +636,10 @@ def build_training_set(
         )
 
     from hogan_bot.feature_registry import get_feature_columns
-    feature_cols = get_feature_columns(use_champion_features)
+    feature_cols = get_feature_columns(
+        use_champion_features,
+        include_experimental=include_exp,
+    )
 
     keep_cols = feature_cols + ["target"]
     has_quality = "meta_quality" in frame.columns
@@ -1391,6 +1425,17 @@ def _make_cv_model(model_type: str):
         return HistGradientBoostingClassifier(
             max_depth=6, learning_rate=0.05, max_iter=400, random_state=42,
         )
+    elif model_type in ("neural_net", "mlp"):
+        from sklearn.neural_network import MLPClassifier
+        return MLPClassifier(
+            hidden_layer_sizes=(64, 32),
+            activation="relu",
+            alpha=1e-4,
+            learning_rate_init=1e-3,
+            max_iter=300,
+            random_state=42,
+            early_stopping=True,
+        )
     else:
         from sklearn.linear_model import LogisticRegression
         return LogisticRegression(max_iter=500, C=1.0, class_weight="balanced")
@@ -1666,6 +1711,73 @@ def train_hist_gradient_boosting(
     }
 
     artifact = TrainedModel(model=clf, feature_columns=feature_cols, scaler=None)
+    with open(model_path, "wb") as f:
+        pickle.dump(artifact, f)
+    return metrics
+
+
+def train_neural_net(
+    candles: pd.DataFrame,
+    model_path: str,
+    horizon_bars: int = 12,
+    db_conn=None,
+    label_mode: str = "fee_threshold",
+) -> dict[str, object]:
+    """Train + save a lightweight sklearn MLP challenger model.
+
+    This preserves Hogan's artifact contract: ``TrainedModel`` stores the
+    estimator, feature column order, and scaler, and inference continues to
+    call ``predict_proba``.
+    """
+    from sklearn.metrics import (
+        accuracy_score,
+        f1_score,
+        precision_score,
+        recall_score,
+        roc_auc_score,
+    )
+    from sklearn.neural_network import MLPClassifier
+    from sklearn.preprocessing import StandardScaler
+
+    X, y, feature_cols, _meta_quality = build_training_set(
+        candles, horizon_bars=horizon_bars, db_conn=db_conn, label_mode=label_mode,
+    )
+    if X is None or y is None or len(X) < 80:
+        raise ValueError(f"Not enough training rows ({len(X) if X is not None else 0})")
+    split = int(len(X) * 0.8)
+    X_train, X_test = X.iloc[:split], X.iloc[split:]
+    y_train, y_test = y.iloc[:split], y.iloc[split:]
+
+    scaler = StandardScaler()
+    X_train_arr = scaler.fit_transform(X_train)
+    X_test_arr = scaler.transform(X_test)
+
+    clf = MLPClassifier(
+        hidden_layer_sizes=(64, 32),
+        activation="relu",
+        alpha=1e-4,
+        learning_rate_init=1e-3,
+        max_iter=300,
+        random_state=42,
+        early_stopping=True,
+    )
+    clf.fit(X_train_arr, y_train)
+
+    proba = clf.predict_proba(X_test_arr)[:, 1]
+    pred = (proba >= 0.5).astype(int)
+    metrics = {
+        "model_type": "neural_net",
+        "accuracy": float(accuracy_score(y_test, pred)),
+        "roc_auc": float(roc_auc_score(y_test, proba)) if len(set(y_test)) > 1 else 0.0,
+        "precision": float(precision_score(y_test, pred, zero_division=0)),
+        "recall": float(recall_score(y_test, pred, zero_division=0)),
+        "f1": float(f1_score(y_test, pred, zero_division=0)),
+        "features": len(feature_cols),
+        "n_train": int(len(X_train)),
+        "n_test": int(len(X_test)),
+    }
+
+    artifact = TrainedModel(model=clf, feature_columns=feature_cols, scaler=scaler)
     with open(model_path, "wb") as f:
         pickle.dump(artifact, f)
     return metrics

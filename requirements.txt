@@ -72,6 +72,9 @@ openpyxl>=3.1.0
 # Metrics / monitoring (optional)
 prometheus-client>=0.20.0
 
+# TimescaleDB/Postgres candle-store backend
+psycopg[binary]>=3.2.0
+
 # ---------------------------------------------------------------------------
 # Phase 2 — Event-driven architecture (WebSocket)
 # ---------------------------------------------------------------------------

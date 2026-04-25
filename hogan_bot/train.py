@@ -11,6 +11,7 @@ from hogan_bot.ml import (
     train_hist_gradient_boosting,
     train_lightgbm,
     train_logistic_regression,
+    train_neural_net,
     train_random_forest,
     train_xgboost,
     walk_forward_cv,
@@ -27,9 +28,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model-path", default="models/hogan_logreg.pkl")
     parser.add_argument(
         "--model-type",
-        choices=["logreg", "random_forest", "xgboost", "lightgbm", "hist_gb"],
+        choices=["logreg", "random_forest", "xgboost", "lightgbm", "hist_gb", "neural_net"],
         default="logreg",
-        help="Classifier: logistic regression (default), random forest, xgboost, lightgbm, or hist_gb",
+        help="Classifier: logistic regression (default), random forest, xgboost, lightgbm, hist_gb, or neural_net",
     )
     parser.add_argument(
         "--tune",
@@ -99,6 +100,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Train separate per-regime models and save to models/regime/",
     )
+    parser.add_argument(
+        "--experimental-features",
+        action="store_true",
+        help="Opt challenger training into social/NLP/whale experimental features",
+    )
     return parser.parse_args()
 
 
@@ -120,6 +126,9 @@ def main() -> None:
                 f"Champion mode: enabling calibration "
                 f"(method={args.calibration_method}). Pass --no-calibrate to disable."
             )
+    elif getattr(args, "experimental_features", False):
+        os.environ["HOGAN_USE_EXPERIMENTAL_FEATURES"] = "true"
+        print("Experimental challenger features enabled (social/NLP/whale block)")
 
     # Non-champion default remains opt-in (backward compat): only calibrate
     # when the user explicitly passes --calibrate.
@@ -301,6 +310,11 @@ def _main_train(args, candles, train_db_conn, label_mode: str) -> None:
         )
     elif args.model_type == "hist_gb":
         metrics = train_hist_gradient_boosting(
+            candles, model_path=args.model_path, horizon_bars=args.horizon_bars,
+            **_train_kw,
+        )
+    elif args.model_type == "neural_net":
+        metrics = train_neural_net(
             candles, model_path=args.model_path, horizon_bars=args.horizon_bars,
             **_train_kw,
         )

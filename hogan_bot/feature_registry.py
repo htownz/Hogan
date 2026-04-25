@@ -91,6 +91,22 @@ def _intermarket(name: str) -> FeatureMeta:
     )
 
 
+def _social(name: str) -> FeatureMeta:
+    return FeatureMeta(
+        name=name, source="social_db", latency_class="hourly",
+        fill_policy="forward_fill", staleness_limit_hours=12.0,
+        decision_relevance=DECISION_ENTRY_EDGE,
+    )
+
+
+def _whale(name: str) -> FeatureMeta:
+    return FeatureMeta(
+        name=name, source="whale_db", latency_class="hourly",
+        fill_policy="forward_fill", staleness_limit_hours=12.0,
+        decision_relevance=DECISION_VETO,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Registry: one entry per _FEATURE_COLUMNS member (59 total)
 # ---------------------------------------------------------------------------
@@ -182,6 +198,16 @@ if len(FEATURE_REGISTRY) != 59:
     raise ValueError(f"Expected 59 features, got {len(FEATURE_REGISTRY)}")
 
 
+EXPERIMENTAL_FEATURE_REGISTRY: dict[str, FeatureMeta] = {m.name: m for m in [
+    _social("social_nlp_sentiment_score"),
+    _social("social_volume_anomaly"),
+    _whale("whale_exchange_flow_norm"),
+    _whale("whale_large_tx_count_norm"),
+]}
+
+EXPERIMENTAL_FEATURE_COLUMNS: list[str] = list(EXPERIMENTAL_FEATURE_REGISTRY.keys())
+
+
 # ---------------------------------------------------------------------------
 # Champion feature subset — audited via permutation importance
 # ---------------------------------------------------------------------------
@@ -229,7 +255,11 @@ if not all(c in FEATURE_REGISTRY for c in CHAMPION_FEATURE_COLUMNS):
 _FULL_FEATURE_COLUMNS: list[str] = list(FEATURE_REGISTRY.keys())
 
 
-def get_feature_columns(use_champion: bool | None = None) -> list[str]:
+def get_feature_columns(
+    use_champion: bool | None = None,
+    *,
+    include_experimental: bool = False,
+) -> list[str]:
     """Return the feature column list for training/inference.
 
     When *use_champion* is True or when HOGAN_CHAMPION_MODE is set,
@@ -241,7 +271,12 @@ def get_feature_columns(use_champion: bool | None = None) -> list[str]:
             use_champion = is_champion_mode()
         except Exception:
             use_champion = False
-    return list(CHAMPION_FEATURE_COLUMNS) if use_champion else list(_FULL_FEATURE_COLUMNS)
+    if use_champion:
+        return list(CHAMPION_FEATURE_COLUMNS)
+    cols = list(_FULL_FEATURE_COLUMNS)
+    if include_experimental:
+        cols.extend(EXPERIMENTAL_FEATURE_COLUMNS)
+    return cols
 
 
 # ---------------------------------------------------------------------------
@@ -316,7 +351,7 @@ def check_staleness(
     ages = data_ages_hours or {}
 
     for name, val in zip(feature_names, feature_values):
-        meta = FEATURE_REGISTRY.get(name)
+        meta = FEATURE_REGISTRY.get(name) or EXPERIMENTAL_FEATURE_REGISTRY.get(name)
         if meta is None:
             logger.debug("check_staleness: feature %r not in registry — skipped", name)
             continue

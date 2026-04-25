@@ -35,6 +35,8 @@ from typing import AsyncIterator
 
 import pandas as pd
 
+from hogan_bot.timeframe_utils import parse_timeframe_to_seconds
+
 logger = logging.getLogger(__name__)
 
 _RECONNECT_BASE = 1.0   # seconds
@@ -53,6 +55,30 @@ def _ws_fail_threshold() -> int:
         return int(os.getenv("HOGAN_WS_FAIL_THRESHOLD", "5"))
     except ValueError:
         return 5
+
+
+def _subminute_trade_timeframes() -> list[str]:
+    raw = os.getenv("HOGAN_SUBMINUTE_TRADE_TIMEFRAMES", "").strip()
+    if not raw:
+        return []
+    out: list[str] = []
+    for item in raw.split(","):
+        tf = item.strip().lower()
+        if not tf:
+            continue
+        try:
+            seconds = parse_timeframe_to_seconds(tf)
+        except ValueError:
+            logger.warning("Ignoring invalid sub-minute timeframe %r", tf)
+            continue
+        if seconds >= 60:
+            logger.warning(
+                "Ignoring %r in HOGAN_SUBMINUTE_TRADE_TIMEFRAMES; use OHLCV for >=1m",
+                tf,
+            )
+            continue
+        out.append(tf)
+    return out
 
 
 @dataclass
@@ -132,6 +158,48 @@ class CandleRingBuffer:
         return df
 
 
+class TradeCandleAggregator:
+    """Aggregate individual trades into fixed-width OHLCV buckets."""
+
+    def __init__(self, timeframe: str) -> None:
+        seconds = parse_timeframe_to_seconds(timeframe)
+        if seconds <= 0 or seconds >= 60:
+            raise ValueError("TradeCandleAggregator is intended for sub-minute bars")
+        self.timeframe = timeframe
+        self.bucket_ms = seconds * 1000
+        self._current: dict[str, dict] = {}
+
+    def add_trade(self, symbol: str, ts_ms: int, price: float, amount: float) -> dict | None:
+        bucket_start = int(ts_ms // self.bucket_ms * self.bucket_ms)
+        cur = self._current.get(symbol)
+        if cur is None:
+            self._current[symbol] = {
+                "ts_ms": bucket_start,
+                "open": price,
+                "high": price,
+                "low": price,
+                "close": price,
+                "volume": amount,
+            }
+            return None
+        if int(cur["ts_ms"]) == bucket_start:
+            cur["high"] = max(float(cur["high"]), price)
+            cur["low"] = min(float(cur["low"]), price)
+            cur["close"] = price
+            cur["volume"] = float(cur["volume"]) + amount
+            return None
+        closed = cur
+        self._current[symbol] = {
+            "ts_ms": bucket_start,
+            "open": price,
+            "high": price,
+            "low": price,
+            "close": price,
+            "volume": amount,
+        }
+        return closed
+
+
 # ---------------------------------------------------------------------------
 # Live WebSocket engine (CCXT Pro)
 # ---------------------------------------------------------------------------
@@ -164,6 +232,10 @@ class LiveDataEngine(DataEngineBase):
         self.rest_fallback_interval = rest_fallback_interval
         self.buffer = CandleRingBuffer(maxlen=ring_buffer_len)
         self._last_candle_ts: dict[str, float] = {}
+        self.trade_timeframes = _subminute_trade_timeframes()
+        self._trade_aggregators = {
+            tf: TradeCandleAggregator(tf) for tf in self.trade_timeframes
+        }
 
     def _ccxt_options(self) -> dict:
         """CCXT options for Kraken and other exchanges (timeout, rate limit)."""
@@ -215,6 +287,11 @@ class LiveDataEngine(DataEngineBase):
                     for symbol in self.symbols
                     for tf in self.timeframes
                 ]
+                tasks.extend(
+                    asyncio.create_task(self._watch_trades(exchange, symbol))
+                    for symbol in self.symbols
+                    if self.trade_timeframes
+                )
                 done, pending = await asyncio.wait(
                     tasks, return_when=asyncio.FIRST_EXCEPTION,
                 )
@@ -286,6 +363,52 @@ class LiveDataEngine(DataEngineBase):
             except Exception as exc:
                 logger.warning("watchOHLCV error for %s/%s: %s", symbol, timeframe, exc)
                 raise  # bubble up to trigger reconnect
+
+    async def _watch_trades(self, exchange, symbol: str) -> None:
+        """Watch raw trades and emit sub-minute OHLCV candles.
+
+        Enable with ``HOGAN_SUBMINUTE_TRADE_TIMEFRAMES=10s,30s``. Exchanges
+        without ``watchTrades`` support will bubble an error and use the same
+        reconnect/fallback behavior as OHLCV streams.
+        """
+        if not hasattr(exchange, "watchTrades"):
+            raise RuntimeError(f"{self.exchange_id} does not expose watchTrades")
+        while self._running:
+            try:
+                trades = await exchange.watchTrades(symbol)
+                for trade in trades:
+                    ts_ms = int(trade.get("timestamp") or int(time.time() * 1000))
+                    price = float(trade.get("price") or 0.0)
+                    amount = float(trade.get("amount") or trade.get("size") or 0.0)
+                    if price <= 0:
+                        continue
+                    for tf, agg in self._trade_aggregators.items():
+                        closed = agg.add_trade(symbol, ts_ms, price, amount)
+                        if closed is None:
+                            continue
+                        self.buffer.push(symbol, tf, closed)
+                        event = CandleEvent(
+                            symbol=symbol,
+                            timeframe=tf,
+                            candle=pd.Series(closed),
+                        )
+                        try:
+                            self._queue.put_nowait(event)
+                        except asyncio.QueueFull:
+                            logger.warning(
+                                "Candle queue full — dropping %s/%s trade candle",
+                                symbol,
+                                tf,
+                            )
+                        try:
+                            from hogan_bot.metrics import CANDLES_RECEIVED
+                            CANDLES_RECEIVED.labels(symbol=symbol, timeframe=tf).inc()
+                        except Exception as exc:
+                            logger.debug("Trade candle metric update failed: %s", exc)
+                    self._last_candle_ts[symbol] = time.time()
+            except Exception as exc:
+                logger.warning("watchTrades error for %s: %s", symbol, exc)
+                raise
 
     # ------------------------------------------------------------------
     async def _run_rest_fallback(self) -> None:
