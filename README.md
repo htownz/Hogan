@@ -105,6 +105,8 @@ pip install -r requirements.txt
 # pip install -r requirements-modeling.txt  # XGBoost, LightGBM, Optuna, MLflow
 # pip install -r requirements-rl.txt        # PPO/RL training
 cp .env.example .env
+# Deployment preflight:
+python -m hogan_bot.healthcheck --no-metrics
 # Champion runtime (canonical entry point):
 python -m hogan_bot.main
 # Or with a finite run:

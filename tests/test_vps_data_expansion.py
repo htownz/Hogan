@@ -215,6 +215,79 @@ class TestTimescaleSchema:
         assert "timeframe, ts DESC" not in sql
 
 
+class TestTimescaleMigrationScript:
+    def test_symbol_filter_parsing(self):
+        from scripts.migrate_candles_to_timescale import _parse_symbol_filter
+
+        assert _parse_symbol_filter("BTC/USD:1h, ETH/USD:10s") == {
+            ("BTC/USD", "1h"),
+            ("ETH/USD", "10s"),
+        }
+
+    def test_symbol_filter_requires_timeframe(self):
+        from scripts.migrate_candles_to_timescale import _parse_symbol_filter
+
+        try:
+            _parse_symbol_filter("BTC/USD")
+        except ValueError as exc:
+            assert "BTC/USD:1h" in str(exc)
+        else:
+            raise AssertionError("expected ValueError for missing timeframe")
+
+    def test_dry_run_does_not_open_timescale(self, monkeypatch, tmp_path):
+        from hogan_bot.storage import _create_schema, upsert_candles
+        from scripts import migrate_candles_to_timescale as script
+
+        db_path = tmp_path / "hogan.db"
+        conn = sqlite3.connect(db_path)
+        _create_schema(conn)
+        upsert_candles(conn, "BTC/USD", "1h", _candles(3))
+        conn.close()
+
+        def _fail_open(_database_url):
+            raise AssertionError("dry-run must not open Timescale")
+
+        monkeypatch.setattr(script, "TimescaleCandleStore", _fail_open)
+
+        results = script.migrate(str(db_path), "", dry_run=True)
+
+        assert [(r.symbol, r.timeframe, r.source_count, r.migrated_count) for r in results] == [
+            ("BTC/USD", "1h", 3, 0)
+        ]
+
+    def test_verify_reports_destination_mismatch(self, monkeypatch, tmp_path):
+        from hogan_bot.storage import _create_schema, upsert_candles
+        from scripts import migrate_candles_to_timescale as script
+
+        db_path = tmp_path / "hogan.db"
+        conn = sqlite3.connect(db_path)
+        _create_schema(conn)
+        upsert_candles(conn, "BTC/USD", "1h", _candles(4))
+        conn.close()
+
+        class _FakeTimescale:
+            def __init__(self, _database_url):
+                self.closed = False
+
+            def upsert_candles(self, _symbol, _timeframe, df):
+                return len(df)
+
+            def candle_count(self, _symbol, _timeframe):
+                return 2
+
+            def close(self):
+                self.closed = True
+
+        monkeypatch.setattr(script, "TimescaleCandleStore", _FakeTimescale)
+
+        results = script.migrate(str(db_path), "postgresql://example", verify=True)
+
+        assert len(results) == 1
+        assert results[0].migrated_count == 4
+        assert results[0].destination_count == 2
+        assert not results[0].verified
+
+
 class TestNeuralNetChallenger:
     def test_cv_factory_returns_predict_proba_model(self):
         from hogan_bot.ml import _make_cv_model

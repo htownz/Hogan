@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -74,6 +75,31 @@ jobs:
       - name: Smoke-test image contents
         run: docker run --rm --entrypoint python hogan-bot:ci -m compileall -q hogan_bot scripts diagnostics
 
+      - name: Prepare image tags
+        id: image
+        shell: bash
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=${image}:sha-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "latest_tag=${image}:latest" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Docker image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker tag hogan-bot:ci "${{ steps.image.outputs.sha_tag }}"
+          docker tag hogan-bot:ci "${{ steps.image.outputs.latest_tag }}"
+          docker push "${{ steps.image.outputs.sha_tag }}"
+          docker push "${{ steps.image.outputs.latest_tag }}"
+
       - name: Prepare Compose environment
         run: |
           cat > .env <<'EOF'
@@ -94,6 +120,8 @@ jobs:
           POSTGRES_USER: hogan
           POSTGRES_PASSWORD: ci-postgres-password
           GRAFANA_ADMIN_PASSWORD: ci-grafana-password
+          HOGAN_BOT_IMAGE: ghcr.io/example/hogan:sha-ci
         run: |
           docker compose config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
           docker compose -f monitoring/docker-compose.monitoring.yml config --quiet

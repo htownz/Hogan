@@ -1,0 +1,41 @@
+services:
+  hogan-bot:
+    build: null
+    image: "${HOGAN_BOT_IMAGE:?Set HOGAN_BOT_IMAGE to a published GHCR tag, for example ghcr.io/owner/repo:sha-<commit>}"
+    pull_policy: always
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: "${HOGAN_BOT_MEMORY_LIMIT:-1g}"
+        reservations:
+          memory: "${HOGAN_BOT_MEMORY_RESERVATION:-256m}"
+
+  timescaledb:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  prometheus:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  grafana:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

@@ -16,6 +16,18 @@ docker compose build
 docker compose up -d
 ```
 
+For VPS production deploys, prefer the CI-published GHCR image instead of
+building on the server:
+
+```bash
+export HOGAN_BOT_IMAGE=ghcr.io/<owner>/<repo>:sha-<commit>
+docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+The CI workflow publishes `sha-<commit>` and `latest` tags on pushes to `main`.
+Use the immutable SHA tag for rollbacks and audits.
+
 The default image installs the live/paper trading runtime and skips heavy
 training extras. Build with advanced modeling dependencies only on machines
 that train boosted-tree challenger models, run Optuna, or use MLflow:
@@ -49,6 +61,7 @@ GRAFANA_ADMIN_PASSWORD=<strong-unique-password>
 HOGAN_TIMESCALE_IMAGE=timescale/timescaledb:2.16.1-pg16
 HOGAN_PROMETHEUS_IMAGE=prom/prometheus:v3.4.0
 HOGAN_GRAFANA_IMAGE=grafana/grafana:11.5.2
+HOGAN_BOT_IMAGE=ghcr.io/<owner>/<repo>:sha-<commit>
 ```
 
 Timescale is available to the bot when you opt in:
@@ -60,6 +73,49 @@ HOGAN_DATABASE_URL=postgresql://hogan:<strong-unique-password>@timescaledb:5432/
 
 SQLite remains the default local/runtime backend until the candle migration is
 validated.
+
+## Timescale Candle Migration
+
+Migrate candle history before enabling the Timescale candle backend for the
+event loop. The migration intentionally copies only the `candles` table; paper
+trades, fills, swarm state, locks, and operational records stay in SQLite.
+
+Preview the copy plan first:
+
+```bash
+python scripts/migrate_candles_to_timescale.py \
+  --sqlite-db data/hogan.db \
+  --dry-run
+```
+
+Copy and verify all candle series:
+
+```bash
+python scripts/migrate_candles_to_timescale.py \
+  --sqlite-db data/hogan.db \
+  --database-url "postgresql://hogan:<strong-unique-password>@localhost:5432/hogan" \
+  --verify
+```
+
+Copy only selected symbol/timeframe pairs:
+
+```bash
+python scripts/migrate_candles_to_timescale.py \
+  --sqlite-db data/hogan.db \
+  --database-url "postgresql://hogan:<strong-unique-password>@localhost:5432/hogan" \
+  --only BTC/USD:1h,ETH/USD:10s \
+  --verify
+```
+
+After verification passes, opt the bot into Timescale candles:
+
+```env
+HOGAN_STORAGE_BACKEND=timescale
+HOGAN_DATABASE_URL=postgresql://hogan:<strong-unique-password>@timescaledb:5432/hogan
+```
+
+Keep SQLite backups even after the candle path moves to Timescale; SQLite still
+owns execution and operational state.
 
 ## Image Versions
 
@@ -106,10 +162,15 @@ docker compose ps
 docker compose logs -f hogan-bot
 docker compose restart hogan-bot
 docker compose down
+python -m hogan_bot.healthcheck --no-metrics
 ```
 
 Run exactly one `hogan-bot` container per account/strategy unless the runtime
 lock and execution ownership model are redesigned.
+
+The container healthcheck runs `python -m hogan_bot.healthcheck` and verifies
+configuration, required filesystem paths, and the metrics endpoint. Before the
+event loop is running, use `--no-metrics` for a config/filesystem preflight.
 
 ## Monitoring-Only Stack
 

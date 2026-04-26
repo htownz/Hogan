@@ -207,8 +207,13 @@ champion features and flag noise/harmful ones for removal.*
 
 *VPS update (2026-04-24): Dockerfile, root Compose stack (bot + TimescaleDB +
 Prometheus + Grafana), Docker deployment runbook, and CI Docker build/Compose
-validation are in place. The default container skips optional advanced
-modeling and RL training dependencies; build with `INSTALL_MODELING=true` for
+validation are in place. CI now publishes immutable GHCR images on pushes to
+`main`, `docker-compose.prod.yml` supports VPS image-pull deployments, and
+`python -m hogan_bot.healthcheck` provides container/runtime preflight checks.
+Timescale candle migration now has dry-run and post-copy verification modes for
+safe VPS backfills before switching `HOGAN_STORAGE_BACKEND=timescale`.
+The default container skips optional advanced modeling and RL training
+dependencies; build with `INSTALL_MODELING=true` for
 XGBoost/LightGBM/Optuna/MLflow images and `INSTALL_RL=true` for PPO
-training/inference images. Registry publishing and automated VPS deploys
-remain planned follow-up work.*
+training/inference images. Automated VPS deploy orchestration remains planned
+follow-up work.*
