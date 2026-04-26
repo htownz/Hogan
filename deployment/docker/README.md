@@ -16,6 +16,27 @@ docker compose build
 docker compose up -d
 ```
 
+The default image installs the live/paper trading runtime and skips heavy
+training extras. Build with advanced modeling dependencies only on machines
+that train boosted-tree challenger models, run Optuna, or use MLflow:
+
+```bash
+docker compose build --build-arg INSTALL_MODELING=true hogan-bot
+```
+
+Build with RL dependencies only on machines that train, tune, or serve PPO
+policies:
+
+```bash
+docker compose build --build-arg INSTALL_RL=true hogan-bot
+```
+
+Both can be enabled for a full research image:
+
+```bash
+docker compose build --build-arg INSTALL_MODELING=true --build-arg INSTALL_RL=true hogan-bot
+```
+
 Keep the first VPS boot in paper mode:
 
 ```env
@@ -107,3 +128,11 @@ The image intentionally does not bake in `models/`; the bot mounts `./models`
 read-only. Copy champion/challenger artifacts to the VPS before starting any
 ML-enabled profile, or keep `HOGAN_USE_ML_FILTER=false` / `HOGAN_ML_AS_SIZER=false`
 until models are trained in-place.
+
+RL/PPO inference is still supported when `HOGAN_USE_RL_AGENT=true`, but the
+container must be built with `INSTALL_RL=true` so `stable-baselines3` and
+`gymnasium` are available.
+
+XGBoost, LightGBM, Optuna, and MLflow are also opt-in for containers. Use
+`INSTALL_MODELING=true` before selecting `--model-type xgboost` /
+`--model-type lightgbm`, running Optuna optimization, or relying on MLflow.

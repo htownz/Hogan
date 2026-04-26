@@ -207,5 +207,8 @@ champion features and flag noise/harmful ones for removal.*
 
 *VPS update (2026-04-24): Dockerfile, root Compose stack (bot + TimescaleDB +
 Prometheus + Grafana), Docker deployment runbook, and CI Docker build/Compose
-validation are in place. Registry publishing and automated VPS deploys remain
-planned follow-up work.*
+validation are in place. The default container skips optional advanced
+modeling and RL training dependencies; build with `INSTALL_MODELING=true` for
+XGBoost/LightGBM/Optuna/MLflow images and `INSTALL_RL=true` for PPO
+training/inference images. Registry publishing and automated VPS deploys
+remain planned follow-up work.*

@@ -17,18 +17,16 @@ scikit-learn>=1.4.0
 #   git -C /path/to/htownz-ccxt fetch upstream && git merge upstream/master
 # ---------------------------------------------------------------------------
 
-# ML backends
-xgboost>=2.0.0
-lightgbm>=4.0.0
+# Advanced ML/model-governance backends
+# Optional heavy install. Use requirements-modeling.txt for XGBoost, LightGBM,
+# Optuna tuning, and MLflow experiment tracking.
 
 # Optional dashboard
 # streamlit>=1.32.0
 # plotly>=5.20.0
 
 # Reinforcement learning (PPO agent)
-# PyTorch is a transitive dependency of stable-baselines3 (~700 MB first install)
-stable-baselines3>=2.3.0
-gymnasium>=0.29.0
+# Optional heavy install. Use requirements-rl.txt when training/tuning PPO models.
 
 # Historical data backfill (no API key required)
 yfinance>=0.2.0
@@ -42,7 +40,7 @@ yfinance>=0.2.0
 alpaca-py>=0.28.0
 
 # Hyperparameter tuning (python -m hogan_bot.rl_tune)
-optuna>=3.0.0
+# Optional heavy install. Use requirements-modeling.txt.
 
 # CoinGecko market intelligence (uses stdlib urllib — no extra package needed)
 # Set COINGECKO_KEY in .env, then run:
@@ -84,7 +82,7 @@ psycopg[binary]>=3.2.0
 # ---------------------------------------------------------------------------
 # Phase 3 — MLflow experiment tracking
 # ---------------------------------------------------------------------------
-mlflow>=2.11.0
+# Optional heavy install. Use requirements-modeling.txt.
 
 # ---------------------------------------------------------------------------
 # Phase 4 — Online / continuous learning

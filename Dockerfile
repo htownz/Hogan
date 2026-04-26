@@ -6,6 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+ARG INSTALL_RL=false
+ARG INSTALL_MODELING=false
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
@@ -13,9 +16,11 @@ RUN apt-get update \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY requirements.txt requirements-modeling.txt requirements-rl.txt ./
 RUN pip install --upgrade pip \
-    && pip install -r requirements.txt
+    && pip install -r requirements.txt \
+    && if [ "$INSTALL_MODELING" = "true" ]; then pip install -r requirements-modeling.txt; fi \
+    && if [ "$INSTALL_RL" = "true" ]; then pip install -r requirements-rl.txt; fi
 
 COPY hogan_bot ./hogan_bot
 COPY scripts ./scripts

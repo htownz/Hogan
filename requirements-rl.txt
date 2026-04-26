@@ -1,0 +1,8 @@
+# Optional reinforcement learning dependencies.
+#
+# Install only when training or tuning PPO models:
+#   pip install -r requirements-rl.txt
+#
+# These pull PyTorch and can add multiple GB to Linux Docker builds.
+stable-baselines3>=2.3.0
+gymnasium>=0.29.0

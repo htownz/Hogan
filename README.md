@@ -101,6 +101,9 @@ Hogan follows a multi-layer architecture:
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+# Optional research/training extras:
+# pip install -r requirements-modeling.txt  # XGBoost, LightGBM, Optuna, MLflow
+# pip install -r requirements-rl.txt        # PPO/RL training
 cp .env.example .env
 # Champion runtime (canonical entry point):
 python -m hogan_bot.main
@@ -370,6 +373,7 @@ python -m hogan_bot.retrain --dry-run
 python -m hogan_bot.retrain --schedule 24
 
 # Every 6 hours on Binance with XGBoost
+# Requires: pip install -r requirements-modeling.txt
 python -m hogan_bot.retrain --exchange binance --symbol BTC/USDT \
     --model-type xgboost --schedule 6
 ```
@@ -433,7 +437,8 @@ HOGAN_RETRAIN_SCHEDULE_HOURS=24
   added as ML features — high positive funding is a crowded-long signal.
 - Probability calibration (Platt scaling): `python -m hogan_bot.train --calibrate`.
 - Confidence-based position sizing: `HOGAN_ML_CONFIDENCE_SIZING=true`.
-- Try gradient boosted trees: `--model-type xgboost` or `--model-type lightgbm`.
+- Try gradient boosted trees: `--model-type xgboost` or `--model-type lightgbm`
+  after installing `requirements-modeling.txt`.
 - Promote only models that beat baseline after fees/slippage using the model registry.
 
 ## Roadmap
