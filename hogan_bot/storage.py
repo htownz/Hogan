@@ -941,20 +941,67 @@ def summarize_polymarket_shadow_trades(conn: sqlite3.Connection) -> dict[str, fl
     """Return compact promotion metrics for closed shadow trades."""
     rows = conn.execute(
         """
-        SELECT realized_pnl
+        SELECT realized_pnl, raw_json
         FROM polymarket_shadow_trades
         WHERE status = 'closed' AND realized_pnl IS NOT NULL
+        ORDER BY closed_ts_ms ASC, id ASC
         """
     ).fetchall()
     pnls = [float(r[0]) for r in rows]
     if not pnls:
-        return {"trades": 0.0, "total_pnl": 0.0, "win_rate": 0.0, "avg_pnl": 0.0}
+        return {
+            "trades": 0.0,
+            "total_pnl": 0.0,
+            "win_rate": 0.0,
+            "avg_pnl": 0.0,
+            "max_drawdown": 0.0,
+            "worst_loss_streak": 0.0,
+            "market_type_coverage": 0.0,
+            "data_quality_weighted_pnl": 0.0,
+        }
     wins = sum(1 for pnl in pnls if pnl > 0)
+    equity = 0.0
+    peak = 0.0
+    max_drawdown = 0.0
+    loss_streak = 0
+    worst_loss_streak = 0
+    market_types: set[str] = set()
+    weighted_pnl = 0.0
+    total_quality = 0.0
+    for pnl, raw_json in rows:
+        pnl = float(pnl)
+        equity += pnl
+        peak = max(peak, equity)
+        max_drawdown = min(max_drawdown, equity - peak)
+        if pnl <= 0:
+            loss_streak += 1
+            worst_loss_streak = max(worst_loss_streak, loss_streak)
+        else:
+            loss_streak = 0
+        try:
+            raw = json.loads(raw_json or "{}")
+        except json.JSONDecodeError:
+            raw = {}
+        opportunity = raw.get("opportunity") if isinstance(raw, dict) else {}
+        assessment = raw.get("assessment") if isinstance(raw, dict) else {}
+        if isinstance(opportunity, dict):
+            market_type = opportunity.get("market_type")
+            if market_type:
+                market_types.add(str(market_type))
+        quality = 1.0
+        if isinstance(assessment, dict):
+            quality = max(0.0, min(1.0, float(assessment.get("data_quality_score", 1.0))))
+        weighted_pnl += pnl * quality
+        total_quality += quality
     return {
         "trades": float(len(pnls)),
         "total_pnl": float(sum(pnls)),
         "win_rate": wins / len(pnls),
         "avg_pnl": float(sum(pnls) / len(pnls)),
+        "max_drawdown": float(abs(max_drawdown)),
+        "worst_loss_streak": float(worst_loss_streak),
+        "market_type_coverage": float(len(market_types)),
+        "data_quality_weighted_pnl": float(weighted_pnl / total_quality) if total_quality > 0 else 0.0,
     }
 
 

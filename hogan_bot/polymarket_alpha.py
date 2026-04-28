@@ -12,15 +12,21 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from hogan_bot.fetch_polymarket import (
+    PolymarketMarketSnapshot,
     PolymarketOpportunity,
     _market_id,
     _yes_probability,
     enrich_clob_snapshots,
     fetch_active_markets,
+    normalize_market_snapshot,
     score_polymarket_opportunities,
 )
 from hogan_bot.polymarket_arbitrage import ArbitrageAlert, detect_arbitrage_alerts
 from hogan_bot.polymarket_edge import EdgeAssessment, assess_opportunity_edge
+from hogan_bot.polymarket_intelligence import (
+    IntelligenceAssessment,
+    assess_intelligence,
+)
 from hogan_bot.polymarket_promotion import evaluate_shadow_ledger
 from hogan_bot.storage import (
     close_polymarket_shadow_trade,
@@ -36,6 +42,8 @@ logger = logging.getLogger(__name__)
 class AlphaCandidate:
     opportunity: PolymarketOpportunity
     edge: EdgeAssessment
+    snapshot: PolymarketMarketSnapshot
+    assessment: IntelligenceAssessment
     shadow_trade_id: int | None = None
 
 
@@ -46,6 +54,18 @@ class ShadowLedgerUpdate:
     open_count: int
     open_exposure_usd: float
     unrealized_pnl: float
+
+
+@dataclass(frozen=True)
+class ShadowPositionView:
+    trade_id: int
+    status: str
+    slug: str
+    side: str
+    entry_prob: float
+    current_prob: float | None
+    size_usd: float
+    pnl: float | None
 
 
 @dataclass(frozen=True)
@@ -83,8 +103,9 @@ def _open_shadow_if_new(
     ts_ms: int,
     opportunity: PolymarketOpportunity,
     edge: EdgeAssessment,
+    assessment: IntelligenceAssessment,
 ) -> int | None:
-    if edge.decision != "shadow_trade":
+    if not assessment.shadow_eligible:
         return None
     if opportunity.candidate_side not in ("buy_yes", "buy_no"):
         return None
@@ -103,6 +124,7 @@ def _open_shadow_if_new(
         rationale=f"{opportunity.rationale}; after_cost_ev={edge.after_cost_ev:.4f}",
         raw={
             "opportunity": opportunity.to_dict(),
+            "assessment": assessment.to_dict(),
             "edge": {
                 "after_cost_ev": edge.after_cost_ev,
                 "expected_value": edge.expected_value,
@@ -118,6 +140,10 @@ def _position_delta(side: str, entry_yes_prob: float, current_yes_prob: float) -
     if side == "buy_no":
         return -delta
     return delta
+
+
+def _shadow_pnl(side: str, entry_prob: float, current_prob: float, size_usd: float) -> float:
+    return float(size_usd) * _position_delta(side, entry_prob, current_prob)
 
 
 def _market_price_index(markets: list[dict]) -> dict[str, float]:
@@ -190,6 +216,41 @@ def _update_shadow_ledger(
     )
 
 
+def _load_shadow_position_views(conn, prices: dict[str, float], *, limit: int = 10) -> list[ShadowPositionView]:
+    rows = conn.execute(
+        """
+        SELECT id, status, market_id, slug, side, entry_prob, exit_prob, size_usd, realized_pnl
+        FROM polymarket_shadow_trades
+        ORDER BY opened_ts_ms DESC
+        LIMIT ?
+        """,
+        (int(limit),),
+    ).fetchall()
+    views: list[ShadowPositionView] = []
+    for trade_id, status, market_id, slug, side, entry_prob, exit_prob, size_usd, realized_pnl in rows:
+        current_prob = float(exit_prob) if exit_prob is not None else prices.get(str(market_id))
+        pnl = (
+            float(realized_pnl)
+            if realized_pnl is not None
+            else (
+                _shadow_pnl(str(side), float(entry_prob), float(current_prob), float(size_usd))
+                if current_prob is not None
+                else None
+            )
+        )
+        views.append(ShadowPositionView(
+            trade_id=int(trade_id),
+            status=str(status),
+            slug=str(slug or market_id),
+            side=str(side),
+            entry_prob=float(entry_prob),
+            current_prob=current_prob,
+            size_usd=float(size_usd),
+            pnl=pnl,
+        ))
+    return views
+
+
 def _latest_ml_probability(conn, symbol: str) -> float | None:
     row = conn.execute(
         """
@@ -228,6 +289,8 @@ def _write_report(
     candidates: list[AlphaCandidate],
     arbitrage_alerts: list[ArbitrageAlert],
     shadow_ledger: ShadowLedgerUpdate,
+    shadow_positions: list[ShadowPositionView],
+    promotion_metrics: dict[str, float],
     btc_prob: float | None,
     eth_prob: float | None,
     promotion_approved: bool,
@@ -246,22 +309,71 @@ def _write_report(
         f"- Shadow closed: `{shadow_ledger.closed}`",
         f"- Shadow open exposure: `${shadow_ledger.open_exposure_usd:.2f}`",
         f"- Shadow unrealized PnL: `${shadow_ledger.unrealized_pnl:.2f}`",
+        f"- Closed shadow PnL: `${promotion_metrics.get('total_pnl', 0.0):.2f}`",
+        f"- Closed shadow win rate: `{promotion_metrics.get('win_rate', 0.0):.2%}`",
+        f"- Max drawdown: `${promotion_metrics.get('max_drawdown', 0.0):.2f}`",
         f"- Hogan BTC probability: `{btc_prob:.4f}`" if btc_prob is not None else "- Hogan BTC probability: `n/a`",
         f"- Hogan ETH probability: `{eth_prob:.4f}`" if eth_prob is not None else "- Hogan ETH probability: `n/a`",
         f"- Promotion approved: `{promotion_approved}`",
     ]
     if promotion_reasons:
         lines.append(f"- Promotion blockers: `{', '.join(promotion_reasons)}`")
+    avg_quality = (
+        sum(candidate.assessment.data_quality_score for candidate in candidates) / len(candidates)
+        if candidates
+        else 0.0
+    )
+    shadow_candidates = sum(1 for candidate in candidates if candidate.assessment.recommendation == "shadow_candidate")
+    research_only = sum(1 for candidate in candidates if candidate.assessment.recommendation == "research")
+    avoid = sum(1 for candidate in candidates if candidate.assessment.recommendation == "avoid")
+    lines.extend([
+        "",
+        "## Data Quality",
+        "",
+        f"- Average data quality: `{avg_quality:.4f}`",
+        f"- Shadow candidates: `{shadow_candidates}`",
+        f"- Research-only: `{research_only}`",
+        f"- Avoid: `{avoid}`",
+        "",
+        "## Machine Recommendations",
+        "",
+    ])
+    for idx, candidate in enumerate(sorted(candidates, key=lambda c: c.assessment.evidence_score, reverse=True)[:10], start=1):
+        assessment = candidate.assessment
+        opp = candidate.opportunity
+        flags = ", ".join(assessment.risk_flags) if assessment.risk_flags else "none"
+        lines.extend([
+            f"### {idx}. {opp.question}",
+            f"- Recommendation: `{assessment.recommendation}`",
+            f"- Evidence score: `{assessment.evidence_score:.4f}`",
+            f"- Fair-value source: `{assessment.fair_value_source}`",
+            f"- Risk flags: `{flags}`",
+            f"- Thesis: {assessment.thesis}",
+            "",
+        ])
+    lines.extend(["", "## Shadow Positions", ""])
+    if not shadow_positions:
+        lines.append("No shadow positions found.")
+    for pos in shadow_positions:
+        current = f"{pos.current_prob:.4f}" if pos.current_prob is not None else "n/a"
+        pnl = f"${pos.pnl:.2f}" if pos.pnl is not None else "n/a"
+        lines.append(
+            f"- `#{pos.trade_id}` `{pos.status}` `{pos.side}` "
+            f"entry=`{pos.entry_prob:.4f}` current=`{current}` size=`${pos.size_usd:.2f}` pnl=`{pnl}` {pos.slug}"
+        )
     lines.extend(["", "## Top Candidates", ""])
     for idx, candidate in enumerate(candidates[:10], start=1):
         opp = candidate.opportunity
         edge = candidate.edge
+        assessment = candidate.assessment
         shadow = f" shadow_id={candidate.shadow_trade_id}" if candidate.shadow_trade_id else ""
         lines.extend([
             f"### {idx}. {opp.question}",
             f"- Side: `{opp.candidate_side}`{shadow}",
             f"- Decision: `{edge.decision}`",
+            f"- Recommendation: `{assessment.recommendation}`",
             f"- Market type: `{opp.market_type}` / `{opp.horizon}`",
+            f"- Data quality: `{assessment.data_quality_score:.4f}`",
             f"- Total score: `{opp.total_score:.4f}`",
             f"- After-cost EV: `{edge.after_cost_ev:.4f}`",
             f"- Crowd probability: `{opp.crowd_prob:.4f}`",
@@ -287,6 +399,12 @@ def _write_report(
             f"- Message: {alert.message}",
             "",
         ])
+    next_action = "Keep collecting shadow evidence."
+    if shadow_candidates:
+        next_action = "Review shadow candidates and let auto-shadow open only eligible hypothetical positions."
+    if promotion_approved:
+        next_action = "Promotion gate passed; review evidence before any authority increase."
+    lines.extend(["", "## Next Action", "", next_action])
     path.write_text("\n".join(lines), encoding="utf-8")
     return str(path)
 
@@ -310,6 +428,7 @@ def run_alpha_lab(
     markets = fetch_active_markets(limit=limit)
     if include_clob:
         markets = enrich_clob_snapshots(markets, max_markets=clob_limit)
+    snapshots = {snapshot.market_id: snapshot for snapshot in map(normalize_market_snapshot, markets)}
     conn = get_connection(db_path)
     symbol_upper = symbol.upper()
     btc_symbol = symbol if symbol_upper.startswith("BTC/") else "BTC/USD"
@@ -339,6 +458,7 @@ def run_alpha_lab(
     candidates: list[AlphaCandidate] = []
     shadow_opened = 0
     opened_shadow_ids: set[int] = set()
+    shadow_positions: list[ShadowPositionView] = []
     try:
         insert_polymarket_opportunities(
             conn,
@@ -348,6 +468,29 @@ def run_alpha_lab(
         )
         for opp in opportunities:
             edge = assess_opportunity_edge(opp)
+            snapshot = snapshots.get(opp.market_id)
+            if snapshot is None:
+                snapshot = PolymarketMarketSnapshot(
+                    market_id=opp.market_id,
+                    slug=opp.slug,
+                    question=opp.question,
+                    event_slug="",
+                    category=opp.category,
+                    market_type=opp.market_type,
+                    horizon=opp.horizon,
+                    target_price=opp.target_price,
+                    yes_probability=opp.crowd_prob,
+                    probability_source="opportunity_fallback",
+                    spread=None,
+                    liquidity=0.0,
+                    volume=0.0,
+                    liquidity_score=opp.liquidity_score,
+                    spread_score=opp.spread_score,
+                    data_quality_score=0.25,
+                    eligibility="research",
+                    quality_flags=["snapshot_missing"],
+                )
+            assessment = assess_intelligence(opp, edge, snapshot)
             shadow_id = None
             if auto_shadow:
                 shadow_id = _open_shadow_if_new(
@@ -356,11 +499,12 @@ def run_alpha_lab(
                     ts_ms=ts_ms,
                     opportunity=opp,
                     edge=edge,
+                    assessment=assessment,
                 )
                 if shadow_id is not None:
                     shadow_opened += 1
                     opened_shadow_ids.add(shadow_id)
-            candidates.append(AlphaCandidate(opp, edge, shadow_id))
+            candidates.append(AlphaCandidate(opp, edge, snapshot, assessment, shadow_id))
         shadow_ledger = _update_shadow_ledger(
             conn,
             markets=markets,
@@ -368,6 +512,7 @@ def run_alpha_lab(
             skip_trade_ids=opened_shadow_ids,
         )
         promotion = evaluate_shadow_ledger(conn)
+        shadow_positions = _load_shadow_position_views(conn, _market_price_index(markets))
     finally:
         conn.close()
 
@@ -377,6 +522,8 @@ def run_alpha_lab(
         candidates=candidates,
         arbitrage_alerts=alerts,
         shadow_ledger=shadow_ledger,
+        shadow_positions=shadow_positions,
+        promotion_metrics=promotion.metrics,
         btc_prob=btc_prob,
         eth_prob=eth_prob,
         promotion_approved=promotion.approved,

@@ -115,6 +115,54 @@ def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
 
 
 @dataclass(frozen=True)
+class PolymarketMarketSnapshot:
+    """Normalized public Polymarket market view with data-quality metadata."""
+
+    market_id: str
+    slug: str
+    question: str
+    event_slug: str
+    category: str
+    market_type: str
+    horizon: str
+    target_price: float | None
+    yes_probability: float | None
+    probability_source: str
+    spread: float | None
+    liquidity: float
+    volume: float
+    liquidity_score: float
+    spread_score: float
+    data_quality_score: float
+    eligibility: str
+    quality_flags: list[str]
+
+    def to_dict(self) -> dict:
+        payload = {
+            "market_id": self.market_id,
+            "slug": self.slug,
+            "question": self.question,
+            "event_slug": self.event_slug,
+            "category": self.category,
+            "market_type": self.market_type,
+            "horizon": self.horizon,
+            "yes_probability": round(self.yes_probability, 6) if self.yes_probability is not None else None,
+            "probability_source": self.probability_source,
+            "spread": round(self.spread, 6) if self.spread is not None else None,
+            "liquidity": round(self.liquidity, 2),
+            "volume": round(self.volume, 2),
+            "liquidity_score": round(self.liquidity_score, 4),
+            "spread_score": round(self.spread_score, 4),
+            "data_quality_score": round(self.data_quality_score, 4),
+            "eligibility": self.eligibility,
+            "quality_flags": list(self.quality_flags),
+        }
+        if self.target_price is not None:
+            payload["target_price"] = round(self.target_price, 2)
+        return payload
+
+
+@dataclass(frozen=True)
 class PolymarketOpportunity:
     """Ranked analysis candidate from a public Polymarket market."""
 
@@ -249,6 +297,14 @@ def _yes_probability(market: dict) -> float | None:
     return _clamp_prob(price)
 
 
+def _probability_source(market: dict) -> str:
+    if "poly_clob_midpoint" in market:
+        return "clob_midpoint"
+    if _yes_probability(market) is not None:
+        return "gamma_outcome_price"
+    return "unavailable"
+
+
 def _market_weight(market: dict) -> float:
     liquidity = _to_float(market.get("liquidity"), default=0.0)
     volume = _to_float(
@@ -256,6 +312,20 @@ def _market_weight(market: dict) -> float:
         default=0.0,
     )
     return max(1.0, liquidity + volume)
+
+
+def _market_liquidity(market: dict) -> float:
+    return max(0.0, _to_float(market.get("liquidity"), default=0.0))
+
+
+def _market_volume(market: dict) -> float:
+    return max(
+        0.0,
+        _to_float(
+            market.get("volume24hr", market.get("volume_24hr", market.get("volume"))),
+            default=0.0,
+        ),
+    )
 
 
 def _liquidity_score(market: dict) -> float:
@@ -266,6 +336,31 @@ def _liquidity_score(market: dict) -> float:
 def _spread_score(market: dict) -> float:
     spread = _to_float(market.get("poly_clob_spread"), default=0.05)
     return max(0.0, min(1.0, 1.0 - spread / 0.10))
+
+
+def _data_quality_score(market: dict) -> tuple[float, list[str]]:
+    flags: list[str] = []
+    source = _probability_source(market)
+    source_score = 0.0
+    if source == "clob_midpoint":
+        source_score = 1.0
+    elif source == "gamma_outcome_price":
+        source_score = 0.65
+        flags.append("gamma_price_only")
+    else:
+        flags.append("missing_probability")
+
+    spread_score = _spread_score(market)
+    liquidity_score = _liquidity_score(market)
+    if "poly_clob_spread" not in market:
+        flags.append("missing_clob_spread")
+    if spread_score < 0.35:
+        flags.append("wide_spread")
+    if liquidity_score < 0.20:
+        flags.append("low_liquidity")
+
+    score = source_score * 0.45 + spread_score * 0.30 + liquidity_score * 0.25
+    return max(0.0, min(1.0, score)), flags
 
 
 def _market_category(market: dict) -> str:
@@ -317,6 +412,41 @@ def _market_type(market: dict, category: str) -> tuple[str, str, float | None]:
     if category in ("btc", "eth"):
         return "directional", horizon, target
     return "other", horizon, target
+
+
+def normalize_market_snapshot(market: dict) -> PolymarketMarketSnapshot:
+    """Normalize one public Polymarket payload for scoring and reporting."""
+    category = _market_category(market)
+    market_type, horizon, target_price = _market_type(market, category)
+    yes_prob = _yes_probability(market)
+    quality_score, quality_flags = _data_quality_score(market)
+    eligibility = "research"
+    if yes_prob is None or category == "other":
+        eligibility = "blocked"
+    elif quality_score >= 0.55 and not {"wide_spread", "low_liquidity"} & set(quality_flags):
+        eligibility = "shadow_candidate"
+    return PolymarketMarketSnapshot(
+        market_id=_market_id(market),
+        slug=str(market.get("slug") or market.get("eventSlug") or ""),
+        question=str(market.get("question") or market.get("title") or ""),
+        event_slug=str(market.get("eventSlug") or ""),
+        category=category,
+        market_type=market_type,
+        horizon=horizon,
+        target_price=target_price,
+        yes_probability=yes_prob,
+        probability_source=_probability_source(market),
+        spread=_to_float(market.get("poly_clob_spread"), default=float("nan"))
+        if "poly_clob_spread" in market
+        else None,
+        liquidity=_market_liquidity(market),
+        volume=_market_volume(market),
+        liquidity_score=_liquidity_score(market),
+        spread_score=_spread_score(market),
+        data_quality_score=quality_score,
+        eligibility=eligibility,
+        quality_flags=quality_flags,
+    )
 
 
 def _yes_direction(market: dict) -> int:

@@ -80,6 +80,31 @@ def test_enrich_clob_snapshots_attaches_public_orderbook_metrics(monkeypatch):
     assert out[0]["poly_clob_spread"] == 0.03
 
 
+def test_normalize_market_snapshot_scores_data_quality():
+    from hogan_bot.fetch_polymarket import normalize_market_snapshot
+
+    snapshot = normalize_market_snapshot({
+        "id": "m1",
+        "slug": "btc-100k",
+        "eventSlug": "btc",
+        "question": "Will Bitcoin reach $100,000 this month?",
+        "outcomes": '["Yes", "No"]',
+        "outcomePrices": '["0.42", "0.58"]',
+        "poly_clob_midpoint": 0.43,
+        "poly_clob_spread": 0.01,
+        "liquidity": "100000",
+        "volume24hr": "25000",
+    })
+
+    assert snapshot.market_id == "m1"
+    assert snapshot.market_type == "price_target"
+    assert snapshot.horizon == "short_term"
+    assert snapshot.probability_source == "clob_midpoint"
+    assert snapshot.data_quality_score > 0.8
+    assert snapshot.eligibility == "shadow_candidate"
+    assert snapshot.to_dict()["target_price"] == 100_000
+
+
 def test_score_polymarket_opportunities_uses_hogan_disagreement():
     from hogan_bot.fetch_polymarket import score_polymarket_opportunities
 

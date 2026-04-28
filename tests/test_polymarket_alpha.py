@@ -67,6 +67,35 @@ def test_edge_engine_scores_shadow_trade_and_rejects_bad_costs():
     assert "low_liquidity" in bad_assessment.reject_reasons
 
 
+def test_intelligence_assessment_gates_shadow_eligibility():
+    from hogan_bot.fetch_polymarket import (
+        normalize_market_snapshot,
+        score_polymarket_opportunities,
+    )
+    from hogan_bot.polymarket_edge import assess_opportunity_edge
+    from hogan_bot.polymarket_intelligence import assess_intelligence
+
+    market = {
+        "id": "m1",
+        "slug": "btc-100k",
+        "question": "Will Bitcoin reach $100,000 this month?",
+        "outcomes": '["Yes", "No"]',
+        "outcomePrices": '["0.42", "0.58"]',
+        "poly_clob_midpoint": 0.42,
+        "poly_clob_spread": 0.01,
+        "liquidity": "100000",
+        "volume24hr": "25000",
+    }
+    opp = score_polymarket_opportunities([market], hogan_btc_bull_prob=0.72)[0]
+    edge = assess_opportunity_edge(opp)
+    assessment = assess_intelligence(opp, edge, normalize_market_snapshot(market))
+
+    assert assessment.recommendation == "shadow_candidate"
+    assert assessment.fair_value_source == "hogan_short_term_ml"
+    assert assessment.shadow_eligible is True
+    assert assessment.evidence_score > 0.5
+
+
 def test_arbitrage_alerts_detect_ladder_and_group_overpricing():
     from hogan_bot.polymarket_arbitrage import (
         detect_crypto_ladder_violations,
@@ -151,6 +180,9 @@ def test_opportunity_storage_and_shadow_ledger_round_trip():
     snapshot = promotion_snapshot(conn)
     assert snapshot["trades"] == 1.0
     assert snapshot["win_rate"] == 1.0
+    assert snapshot["max_drawdown"] == 0.0
+    assert snapshot["worst_loss_streak"] == 0.0
+    assert "data_quality_weighted_pnl" in snapshot
     ledger = load_shadow_ledger(conn, status="closed", limit=5)
     assert ledger[0]["market_id"] == "m1"
     assert ledger[0]["status"] == "closed"
@@ -172,6 +204,22 @@ def test_polymarket_promotion_gate_requires_shadow_evidence():
     )
     assert approved.approved is True
     assert approved.reasons == []
+
+    rejected_risk = evaluate_polymarket_promotion(
+        {
+            "trades": 60.0,
+            "total_pnl": 120.0,
+            "avg_pnl": 2.0,
+            "win_rate": 0.62,
+            "max_drawdown": 30.0,
+            "worst_loss_streak": 6.0,
+            "market_type_coverage": 0.0,
+            "data_quality_weighted_pnl": -0.1,
+        },
+    )
+    assert rejected_risk.approved is False
+    assert any("drawdown_above_gate" in reason for reason in rejected_risk.reasons)
+    assert any("loss_streak_above_gate" in reason for reason in rejected_risk.reasons)
 
 
 def test_alpha_lab_runner_persists_report_and_opens_shadow_once(monkeypatch, tmp_path):
@@ -212,7 +260,12 @@ def test_alpha_lab_runner_persists_report_and_opens_shadow_once(monkeypatch, tmp
 
     assert first.shadow_opened == 1
     assert second.shadow_opened == 0
-    assert "Polymarket Alpha Lab Report" in Path(first.report_path).read_text()
+    report = Path(first.report_path).read_text()
+    assert "Polymarket Alpha Lab Report" in report
+    assert "## Data Quality" in report
+    assert "## Machine Recommendations" in report
+    assert "## Shadow Positions" in report
+    assert "## Next Action" in report
 
     conn = sqlite3.connect(db_path)
     open_count = conn.execute(

@@ -101,13 +101,27 @@ def _fmt_money(value) -> str:
 def print_shadow_ledger(conn, *, status: str = "all", limit: int = 20) -> None:
     """Print compact shadow ledger rows and promotion summary."""
     summary = promotion_snapshot(conn)
+    from hogan_bot.polymarket_promotion import evaluate_polymarket_promotion
+
+    promotion = evaluate_polymarket_promotion(summary)
+    all_rows = load_shadow_ledger(conn, status="all", limit=10_000)
+    open_rows = [row for row in all_rows if row["status"] == "open"]
+    open_exposure = sum(float(row["size_usd"]) for row in open_rows)
     print(
         "Summary: "
         f"closed={summary['trades']:.0f} "
+        f"open={len(open_rows)} "
+        f"open_exposure={_fmt_money(open_exposure)} "
         f"total_pnl={_fmt_money(summary['total_pnl'])} "
         f"avg_pnl={_fmt_money(summary['avg_pnl'])} "
-        f"win_rate={summary['win_rate']:.2%}"
+        f"win_rate={summary['win_rate']:.2%} "
+        f"max_drawdown={_fmt_money(summary.get('max_drawdown', 0.0))} "
+        f"worst_loss_streak={summary.get('worst_loss_streak', 0.0):.0f} "
+        f"market_types={summary.get('market_type_coverage', 0.0):.0f}"
     )
+    print(f"Promotion approved: {promotion.approved}")
+    if promotion.reasons:
+        print("Promotion blockers:", ", ".join(promotion.reasons))
     rows = load_shadow_ledger(conn, status=status, limit=limit)
     if not rows:
         print("No Polymarket shadow trades found.")
