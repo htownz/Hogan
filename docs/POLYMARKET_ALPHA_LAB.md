@@ -63,6 +63,41 @@ Shadow trades are hypothetical positions only. Use them to measure:
 Promotion to live-ready design requires sustained positive evidence, not a
 single good scan.
 
+## Standalone Program
+
+Run Polymarket separately from the Hogan exchange-trading event loop:
+
+```powershell
+py -3.11 -m hogan_bot.polymarket_service --mode scan --db data/hogan.db --clob-limit 50
+```
+
+Use the no-write recommendation path when you only want machine reasoning:
+
+```powershell
+py -3.11 -m hogan_bot.polymarket_service --mode recommendations-only --db data/hogan.db --clob-limit 50
+```
+
+Run as a scheduled daemon loop:
+
+```powershell
+py -3.11 -m hogan_bot.polymarket_service --mode daemon --interval-minutes 30 --authority-mode shadow --clob-limit 50
+```
+
+Service defaults can be set with environment variables:
+
+- `HOGAN_POLYMARKET_MODE`
+- `HOGAN_POLYMARKET_AUTHORITY_MODE`
+- `HOGAN_POLYMARKET_INTERVAL_MINUTES`
+- `HOGAN_POLYMARKET_CLOB_LIMIT`
+- `HOGAN_POLYMARKET_REPORT_DIR`
+- `HOGAN_POLYMARKET_MAX_OPEN_SHADOW_TRADES`
+- `HOGAN_POLYMARKET_MAX_OPEN_SHADOW_EXPOSURE`
+- `HOGAN_POLYMARKET_WATCHLIST_EV_MARGIN`
+
+The standalone service still uses the shared Hogan DB for BTC candles, latest
+ML probability, Polymarket shadow evidence, and promotion metrics. It does not
+load wallet credentials or place real Polymarket orders.
+
 ## Promotion Gate
 
 The current promotion gate requires:
