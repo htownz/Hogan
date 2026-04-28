@@ -58970,3 +58970,7 @@ SystemError: <built-in function kill> returned a result with an exception set
 2026-04-28 15:00:06,676 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
 2026-04-28 15:00:06,712 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
 2026-04-28 15:00:06,861 INFO MTF_EVAL BTC/USD/30m → hold (size scaled 0.70x for sub-hour eval)
+2026-04-28 15:01:17,886 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:01:18,052 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:01:37,005 INFO Database connection closed.
+2026-04-28 15:01:37,015 INFO Shutdown requested (KeyboardInterrupt).
