@@ -19,6 +19,8 @@ class IntelligenceAssessment:
     fair_value_source: str
     thesis: str
     evidence_score: float
+    confidence: float
+    recommended_size_usd: float
     risk_flags: list[str]
     data_quality_score: float
     shadow_eligible: bool
@@ -30,6 +32,8 @@ class IntelligenceAssessment:
             "fair_value_source": self.fair_value_source,
             "thesis": self.thesis,
             "evidence_score": round(self.evidence_score, 4),
+            "confidence": round(self.confidence, 4),
+            "recommended_size_usd": round(self.recommended_size_usd, 2),
             "risk_flags": list(self.risk_flags),
             "data_quality_score": round(self.data_quality_score, 4),
             "shadow_eligible": self.shadow_eligible,
@@ -65,6 +69,7 @@ def assess_intelligence(
     snapshot: PolymarketMarketSnapshot,
     *,
     min_data_quality: float = 0.55,
+    max_shadow_size_usd: float = 25.0,
 ) -> IntelligenceAssessment:
     """Return a machine recommendation for one opportunity."""
     risk_flags = list(snapshot.quality_flags)
@@ -89,6 +94,8 @@ def assess_intelligence(
         + snapshot.data_quality_score * 0.20
     )
     evidence = max(0.0, min(1.0, evidence))
+    risk_penalty = min(0.75, len(set(risk_flags)) * 0.12)
+    confidence = max(0.0, min(1.0, evidence * (1.0 - risk_penalty)))
 
     critical = {
         "fair_value_unavailable",
@@ -110,6 +117,12 @@ def assess_intelligence(
         recommendation = "research"
     else:
         recommendation = "monitor"
+    recommended_size_usd = 0.0
+    if shadow_eligible:
+        recommended_size_usd = max(
+            1.0,
+            min(float(max_shadow_size_usd), edge.max_size_usd * confidence),
+        )
 
     return IntelligenceAssessment(
         market_id=opportunity.market_id,
@@ -117,6 +130,8 @@ def assess_intelligence(
         fair_value_source=_fair_value_source(opportunity),
         thesis=_thesis(opportunity, edge),
         evidence_score=evidence,
+        confidence=confidence,
+        recommended_size_usd=recommended_size_usd,
         risk_flags=sorted(set(risk_flags)),
         data_quality_score=snapshot.data_quality_score,
         shadow_eligible=shadow_eligible,

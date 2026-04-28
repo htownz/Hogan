@@ -77,6 +77,7 @@ class AlphaRunResult:
     arbitrage_alerts: int
     shadow_opened: int
     shadow_ledger: ShadowLedgerUpdate
+    authority_mode: str
     btc_prob: float | None
     eth_prob: float | None
     promotion_approved: bool
@@ -104,6 +105,8 @@ def _open_shadow_if_new(
     opportunity: PolymarketOpportunity,
     edge: EdgeAssessment,
     assessment: IntelligenceAssessment,
+    max_open_trades: int,
+    max_open_exposure_usd: float,
 ) -> int | None:
     if not assessment.shadow_eligible:
         return None
@@ -111,7 +114,13 @@ def _open_shadow_if_new(
         return None
     if _has_open_shadow(conn, opportunity.market_id, opportunity.candidate_side):
         return None
-    size_usd = max(1.0, min(25.0, edge.max_size_usd))
+    open_count, open_exposure = _open_shadow_budget(conn)
+    if open_count >= max_open_trades or open_exposure >= max_open_exposure_usd:
+        return None
+    remaining_exposure = max(0.0, max_open_exposure_usd - open_exposure)
+    if remaining_exposure < 1.0:
+        return None
+    size_usd = max(1.0, min(assessment.recommended_size_usd, edge.max_size_usd, remaining_exposure))
     return open_polymarket_shadow_trade(
         conn,
         opened_ts_ms=ts_ms,
@@ -133,6 +142,27 @@ def _open_shadow_if_new(
             },
         },
     )
+
+
+def _open_shadow_budget(conn) -> tuple[int, float]:
+    row = conn.execute(
+        """
+        SELECT COUNT(*), COALESCE(SUM(size_usd), 0.0)
+        FROM polymarket_shadow_trades
+        WHERE status = 'open'
+        """
+    ).fetchone()
+    if row is None:
+        return 0, 0.0
+    return int(row[0] or 0), float(row[1] or 0.0)
+
+
+def _authority_allows_shadow(authority_mode: str, promotion_approved: bool) -> bool:
+    if authority_mode == "shadow":
+        return True
+    if authority_mode == "conditional":
+        return promotion_approved
+    return False
 
 
 def _position_delta(side: str, entry_yes_prob: float, current_yes_prob: float) -> float:
@@ -291,6 +321,7 @@ def _write_report(
     shadow_ledger: ShadowLedgerUpdate,
     shadow_positions: list[ShadowPositionView],
     promotion_metrics: dict[str, float],
+    authority_mode: str,
     btc_prob: float | None,
     eth_prob: float | None,
     promotion_approved: bool,
@@ -315,6 +346,7 @@ def _write_report(
         f"- Hogan BTC probability: `{btc_prob:.4f}`" if btc_prob is not None else "- Hogan BTC probability: `n/a`",
         f"- Hogan ETH probability: `{eth_prob:.4f}`" if eth_prob is not None else "- Hogan ETH probability: `n/a`",
         f"- Promotion approved: `{promotion_approved}`",
+        f"- Authority mode: `{authority_mode}`",
     ]
     if promotion_reasons:
         lines.append(f"- Promotion blockers: `{', '.join(promotion_reasons)}`")
@@ -346,6 +378,8 @@ def _write_report(
             f"### {idx}. {opp.question}",
             f"- Recommendation: `{assessment.recommendation}`",
             f"- Evidence score: `{assessment.evidence_score:.4f}`",
+            f"- Confidence: `{assessment.confidence:.4f}`",
+            f"- Recommended size: `${assessment.recommended_size_usd:.2f}`",
             f"- Fair-value source: `{assessment.fair_value_source}`",
             f"- Risk flags: `{flags}`",
             f"- Thesis: {assessment.thesis}",
@@ -374,6 +408,8 @@ def _write_report(
             f"- Recommendation: `{assessment.recommendation}`",
             f"- Market type: `{opp.market_type}` / `{opp.horizon}`",
             f"- Data quality: `{assessment.data_quality_score:.4f}`",
+            f"- Confidence: `{assessment.confidence:.4f}`",
+            f"- Recommended size: `${assessment.recommended_size_usd:.2f}`",
             f"- Total score: `{opp.total_score:.4f}`",
             f"- After-cost EV: `{edge.after_cost_ev:.4f}`",
             f"- Crowd probability: `{opp.crowd_prob:.4f}`",
@@ -400,7 +436,9 @@ def _write_report(
             "",
         ])
     next_action = "Keep collecting shadow evidence."
-    if shadow_candidates:
+    if authority_mode in ("research", "advisory"):
+        next_action = f"Authority is `{authority_mode}`; review recommendations without opening new shadow trades."
+    elif shadow_candidates:
         next_action = "Review shadow candidates and let auto-shadow open only eligible hypothetical positions."
     if promotion_approved:
         next_action = "Promotion gate passed; review evidence before any authority increase."
@@ -421,9 +459,15 @@ def run_alpha_lab(
     btc_long_prob: float | None = None,
     eth_long_prob: float | None = None,
     auto_shadow: bool = True,
+    authority_mode: str = "shadow",
+    max_open_shadow_trades: int = 10,
+    max_open_shadow_exposure_usd: float = 250.0,
     report_dir: str = "reports/polymarket",
 ) -> AlphaRunResult:
     """Run public-data scan, edge assessment, shadow tracking, and report."""
+    authority_mode = authority_mode.strip().lower()
+    if authority_mode not in ("research", "shadow", "advisory", "conditional"):
+        raise ValueError(f"unknown Polymarket authority mode: {authority_mode}")
     ts_ms = int(time.time() * 1000)
     markets = fetch_active_markets(limit=limit)
     if include_clob:
@@ -460,6 +504,8 @@ def run_alpha_lab(
     opened_shadow_ids: set[int] = set()
     shadow_positions: list[ShadowPositionView] = []
     try:
+        promotion = evaluate_shadow_ledger(conn)
+        allow_shadow = auto_shadow and _authority_allows_shadow(authority_mode, promotion.approved)
         insert_polymarket_opportunities(
             conn,
             symbol,
@@ -492,7 +538,7 @@ def run_alpha_lab(
                 )
             assessment = assess_intelligence(opp, edge, snapshot)
             shadow_id = None
-            if auto_shadow:
+            if allow_shadow:
                 shadow_id = _open_shadow_if_new(
                     conn,
                     symbol=symbol,
@@ -500,6 +546,8 @@ def run_alpha_lab(
                     opportunity=opp,
                     edge=edge,
                     assessment=assessment,
+                    max_open_trades=max(0, int(max_open_shadow_trades)),
+                    max_open_exposure_usd=max(0.0, float(max_open_shadow_exposure_usd)),
                 )
                 if shadow_id is not None:
                     shadow_opened += 1
@@ -524,6 +572,7 @@ def run_alpha_lab(
         shadow_ledger=shadow_ledger,
         shadow_positions=shadow_positions,
         promotion_metrics=promotion.metrics,
+        authority_mode=authority_mode,
         btc_prob=btc_prob,
         eth_prob=eth_prob,
         promotion_approved=promotion.approved,
@@ -537,6 +586,7 @@ def run_alpha_lab(
         arbitrage_alerts=len(alerts),
         shadow_opened=shadow_opened,
         shadow_ledger=shadow_ledger,
+        authority_mode=authority_mode,
         btc_prob=btc_prob,
         eth_prob=eth_prob,
         promotion_approved=promotion.approved,
@@ -558,6 +608,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--eth-prob", type=float, default=None)
     p.add_argument("--btc-long-prob", type=float, default=None, help="Optional calibrated long-horizon BTC fair probability")
     p.add_argument("--eth-long-prob", type=float, default=None, help="Optional calibrated long-horizon ETH fair probability")
+    p.add_argument("--authority-mode", choices=("research", "shadow", "advisory", "conditional"), default="shadow")
+    p.add_argument("--max-open-shadow-trades", type=int, default=10)
+    p.add_argument("--max-open-shadow-exposure", type=float, default=250.0)
     p.add_argument("--no-auto-shadow", action="store_true")
     p.add_argument("--report-dir", default="reports/polymarket")
     return p.parse_args()
@@ -577,6 +630,9 @@ def main() -> None:
         btc_long_prob=args.btc_long_prob,
         eth_long_prob=args.eth_long_prob,
         auto_shadow=not args.no_auto_shadow,
+        authority_mode=args.authority_mode,
+        max_open_shadow_trades=args.max_open_shadow_trades,
+        max_open_shadow_exposure_usd=args.max_open_shadow_exposure,
         report_dir=args.report_dir,
     )
     print(f"Report: {result.report_path}")
@@ -588,6 +644,7 @@ def main() -> None:
     print(f"Hogan ETH probability: {result.eth_prob:.4f}" if result.eth_prob is not None else "Hogan ETH probability: n/a")
     print(f"Arbitrage alerts: {result.arbitrage_alerts}")
     print(f"Promotion approved: {result.promotion_approved}")
+    print(f"Authority mode: {result.authority_mode}")
     if result.promotion_reasons:
         print("Promotion blockers:", ", ".join(result.promotion_reasons))
 

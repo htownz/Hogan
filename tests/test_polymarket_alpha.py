@@ -94,6 +94,8 @@ def test_intelligence_assessment_gates_shadow_eligibility():
     assert assessment.fair_value_source == "hogan_short_term_ml"
     assert assessment.shadow_eligible is True
     assert assessment.evidence_score > 0.5
+    assert assessment.confidence > 0.0
+    assert assessment.recommended_size_usd > 0.0
 
 
 def test_arbitrage_alerts_detect_ladder_and_group_overpricing():
@@ -259,6 +261,7 @@ def test_alpha_lab_runner_persists_report_and_opens_shadow_once(monkeypatch, tmp
     )
 
     assert first.shadow_opened == 1
+    assert first.authority_mode == "shadow"
     assert second.shadow_opened == 0
     report = Path(first.report_path).read_text()
     assert "Polymarket Alpha Lab Report" in report
@@ -275,6 +278,50 @@ def test_alpha_lab_runner_persists_report_and_opens_shadow_once(monkeypatch, tmp
     conn.close()
     assert open_count == 1
     assert opp_count >= 1
+
+
+def test_alpha_lab_authority_modes_and_shadow_budget(monkeypatch, tmp_path):
+    from hogan_bot.polymarket_alpha import run_alpha_lab
+
+    markets = [
+        {
+            "id": "m1",
+            "slug": "btc-100k",
+            "question": "Will Bitcoin reach $100,000 this month?",
+            "outcomes": '["Yes", "No"]',
+            "outcomePrices": '["0.42", "0.58"]',
+            "poly_clob_midpoint": 0.42,
+            "poly_clob_spread": 0.01,
+            "liquidity": "100000",
+            "volume24hr": "25000",
+        }
+    ]
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.fetch_active_markets", lambda limit: markets)
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.enrich_clob_snapshots", lambda data, max_markets: data)
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.detect_arbitrage_alerts", lambda data: [])
+
+    research = run_alpha_lab(
+        db_path=str(tmp_path / "research.db"),
+        limit=1,
+        include_clob=False,
+        btc_prob=0.72,
+        authority_mode="research",
+        report_dir=str(tmp_path / "research_reports"),
+    )
+    capped = run_alpha_lab(
+        db_path=str(tmp_path / "capped.db"),
+        limit=1,
+        include_clob=False,
+        btc_prob=0.72,
+        max_open_shadow_trades=0,
+        report_dir=str(tmp_path / "capped_reports"),
+    )
+
+    assert research.shadow_opened == 0
+    assert research.authority_mode == "research"
+    assert research.candidates[0].assessment.shadow_eligible is True
+    assert capped.shadow_opened == 0
+    assert "Authority is `research`" in Path(research.report_path).read_text()
 
 
 def test_alpha_lab_uses_latest_decision_ml_probability(monkeypatch, tmp_path):
