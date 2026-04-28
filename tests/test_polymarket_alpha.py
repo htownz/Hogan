@@ -521,6 +521,55 @@ def test_alpha_lab_uses_automatic_btc_long_horizon_model(monkeypatch, tmp_path, 
     assert "spot=$100,000" in output
 
 
+def test_alpha_lab_reports_watchlist_near_shadow_threshold(monkeypatch, tmp_path, capsys):
+    from hogan_bot.polymarket_alpha import (
+        print_recommendations,
+        run_alpha_lab,
+        run_recommendations_only,
+    )
+
+    markets = [
+        {
+            "id": "m1",
+            "slug": "btc-150k-2026",
+            "question": "Will Bitcoin hit $150k by December 31, 2026?",
+            "outcomes": '["Yes", "No"]',
+            "outcomePrices": '["0.05", "0.95"]',
+            "poly_clob_midpoint": 0.05,
+            "poly_clob_spread": 0.01,
+            "liquidity": "100000",
+            "volume24hr": "25000",
+        }
+    ]
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.fetch_active_markets", lambda limit: markets)
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.enrich_clob_snapshots", lambda data, max_markets: data)
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.detect_arbitrage_alerts", lambda data: [])
+
+    recommendations = run_recommendations_only(
+        db_path=str(tmp_path / "recommendations.db"),
+        limit=1,
+        include_clob=False,
+        btc_long_prob=0.110,
+    )
+    print_recommendations(recommendations, limit=1)
+    output = capsys.readouterr().out
+
+    assert recommendations.candidates[0].watchlist is not None
+    assert "watchlist=near_shadow_ev_threshold" in output
+
+    result = run_alpha_lab(
+        db_path=str(tmp_path / "hogan.db"),
+        limit=1,
+        include_clob=False,
+        btc_long_prob=0.110,
+        report_dir=str(tmp_path / "reports"),
+    )
+    report = Path(result.report_path).read_text()
+    assert "## Watchlist" in report
+    assert "near_shadow_ev_threshold" in report
+    assert result.shadow_opened == 0
+
+
 class _FakeLongHorizonEstimate:
     def __init__(self, probability: float):
         self.probability = probability

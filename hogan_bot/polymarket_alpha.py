@@ -38,6 +38,24 @@ from hogan_bot.storage import (
 
 logger = logging.getLogger(__name__)
 
+_SHADOW_EV_THRESHOLD = 0.05
+
+
+@dataclass(frozen=True)
+class WatchlistSignal:
+    reason: str
+    ev_gap: float
+    trigger_price: float
+    trigger_label: str
+
+    def to_dict(self) -> dict:
+        return {
+            "reason": self.reason,
+            "ev_gap": round(self.ev_gap, 4),
+            "trigger_price": round(self.trigger_price, 4),
+            "trigger_label": self.trigger_label,
+        }
+
 
 @dataclass(frozen=True)
 class AlphaCandidate:
@@ -45,6 +63,7 @@ class AlphaCandidate:
     edge: EdgeAssessment
     snapshot: PolymarketMarketSnapshot
     assessment: IntelligenceAssessment
+    watchlist: WatchlistSignal | None = None
     long_horizon_model: dict | None = None
     shadow_trade_id: int | None = None
 
@@ -152,6 +171,39 @@ def _open_shadow_if_new(
                 "reject_reasons": edge.reject_reasons,
             },
         },
+    )
+
+
+def _watchlist_signal(
+    candidate_side: str,
+    edge: EdgeAssessment,
+    assessment: IntelligenceAssessment,
+    *,
+    ev_margin: float,
+) -> WatchlistSignal | None:
+    if assessment.shadow_eligible:
+        return None
+    if candidate_side not in ("buy_yes", "buy_no"):
+        return None
+    critical = {
+        "fair_value_unavailable",
+        "long_horizon_price_target_requires_calibrated_fair_value",
+        "snapshot_blocked",
+    }
+    if critical.intersection(assessment.risk_flags):
+        return None
+    if edge.after_cost_ev <= 0:
+        return None
+    ev_gap = _SHADOW_EV_THRESHOLD - edge.after_cost_ev
+    if ev_gap < 0 or ev_gap > ev_margin:
+        return None
+    trigger_price = max(0.0, edge.market_probability - ev_gap)
+    label = "YES" if candidate_side == "buy_yes" else "NO"
+    return WatchlistSignal(
+        reason="near_shadow_ev_threshold",
+        ev_gap=ev_gap,
+        trigger_price=trigger_price,
+        trigger_label=label,
     )
 
 
@@ -356,6 +408,7 @@ def _build_candidates(
     btc_long_prob: float | None,
     eth_long_prob: float | None,
     btc_long_models: dict[str, dict] | None = None,
+    watchlist_ev_margin: float = 0.02,
 ) -> tuple[list[PolymarketOpportunity], list[AlphaCandidate], list[ArbitrageAlert]]:
     snapshots = {snapshot.market_id: snapshot for snapshot in map(normalize_market_snapshot, markets)}
     btc_long_probs = {
@@ -401,11 +454,18 @@ def _build_candidates(
                 quality_flags=["snapshot_missing"],
             )
         assessment = assess_intelligence(opp, edge, snapshot)
+        watchlist = _watchlist_signal(
+            opp.candidate_side,
+            edge,
+            assessment,
+            ev_margin=max(0.0, float(watchlist_ev_margin)),
+        )
         candidates.append(AlphaCandidate(
             opp,
             edge,
             snapshot,
             assessment,
+            watchlist,
             (btc_long_models or {}).get(opp.market_id),
         ))
     return opportunities, candidates, detect_arbitrage_alerts(markets)
@@ -423,6 +483,7 @@ def run_recommendations_only(
     btc_long_prob: float | None = None,
     eth_long_prob: float | None = None,
     use_long_horizon_model: bool = True,
+    watchlist_ev_margin: float = 0.02,
 ) -> RecommendationRunResult:
     """Scan and assess markets without writing reports or shadow ledger rows."""
     markets = fetch_active_markets(limit=limit)
@@ -451,6 +512,7 @@ def run_recommendations_only(
         btc_long_prob=btc_long_prob,
         eth_long_prob=eth_long_prob,
         btc_long_models=btc_long_models,
+        watchlist_ev_margin=watchlist_ev_margin,
     )
     return RecommendationRunResult(
         opportunities=opportunities,
@@ -482,9 +544,18 @@ def print_recommendations(result: RecommendationRunResult, *, limit: int = 10) -
         )
         print(f"   flags={flags}")
         print(f"   clob={candidate.snapshot.clob_status}: {candidate.snapshot.clob_reason or 'n/a'}")
+        if candidate.watchlist:
+            print(f"   watchlist={_format_watchlist_signal(candidate.watchlist)}")
         if candidate.long_horizon_model:
             print(f"   long_horizon={_format_long_horizon_model(candidate.long_horizon_model)}")
         print(f"   thesis={assessment.thesis}")
+
+
+def _format_watchlist_signal(signal: WatchlistSignal) -> str:
+    return (
+        f"{signal.reason}; needs_ev=+{signal.ev_gap:.4f}; "
+        f"trigger_{signal.trigger_label}<={signal.trigger_price:.4f}"
+    )
 
 
 def _format_long_horizon_model(model: dict) -> str:
@@ -576,12 +647,14 @@ def _write_report(
     shadow_candidates = sum(1 for candidate in candidates if candidate.assessment.recommendation == "shadow_candidate")
     research_only = sum(1 for candidate in candidates if candidate.assessment.recommendation == "research")
     avoid = sum(1 for candidate in candidates if candidate.assessment.recommendation == "avoid")
+    watchlist = [candidate for candidate in candidates if candidate.watchlist is not None]
     lines.extend([
         "",
         "## Data Quality",
         "",
         f"- Average data quality: `{avg_quality:.4f}`",
         f"- Shadow candidates: `{shadow_candidates}`",
+        f"- Watchlist near-misses: `{len(watchlist)}`",
         f"- Research-only: `{research_only}`",
         f"- Avoid: `{avoid}`",
         "",
@@ -603,9 +676,26 @@ def _write_report(
             f"- Risk flags: `{flags}`",
             f"- Thesis: {assessment.thesis}",
         ])
+        if candidate.watchlist:
+            lines.append(f"- Watchlist trigger: `{_format_watchlist_signal(candidate.watchlist)}`")
         if candidate.long_horizon_model:
             lines.append(f"- Long-horizon model: `{_format_long_horizon_model(candidate.long_horizon_model)}`")
         lines.append("")
+    lines.extend(["", "## Watchlist", ""])
+    if not watchlist:
+        lines.append("No near-threshold machine watchlist items.")
+    for idx, candidate in enumerate(sorted(watchlist, key=lambda c: c.watchlist.ev_gap if c.watchlist else 1.0)[:10], start=1):
+        signal = candidate.watchlist
+        if signal is None:
+            continue
+        lines.extend([
+            f"### {idx}. {candidate.opportunity.question}",
+            f"- Recommendation: `{candidate.assessment.recommendation}`",
+            f"- After-cost EV: `{candidate.edge.after_cost_ev:.4f}`",
+            f"- Trigger: `{_format_watchlist_signal(signal)}`",
+            f"- Fair-value source: `{candidate.assessment.fair_value_source}`",
+            "",
+        ])
     lines.extend(["", "## Shadow Positions", ""])
     if not shadow_positions:
         lines.append("No shadow positions found.")
@@ -642,6 +732,8 @@ def _write_report(
             lines.append(f"- Target price: `${opp.target_price:,.0f}`")
         if candidate.long_horizon_model:
             lines.append(f"- Long-horizon model: `{_format_long_horizon_model(candidate.long_horizon_model)}`")
+        if candidate.watchlist:
+            lines.append(f"- Watchlist trigger: `{_format_watchlist_signal(candidate.watchlist)}`")
         if opp.safety_note:
             lines.append(f"- Safety note: `{opp.safety_note}`")
         if edge.reject_reasons:
@@ -684,6 +776,7 @@ def run_alpha_lab(
     eth_long_prob: float | None = None,
     auto_shadow: bool = True,
     use_long_horizon_model: bool = True,
+    watchlist_ev_margin: float = 0.02,
     authority_mode: str = "shadow",
     max_open_shadow_trades: int = 10,
     max_open_shadow_exposure_usd: float = 250.0,
@@ -717,6 +810,7 @@ def run_alpha_lab(
         btc_long_prob=btc_long_prob,
         eth_long_prob=eth_long_prob,
         btc_long_models=btc_long_models,
+        watchlist_ev_margin=watchlist_ev_margin,
     )
 
     candidates: list[AlphaCandidate] = []
@@ -756,6 +850,7 @@ def run_alpha_lab(
                 edge,
                 candidate.snapshot,
                 assessment,
+                candidate.watchlist,
                 candidate.long_horizon_model,
                 shadow_id,
             ))
@@ -820,6 +915,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max-open-shadow-exposure", type=float, default=250.0)
     p.add_argument("--recommendations-only", action="store_true", help="Print machine recommendations without writing reports or shadow rows")
     p.add_argument("--recommendation-limit", type=int, default=10)
+    p.add_argument("--watchlist-ev-margin", type=float, default=0.02, help="EV gap below shadow threshold that qualifies as a watchlist near-miss")
     p.add_argument("--no-auto-shadow", action="store_true")
     p.add_argument("--report-dir", default="reports/polymarket")
     return p.parse_args()
@@ -840,6 +936,7 @@ def main() -> None:
             btc_long_prob=args.btc_long_prob,
             eth_long_prob=args.eth_long_prob,
             use_long_horizon_model=not args.no_long_horizon_model,
+            watchlist_ev_margin=args.watchlist_ev_margin,
         )
         print_recommendations(result, limit=args.recommendation_limit)
         return
@@ -854,6 +951,7 @@ def main() -> None:
         btc_long_prob=args.btc_long_prob,
         eth_long_prob=args.eth_long_prob,
         use_long_horizon_model=not args.no_long_horizon_model,
+        watchlist_ev_margin=args.watchlist_ev_margin,
         auto_shadow=not args.no_auto_shadow,
         authority_mode=args.authority_mode,
         max_open_shadow_trades=args.max_open_shadow_trades,
