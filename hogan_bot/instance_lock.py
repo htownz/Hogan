@@ -90,7 +90,7 @@ class RuntimeInstanceLock:
                 if owner_pid and _pid_exists(owner_pid):
                     raise InstanceLockError(
                         f"another Hogan runtime is active (pid={owner_pid}, lock='{self.lock_path}')"
-                    )
+                    ) from None
                 # Stale lock (dead pid or unreadable metadata): remove then retry.
                 self.lock_path.unlink(missing_ok=True)
         raise InstanceLockError(f"unable to acquire runtime lock at '{self.lock_path}'")

@@ -284,6 +284,7 @@ def print_ict_report(results: dict) -> None:
 
 def main() -> None:
     import argparse
+
     from hogan_bot.storage import get_connection
 
     logging.basicConfig(
