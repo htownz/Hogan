@@ -148,6 +148,38 @@ def _create_schema(conn: sqlite3.Connection) -> None:
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS polymarket_market_snapshots (
+            ts_ms INTEGER NOT NULL,
+            symbol TEXT NOT NULL,
+            market_id TEXT NOT NULL,
+            slug TEXT,
+            question TEXT,
+            category TEXT,
+            category_id TEXT,
+            market_type TEXT,
+            horizon TEXT,
+            yes_probability REAL,
+            probability_source TEXT,
+            spread REAL,
+            liquidity REAL,
+            volume REAL,
+            data_quality_score REAL,
+            eligibility TEXT,
+            required_evidence_source TEXT,
+            shadow_policy TEXT,
+            raw_json TEXT,
+            PRIMARY KEY (ts_ms, symbol, market_id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_poly_snapshots_symbol_ts
+        ON polymarket_market_snapshots(symbol, ts_ms DESC)
+        """
+    )
+    conn.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_poly_shadow_status
         ON polymarket_shadow_trades(status, opened_ts_ms DESC)
         """
@@ -846,6 +878,72 @@ def insert_polymarket_opportunities(
     return len(rows)
 
 
+def insert_polymarket_market_snapshots(
+    conn: sqlite3.Connection,
+    symbol: str,
+    ts_ms: int,
+    snapshots: list[dict],
+) -> int:
+    """Persist normalized Polymarket market snapshots for dataset growth."""
+    if not snapshots:
+        return 0
+    rows = []
+    for snapshot in snapshots:
+        rows.append((
+            int(ts_ms),
+            symbol,
+            str(snapshot.get("market_id", "")),
+            snapshot.get("slug"),
+            snapshot.get("question"),
+            snapshot.get("category"),
+            snapshot.get("category_id"),
+            snapshot.get("market_type"),
+            snapshot.get("horizon"),
+            snapshot.get("yes_probability"),
+            snapshot.get("probability_source"),
+            snapshot.get("spread"),
+            snapshot.get("liquidity"),
+            snapshot.get("volume"),
+            snapshot.get("data_quality_score"),
+            snapshot.get("eligibility"),
+            snapshot.get("required_evidence_source"),
+            snapshot.get("shadow_policy"),
+            json.dumps(snapshot, sort_keys=True),
+        ))
+    conn.executemany(
+        """
+        INSERT OR REPLACE INTO polymarket_market_snapshots (
+            ts_ms, symbol, market_id, slug, question, category, category_id,
+            market_type, horizon, yes_probability, probability_source, spread,
+            liquidity, volume, data_quality_score, eligibility,
+            required_evidence_source, shadow_policy, raw_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        rows,
+    )
+    conn.commit()
+    return len(rows)
+
+
+def load_polymarket_market_snapshots(
+    conn: sqlite3.Connection,
+    symbol: str = "BTC/USD",
+    limit: int = 100,
+) -> pd.DataFrame:
+    """Load recent normalized Polymarket market snapshots."""
+    return pd.read_sql_query(
+        """
+        SELECT *
+        FROM polymarket_market_snapshots
+        WHERE symbol = ?
+        ORDER BY ts_ms DESC, data_quality_score DESC
+        LIMIT ?
+        """,
+        conn,
+        params=(symbol, int(limit)),
+    )
+
+
 def load_polymarket_opportunities(
     conn: sqlite3.Connection,
     symbol: str = "BTC/USD",
@@ -993,6 +1091,9 @@ def summarize_polymarket_shadow_trades(conn: sqlite3.Connection) -> dict[str, fl
             "max_drawdown": 0.0,
             "worst_loss_streak": 0.0,
             "market_type_coverage": 0.0,
+            "market_category_coverage": 0.0,
+            "fair_value_source_coverage": 0.0,
+            "calibrated_fair_value_trades": 0.0,
             "data_quality_weighted_pnl": 0.0,
         }
     wins = sum(1 for pnl in pnls if pnl > 0)
@@ -1002,6 +1103,9 @@ def summarize_polymarket_shadow_trades(conn: sqlite3.Connection) -> dict[str, fl
     loss_streak = 0
     worst_loss_streak = 0
     market_types: set[str] = set()
+    market_categories: set[str] = set()
+    fair_value_sources: set[str] = set()
+    calibrated_fair_value_trades = 0
     weighted_pnl = 0.0
     total_quality = 0.0
     for pnl, raw_json in rows:
@@ -1019,14 +1123,26 @@ def summarize_polymarket_shadow_trades(conn: sqlite3.Connection) -> dict[str, fl
         except json.JSONDecodeError:
             raw = {}
         opportunity = raw.get("opportunity") if isinstance(raw, dict) else {}
+        if not isinstance(opportunity, dict) and isinstance(raw, dict):
+            opportunity = {}
+        if isinstance(raw, dict) and raw.get("market_id") and not opportunity:
+            opportunity = raw
         assessment = raw.get("assessment") if isinstance(raw, dict) else {}
         if isinstance(opportunity, dict):
             market_type = opportunity.get("market_type")
             if market_type:
                 market_types.add(str(market_type))
+            category_id = opportunity.get("category_id")
+            if category_id:
+                market_categories.add(str(category_id))
         quality = 1.0
         if isinstance(assessment, dict):
             quality = max(0.0, min(1.0, float(assessment.get("data_quality_score", 1.0))))
+            fair_value_source = assessment.get("fair_value_source")
+            if fair_value_source:
+                fair_value_sources.add(str(fair_value_source))
+                if str(fair_value_source).startswith("calibrated"):
+                    calibrated_fair_value_trades += 1
         weighted_pnl += pnl * quality
         total_quality += quality
     return {
@@ -1037,6 +1153,9 @@ def summarize_polymarket_shadow_trades(conn: sqlite3.Connection) -> dict[str, fl
         "max_drawdown": float(abs(max_drawdown)),
         "worst_loss_streak": float(worst_loss_streak),
         "market_type_coverage": float(len(market_types)),
+        "market_category_coverage": float(len(market_categories)),
+        "fair_value_source_coverage": float(len(fair_value_sources)),
+        "calibrated_fair_value_trades": float(calibrated_fair_value_trades),
         "data_quality_weighted_pnl": float(weighted_pnl / total_quality) if total_quality > 0 else 0.0,
     }
 

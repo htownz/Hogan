@@ -186,6 +186,8 @@ def test_opportunity_storage_and_shadow_ledger_round_trip():
     assert snapshot["max_drawdown"] == 0.0
     assert snapshot["worst_loss_streak"] == 0.0
     assert "data_quality_weighted_pnl" in snapshot
+    assert "market_category_coverage" in snapshot
+    assert "fair_value_source_coverage" in snapshot
     ledger = load_shadow_ledger(conn, status="closed", limit=5)
     assert ledger[0]["market_id"] == "m1"
     assert ledger[0]["status"] == "closed"
@@ -283,7 +285,9 @@ def test_alpha_lab_runner_persists_report_and_opens_shadow_once(monkeypatch, tmp
     report = Path(first.report_path).read_text()
     assert "Polymarket Alpha Lab Report" in report
     assert "## Data Quality" in report
+    assert "## Category Coverage" in report
     assert "## Machine Recommendations" in report
+    assert "Evidence source" in report
     assert "## Shadow Positions" in report
     assert "CLOB diagnostic" in report
     assert "## Next Action" in report
@@ -293,9 +297,11 @@ def test_alpha_lab_runner_persists_report_and_opens_shadow_once(monkeypatch, tmp
         "SELECT COUNT(*) FROM polymarket_shadow_trades WHERE status='open'"
     ).fetchone()[0]
     opp_count = conn.execute("SELECT COUNT(*) FROM polymarket_opportunities").fetchone()[0]
+    snapshot_count = conn.execute("SELECT COUNT(*) FROM polymarket_market_snapshots").fetchone()[0]
     conn.close()
     assert open_count == 1
     assert opp_count >= 1
+    assert snapshot_count >= 1
 
 
 def test_alpha_lab_authority_modes_and_shadow_budget(monkeypatch, tmp_path):
@@ -376,8 +382,11 @@ def test_recommendations_only_does_not_write_report_or_ledger(monkeypatch, tmp_p
     print_recommendations(result, limit=1)
 
     assert result.candidates[0].assessment.recommendation == "shadow_candidate"
+    assert result.candidates[0].evidence.source == "crypto_price_history"
     output = capsys.readouterr().out
     assert "shadow_candidate" in output
+    assert "Category coverage:" in output
+    assert "evidence_source=crypto_price_history" in output
     assert "clob=not_enriched" in output
     conn = get_connection(str(db_path))
     opp_count = conn.execute("SELECT COUNT(*) FROM polymarket_opportunities").fetchone()[0]

@@ -19,6 +19,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from hogan_bot.polymarket_categories import classify_polymarket_category
+
 logger = logging.getLogger(__name__)
 
 _GAMMA_BASE = "https://gamma-api.polymarket.com"
@@ -123,9 +125,12 @@ class PolymarketMarketSnapshot:
     question: str
     event_slug: str
     category: str
+    category_id: str
     market_type: str
     horizon: str
     target_price: float | None
+    required_evidence_source: str
+    shadow_policy: str
     yes_probability: float | None
     probability_source: str
     spread: float | None
@@ -147,8 +152,11 @@ class PolymarketMarketSnapshot:
             "question": self.question,
             "event_slug": self.event_slug,
             "category": self.category,
+            "category_id": self.category_id,
             "market_type": self.market_type,
             "horizon": self.horizon,
+            "required_evidence_source": self.required_evidence_source,
+            "shadow_policy": self.shadow_policy,
             "yes_probability": round(self.yes_probability, 6) if self.yes_probability is not None else None,
             "probability_source": self.probability_source,
             "spread": round(self.spread, 6) if self.spread is not None else None,
@@ -185,9 +193,12 @@ class PolymarketOpportunity:
     catalyst_score: float
     total_score: float
     rationale: str
+    category_id: str = "unsupported"
     market_type: str = "unknown"
     horizon: str = "unknown"
     target_price: float | None = None
+    required_evidence_source: str = "unsupported"
+    shadow_policy: str = "research_only"
     safety_note: str | None = None
 
     def to_dict(self) -> dict:
@@ -205,8 +216,11 @@ class PolymarketOpportunity:
             "catalyst_score": round(self.catalyst_score, 4),
             "total_score": round(self.total_score, 4),
             "rationale": self.rationale,
+            "category_id": self.category_id,
             "market_type": self.market_type,
             "horizon": self.horizon,
+            "required_evidence_source": self.required_evidence_source,
+            "shadow_policy": self.shadow_policy,
         }
         if self.target_price is not None:
             payload["target_price"] = round(self.target_price, 2)
@@ -408,31 +422,35 @@ def _market_horizon(market: dict) -> str:
     return "unknown"
 
 
+def _category_match(market: dict):
+    text = _market_text(market)
+    target = _extract_price_target(text)
+    return classify_polymarket_category(text, target_price=target)
+
+
 def _market_type(market: dict, category: str) -> tuple[str, str, float | None]:
     text = _market_text(market)
     target = _extract_price_target(text)
     horizon = _market_horizon(market)
-    if category in ("btc", "eth") and _contains_any(text, _CRYPTO_MACRO_TERMS):
-        return "macro_crypto", horizon, target
-    if category in ("btc", "eth") and target is not None:
-        return "price_target", horizon, target
-    if category == "macro_risk":
-        return "macro_risk", horizon, target
-    if category in ("btc", "eth"):
-        return "directional", horizon, target
-    return "other", horizon, target
+    match = _category_match(market)
+    return match.market_type, horizon, target
 
 
 def normalize_market_snapshot(market: dict) -> PolymarketMarketSnapshot:
     """Normalize one public Polymarket payload for scoring and reporting."""
-    category = _market_category(market)
+    match = _category_match(market)
+    category = match.asset_category
     market_type, horizon, target_price = _market_type(market, category)
     yes_prob = _yes_probability(market)
     quality_score, quality_flags = _data_quality_score(market)
     eligibility = "research"
     if yes_prob is None or category == "other":
         eligibility = "blocked"
-    elif quality_score >= 0.55 and not {"wide_spread", "low_liquidity"} & set(quality_flags):
+    elif (
+        quality_score >= 0.55
+        and match.shadow_policy != "research_only"
+        and not {"wide_spread", "low_liquidity"} & set(quality_flags)
+    ):
         eligibility = "shadow_candidate"
     return PolymarketMarketSnapshot(
         market_id=_market_id(market),
@@ -440,9 +458,12 @@ def normalize_market_snapshot(market: dict) -> PolymarketMarketSnapshot:
         question=str(market.get("question") or market.get("title") or ""),
         event_slug=str(market.get("eventSlug") or ""),
         category=category,
+        category_id=match.category_id,
         market_type=market_type,
         horizon=horizon,
         target_price=target_price,
+        required_evidence_source=match.required_evidence_source,
+        shadow_policy=match.shadow_policy,
         yes_probability=yes_prob,
         probability_source=_probability_source(market),
         spread=_to_float(market.get("poly_clob_spread"), default=float("nan"))
@@ -633,7 +654,8 @@ def score_polymarket_opportunities(
     for market in markets:
         if str(market.get("closed", "")).lower() == "true":
             continue
-        category = _market_category(market)
+        match = _category_match(market)
+        category = match.asset_category
         if category not in ("btc", "eth", "macro_risk"):
             continue
         yes_prob = _yes_probability(market)
@@ -708,9 +730,12 @@ def score_polymarket_opportunities(
             catalyst_score=catalyst,
             total_score=max(0.0, min(1.0, total)),
             rationale=rationale,
+            category_id=match.category_id,
             market_type=market_type,
             horizon=horizon,
             target_price=target_price,
+            required_evidence_source=match.required_evidence_source,
+            shadow_policy=match.shadow_policy,
             safety_note=safety_note,
         ))
 

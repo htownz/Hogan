@@ -23,6 +23,7 @@ from hogan_bot.fetch_polymarket import (
 )
 from hogan_bot.polymarket_arbitrage import ArbitrageAlert, detect_arbitrage_alerts
 from hogan_bot.polymarket_edge import EdgeAssessment, assess_opportunity_edge
+from hogan_bot.polymarket_evidence import PolymarketEvidence, assess_polymarket_evidence
 from hogan_bot.polymarket_intelligence import (
     IntelligenceAssessment,
     assess_intelligence,
@@ -32,6 +33,7 @@ from hogan_bot.polymarket_promotion import evaluate_shadow_ledger
 from hogan_bot.storage import (
     close_polymarket_shadow_trade,
     get_connection,
+    insert_polymarket_market_snapshots,
     insert_polymarket_opportunities,
     open_polymarket_shadow_trade,
 )
@@ -62,6 +64,7 @@ class AlphaCandidate:
     opportunity: PolymarketOpportunity
     edge: EdgeAssessment
     snapshot: PolymarketMarketSnapshot
+    evidence: PolymarketEvidence
     assessment: IntelligenceAssessment
     watchlist: WatchlistSignal | None = None
     long_horizon_model: dict | None = None
@@ -135,6 +138,7 @@ def _open_shadow_if_new(
     opportunity: PolymarketOpportunity,
     edge: EdgeAssessment,
     assessment: IntelligenceAssessment,
+    evidence: PolymarketEvidence,
     max_open_trades: int,
     max_open_exposure_usd: float,
 ) -> int | None:
@@ -164,6 +168,7 @@ def _open_shadow_if_new(
         raw={
             "opportunity": opportunity.to_dict(),
             "assessment": assessment.to_dict(),
+            "evidence": evidence.to_dict() if evidence is not None else {},
             "edge": {
                 "after_cost_ev": edge.after_cost_ev,
                 "expected_value": edge.expected_value,
@@ -436,9 +441,12 @@ def _build_candidates(
                 question=opp.question,
                 event_slug="",
                 category=opp.category,
+                category_id=opp.category_id,
                 market_type=opp.market_type,
                 horizon=opp.horizon,
                 target_price=opp.target_price,
+                required_evidence_source=opp.required_evidence_source,
+                shadow_policy=opp.shadow_policy,
                 yes_probability=opp.crowd_prob,
                 probability_source="opportunity_fallback",
                 spread=None,
@@ -453,6 +461,7 @@ def _build_candidates(
                 eligibility="research",
                 quality_flags=["snapshot_missing"],
             )
+        evidence = assess_polymarket_evidence(snapshot)
         assessment = assess_intelligence(opp, edge, snapshot)
         watchlist = _watchlist_signal(
             opp.candidate_side,
@@ -464,6 +473,7 @@ def _build_candidates(
             opp,
             edge,
             snapshot,
+            evidence,
             assessment,
             watchlist,
             (btc_long_models or {}).get(opp.market_id),
@@ -528,6 +538,9 @@ def print_recommendations(result: RecommendationRunResult, *, limit: int = 10) -
     print(f"Arbitrage alerts: {result.arbitrage_alerts}")
     print(f"Hogan BTC probability: {result.btc_prob:.4f}" if result.btc_prob is not None else "Hogan BTC probability: n/a")
     print(f"Hogan ETH probability: {result.eth_prob:.4f}" if result.eth_prob is not None else "Hogan ETH probability: n/a")
+    category_summary = _category_breakdown(result.candidates)
+    if category_summary:
+        print("Category coverage:", _format_category_breakdown(category_summary))
     for idx, candidate in enumerate(
         sorted(result.candidates, key=lambda c: c.assessment.evidence_score, reverse=True)[:limit],
         start=1,
@@ -543,12 +556,48 @@ def print_recommendations(result: RecommendationRunResult, *, limit: int = 10) -
             f"fair={assessment.fair_value_source}"
         )
         print(f"   flags={flags}")
+        print(f"   evidence_source={candidate.evidence.source} confidence={candidate.evidence.confidence:.3f}")
         print(f"   clob={candidate.snapshot.clob_status}: {candidate.snapshot.clob_reason or 'n/a'}")
         if candidate.watchlist:
             print(f"   watchlist={_format_watchlist_signal(candidate.watchlist)}")
         if candidate.long_horizon_model:
             print(f"   long_horizon={_format_long_horizon_model(candidate.long_horizon_model)}")
         print(f"   thesis={assessment.thesis}")
+
+
+def _category_breakdown(candidates: list[AlphaCandidate]) -> dict[str, dict[str, float]]:
+    summary: dict[str, dict[str, float]] = {}
+    for candidate in candidates:
+        category_id = candidate.snapshot.category_id
+        bucket = summary.setdefault(
+            category_id,
+            {
+                "count": 0.0,
+                "quality_total": 0.0,
+                "watchlist": 0.0,
+                "shadow_candidates": 0.0,
+            },
+        )
+        bucket["count"] += 1.0
+        bucket["quality_total"] += candidate.snapshot.data_quality_score
+        if candidate.watchlist is not None:
+            bucket["watchlist"] += 1.0
+        if candidate.assessment.recommendation == "shadow_candidate":
+            bucket["shadow_candidates"] += 1.0
+    for bucket in summary.values():
+        count = max(1.0, bucket["count"])
+        bucket["avg_quality"] = bucket["quality_total"] / count
+    return summary
+
+
+def _format_category_breakdown(summary: dict[str, dict[str, float]]) -> str:
+    parts = []
+    for category_id, bucket in sorted(summary.items(), key=lambda item: (-item[1]["count"], item[0])):
+        parts.append(
+            f"{category_id}:n={int(bucket['count'])},q={bucket.get('avg_quality', 0.0):.2f},"
+            f"watch={int(bucket['watchlist'])},shadow={int(bucket['shadow_candidates'])}"
+        )
+    return "; ".join(parts)
 
 
 def _format_watchlist_signal(signal: WatchlistSignal) -> str:
@@ -632,6 +681,9 @@ def _write_report(
         f"- Closed shadow PnL: `${promotion_metrics.get('total_pnl', 0.0):.2f}`",
         f"- Closed shadow win rate: `{promotion_metrics.get('win_rate', 0.0):.2%}`",
         f"- Max drawdown: `${promotion_metrics.get('max_drawdown', 0.0):.2f}`",
+        f"- Shadow category coverage: `{promotion_metrics.get('market_category_coverage', 0.0):.0f}`",
+        f"- Fair-value source coverage: `{promotion_metrics.get('fair_value_source_coverage', 0.0):.0f}`",
+        f"- Calibrated fair-value trades: `{promotion_metrics.get('calibrated_fair_value_trades', 0.0):.0f}`",
         f"- Hogan BTC probability: `{btc_prob:.4f}`" if btc_prob is not None else "- Hogan BTC probability: `n/a`",
         f"- Hogan ETH probability: `{eth_prob:.4f}`" if eth_prob is not None else "- Hogan ETH probability: `n/a`",
         f"- Promotion approved: `{promotion_approved}`",
@@ -648,6 +700,7 @@ def _write_report(
     research_only = sum(1 for candidate in candidates if candidate.assessment.recommendation == "research")
     avoid = sum(1 for candidate in candidates if candidate.assessment.recommendation == "avoid")
     watchlist = [candidate for candidate in candidates if candidate.watchlist is not None]
+    category_summary = _category_breakdown(candidates)
     lines.extend([
         "",
         "## Data Quality",
@@ -655,12 +708,21 @@ def _write_report(
         f"- Average data quality: `{avg_quality:.4f}`",
         f"- Shadow candidates: `{shadow_candidates}`",
         f"- Watchlist near-misses: `{len(watchlist)}`",
+        f"- Category coverage: `{_format_category_breakdown(category_summary) if category_summary else 'n/a'}`",
         f"- Research-only: `{research_only}`",
         f"- Avoid: `{avoid}`",
-        "",
-        "## Machine Recommendations",
-        "",
     ])
+    lines.extend(["", "## Category Coverage", ""])
+    if not category_summary:
+        lines.append("No category coverage data.")
+    for category_id, bucket in sorted(category_summary.items(), key=lambda item: (-item[1]["count"], item[0])):
+        lines.append(
+            f"- `{category_id}` count=`{int(bucket['count'])}` "
+            f"avg_quality=`{bucket.get('avg_quality', 0.0):.4f}` "
+            f"watchlist=`{int(bucket['watchlist'])}` "
+            f"shadow_candidates=`{int(bucket['shadow_candidates'])}`"
+        )
+    lines.extend(["", "## Machine Recommendations", ""])
     for idx, candidate in enumerate(sorted(candidates, key=lambda c: c.assessment.evidence_score, reverse=True)[:10], start=1):
         assessment = candidate.assessment
         opp = candidate.opportunity
@@ -672,6 +734,7 @@ def _write_report(
             f"- Confidence: `{assessment.confidence:.4f}`",
             f"- Recommended size: `${assessment.recommended_size_usd:.2f}`",
             f"- Fair-value source: `{assessment.fair_value_source}`",
+            f"- Evidence source: `{candidate.evidence.source}` confidence=`{candidate.evidence.confidence:.4f}`",
             f"- CLOB diagnostic: `{candidate.snapshot.clob_status}` - {candidate.snapshot.clob_reason or 'n/a'}",
             f"- Risk flags: `{flags}`",
             f"- Thesis: {assessment.thesis}",
@@ -717,7 +780,9 @@ def _write_report(
             f"- Side: `{opp.candidate_side}`{shadow}",
             f"- Decision: `{edge.decision}`",
             f"- Recommendation: `{assessment.recommendation}`",
+            f"- Category id: `{opp.category_id}`",
             f"- Market type: `{opp.market_type}` / `{opp.horizon}`",
+            f"- Evidence source: `{candidate.evidence.source}` confidence=`{candidate.evidence.confidence:.4f}`",
             f"- Data quality: `{assessment.data_quality_score:.4f}`",
             f"- CLOB diagnostic: `{candidate.snapshot.clob_status}` - {candidate.snapshot.clob_reason or 'n/a'}",
             f"- Confidence: `{assessment.confidence:.4f}`",
@@ -790,6 +855,7 @@ def run_alpha_lab(
     markets = fetch_active_markets(limit=limit)
     if include_clob:
         markets = enrich_clob_snapshots(markets, max_markets=clob_limit)
+    snapshots = [normalize_market_snapshot(market) for market in markets]
     conn = get_connection(db_path)
     btc_prob, eth_prob = _resolve_probabilities(
         conn,
@@ -818,6 +884,12 @@ def run_alpha_lab(
     opened_shadow_ids: set[int] = set()
     shadow_positions: list[ShadowPositionView] = []
     try:
+        insert_polymarket_market_snapshots(
+            conn,
+            symbol,
+            ts_ms,
+            [snapshot.to_dict() for snapshot in snapshots],
+        )
         promotion = evaluate_shadow_ledger(conn)
         allow_shadow = auto_shadow and _authority_allows_shadow(authority_mode, promotion.approved)
         insert_polymarket_opportunities(
@@ -839,6 +911,7 @@ def run_alpha_lab(
                     opportunity=opp,
                     edge=edge,
                     assessment=assessment,
+                    evidence=candidate.evidence,
                     max_open_trades=max(0, int(max_open_shadow_trades)),
                     max_open_exposure_usd=max(0.0, float(max_open_shadow_exposure_usd)),
                 )
@@ -849,6 +922,7 @@ def run_alpha_lab(
                 opp,
                 edge,
                 candidate.snapshot,
+                candidate.evidence,
                 assessment,
                 candidate.watchlist,
                 candidate.long_horizon_model,

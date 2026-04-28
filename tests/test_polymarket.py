@@ -168,6 +168,7 @@ def test_normalize_market_snapshot_scores_data_quality():
     })
 
     assert snapshot.market_id == "m1"
+    assert snapshot.category_id == "crypto_price_target"
     assert snapshot.market_type == "price_target"
     assert snapshot.horizon == "short_term"
     assert snapshot.probability_source == "clob_midpoint"
@@ -207,8 +208,65 @@ def test_normalize_market_snapshot_keeps_crypto_treasury_markets_macro():
         "liquidity": "100000",
     })
 
-    assert snapshot.market_type == "macro_crypto"
+    assert snapshot.category_id == "crypto_treasury"
+    assert snapshot.market_type == "crypto_treasury"
     assert snapshot.target_price == 1.0
+    assert snapshot.shadow_policy == "research_only"
+    assert snapshot.eligibility == "research"
+
+
+def test_polymarket_category_registry_classifies_policy_macro_and_equity():
+    from hogan_bot.fetch_polymarket import normalize_market_snapshot
+
+    policy = normalize_market_snapshot({
+        "id": "policy",
+        "question": "Will the SEC approve a spot Ethereum ETF this year?",
+        "outcomes": '["Yes", "No"]',
+        "outcomePrices": '["0.52", "0.48"]',
+        "poly_clob_midpoint": 0.52,
+        "poly_clob_spread": 0.01,
+    })
+    macro = normalize_market_snapshot({
+        "id": "macro",
+        "question": "Will CPI inflation be above 4% this month?",
+        "outcomes": '["Yes", "No"]',
+        "outcomePrices": '["0.20", "0.80"]',
+    })
+    equity = normalize_market_snapshot({
+        "id": "equity",
+        "question": "Will NVDA stock close above $150 this month?",
+        "outcomes": '["Yes", "No"]',
+        "outcomePrices": '["0.40", "0.60"]',
+    })
+
+    assert policy.category_id == "crypto_policy"
+    assert macro.category_id == "macro_event"
+    assert equity.category_id == "equity_index_or_single_name"
+
+    politics = normalize_market_snapshot({
+        "id": "politics",
+        "question": "Will Donald Trump win the 2028 US Presidential Election?",
+        "outcomes": '["Yes", "No"]',
+        "outcomePrices": '["0.20", "0.80"]',
+    })
+    assert politics.category_id == "unsupported"
+
+
+def test_polymarket_evidence_adapters_return_category_flags():
+    from hogan_bot.fetch_polymarket import normalize_market_snapshot
+    from hogan_bot.polymarket_evidence import assess_polymarket_evidence
+
+    treasury = normalize_market_snapshot({
+        "id": "treasury",
+        "question": "Will MicroStrategy sell any Bitcoin by December 31, 2026?",
+        "outcomes": '["Yes", "No"]',
+        "outcomePrices": '["0.09", "0.91"]',
+    })
+
+    evidence = assess_polymarket_evidence(treasury)
+
+    assert evidence.source == "crypto_treasury_public_context"
+    assert "structured_holdings_data_missing" in evidence.flags
 
 
 def test_score_polymarket_opportunities_uses_hogan_disagreement():
