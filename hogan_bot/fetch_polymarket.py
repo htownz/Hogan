@@ -14,6 +14,7 @@ import os
 import time
 from dataclasses import dataclass
 from datetime import date
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -23,6 +24,10 @@ _GAMMA_BASE = "https://gamma-api.polymarket.com"
 _CLOB_BASE = "https://clob.polymarket.com"
 _TIMEOUT = 20
 _SLEEP = 0.25
+_HEADERS = {
+    "Accept": "application/json",
+    "User-Agent": "HoganBot/1.0 (+https://github.com/htownz/Hogan; public market data research)",
+}
 
 _BTC_TERMS = ("bitcoin", "btc")
 _ETH_TERMS = ("ethereum", "ether", "eth")
@@ -102,17 +107,27 @@ class PolymarketOpportunity:
 def _get_json(path: str, params: dict | None = None) -> object:
     query = f"?{urlencode(params)}" if params else ""
     url = f"{_GAMMA_BASE}{path}{query}"
-    req = Request(url, headers={"Accept": "application/json"})
-    with urlopen(req, timeout=_TIMEOUT) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    req = Request(url, headers=_HEADERS)
+    try:
+        with urlopen(req, timeout=_TIMEOUT) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except HTTPError as exc:
+        raise RuntimeError(f"Polymarket Gamma HTTP {exc.code} for {path}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"Polymarket Gamma request failed for {path}: {exc}") from exc
 
 
 def _get_clob_json(path: str, params: dict | None = None) -> object:
     query = f"?{urlencode(params)}" if params else ""
     url = f"{_CLOB_BASE}{path}{query}"
-    req = Request(url, headers={"Accept": "application/json"})
-    with urlopen(req, timeout=_TIMEOUT) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    req = Request(url, headers=_HEADERS)
+    try:
+        with urlopen(req, timeout=_TIMEOUT) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except HTTPError as exc:
+        raise RuntimeError(f"Polymarket CLOB HTTP {exc.code} for {path}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"Polymarket CLOB request failed for {path}: {exc}") from exc
 
 
 def _json_list(value) -> list:

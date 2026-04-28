@@ -148,3 +148,20 @@ def test_opportunity_storage_and_shadow_ledger_round_trip():
     snapshot = promotion_snapshot(conn)
     assert snapshot["trades"] == 1.0
     assert snapshot["win_rate"] == 1.0
+
+
+def test_polymarket_promotion_gate_requires_shadow_evidence():
+    from hogan_bot.polymarket_promotion import evaluate_polymarket_promotion
+
+    rejected = evaluate_polymarket_promotion(
+        {"trades": 3.0, "total_pnl": 12.0, "avg_pnl": 4.0, "win_rate": 0.8},
+        min_trades=10,
+    )
+    assert rejected.approved is False
+    assert any("insufficient_shadow_trades" in reason for reason in rejected.reasons)
+
+    approved = evaluate_polymarket_promotion(
+        {"trades": 60.0, "total_pnl": 120.0, "avg_pnl": 2.0, "win_rate": 0.62},
+    )
+    assert approved.approved is True
+    assert approved.reasons == []
