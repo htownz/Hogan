@@ -321,6 +321,8 @@ class BotConfig:
     swarm_data_max_stale_hours: float = 2.0
     swarm_exec_fee_rate: float = 0.0026
     swarm_exec_min_edge_ratio: float = 1.5
+    swarm_polymarket_min_signal: float = 0.20
+    swarm_polymarket_veto_threshold: float = 0.65
 
     swarm_replay_forward_window_bars: int = 12
     swarm_replay_bars_before: int = 60
@@ -943,6 +945,8 @@ def load_config() -> BotConfig:
         swarm_active_allow_new_signals=os.getenv(
             "HOGAN_SWARM_ACTIVE_ALLOW_NEW_SIGNALS", "false",
         ).lower() == "true",
+        swarm_polymarket_min_signal=_env_float("HOGAN_SWARM_POLYMARKET_MIN_SIGNAL", "0.20"),
+        swarm_polymarket_veto_threshold=_env_float("HOGAN_SWARM_POLYMARKET_VETO_THRESHOLD", "0.65"),
         rl_model_path=os.getenv("HOGAN_RL_MODEL_PATH", "models/hogan_rl_policy.zip"),
         rl_reward_type=os.getenv("HOGAN_RL_REWARD_TYPE", "risk_adjusted"),
         rl_timesteps=_env_int("HOGAN_RL_TIMESTEPS", "200000"),

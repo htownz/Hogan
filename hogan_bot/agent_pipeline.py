@@ -379,6 +379,33 @@ class SentimentAgent:
             if row:
                 scores["social_vol"] = float(row[0])
 
+            poly_metric = (
+                "poly_eth_bull_prob"
+                if self.symbol.upper().startswith("ETH/")
+                else "poly_btc_bull_prob"
+            )
+            row = self.conn.execute(
+                "SELECT value, date FROM onchain_metrics WHERE symbol=? AND metric=? "
+                "AND date<=? ORDER BY date DESC LIMIT 1",
+                (self.symbol, poly_metric, cutoff_date),
+            ).fetchone()
+            if row:
+                scores["polymarket_bull"] = float(row[0])
+                try:
+                    _d = pd.Timestamp(row[1], tz="UTC")
+                    _age = (pd.Timestamp(cutoff_date, tz="UTC") - _d).total_seconds() / 3600.0
+                    _sent_ages.append(_age)
+                except Exception as exc:
+                    logger.debug("SentimentAgent: polymarket age parse failed: %s", exc)
+
+            row = self.conn.execute(
+                "SELECT value FROM onchain_metrics WHERE symbol=? AND metric='poly_crypto_risk_prob' "
+                "AND date<=? ORDER BY date DESC LIMIT 1",
+                (self.symbol, cutoff_date),
+            ).fetchone()
+            if row:
+                scores["polymarket_crypto_risk"] = 1.0 - float(row[0])
+
             # Funding rate (positive = longs paying, bearish signal)
             row = self.conn.execute(
                 "SELECT value FROM derivatives_metrics WHERE symbol=? AND metric='funding_rate' "
@@ -430,6 +457,8 @@ class SentimentAgent:
             "funding": 0.10,
             "fg_velocity": 0.15,         # Phase 3A: sentiment momentum
             "funding_regime": 0.15,       # Phase 3B: contrarian funding signal
+            "polymarket_bull": 0.15,      # Prediction-market implied directional odds
+            "polymarket_crypto_risk": 0.10,
         }
 
         available_weights = {k: w for k, w in weights.items() if k in scores}
@@ -517,6 +546,23 @@ class MacroAgent:
         except Exception as exc:
             logger.warning("MacroAgent data lookup failed: %s", exc)
 
+        try:
+            row = self.conn.execute(
+                "SELECT value, date FROM onchain_metrics WHERE symbol=? AND metric='poly_macro_risk_prob' "
+                "AND date<=? ORDER BY date DESC LIMIT 1",
+                (self.symbol, cutoff_date),
+            ).fetchone()
+            if row:
+                indicators["poly_macro_risk_prob"] = max(0.0, min(1.0, float(row[0])))
+                try:
+                    _d = pd.Timestamp(row[1], tz="UTC")
+                    _age = (pd.Timestamp(cutoff_date, tz="UTC") - _d).total_seconds() / 3600.0
+                    _metric_ages.append(_age)
+                except Exception as exc:
+                    logger.debug("MacroAgent: polymarket age parse failed: %s", exc)
+        except Exception as exc:
+            logger.debug("MacroAgent: Polymarket macro lookup failed: %s", exc)
+
         data_age_hours = max(_metric_ages) if _metric_ages else 999.0
 
         if not indicators:
@@ -526,6 +572,9 @@ class MacroAgent:
 
         vix = indicators.get("vix_close", 20.0)
         risk_score += 1.0 if vix < 15 else (-1.0 if vix > 25 else 0.0)
+
+        if "poly_macro_risk_prob" in indicators:
+            risk_score += -1.0 * ((indicators["poly_macro_risk_prob"] - 0.5) * 2.0)
 
         dxy = indicators.get("dxy_close", 100.0)
         risk_score += -0.5 if dxy > 105 else (0.5 if dxy < 95 else 0.0)

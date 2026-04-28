@@ -95,6 +95,35 @@ def run_all_fetchers(
         results["news_sentiment"] = "SKIPPED (no CRYPTOPANIC_KEY)"
         logger.info("FETCH news_sentiment: skipped (no CRYPTOPANIC_KEY env var)")
 
+    # 4B. Polymarket prediction-market intelligence (public, no auth)
+    if os.getenv("HOGAN_USE_POLYMARKET_SIGNALS", "false").strip().lower() in ("1", "true", "yes"):
+        try:
+            from hogan_bot.fetch_polymarket import fetch_and_store as fetch_poly
+            try:
+                limit = int(os.getenv("HOGAN_POLYMARKET_EVENT_LIMIT", "100"))
+            except ValueError:
+                limit = 100
+            try:
+                clob_limit = int(os.getenv("HOGAN_POLYMARKET_CLOB_LIMIT", "12"))
+            except ValueError:
+                clob_limit = 12
+            include_clob = os.getenv("HOGAN_POLYMARKET_USE_CLOB", "true").lower() in ("1", "true", "yes")
+            rows = fetch_poly(
+                symbol=primary_symbol,
+                db_path=db_path,
+                limit=limit,
+                include_clob=include_clob,
+                clob_limit=clob_limit,
+            )
+            results["polymarket"] = rows
+            logger.info("FETCH polymarket: %d rows", rows)
+        except Exception as exc:
+            results["polymarket"] = f"ERROR: {exc}"
+            logger.warning("FETCH polymarket failed: %s", exc)
+    else:
+        results["polymarket"] = "SKIPPED (HOGAN_USE_POLYMARKET_SIGNALS=false)"
+        logger.info("FETCH polymarket: skipped (disabled)")
+
     # 5. FRED macro data (free, no auth)
     try:
         from hogan_bot.fetch_fred import fetch_and_store as fetch_fred

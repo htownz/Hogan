@@ -880,6 +880,7 @@ def decide(
                 ExecutionCostAgent,
             )
             from hogan_bot.swarm_decision.agents.pipeline_agent import PipelineAgent
+            from hogan_bot.swarm_decision.agents.polymarket import PolymarketAgent
             from hogan_bot.swarm_decision.agents.risk_steward import RiskStewardAgent
             from hogan_bot.swarm_decision.agents.volatility_regime import (
                 VolatilityRegimeAgent,
@@ -912,6 +913,11 @@ def decide(
                     ))
                 elif aid == "volatility_regime_v1":
                     agents.append(VolatilityRegimeAgent())
+                elif aid == "polymarket_v1":
+                    agents.append(PolymarketAgent(
+                        min_signal=getattr(config, "swarm_polymarket_min_signal", 0.20),
+                        veto_threshold=getattr(config, "swarm_polymarket_veto_threshold", 0.65),
+                    ))
 
             if agents:
                 import math as _math_sw
