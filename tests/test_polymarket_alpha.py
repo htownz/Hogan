@@ -478,10 +478,11 @@ def test_alpha_lab_keeps_long_target_research_and_reports_arbitrage_alert(monkey
     assert "test alert" in report
 
 
-def test_alpha_lab_uses_automatic_btc_long_horizon_model(monkeypatch, tmp_path):
-    from types import SimpleNamespace
-
-    from hogan_bot.polymarket_alpha import run_recommendations_only
+def test_alpha_lab_uses_automatic_btc_long_horizon_model(monkeypatch, tmp_path, capsys):
+    from hogan_bot.polymarket_alpha import (
+        print_recommendations,
+        run_recommendations_only,
+    )
 
     markets = [
         {
@@ -501,7 +502,7 @@ def test_alpha_lab_uses_automatic_btc_long_horizon_model(monkeypatch, tmp_path):
     monkeypatch.setattr("hogan_bot.polymarket_alpha.detect_arbitrage_alerts", lambda data: [])
     monkeypatch.setattr(
         "hogan_bot.polymarket_alpha.estimate_btc_long_horizon_probability",
-        lambda conn, target_price, question, symbol: SimpleNamespace(probability=0.18),
+        lambda conn, target_price, question, symbol: _FakeLongHorizonEstimate(0.18),
     )
 
     result = run_recommendations_only(
@@ -513,6 +514,28 @@ def test_alpha_lab_uses_automatic_btc_long_horizon_model(monkeypatch, tmp_path):
     assert result.candidates[0].opportunity.hogan_prob == 0.18
     assert result.candidates[0].opportunity.safety_note is None
     assert result.candidates[0].assessment.fair_value_source == "calibrated_long_horizon"
+    assert result.candidates[0].long_horizon_model["current_price"] == 100_000.0
+    print_recommendations(result, limit=1)
+    output = capsys.readouterr().out
+    assert "long_horizon=prob=0.1800" in output
+    assert "spot=$100,000" in output
+
+
+class _FakeLongHorizonEstimate:
+    def __init__(self, probability: float):
+        self.probability = probability
+
+    def to_dict(self) -> dict:
+        return {
+            "probability": self.probability,
+            "source": "btc_long_horizon_lognormal_v1",
+            "current_price": 100_000.0,
+            "target_price": 150_000.0,
+            "days_to_deadline": 612.0,
+            "annualized_drift": 0.03,
+            "annualized_volatility": 0.55,
+            "sample_size": 365,
+        }
 
 
 def test_alpha_lab_marks_and_closes_shadow_trade_on_price_move(monkeypatch, tmp_path):

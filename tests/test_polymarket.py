@@ -196,6 +196,21 @@ def test_normalize_market_snapshot_exposes_clob_diagnostics():
     assert snapshot.to_dict()["clob_status"] == "no_token_id"
 
 
+def test_normalize_market_snapshot_keeps_crypto_treasury_markets_macro():
+    from hogan_bot.fetch_polymarket import normalize_market_snapshot
+
+    snapshot = normalize_market_snapshot({
+        "id": "m1",
+        "question": "Will El Salvador hold $1b+ of BTC by December 31, 2026?",
+        "outcomes": '["Yes", "No"]',
+        "outcomePrices": '["0.32", "0.68"]',
+        "liquidity": "100000",
+    })
+
+    assert snapshot.market_type == "macro_crypto"
+    assert snapshot.target_price == 1.0
+
+
 def test_score_polymarket_opportunities_uses_hogan_disagreement():
     from hogan_bot.fetch_polymarket import score_polymarket_opportunities
 

@@ -412,10 +412,10 @@ def _market_type(market: dict, category: str) -> tuple[str, str, float | None]:
     text = _market_text(market)
     target = _extract_price_target(text)
     horizon = _market_horizon(market)
-    if category in ("btc", "eth") and target is not None:
-        return "price_target", horizon, target
     if category in ("btc", "eth") and _contains_any(text, _CRYPTO_MACRO_TERMS):
         return "macro_crypto", horizon, target
+    if category in ("btc", "eth") and target is not None:
+        return "price_target", horizon, target
     if category == "macro_risk":
         return "macro_risk", horizon, target
     if category in ("btc", "eth"):

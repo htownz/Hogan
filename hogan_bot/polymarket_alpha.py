@@ -45,6 +45,7 @@ class AlphaCandidate:
     edge: EdgeAssessment
     snapshot: PolymarketMarketSnapshot
     assessment: IntelligenceAssessment
+    long_horizon_model: dict | None = None
     shadow_trade_id: int | None = None
 
 
@@ -354,9 +355,14 @@ def _build_candidates(
     eth_prob: float | None,
     btc_long_prob: float | None,
     eth_long_prob: float | None,
-    btc_long_probs: dict[str, float] | None = None,
+    btc_long_models: dict[str, dict] | None = None,
 ) -> tuple[list[PolymarketOpportunity], list[AlphaCandidate], list[ArbitrageAlert]]:
     snapshots = {snapshot.market_id: snapshot for snapshot in map(normalize_market_snapshot, markets)}
+    btc_long_probs = {
+        market_id: float(model["probability"])
+        for market_id, model in (btc_long_models or {}).items()
+        if model.get("probability") is not None
+    }
     opportunities = score_polymarket_opportunities(
         markets,
         hogan_btc_bull_prob=btc_prob,
@@ -395,7 +401,13 @@ def _build_candidates(
                 quality_flags=["snapshot_missing"],
             )
         assessment = assess_intelligence(opp, edge, snapshot)
-        candidates.append(AlphaCandidate(opp, edge, snapshot, assessment))
+        candidates.append(AlphaCandidate(
+            opp,
+            edge,
+            snapshot,
+            assessment,
+            (btc_long_models or {}).get(opp.market_id),
+        ))
     return opportunities, candidates, detect_arbitrage_alerts(markets)
 
 
@@ -424,7 +436,7 @@ def run_recommendations_only(
             btc_prob=btc_prob,
             eth_prob=eth_prob,
         )
-        btc_long_probs = _estimate_btc_long_horizon_probs(
+        btc_long_models = _estimate_btc_long_horizon_models(
             conn,
             markets=markets,
             symbol=symbol,
@@ -438,7 +450,7 @@ def run_recommendations_only(
         eth_prob=eth_prob,
         btc_long_prob=btc_long_prob,
         eth_long_prob=eth_long_prob,
-        btc_long_probs=btc_long_probs,
+        btc_long_models=btc_long_models,
     )
     return RecommendationRunResult(
         opportunities=opportunities,
@@ -470,20 +482,34 @@ def print_recommendations(result: RecommendationRunResult, *, limit: int = 10) -
         )
         print(f"   flags={flags}")
         print(f"   clob={candidate.snapshot.clob_status}: {candidate.snapshot.clob_reason or 'n/a'}")
+        if candidate.long_horizon_model:
+            print(f"   long_horizon={_format_long_horizon_model(candidate.long_horizon_model)}")
         print(f"   thesis={assessment.thesis}")
 
 
-def _estimate_btc_long_horizon_probs(
+def _format_long_horizon_model(model: dict) -> str:
+    return (
+        f"prob={float(model['probability']):.4f} "
+        f"spot=${float(model['current_price']):,.0f} "
+        f"target=${float(model['target_price']):,.0f} "
+        f"days={float(model['days_to_deadline']):.0f} "
+        f"drift={float(model['annualized_drift']):.2%} "
+        f"vol={float(model['annualized_volatility']):.2%} "
+        f"n={int(model['sample_size'])}"
+    )
+
+
+def _estimate_btc_long_horizon_models(
     conn,
     *,
     markets: list[dict],
     symbol: str,
     enabled: bool,
-) -> dict[str, float]:
+) -> dict[str, dict]:
     if not enabled:
         return {}
     btc_symbol = symbol if symbol.upper().startswith("BTC/") else "BTC/USD"
-    probs: dict[str, float] = {}
+    models: dict[str, dict] = {}
     for market in markets:
         snapshot = normalize_market_snapshot(market)
         if (
@@ -500,8 +526,8 @@ def _estimate_btc_long_horizon_probs(
             symbol=btc_symbol,
         )
         if estimate is not None:
-            probs[snapshot.market_id] = estimate.probability
-    return probs
+            models[snapshot.market_id] = estimate.to_dict()
+    return models
 
 
 def _write_report(
@@ -576,8 +602,10 @@ def _write_report(
             f"- CLOB diagnostic: `{candidate.snapshot.clob_status}` - {candidate.snapshot.clob_reason or 'n/a'}",
             f"- Risk flags: `{flags}`",
             f"- Thesis: {assessment.thesis}",
-            "",
         ])
+        if candidate.long_horizon_model:
+            lines.append(f"- Long-horizon model: `{_format_long_horizon_model(candidate.long_horizon_model)}`")
+        lines.append("")
     lines.extend(["", "## Shadow Positions", ""])
     if not shadow_positions:
         lines.append("No shadow positions found.")
@@ -612,6 +640,8 @@ def _write_report(
         ])
         if opp.target_price is not None:
             lines.append(f"- Target price: `${opp.target_price:,.0f}`")
+        if candidate.long_horizon_model:
+            lines.append(f"- Long-horizon model: `{_format_long_horizon_model(candidate.long_horizon_model)}`")
         if opp.safety_note:
             lines.append(f"- Safety note: `{opp.safety_note}`")
         if edge.reject_reasons:
@@ -674,7 +704,7 @@ def run_alpha_lab(
         btc_prob=btc_prob,
         eth_prob=eth_prob,
     )
-    btc_long_probs = _estimate_btc_long_horizon_probs(
+    btc_long_models = _estimate_btc_long_horizon_models(
         conn,
         markets=markets,
         symbol=symbol,
@@ -686,7 +716,7 @@ def run_alpha_lab(
         eth_prob=eth_prob,
         btc_long_prob=btc_long_prob,
         eth_long_prob=eth_long_prob,
-        btc_long_probs=btc_long_probs,
+        btc_long_models=btc_long_models,
     )
 
     candidates: list[AlphaCandidate] = []
@@ -721,7 +751,14 @@ def run_alpha_lab(
                 if shadow_id is not None:
                     shadow_opened += 1
                     opened_shadow_ids.add(shadow_id)
-            candidates.append(AlphaCandidate(opp, edge, candidate.snapshot, assessment, shadow_id))
+            candidates.append(AlphaCandidate(
+                opp,
+                edge,
+                candidate.snapshot,
+                assessment,
+                candidate.long_horizon_model,
+                shadow_id,
+            ))
         shadow_ledger = _update_shadow_ledger(
             conn,
             markets=markets,
