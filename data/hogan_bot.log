@@ -59039,3 +59039,5 @@ SystemError: <built-in function kill> returned a result with an exception set
 2026-04-28 15:03:28,340 INFO Loaded forecast model: models\forecast_4h.pkl
 2026-04-28 15:03:28,347 INFO Loaded forecast model: models\forecast_12h.pkl
 2026-04-28 15:03:28,354 INFO Loaded forecast model: models\forecast_24h.pkl
+2026-04-28 15:04:04,447 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:04:04,647 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
