@@ -112,7 +112,9 @@ def test_opportunity_storage_and_shadow_ledger_round_trip():
     from hogan_bot.fetch_polymarket import PolymarketOpportunity
     from hogan_bot.polymarket_shadow import (
         close_shadow,
+        load_shadow_ledger,
         open_shadow_from_opportunity,
+        print_shadow_ledger,
         promotion_snapshot,
     )
     from hogan_bot.storage import (
@@ -149,6 +151,10 @@ def test_opportunity_storage_and_shadow_ledger_round_trip():
     snapshot = promotion_snapshot(conn)
     assert snapshot["trades"] == 1.0
     assert snapshot["win_rate"] == 1.0
+    ledger = load_shadow_ledger(conn, status="closed", limit=5)
+    assert ledger[0]["market_id"] == "m1"
+    assert ledger[0]["status"] == "closed"
+    print_shadow_ledger(conn, status="closed", limit=5)
 
 
 def test_polymarket_promotion_gate_requires_shadow_evidence():
@@ -216,6 +222,49 @@ def test_alpha_lab_runner_persists_report_and_opens_shadow_once(monkeypatch, tmp
     conn.close()
     assert open_count == 1
     assert opp_count >= 1
+
+
+def test_alpha_lab_uses_latest_decision_ml_probability(monkeypatch, tmp_path):
+    from hogan_bot.polymarket_alpha import run_alpha_lab
+    from hogan_bot.storage import get_connection, log_decision
+
+    markets = [
+        {
+            "id": "m1",
+            "slug": "btc-100k",
+            "question": "Will Bitcoin reach $100,000 this month?",
+            "outcomes": '["Yes", "No"]',
+            "outcomePrices": '["0.42", "0.58"]',
+            "poly_clob_spread": 0.01,
+            "liquidity": "100000",
+            "volume24hr": "25000",
+        }
+    ]
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.fetch_active_markets", lambda limit: markets)
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.enrich_clob_snapshots", lambda data, max_markets: data)
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.detect_arbitrage_alerts", lambda data: [])
+
+    db_path = tmp_path / "hogan.db"
+    conn = get_connection(str(db_path))
+    log_decision(
+        conn,
+        ts_ms=1_700_000_000_000,
+        symbol="BTC/USD",
+        final_action="buy",
+        ml_up_prob=0.72,
+    )
+    conn.close()
+
+    result = run_alpha_lab(
+        db_path=str(db_path),
+        limit=1,
+        include_clob=False,
+        report_dir=str(tmp_path / "reports"),
+    )
+
+    assert result.btc_prob == 0.72
+    assert result.opportunities[0].hogan_prob == 0.72
+    assert "Hogan BTC probability: `0.7200`" in Path(result.report_path).read_text()
 
 
 def test_alpha_lab_marks_and_closes_shadow_trade_on_price_move(monkeypatch, tmp_path):

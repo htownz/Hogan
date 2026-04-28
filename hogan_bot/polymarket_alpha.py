@@ -57,6 +57,8 @@ class AlphaRunResult:
     arbitrage_alerts: int
     shadow_opened: int
     shadow_ledger: ShadowLedgerUpdate
+    btc_prob: float | None
+    eth_prob: float | None
     promotion_approved: bool
     promotion_reasons: list[str]
 
@@ -188,6 +190,37 @@ def _update_shadow_ledger(
     )
 
 
+def _latest_ml_probability(conn, symbol: str) -> float | None:
+    row = conn.execute(
+        """
+        SELECT ml_up_prob
+        FROM decision_log
+        WHERE symbol = ? AND ml_up_prob IS NOT NULL
+        ORDER BY ts_ms DESC
+        LIMIT 1
+        """,
+        (symbol,),
+    ).fetchone()
+    if row is None:
+        return None
+    try:
+        return max(0.0, min(1.0, float(row[0])))
+    except (TypeError, ValueError):
+        return None
+
+
+def _resolve_model_probability(
+    conn,
+    *,
+    explicit_prob: float | None,
+    preferred_symbol: str,
+    fallback_symbol: str,
+) -> float | None:
+    if explicit_prob is not None:
+        return max(0.0, min(1.0, float(explicit_prob)))
+    return _latest_ml_probability(conn, preferred_symbol) or _latest_ml_probability(conn, fallback_symbol)
+
+
 def _write_report(
     *,
     report_dir: str,
@@ -195,6 +228,8 @@ def _write_report(
     candidates: list[AlphaCandidate],
     arbitrage_alert_count: int,
     shadow_ledger: ShadowLedgerUpdate,
+    btc_prob: float | None,
+    eth_prob: float | None,
     promotion_approved: bool,
     promotion_reasons: list[str],
 ) -> str:
@@ -211,6 +246,8 @@ def _write_report(
         f"- Shadow closed: `{shadow_ledger.closed}`",
         f"- Shadow open exposure: `${shadow_ledger.open_exposure_usd:.2f}`",
         f"- Shadow unrealized PnL: `${shadow_ledger.unrealized_pnl:.2f}`",
+        f"- Hogan BTC probability: `{btc_prob:.4f}`" if btc_prob is not None else "- Hogan BTC probability: `n/a`",
+        f"- Hogan ETH probability: `{eth_prob:.4f}`" if eth_prob is not None else "- Hogan ETH probability: `n/a`",
         f"- Promotion approved: `{promotion_approved}`",
     ]
     if promotion_reasons:
@@ -254,6 +291,22 @@ def run_alpha_lab(
     markets = fetch_active_markets(limit=limit)
     if include_clob:
         markets = enrich_clob_snapshots(markets, max_markets=clob_limit)
+    conn = get_connection(db_path)
+    symbol_upper = symbol.upper()
+    btc_symbol = symbol if symbol_upper.startswith("BTC/") else "BTC/USD"
+    eth_symbol = symbol if symbol_upper.startswith("ETH/") else "ETH/USD"
+    btc_prob = _resolve_model_probability(
+        conn,
+        explicit_prob=btc_prob,
+        preferred_symbol=btc_symbol,
+        fallback_symbol="BTC/USD",
+    )
+    eth_prob = _resolve_model_probability(
+        conn,
+        explicit_prob=eth_prob,
+        preferred_symbol=eth_symbol,
+        fallback_symbol="ETH/USD",
+    )
     opportunities = score_polymarket_opportunities(
         markets,
         hogan_btc_bull_prob=btc_prob,
@@ -262,7 +315,6 @@ def run_alpha_lab(
     )
     alerts = detect_arbitrage_alerts(markets)
 
-    conn = get_connection(db_path)
     candidates: list[AlphaCandidate] = []
     shadow_opened = 0
     opened_shadow_ids: set[int] = set()
@@ -304,6 +356,8 @@ def run_alpha_lab(
         candidates=candidates,
         arbitrage_alert_count=len(alerts),
         shadow_ledger=shadow_ledger,
+        btc_prob=btc_prob,
+        eth_prob=eth_prob,
         promotion_approved=promotion.approved,
         promotion_reasons=promotion.reasons,
     )
@@ -315,6 +369,8 @@ def run_alpha_lab(
         arbitrage_alerts=len(alerts),
         shadow_opened=shadow_opened,
         shadow_ledger=shadow_ledger,
+        btc_prob=btc_prob,
+        eth_prob=eth_prob,
         promotion_approved=promotion.approved,
         promotion_reasons=promotion.reasons,
     )
@@ -356,6 +412,8 @@ def main() -> None:
     print(f"Shadow trades opened: {result.shadow_opened}")
     print(f"Shadow trades closed: {result.shadow_ledger.closed}")
     print(f"Shadow unrealized PnL: {result.shadow_ledger.unrealized_pnl:.2f}")
+    print(f"Hogan BTC probability: {result.btc_prob:.4f}" if result.btc_prob is not None else "Hogan BTC probability: n/a")
+    print(f"Hogan ETH probability: {result.eth_prob:.4f}" if result.eth_prob is not None else "Hogan ETH probability: n/a")
     print(f"Arbitrage alerts: {result.arbitrage_alerts}")
     print(f"Promotion approved: {result.promotion_approved}")
     if result.promotion_reasons:
