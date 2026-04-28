@@ -45,6 +45,25 @@ def close_shadow(conn, trade_id: int, exit_prob: float) -> float:
     )
 
 
+def cancel_shadow(
+    conn,
+    trade_id: int,
+    *,
+    exit_prob: float | None = None,
+    reason: str = "operator_cancelled",
+) -> float:
+    """Cancel an open hypothetical trade without counting it as closed PnL."""
+    from hogan_bot.storage import cancel_polymarket_shadow_trade
+
+    return cancel_polymarket_shadow_trade(
+        conn,
+        trade_id,
+        cancelled_ts_ms=int(time.time() * 1000),
+        exit_prob=exit_prob,
+        reason=reason,
+    )
+
+
 def promotion_snapshot(conn) -> dict[str, float]:
     """Return compact shadow-trading promotion metrics."""
     from hogan_bot.storage import summarize_polymarket_shadow_trades
@@ -141,8 +160,10 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--db", default="data/hogan.db")
-    parser.add_argument("--status", choices=("all", "open", "closed"), default="all")
+    parser.add_argument("--status", choices=("all", "open", "closed", "cancelled"), default="all")
     parser.add_argument("--limit", type=int, default=20)
+    parser.add_argument("--cancel-id", type=int, action="append", default=[], help="Cancel an open shadow trade by ID")
+    parser.add_argument("--cancel-reason", default="operator_cancelled")
     return parser.parse_args()
 
 
@@ -152,6 +173,9 @@ def main() -> None:
     args = parse_args()
     conn = get_connection(args.db)
     try:
+        for trade_id in args.cancel_id:
+            cancel_shadow(conn, trade_id, reason=args.cancel_reason)
+            print(f"Cancelled Polymarket shadow trade #{trade_id}: {args.cancel_reason}")
         print_shadow_ledger(conn, status=args.status, limit=args.limit)
     finally:
         conn.close()

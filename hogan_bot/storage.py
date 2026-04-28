@@ -937,6 +937,42 @@ def close_polymarket_shadow_trade(
     return float(pnl)
 
 
+def cancel_polymarket_shadow_trade(
+    conn: sqlite3.Connection,
+    trade_id: int,
+    *,
+    cancelled_ts_ms: int,
+    exit_prob: float | None = None,
+    reason: str = "operator_cancelled",
+) -> float:
+    """Cancel an open hypothetical position without counting it as promotion PnL."""
+    row = conn.execute(
+        """
+        SELECT entry_prob, rationale
+        FROM polymarket_shadow_trades
+        WHERE id = ? AND status = 'open'
+        """,
+        (int(trade_id),),
+    ).fetchone()
+    if row is None:
+        raise ValueError(f"open Polymarket shadow trade not found: {trade_id}")
+    entry_prob = float(row[0])
+    rationale = str(row[1] or "")
+    cancel_prob = entry_prob if exit_prob is None else float(exit_prob)
+    cancel_reason = f"{rationale}; cancel_reason={reason}" if rationale else f"cancel_reason={reason}"
+    conn.execute(
+        """
+        UPDATE polymarket_shadow_trades
+        SET closed_ts_ms = ?, exit_prob = ?, realized_pnl = 0.0,
+            status = 'cancelled', rationale = ?
+        WHERE id = ?
+        """,
+        (int(cancelled_ts_ms), float(cancel_prob), cancel_reason, int(trade_id)),
+    )
+    conn.commit()
+    return 0.0
+
+
 def summarize_polymarket_shadow_trades(conn: sqlite3.Connection) -> dict[str, float]:
     """Return compact promotion metrics for closed shadow trades."""
     rows = conn.execute(

@@ -142,6 +142,7 @@ def test_arbitrage_alerts_detect_ladder_and_group_overpricing():
 def test_opportunity_storage_and_shadow_ledger_round_trip():
     from hogan_bot.fetch_polymarket import PolymarketOpportunity
     from hogan_bot.polymarket_shadow import (
+        cancel_shadow,
         close_shadow,
         load_shadow_ledger,
         open_shadow_from_opportunity,
@@ -189,6 +190,16 @@ def test_opportunity_storage_and_shadow_ledger_round_trip():
     assert ledger[0]["market_id"] == "m1"
     assert ledger[0]["status"] == "closed"
     print_shadow_ledger(conn, status="closed", limit=5)
+
+    cancel_id = open_shadow_from_opportunity(conn, opp, size_usd=10.0)
+    assert cancel_shadow(conn, cancel_id, reason="test_cancel") == 0.0
+    cancelled = load_shadow_ledger(conn, status="cancelled", limit=5)
+    assert cancelled[0]["id"] == cancel_id
+    assert cancelled[0]["realized_pnl"] == 0.0
+    assert "test_cancel" in cancelled[0]["rationale"]
+
+    snapshot_after_cancel = promotion_snapshot(conn)
+    assert snapshot_after_cancel["trades"] == 1.0
 
 
 def test_polymarket_promotion_gate_requires_shadow_evidence():
