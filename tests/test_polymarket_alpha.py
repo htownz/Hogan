@@ -197,6 +197,12 @@ def test_opportunity_storage_and_shadow_ledger_round_trip():
     assert cancelled[0]["id"] == cancel_id
     assert cancelled[0]["realized_pnl"] == 0.0
     assert "test_cancel" in cancelled[0]["rationale"]
+    try:
+        cancel_shadow(conn, cancel_id, reason="already_cancelled")
+    except ValueError as exc:
+        assert "open Polymarket shadow trade not found" in str(exc)
+    else:
+        raise AssertionError("expected cancelling a non-open shadow trade to fail")
 
     snapshot_after_cancel = promotion_snapshot(conn)
     assert snapshot_after_cancel["trades"] == 1.0

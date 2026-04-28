@@ -174,8 +174,11 @@ def main() -> None:
     conn = get_connection(args.db)
     try:
         for trade_id in args.cancel_id:
-            cancel_shadow(conn, trade_id, reason=args.cancel_reason)
-            print(f"Cancelled Polymarket shadow trade #{trade_id}: {args.cancel_reason}")
+            try:
+                cancel_shadow(conn, trade_id, reason=args.cancel_reason)
+                print(f"Cancelled Polymarket shadow trade #{trade_id}: {args.cancel_reason}")
+            except ValueError as exc:
+                print(f"Skipped Polymarket shadow trade #{trade_id}: {exc}")
         print_shadow_ledger(conn, status=args.status, limit=args.limit)
     finally:
         conn.close()
