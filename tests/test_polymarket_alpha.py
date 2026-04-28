@@ -216,3 +216,60 @@ def test_alpha_lab_runner_persists_report_and_opens_shadow_once(monkeypatch, tmp
     conn.close()
     assert open_count == 1
     assert opp_count >= 1
+
+
+def test_alpha_lab_marks_and_closes_shadow_trade_on_price_move(monkeypatch, tmp_path):
+    from hogan_bot.polymarket_alpha import run_alpha_lab
+
+    market = {
+        "id": "m1",
+        "slug": "btc-100k",
+        "question": "Will Bitcoin reach $100,000 this month?",
+        "outcomes": '["Yes", "No"]',
+        "outcomePrices": '["0.42", "0.58"]',
+        "poly_clob_spread": 0.01,
+        "liquidity": "100000",
+        "volume24hr": "25000",
+    }
+    scans = [
+        [dict(market)],
+        [dict(market, outcomePrices='["0.56", "0.44"]')],
+    ]
+
+    def _markets(limit):
+        return scans.pop(0)
+
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.fetch_active_markets", _markets)
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.enrich_clob_snapshots", lambda data, max_markets: data)
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.detect_arbitrage_alerts", lambda data: [])
+
+    db_path = tmp_path / "hogan.db"
+    report_dir = tmp_path / "reports"
+    first = run_alpha_lab(
+        db_path=str(db_path),
+        limit=1,
+        include_clob=False,
+        btc_prob=0.72,
+        report_dir=str(report_dir),
+    )
+    second = run_alpha_lab(
+        db_path=str(db_path),
+        limit=1,
+        include_clob=False,
+        btc_prob=0.72,
+        report_dir=str(report_dir),
+    )
+
+    assert first.shadow_opened == 1
+    assert second.shadow_opened == 0
+    assert second.shadow_ledger.marked_open == 1
+    assert second.shadow_ledger.closed == 1
+    assert "Shadow closed: `1`" in Path(second.report_path).read_text()
+
+    conn = sqlite3.connect(db_path)
+    row = conn.execute(
+        "SELECT status, realized_pnl FROM polymarket_shadow_trades WHERE market_id='m1'"
+    ).fetchone()
+    conn.close()
+    assert row[0] == "closed"
+    assert row[1] > 0

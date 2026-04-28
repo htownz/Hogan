@@ -13,6 +13,8 @@ from pathlib import Path
 
 from hogan_bot.fetch_polymarket import (
     PolymarketOpportunity,
+    _market_id,
+    _yes_probability,
     enrich_clob_snapshots,
     fetch_active_markets,
     score_polymarket_opportunities,
@@ -21,6 +23,7 @@ from hogan_bot.polymarket_arbitrage import detect_arbitrage_alerts
 from hogan_bot.polymarket_edge import EdgeAssessment, assess_opportunity_edge
 from hogan_bot.polymarket_promotion import evaluate_shadow_ledger
 from hogan_bot.storage import (
+    close_polymarket_shadow_trade,
     get_connection,
     insert_polymarket_opportunities,
     open_polymarket_shadow_trade,
@@ -37,6 +40,15 @@ class AlphaCandidate:
 
 
 @dataclass(frozen=True)
+class ShadowLedgerUpdate:
+    marked_open: int
+    closed: int
+    open_count: int
+    open_exposure_usd: float
+    unrealized_pnl: float
+
+
+@dataclass(frozen=True)
 class AlphaRunResult:
     ts_ms: int
     report_path: str
@@ -44,6 +56,7 @@ class AlphaRunResult:
     candidates: list[AlphaCandidate]
     arbitrage_alerts: int
     shadow_opened: int
+    shadow_ledger: ShadowLedgerUpdate
     promotion_approved: bool
     promotion_reasons: list[str]
 
@@ -98,12 +111,90 @@ def _open_shadow_if_new(
     )
 
 
+def _position_delta(side: str, entry_yes_prob: float, current_yes_prob: float) -> float:
+    delta = current_yes_prob - entry_yes_prob
+    if side == "buy_no":
+        return -delta
+    return delta
+
+
+def _market_price_index(markets: list[dict]) -> dict[str, float]:
+    prices: dict[str, float] = {}
+    for market in markets:
+        market_id = _market_id(market)
+        prob = _yes_probability(market)
+        if market_id and prob is not None:
+            prices[market_id] = prob
+    return prices
+
+
+def _update_shadow_ledger(
+    conn,
+    *,
+    markets: list[dict],
+    ts_ms: int,
+    skip_trade_ids: set[int] | None = None,
+    take_profit_delta: float = 0.12,
+    stop_loss_delta: float = -0.08,
+) -> ShadowLedgerUpdate:
+    """Mark open shadow trades to latest public YES probability and close exits."""
+    prices = _market_price_index(markets)
+    rows = conn.execute(
+        """
+        SELECT id, market_id, side, entry_prob, size_usd
+        FROM polymarket_shadow_trades
+        WHERE status = 'open'
+        """,
+    ).fetchall()
+    skip_trade_ids = skip_trade_ids or set()
+    marked = 0
+    closed = 0
+    open_count = 0
+    exposure = 0.0
+    unrealized = 0.0
+
+    for trade_id, market_id, side, entry_prob, size_usd in rows:
+        if int(trade_id) in skip_trade_ids:
+            open_count += 1
+            exposure += float(size_usd)
+            continue
+        current_prob = prices.get(str(market_id))
+        if current_prob is None:
+            open_count += 1
+            exposure += float(size_usd)
+            continue
+        marked += 1
+        delta = _position_delta(str(side), float(entry_prob), float(current_prob))
+        pnl = float(size_usd) * delta
+        if delta >= take_profit_delta or delta <= stop_loss_delta:
+            close_polymarket_shadow_trade(
+                conn,
+                int(trade_id),
+                closed_ts_ms=ts_ms,
+                exit_prob=float(current_prob),
+            )
+            closed += 1
+        else:
+            open_count += 1
+            exposure += float(size_usd)
+            unrealized += pnl
+
+    return ShadowLedgerUpdate(
+        marked_open=marked,
+        closed=closed,
+        open_count=open_count,
+        open_exposure_usd=exposure,
+        unrealized_pnl=unrealized,
+    )
+
+
 def _write_report(
     *,
     report_dir: str,
     ts_ms: int,
     candidates: list[AlphaCandidate],
     arbitrage_alert_count: int,
+    shadow_ledger: ShadowLedgerUpdate,
     promotion_approved: bool,
     promotion_reasons: list[str],
 ) -> str:
@@ -116,6 +207,10 @@ def _write_report(
         f"- Timestamp ms: `{ts_ms}`",
         f"- Candidates reviewed: `{len(candidates)}`",
         f"- Arbitrage alerts: `{arbitrage_alert_count}`",
+        f"- Shadow marked open: `{shadow_ledger.marked_open}`",
+        f"- Shadow closed: `{shadow_ledger.closed}`",
+        f"- Shadow open exposure: `${shadow_ledger.open_exposure_usd:.2f}`",
+        f"- Shadow unrealized PnL: `${shadow_ledger.unrealized_pnl:.2f}`",
         f"- Promotion approved: `{promotion_approved}`",
     ]
     if promotion_reasons:
@@ -170,6 +265,7 @@ def run_alpha_lab(
     conn = get_connection(db_path)
     candidates: list[AlphaCandidate] = []
     shadow_opened = 0
+    opened_shadow_ids: set[int] = set()
     try:
         insert_polymarket_opportunities(
             conn,
@@ -190,7 +286,14 @@ def run_alpha_lab(
                 )
                 if shadow_id is not None:
                     shadow_opened += 1
+                    opened_shadow_ids.add(shadow_id)
             candidates.append(AlphaCandidate(opp, edge, shadow_id))
+        shadow_ledger = _update_shadow_ledger(
+            conn,
+            markets=markets,
+            ts_ms=ts_ms,
+            skip_trade_ids=opened_shadow_ids,
+        )
         promotion = evaluate_shadow_ledger(conn)
     finally:
         conn.close()
@@ -200,6 +303,7 @@ def run_alpha_lab(
         ts_ms=ts_ms,
         candidates=candidates,
         arbitrage_alert_count=len(alerts),
+        shadow_ledger=shadow_ledger,
         promotion_approved=promotion.approved,
         promotion_reasons=promotion.reasons,
     )
@@ -210,6 +314,7 @@ def run_alpha_lab(
         candidates=candidates,
         arbitrage_alerts=len(alerts),
         shadow_opened=shadow_opened,
+        shadow_ledger=shadow_ledger,
         promotion_approved=promotion.approved,
         promotion_reasons=promotion.reasons,
     )
@@ -249,6 +354,8 @@ def main() -> None:
     print(f"Report: {result.report_path}")
     print(f"Opportunities: {len(result.opportunities)}")
     print(f"Shadow trades opened: {result.shadow_opened}")
+    print(f"Shadow trades closed: {result.shadow_ledger.closed}")
+    print(f"Shadow unrealized PnL: {result.shadow_ledger.unrealized_pnl:.2f}")
     print(f"Arbitrage alerts: {result.arbitrage_alerts}")
     print(f"Promotion approved: {result.promotion_approved}")
     if result.promotion_reasons:
