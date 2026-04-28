@@ -61,10 +61,15 @@ def _subminute_trade_timeframes() -> list[str]:
     raw = os.getenv("HOGAN_SUBMINUTE_TRADE_TIMEFRAMES", "").strip()
     if not raw:
         return []
+    try:
+        max_timeframes = max(1, int(os.getenv("HOGAN_SUBMINUTE_MAX_TIMEFRAMES", "3")))
+    except ValueError:
+        max_timeframes = 3
     out: list[str] = []
+    seen: set[str] = set()
     for item in raw.split(","):
         tf = item.strip().lower()
-        if not tf:
+        if not tf or tf in seen:
             continue
         try:
             seconds = parse_timeframe_to_seconds(tf)
@@ -77,6 +82,14 @@ def _subminute_trade_timeframes() -> list[str]:
                 tf,
             )
             continue
+        if len(out) >= max_timeframes:
+            logger.warning(
+                "Ignoring %r in HOGAN_SUBMINUTE_TRADE_TIMEFRAMES; max %d enabled",
+                tf,
+                max_timeframes,
+            )
+            continue
+        seen.add(tf)
         out.append(tf)
     return out
 

@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [main, develop]
+    tags: ["v*"]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -93,12 +95,17 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish Docker image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         run: |
           docker tag hogan-bot:ci "${{ steps.image.outputs.sha_tag }}"
           docker tag hogan-bot:ci "${{ steps.image.outputs.latest_tag }}"
           docker push "${{ steps.image.outputs.sha_tag }}"
           docker push "${{ steps.image.outputs.latest_tag }}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            release_tag="${{ steps.image.outputs.image }}:${GITHUB_REF_NAME}"
+            docker tag hogan-bot:ci "${release_tag}"
+            docker push "${release_tag}"
+          fi
 
       - name: Prepare Compose environment
         run: |
@@ -125,3 +132,48 @@ jobs:
           docker compose config --quiet
           docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
           docker compose -f monitoring/docker-compose.monitoring.yml config --quiet
+
+  optional-dependency-profiles:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        profile:
+          - modeling
+          - rl
+          - full
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install base dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Install optional profile dependencies
+        run: |
+          if [[ "${{ matrix.profile }}" == "modeling" || "${{ matrix.profile }}" == "full" ]]; then
+            pip install -r requirements-modeling.txt
+          fi
+          if [[ "${{ matrix.profile }}" == "rl" || "${{ matrix.profile }}" == "full" ]]; then
+            pip install -r requirements-rl.txt
+          fi
+
+      - name: Run profile smoke tests
+        run: |
+          python -m pytest tests/test_ml.py tests/test_rl_env.py -q
+
+  optional-research-image:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build full research image
+        run: docker build --build-arg INSTALL_MODELING=true --build-arg INSTALL_RL=true -t hogan-bot:research .

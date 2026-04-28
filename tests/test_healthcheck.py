@@ -41,3 +41,14 @@ def test_healthcheck_strict_models_reports_missing_model(monkeypatch, tmp_path):
     errors = run_healthcheck(check_metrics=False, strict_models=True)
 
     assert any("required model file(s) missing" in error for error in errors)
+
+
+def test_healthcheck_checks_existing_sqlite(monkeypatch, tmp_path):
+    _base_env(monkeypatch, tmp_path)
+    db_path = tmp_path / "hogan.db"
+    db_path.write_bytes(b"not sqlite")
+    monkeypatch.setenv("HOGAN_DB_PATH", str(db_path))
+
+    errors = run_healthcheck(check_metrics=False, check_db=True)
+
+    assert any("SQLite health check failed" in error for error in errors)

@@ -81,6 +81,14 @@ class TestSubMinuteIngestion:
             "volume": 0.75,
         }
 
+    def test_subminute_env_dedupes_and_caps_timeframes(self, monkeypatch):
+        from hogan_bot.data_engine import _subminute_trade_timeframes
+
+        monkeypatch.setenv("HOGAN_SUBMINUTE_TRADE_TIMEFRAMES", "10s,10s,1m,bad,30s,5s")
+        monkeypatch.setenv("HOGAN_SUBMINUTE_MAX_TIMEFRAMES", "2")
+
+        assert _subminute_trade_timeframes() == ["10s", "30s"]
+
 
 class TestExperimentalFeatureExpansion:
     def test_experimental_features_are_challenger_only(self):
@@ -126,6 +134,45 @@ class TestExperimentalFeatureExpansion:
         out = add_social_whale_features(frame, conn)
         assert list(out["social_nlp_sentiment_score"]) == [0.25, 0.75]
         assert list(out["whale_exchange_flow_norm"]) == [-0.2, -0.2]
+
+    def test_social_whale_features_use_existing_fetcher_metric_aliases(self):
+        from hogan_bot.social_whale_features import add_social_whale_features
+        from hogan_bot.storage import _create_schema
+
+        conn = sqlite3.connect(":memory:")
+        _create_schema(conn)
+        conn.executemany(
+            """
+            INSERT INTO onchain_metrics (symbol, date, metric, value)
+            VALUES ('BTC/USD', ?, ?, ?)
+            """,
+            [
+                ("2024-01-01", "news_sentiment_score", 0.20),
+                ("2024-01-03", "news_sentiment_score", 0.80),
+                ("2024-01-01", "news_volume_norm", 1.25),
+                ("2024-01-03", "santiment_social_vol_chg", 0.40),
+                ("2024-01-01", "glassnode_exchange_netflow", -0.0002),
+                ("2024-01-01", "dune_btc_whale_pct", 0.12),
+            ],
+        )
+        frame = pd.DataFrame({
+            "timestamp": pd.to_datetime(
+                ["2024-01-02T00:00:00Z", "2024-01-04T00:00:00Z"],
+                utc=True,
+            ),
+            "open": [1.0, 1.0],
+            "high": [1.0, 1.0],
+            "low": [1.0, 1.0],
+            "close": [1.0, 1.0],
+            "volume": [1.0, 1.0],
+        })
+
+        out = add_social_whale_features(frame, conn)
+
+        assert list(out["social_nlp_sentiment_score"]) == [0.20, 0.80]
+        assert list(out["social_volume_anomaly"]) == [0.25, 0.40]
+        assert list(out["whale_exchange_flow_norm"]) == [-0.0002, -0.0002]
+        assert list(out["whale_large_tx_count_norm"]) == [0.12, 0.12]
 
     def test_predict_up_probability_builds_experimental_columns(self):
         from hogan_bot.feature_registry import (
@@ -213,6 +260,19 @@ class TestTimescaleSchema:
         sql = "\n".join(store.conn.cursor_obj.sql)
         assert "ts_ms DESC" in sql
         assert "timeframe, ts DESC" not in sql
+
+
+class TestAlpacaMinuteData:
+    def test_configured_crypto_timeframes_include_1min_default_and_dedupe_env(self, monkeypatch):
+        from hogan_bot.fetch_alpaca import configured_crypto_timeframes
+
+        monkeypatch.delenv("HOGAN_ALPACA_CRYPTO_TIMEFRAMES", raising=False)
+        assert configured_crypto_timeframes()[0] == "1Min"
+        assert configured_crypto_timeframes("1Min,10Min,1Min,bad,1Hour") == [
+            "1Min",
+            "10Min",
+            "1Hour",
+        ]
 
 
 class TestTimescaleMigrationScript:

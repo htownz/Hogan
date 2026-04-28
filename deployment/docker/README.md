@@ -21,12 +21,12 @@ building on the server:
 
 ```bash
 export HOGAN_BOT_IMAGE=ghcr.io/<owner>/<repo>:sha-<commit>
-docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+python scripts/deploy_vps.py --image "$HOGAN_BOT_IMAGE"
 ```
 
 The CI workflow publishes `sha-<commit>` and `latest` tags on pushes to `main`.
-Use the immutable SHA tag for rollbacks and audits.
+It also publishes `v*` tags when release tags are pushed. Use immutable SHA tags
+for rollbacks and audits. See `docs/RELEASE_AND_ROLLBACK.md`.
 
 The default image installs the live/paper trading runtime and skips heavy
 training extras. Build with advanced modeling dependencies only on machines
@@ -117,6 +117,20 @@ HOGAN_DATABASE_URL=postgresql://hogan:<strong-unique-password>@timescaledb:5432/
 Keep SQLite backups even after the candle path moves to Timescale; SQLite still
 owns execution and operational state.
 
+## Sub-Minute Ingestion
+
+Sub-minute bars are aggregated from raw trades and should be enabled only after
+Timescale migration/verification is complete. Start narrow:
+
+```env
+HOGAN_SUBMINUTE_TRADE_TIMEFRAMES=10s,30s
+HOGAN_SUBMINUTE_MAX_TIMEFRAMES=2
+```
+
+The runtime ignores invalid values, de-duplicates entries, rejects `>=1m`
+timeframes for the raw-trade path, and caps the enabled set with
+`HOGAN_SUBMINUTE_MAX_TIMEFRAMES`. Use standard OHLCV ingestion for `1m+`.
+
 ## Image Versions
 
 The Compose files use pinned defaults for TimescaleDB, Prometheus, and Grafana
@@ -151,8 +165,16 @@ endpoints to the public internet.
 Backup example:
 
 ```bash
-docker exec hogan-timescaledb pg_dump -U hogan -d hogan > hogan_timescale.sql
-tar czf hogan_runtime.tgz data models reports
+python scripts/runtime_backup.py backup --include-timescale
+python scripts/runtime_backup.py verify --backup backups/<timestamp>
+```
+
+Restore requires an explicit confirmation flag:
+
+```bash
+python scripts/runtime_backup.py restore \
+  --backup backups/<timestamp> \
+  --confirm-restore
 ```
 
 ## Operations

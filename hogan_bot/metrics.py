@@ -33,6 +33,11 @@ GAP_GUARD_ACTIVE = Gauge("hogan_gap_guard_active", "1 when GAP_GUARD is blocking
 FEATURE_DRIFT = Counter("hogan_feature_drift_total", "Feature distribution drift detections", ["symbol"])
 ONLINE_UPDATES = Counter("hogan_online_updates_total", "Online model partial_fit calls", ["model_name"])
 MODEL_PROMOTED = Counter("hogan_model_promoted_total", "Challenger promotions to champion", ["symbol"])
+STRATEGY_DEGRADATION = Counter(
+    "hogan_strategy_degradation_total",
+    "Strategy self-evaluation degradation events",
+    ["symbol"],
+)
 
 # Phase 7 — production watchdog
 DEAD_MAN_ALERTS = Counter("hogan_dead_man_alerts_total", "Dead-man switch alerts fired")

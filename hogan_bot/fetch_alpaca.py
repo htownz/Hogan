@@ -61,8 +61,9 @@ CRYPTO_SYMBOLS: list[str] = ["BTC/USD", "ETH/USD", "SOL/USD"]
 # Stock symbols to store as OHLCV candles (macro context features)
 STOCK_SYMBOLS: list[str] = ["SPY", "QQQ", "GLD", "TLT"]
 
-# Timeframes supported for crypto backfill
-CRYPTO_TIMEFRAMES: list[str] = ["10Min", "30Min", "1Hour", "1Day"]
+# Timeframes supported for crypto backfill. 1Min materially expands the
+# microstructure dataset, so callers can narrow this via HOGAN_ALPACA_CRYPTO_TIMEFRAMES.
+CRYPTO_TIMEFRAMES: list[str] = ["1Min", "10Min", "30Min", "1Hour", "1Day"]
 
 # Canonical label map: Alpaca timeframe string → stored timeframe label
 _TF_LABEL: dict[str, str] = {
@@ -76,6 +77,26 @@ _TF_LABEL: dict[str, str] = {
     "4Hour": "4h",
     "1Day":  "1d",
 }
+
+
+def configured_crypto_timeframes(raw: str | None = None) -> list[str]:
+    """Return validated Alpaca crypto timeframes from env/config."""
+    value = raw if raw is not None else os.getenv("HOGAN_ALPACA_CRYPTO_TIMEFRAMES", "")
+    if not value.strip():
+        return list(CRYPTO_TIMEFRAMES)
+    allowed = set(_TF_LABEL)
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in value.split(","):
+        tf = item.strip()
+        if not tf or tf in seen:
+            continue
+        if tf not in allowed:
+            logger.warning("Ignoring unsupported Alpaca crypto timeframe %r", tf)
+            continue
+        seen.add(tf)
+        out.append(tf)
+    return out or list(CRYPTO_TIMEFRAMES)
 
 
 # ---------------------------------------------------------------------------
@@ -471,7 +492,7 @@ def backfill_all_candles(
     _check_keys()
     _db = db_path or os.getenv("HOGAN_DB_PATH", "data/hogan.db")
     cs = crypto_symbols or CRYPTO_SYMBOLS
-    ctf = crypto_timeframes or CRYPTO_TIMEFRAMES
+    ctf = crypto_timeframes or configured_crypto_timeframes()
     ss = stock_symbols or STOCK_SYMBOLS
 
     total: dict[str, int] = {}
@@ -555,7 +576,7 @@ def fetch_all_alpaca(
 
     # Incremental MTF candle refresh (3 days catches any missed bars)
     if include_candles_incremental:
-        for tf_str in CRYPTO_TIMEFRAMES:
+        for tf_str in configured_crypto_timeframes():
             result = fetch_crypto_bars(
                 symbols=CRYPTO_SYMBOLS,
                 days=3,

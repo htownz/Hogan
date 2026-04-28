@@ -104,6 +104,7 @@ pip install -r requirements.txt
 # Optional research/training extras:
 # pip install -r requirements-modeling.txt  # XGBoost, LightGBM, Optuna, MLflow
 # pip install -r requirements-rl.txt        # PPO/RL training
+# See docs/DEPENDENCY_PROFILES.md for Docker/CI profile details.
 cp .env.example .env
 # Deployment preflight:
 python -m hogan_bot.healthcheck --no-metrics
