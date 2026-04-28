@@ -67,6 +67,43 @@ _MACRO_RISK_TERMS = (
     "unemployment",
     "war",
 )
+_CRYPTO_MACRO_TERMS = (
+    "capital gains",
+    "crypto",
+    "el salvador",
+    "etf",
+    "microstrategy",
+    "sec",
+    "strategic reserve",
+    "strategy",
+    "trump",
+)
+_PRICE_RE = re.compile(
+    r"(?:\$\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?)\s*(k|m|thousand|million)?)"
+    r"|(?:\b([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?)\s*(k|m|thousand|million)\b)",
+    re.I,
+)
+_LONG_HORIZON_TERMS = (
+    "2026",
+    "2027",
+    "2028",
+    "next year",
+    "this year",
+    "december",
+    "november",
+    "october",
+    "september",
+    "june 30",
+    "december 31",
+)
+_SHORT_HORIZON_TERMS = (
+    "today",
+    "tomorrow",
+    "this week",
+    "this month",
+    "week",
+    "month",
+)
 
 
 def _contains_term(text: str, term: str) -> bool:
@@ -94,9 +131,13 @@ class PolymarketOpportunity:
     catalyst_score: float
     total_score: float
     rationale: str
+    market_type: str = "unknown"
+    horizon: str = "unknown"
+    target_price: float | None = None
+    safety_note: str | None = None
 
     def to_dict(self) -> dict:
-        return {
+        payload = {
             "market_id": self.market_id,
             "slug": self.slug,
             "question": self.question,
@@ -110,7 +151,14 @@ class PolymarketOpportunity:
             "catalyst_score": round(self.catalyst_score, 4),
             "total_score": round(self.total_score, 4),
             "rationale": self.rationale,
+            "market_type": self.market_type,
+            "horizon": self.horizon,
         }
+        if self.target_price is not None:
+            payload["target_price"] = round(self.target_price, 2)
+        if self.safety_note:
+            payload["safety_note"] = self.safety_note
+        return payload
 
 
 def _get_json(path: str, params: dict | None = None) -> object:
@@ -229,6 +277,46 @@ def _market_category(market: dict) -> str:
     if _contains_any(text, _MACRO_RISK_TERMS):
         return "macro_risk"
     return "other"
+
+
+def _extract_price_target(text: str) -> float | None:
+    match = _PRICE_RE.search(text)
+    if not match:
+        return None
+    raw = (match.group(1) or match.group(3) or "").replace(",", "")
+    if not raw:
+        return None
+    value = float(raw)
+    suffix = (match.group(2) or match.group(4) or "").lower()
+    if suffix in ("k", "thousand"):
+        value *= 1_000
+    elif suffix in ("m", "million"):
+        value *= 1_000_000
+    return value
+
+
+def _market_horizon(market: dict) -> str:
+    text = _market_text(market)
+    if _contains_any(text, _LONG_HORIZON_TERMS):
+        return "long_term"
+    if _contains_any(text, _SHORT_HORIZON_TERMS):
+        return "short_term"
+    return "unknown"
+
+
+def _market_type(market: dict, category: str) -> tuple[str, str, float | None]:
+    text = _market_text(market)
+    target = _extract_price_target(text)
+    horizon = _market_horizon(market)
+    if category in ("btc", "eth") and target is not None:
+        return "price_target", horizon, target
+    if category in ("btc", "eth") and _contains_any(text, _CRYPTO_MACRO_TERMS):
+        return "macro_crypto", horizon, target
+    if category == "macro_risk":
+        return "macro_risk", horizon, target
+    if category in ("btc", "eth"):
+        return "directional", horizon, target
+    return "other", horizon, target
 
 
 def _yes_direction(market: dict) -> int:
@@ -360,6 +448,8 @@ def score_polymarket_opportunities(
     *,
     hogan_btc_bull_prob: float | None = None,
     hogan_eth_bull_prob: float | None = None,
+    hogan_btc_long_horizon_prob: float | None = None,
+    hogan_eth_long_horizon_prob: float | None = None,
     limit: int = 10,
 ) -> list[PolymarketOpportunity]:
     """Rank individual Polymarket markets for research/trading review.
@@ -380,17 +470,33 @@ def score_polymarket_opportunities(
             continue
 
         direction = _yes_direction(market)
+        market_type, horizon, target_price = _market_type(market, category)
+        safety_note = None
         if category == "btc" and direction != 0:
             crowd_bull = yes_prob if direction > 0 else 1.0 - yes_prob
-            hogan_prob = hogan_btc_bull_prob
+            if market_type == "price_target" and horizon == "long_term":
+                hogan_prob = hogan_btc_long_horizon_prob
+                if hogan_prob is None:
+                    safety_note = "long_horizon_price_target_requires_calibrated_fair_value"
+            else:
+                hogan_prob = hogan_btc_bull_prob
         elif category == "eth" and direction != 0:
             crowd_bull = yes_prob if direction > 0 else 1.0 - yes_prob
-            hogan_prob = hogan_eth_bull_prob
+            if market_type == "price_target" and horizon == "long_term":
+                hogan_prob = hogan_eth_long_horizon_prob
+                if hogan_prob is None:
+                    safety_note = "long_horizon_price_target_requires_calibrated_fair_value"
+            else:
+                hogan_prob = hogan_eth_bull_prob
         else:
             crowd_bull = 1.0 - yes_prob if category == "macro_risk" else yes_prob
             hogan_prob = None
 
-        if hogan_prob is not None:
+        if safety_note:
+            edge_score = min(1.0, abs(crowd_bull - 0.5) / 0.35)
+            candidate_side = "research"
+            rationale = f"{safety_note}; crowd probability {crowd_bull:.2f}"
+        elif hogan_prob is not None:
             hogan_prob = _clamp_prob(float(hogan_prob))
             disagreement = hogan_prob - crowd_bull
             edge_score = min(1.0, abs(disagreement) / 0.30)
@@ -423,6 +529,10 @@ def score_polymarket_opportunities(
             catalyst_score=catalyst,
             total_score=max(0.0, min(1.0, total)),
             rationale=rationale,
+            market_type=market_type,
+            horizon=horizon,
+            target_price=target_price,
+            safety_note=safety_note,
         ))
 
     return sorted(opportunities, key=lambda opp: opp.total_score, reverse=True)[:limit]

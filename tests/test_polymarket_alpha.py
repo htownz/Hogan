@@ -267,6 +267,53 @@ def test_alpha_lab_uses_latest_decision_ml_probability(monkeypatch, tmp_path):
     assert "Hogan BTC probability: `0.7200`" in Path(result.report_path).read_text()
 
 
+def test_alpha_lab_keeps_long_target_research_and_reports_arbitrage_alert(monkeypatch, tmp_path):
+    from hogan_bot.polymarket_alpha import run_alpha_lab
+    from hogan_bot.polymarket_arbitrage import ArbitrageAlert
+
+    markets = [
+        {
+            "id": "m1",
+            "slug": "btc-150k-2026",
+            "question": "Will Bitcoin hit $150k by December 31, 2026?",
+            "outcomes": '["Yes", "No"]',
+            "outcomePrices": '["0.05", "0.95"]',
+            "poly_clob_spread": 0.01,
+            "liquidity": "100000",
+            "volume24hr": "25000",
+        }
+    ]
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.fetch_active_markets", lambda limit: markets)
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.enrich_clob_snapshots", lambda data, max_markets: data)
+    monkeypatch.setattr(
+        "hogan_bot.polymarket_alpha.detect_arbitrage_alerts",
+        lambda data: [
+            ArbitrageAlert(
+                kind="crypto_ladder_monotonicity",
+                market_ids=["low", "high"],
+                severity=0.25,
+                message="test alert",
+            )
+        ],
+    )
+
+    result = run_alpha_lab(
+        db_path=str(tmp_path / "hogan.db"),
+        limit=1,
+        include_clob=False,
+        btc_prob=0.72,
+        report_dir=str(tmp_path / "reports"),
+    )
+
+    assert result.shadow_opened == 0
+    assert result.candidates[0].opportunity.candidate_side == "research"
+    assert result.candidates[0].edge.decision == "research"
+    report = Path(result.report_path).read_text()
+    assert "long_horizon_price_target_requires_calibrated_fair_value" in report
+    assert "## Arbitrage Alerts" in report
+    assert "test alert" in report
+
+
 def test_alpha_lab_marks_and_closes_shadow_trade_on_price_move(monkeypatch, tmp_path):
     from hogan_bot.polymarket_alpha import run_alpha_lab
 

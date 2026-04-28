@@ -19,7 +19,7 @@ from hogan_bot.fetch_polymarket import (
     fetch_active_markets,
     score_polymarket_opportunities,
 )
-from hogan_bot.polymarket_arbitrage import detect_arbitrage_alerts
+from hogan_bot.polymarket_arbitrage import ArbitrageAlert, detect_arbitrage_alerts
 from hogan_bot.polymarket_edge import EdgeAssessment, assess_opportunity_edge
 from hogan_bot.polymarket_promotion import evaluate_shadow_ledger
 from hogan_bot.storage import (
@@ -226,7 +226,7 @@ def _write_report(
     report_dir: str,
     ts_ms: int,
     candidates: list[AlphaCandidate],
-    arbitrage_alert_count: int,
+    arbitrage_alerts: list[ArbitrageAlert],
     shadow_ledger: ShadowLedgerUpdate,
     btc_prob: float | None,
     eth_prob: float | None,
@@ -241,7 +241,7 @@ def _write_report(
         "",
         f"- Timestamp ms: `{ts_ms}`",
         f"- Candidates reviewed: `{len(candidates)}`",
-        f"- Arbitrage alerts: `{arbitrage_alert_count}`",
+        f"- Arbitrage alerts: `{len(arbitrage_alerts)}`",
         f"- Shadow marked open: `{shadow_ledger.marked_open}`",
         f"- Shadow closed: `{shadow_ledger.closed}`",
         f"- Shadow open exposure: `${shadow_ledger.open_exposure_usd:.2f}`",
@@ -261,15 +261,32 @@ def _write_report(
             f"### {idx}. {opp.question}",
             f"- Side: `{opp.candidate_side}`{shadow}",
             f"- Decision: `{edge.decision}`",
+            f"- Market type: `{opp.market_type}` / `{opp.horizon}`",
             f"- Total score: `{opp.total_score:.4f}`",
             f"- After-cost EV: `{edge.after_cost_ev:.4f}`",
             f"- Crowd probability: `{opp.crowd_prob:.4f}`",
             f"- Hogan probability: `{opp.hogan_prob:.4f}`" if opp.hogan_prob is not None else "- Hogan probability: `n/a`",
             f"- Rationale: {opp.rationale}",
         ])
+        if opp.target_price is not None:
+            lines.append(f"- Target price: `${opp.target_price:,.0f}`")
+        if opp.safety_note:
+            lines.append(f"- Safety note: `{opp.safety_note}`")
         if edge.reject_reasons:
             lines.append(f"- Reject reasons: `{', '.join(edge.reject_reasons)}`")
         lines.append("")
+    lines.extend(["", "## Arbitrage Alerts", ""])
+    if not arbitrage_alerts:
+        lines.append("No alert-only inconsistencies detected.")
+    for idx, alert in enumerate(sorted(arbitrage_alerts, key=lambda a: a.severity, reverse=True)[:15], start=1):
+        ids = ", ".join(alert.market_ids[:5])
+        lines.extend([
+            f"### {idx}. {alert.kind}",
+            f"- Severity: `{alert.severity:.4f}`",
+            f"- Market IDs: `{ids}`",
+            f"- Message: {alert.message}",
+            "",
+        ])
     path.write_text("\n".join(lines), encoding="utf-8")
     return str(path)
 
@@ -283,6 +300,8 @@ def run_alpha_lab(
     clob_limit: int = 12,
     btc_prob: float | None = None,
     eth_prob: float | None = None,
+    btc_long_prob: float | None = None,
+    eth_long_prob: float | None = None,
     auto_shadow: bool = True,
     report_dir: str = "reports/polymarket",
 ) -> AlphaRunResult:
@@ -311,6 +330,8 @@ def run_alpha_lab(
         markets,
         hogan_btc_bull_prob=btc_prob,
         hogan_eth_bull_prob=eth_prob,
+        hogan_btc_long_horizon_prob=btc_long_prob,
+        hogan_eth_long_horizon_prob=eth_long_prob,
         limit=25,
     )
     alerts = detect_arbitrage_alerts(markets)
@@ -354,7 +375,7 @@ def run_alpha_lab(
         report_dir=report_dir,
         ts_ms=ts_ms,
         candidates=candidates,
-        arbitrage_alert_count=len(alerts),
+        arbitrage_alerts=alerts,
         shadow_ledger=shadow_ledger,
         btc_prob=btc_prob,
         eth_prob=eth_prob,
@@ -388,6 +409,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--clob-limit", type=int, default=12)
     p.add_argument("--btc-prob", type=float, default=None)
     p.add_argument("--eth-prob", type=float, default=None)
+    p.add_argument("--btc-long-prob", type=float, default=None, help="Optional calibrated long-horizon BTC fair probability")
+    p.add_argument("--eth-long-prob", type=float, default=None, help="Optional calibrated long-horizon ETH fair probability")
     p.add_argument("--no-auto-shadow", action="store_true")
     p.add_argument("--report-dir", default="reports/polymarket")
     return p.parse_args()
@@ -404,6 +427,8 @@ def main() -> None:
         clob_limit=args.clob_limit,
         btc_prob=args.btc_prob,
         eth_prob=args.eth_prob,
+        btc_long_prob=args.btc_long_prob,
+        eth_long_prob=args.eth_long_prob,
         auto_shadow=not args.no_auto_shadow,
         report_dir=args.report_dir,
     )

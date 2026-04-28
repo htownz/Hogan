@@ -114,6 +114,58 @@ def test_score_polymarket_opportunities_uses_hogan_disagreement():
     assert opportunities[0].total_score > opportunities[-1].total_score
 
 
+def test_score_polymarket_opportunities_keeps_long_targets_research_without_long_fair_value():
+    from hogan_bot.fetch_polymarket import score_polymarket_opportunities
+
+    opportunities = score_polymarket_opportunities(
+        [
+            {
+                "id": "m1",
+                "slug": "btc-150k-2026",
+                "question": "Will Bitcoin hit $150k by December 31, 2026?",
+                "outcomes": '["Yes", "No"]',
+                "outcomePrices": '["0.05", "0.95"]',
+                "poly_clob_spread": 0.01,
+                "liquidity": "100000",
+                "volume24hr": "25000",
+            }
+        ],
+        hogan_btc_bull_prob=0.72,
+    )
+
+    assert opportunities[0].candidate_side == "research"
+    assert opportunities[0].hogan_prob is None
+    assert opportunities[0].market_type == "price_target"
+    assert opportunities[0].horizon == "long_term"
+    assert opportunities[0].target_price == 150_000
+    assert opportunities[0].safety_note == "long_horizon_price_target_requires_calibrated_fair_value"
+
+
+def test_score_polymarket_opportunities_allows_long_target_with_calibrated_fair_value():
+    from hogan_bot.fetch_polymarket import score_polymarket_opportunities
+
+    opportunities = score_polymarket_opportunities(
+        [
+            {
+                "id": "m1",
+                "slug": "btc-150k-2026",
+                "question": "Will Bitcoin hit $150k by December 31, 2026?",
+                "outcomes": '["Yes", "No"]',
+                "outcomePrices": '["0.05", "0.95"]',
+                "poly_clob_spread": 0.01,
+                "liquidity": "100000",
+                "volume24hr": "25000",
+            }
+        ],
+        hogan_btc_bull_prob=0.72,
+        hogan_btc_long_horizon_prob=0.18,
+    )
+
+    assert opportunities[0].candidate_side == "buy_yes"
+    assert opportunities[0].hogan_prob == 0.18
+    assert opportunities[0].safety_note is None
+
+
 def test_score_polymarket_opportunities_handles_bearish_yes_mapping():
     from hogan_bot.fetch_polymarket import score_polymarket_opportunities
 

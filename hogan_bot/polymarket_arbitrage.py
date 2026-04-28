@@ -4,10 +4,13 @@ The output is alert-only. These helpers do not place orders.
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
-from hogan_bot.fetch_polymarket import _json_list, _yes_probability
+from hogan_bot.fetch_polymarket import (
+    _extract_price_target,
+    _json_list,
+    _yes_probability,
+)
 
 
 @dataclass(frozen=True)
@@ -18,29 +21,12 @@ class ArbitrageAlert:
     message: str
 
 
-_PRICE_RE = re.compile(r"\$?\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?)\s*(k|m|thousand|million)?", re.I)
-
-
 def _market_id(market: dict) -> str:
     return str(market.get("id") or market.get("conditionId") or market.get("slug") or "")
 
 
 def _text(market: dict) -> str:
     return " ".join(str(market.get(k) or "") for k in ("question", "title", "slug")).lower()
-
-
-def _extract_target(text: str) -> float | None:
-    matches = list(_PRICE_RE.finditer(text))
-    if not matches:
-        return None
-    raw = matches[-1].group(1).replace(",", "")
-    value = float(raw)
-    suffix = (matches[-1].group(2) or "").lower()
-    if suffix in ("k", "thousand"):
-        value *= 1_000
-    elif suffix in ("m", "million"):
-        value *= 1_000_000
-    return value
 
 
 def detect_crypto_ladder_violations(markets: list[dict], asset_terms: tuple[str, ...] = ("bitcoin", "btc")) -> list[ArbitrageAlert]:
@@ -52,7 +38,7 @@ def detect_crypto_ladder_violations(markets: list[dict], asset_terms: tuple[str,
             continue
         if not any(term in text for term in ("above", "over", "reach", "hit")):
             continue
-        target = _extract_target(text)
+        target = _extract_price_target(text)
         prob = _yes_probability(market)
         if target is None or prob is None:
             continue

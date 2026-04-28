@@ -58893,3 +58893,15 @@ SystemError: <built-in function kill> returned a result with an exception set
 2026-04-28 14:30:33,812 INFO Loaded forecast model: models\forecast_24h.pkl
 2026-04-28 14:31:09,924 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
 2026-04-28 14:31:10,076 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 14:32:22,393 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 14:32:22,543 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 14:33:34,806 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 14:33:34,984 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 14:34:10,968 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 14:34:11,132 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 14:35:23,366 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 14:35:23,511 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 14:35:23,539 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 14:35:23,692 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-04-28 14:36:35,583 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 14:36:35,747 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)

@@ -74,7 +74,9 @@ def assess_opportunity_edge(
     if after_cost_ev <= 0:
         reject_reasons.append("non_positive_ev")
 
-    if reject_reasons:
+    if "research_only_side" in reject_reasons:
+        decision = "research"
+    elif reject_reasons:
         decision = "reject"
     elif after_cost_ev >= 0.05 and opportunity.total_score >= 0.60:
         decision = "shadow_trade"
