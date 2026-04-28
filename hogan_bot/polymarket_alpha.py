@@ -27,6 +27,7 @@ from hogan_bot.polymarket_intelligence import (
     IntelligenceAssessment,
     assess_intelligence,
 )
+from hogan_bot.polymarket_long_horizon import estimate_btc_long_horizon_probability
 from hogan_bot.polymarket_promotion import evaluate_shadow_ledger
 from hogan_bot.storage import (
     close_polymarket_shadow_trade,
@@ -353,6 +354,7 @@ def _build_candidates(
     eth_prob: float | None,
     btc_long_prob: float | None,
     eth_long_prob: float | None,
+    btc_long_probs: dict[str, float] | None = None,
 ) -> tuple[list[PolymarketOpportunity], list[AlphaCandidate], list[ArbitrageAlert]]:
     snapshots = {snapshot.market_id: snapshot for snapshot in map(normalize_market_snapshot, markets)}
     opportunities = score_polymarket_opportunities(
@@ -361,6 +363,7 @@ def _build_candidates(
         hogan_eth_bull_prob=eth_prob,
         hogan_btc_long_horizon_prob=btc_long_prob,
         hogan_eth_long_horizon_prob=eth_long_prob,
+        hogan_btc_long_horizon_probs=btc_long_probs,
         limit=25,
     )
     candidates: list[AlphaCandidate] = []
@@ -407,6 +410,7 @@ def run_recommendations_only(
     eth_prob: float | None = None,
     btc_long_prob: float | None = None,
     eth_long_prob: float | None = None,
+    use_long_horizon_model: bool = True,
 ) -> RecommendationRunResult:
     """Scan and assess markets without writing reports or shadow ledger rows."""
     markets = fetch_active_markets(limit=limit)
@@ -420,6 +424,12 @@ def run_recommendations_only(
             btc_prob=btc_prob,
             eth_prob=eth_prob,
         )
+        btc_long_probs = _estimate_btc_long_horizon_probs(
+            conn,
+            markets=markets,
+            symbol=symbol,
+            enabled=use_long_horizon_model and btc_long_prob is None,
+        )
     finally:
         conn.close()
     opportunities, candidates, alerts = _build_candidates(
@@ -428,6 +438,7 @@ def run_recommendations_only(
         eth_prob=eth_prob,
         btc_long_prob=btc_long_prob,
         eth_long_prob=eth_long_prob,
+        btc_long_probs=btc_long_probs,
     )
     return RecommendationRunResult(
         opportunities=opportunities,
@@ -460,6 +471,37 @@ def print_recommendations(result: RecommendationRunResult, *, limit: int = 10) -
         print(f"   flags={flags}")
         print(f"   clob={candidate.snapshot.clob_status}: {candidate.snapshot.clob_reason or 'n/a'}")
         print(f"   thesis={assessment.thesis}")
+
+
+def _estimate_btc_long_horizon_probs(
+    conn,
+    *,
+    markets: list[dict],
+    symbol: str,
+    enabled: bool,
+) -> dict[str, float]:
+    if not enabled:
+        return {}
+    btc_symbol = symbol if symbol.upper().startswith("BTC/") else "BTC/USD"
+    probs: dict[str, float] = {}
+    for market in markets:
+        snapshot = normalize_market_snapshot(market)
+        if (
+            snapshot.category != "btc"
+            or snapshot.market_type != "price_target"
+            or snapshot.horizon != "long_term"
+            or snapshot.target_price is None
+        ):
+            continue
+        estimate = estimate_btc_long_horizon_probability(
+            conn,
+            target_price=snapshot.target_price,
+            question=snapshot.question,
+            symbol=btc_symbol,
+        )
+        if estimate is not None:
+            probs[snapshot.market_id] = estimate.probability
+    return probs
 
 
 def _write_report(
@@ -611,6 +653,7 @@ def run_alpha_lab(
     btc_long_prob: float | None = None,
     eth_long_prob: float | None = None,
     auto_shadow: bool = True,
+    use_long_horizon_model: bool = True,
     authority_mode: str = "shadow",
     max_open_shadow_trades: int = 10,
     max_open_shadow_exposure_usd: float = 250.0,
@@ -631,12 +674,19 @@ def run_alpha_lab(
         btc_prob=btc_prob,
         eth_prob=eth_prob,
     )
+    btc_long_probs = _estimate_btc_long_horizon_probs(
+        conn,
+        markets=markets,
+        symbol=symbol,
+        enabled=use_long_horizon_model and btc_long_prob is None,
+    )
     opportunities, built_candidates, alerts = _build_candidates(
         markets=markets,
         btc_prob=btc_prob,
         eth_prob=eth_prob,
         btc_long_prob=btc_long_prob,
         eth_long_prob=eth_long_prob,
+        btc_long_probs=btc_long_probs,
     )
 
     candidates: list[AlphaCandidate] = []
@@ -727,6 +777,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--eth-prob", type=float, default=None)
     p.add_argument("--btc-long-prob", type=float, default=None, help="Optional calibrated long-horizon BTC fair probability")
     p.add_argument("--eth-long-prob", type=float, default=None, help="Optional calibrated long-horizon ETH fair probability")
+    p.add_argument("--no-long-horizon-model", action="store_true", help="Disable automatic BTC long-horizon fair-value estimates")
     p.add_argument("--authority-mode", choices=("research", "shadow", "advisory", "conditional"), default="shadow")
     p.add_argument("--max-open-shadow-trades", type=int, default=10)
     p.add_argument("--max-open-shadow-exposure", type=float, default=250.0)
@@ -751,6 +802,7 @@ def main() -> None:
             eth_prob=args.eth_prob,
             btc_long_prob=args.btc_long_prob,
             eth_long_prob=args.eth_long_prob,
+            use_long_horizon_model=not args.no_long_horizon_model,
         )
         print_recommendations(result, limit=args.recommendation_limit)
         return
@@ -764,6 +816,7 @@ def main() -> None:
         eth_prob=args.eth_prob,
         btc_long_prob=args.btc_long_prob,
         eth_long_prob=args.eth_long_prob,
+        use_long_horizon_model=not args.no_long_horizon_model,
         auto_shadow=not args.no_auto_shadow,
         authority_mode=args.authority_mode,
         max_open_shadow_trades=args.max_open_shadow_trades,

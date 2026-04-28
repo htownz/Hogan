@@ -478,6 +478,43 @@ def test_alpha_lab_keeps_long_target_research_and_reports_arbitrage_alert(monkey
     assert "test alert" in report
 
 
+def test_alpha_lab_uses_automatic_btc_long_horizon_model(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from hogan_bot.polymarket_alpha import run_recommendations_only
+
+    markets = [
+        {
+            "id": "m1",
+            "slug": "btc-150k-2026",
+            "question": "Will Bitcoin hit $150k by December 31, 2026?",
+            "outcomes": '["Yes", "No"]',
+            "outcomePrices": '["0.05", "0.95"]',
+            "poly_clob_midpoint": 0.05,
+            "poly_clob_spread": 0.01,
+            "liquidity": "100000",
+            "volume24hr": "25000",
+        }
+    ]
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.fetch_active_markets", lambda limit: markets)
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.enrich_clob_snapshots", lambda data, max_markets: data)
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.detect_arbitrage_alerts", lambda data: [])
+    monkeypatch.setattr(
+        "hogan_bot.polymarket_alpha.estimate_btc_long_horizon_probability",
+        lambda conn, target_price, question, symbol: SimpleNamespace(probability=0.18),
+    )
+
+    result = run_recommendations_only(
+        db_path=str(tmp_path / "hogan.db"),
+        limit=1,
+        include_clob=False,
+    )
+
+    assert result.candidates[0].opportunity.hogan_prob == 0.18
+    assert result.candidates[0].opportunity.safety_note is None
+    assert result.candidates[0].assessment.fair_value_source == "calibrated_long_horizon"
+
+
 def test_alpha_lab_marks_and_closes_shadow_trade_on_price_move(monkeypatch, tmp_path):
     from hogan_bot.polymarket_alpha import run_alpha_lab
 

@@ -282,6 +282,39 @@ def test_score_polymarket_opportunities_allows_long_target_with_calibrated_fair_
     assert opportunities[0].safety_note is None
 
 
+def test_score_polymarket_opportunities_uses_per_market_long_target_fair_value():
+    from hogan_bot.fetch_polymarket import score_polymarket_opportunities
+
+    opportunities = score_polymarket_opportunities(
+        [
+            {
+                "id": "m1",
+                "slug": "btc-150k-2026",
+                "question": "Will Bitcoin hit $150k by December 31, 2026?",
+                "outcomes": '["Yes", "No"]',
+                "outcomePrices": '["0.05", "0.95"]',
+                "poly_clob_spread": 0.01,
+                "liquidity": "100000",
+            },
+            {
+                "id": "m2",
+                "slug": "btc-1m-gta",
+                "question": "Will bitcoin hit $1m before GTA VI?",
+                "outcomes": '["Yes", "No"]',
+                "outcomePrices": '["0.45", "0.55"]',
+                "poly_clob_spread": 0.01,
+                "liquidity": "100000",
+            },
+        ],
+        hogan_btc_long_horizon_probs={"m1": 0.18},
+    )
+
+    by_id = {opp.market_id: opp for opp in opportunities}
+    assert by_id["m1"].hogan_prob == 0.18
+    assert by_id["m1"].safety_note is None
+    assert by_id["m2"].candidate_side == "research"
+
+
 def test_score_polymarket_opportunities_handles_bearish_yes_mapping():
     from hogan_bot.fetch_polymarket import score_polymarket_opportunities
 

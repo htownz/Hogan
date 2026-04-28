@@ -619,6 +619,8 @@ def score_polymarket_opportunities(
     hogan_eth_bull_prob: float | None = None,
     hogan_btc_long_horizon_prob: float | None = None,
     hogan_eth_long_horizon_prob: float | None = None,
+    hogan_btc_long_horizon_probs: dict[str, float] | None = None,
+    hogan_eth_long_horizon_probs: dict[str, float] | None = None,
     limit: int = 10,
 ) -> list[PolymarketOpportunity]:
     """Rank individual Polymarket markets for research/trading review.
@@ -644,7 +646,11 @@ def score_polymarket_opportunities(
         if category == "btc" and direction != 0:
             crowd_bull = yes_prob if direction > 0 else 1.0 - yes_prob
             if market_type == "price_target" and horizon == "long_term":
-                hogan_prob = hogan_btc_long_horizon_prob
+                hogan_prob = (
+                    (hogan_btc_long_horizon_probs or {}).get(_market_id(market))
+                    if hogan_btc_long_horizon_probs
+                    else hogan_btc_long_horizon_prob
+                )
                 if hogan_prob is None:
                     safety_note = "long_horizon_price_target_requires_calibrated_fair_value"
             else:
@@ -652,7 +658,11 @@ def score_polymarket_opportunities(
         elif category == "eth" and direction != 0:
             crowd_bull = yes_prob if direction > 0 else 1.0 - yes_prob
             if market_type == "price_target" and horizon == "long_term":
-                hogan_prob = hogan_eth_long_horizon_prob
+                hogan_prob = (
+                    (hogan_eth_long_horizon_probs or {}).get(_market_id(market))
+                    if hogan_eth_long_horizon_probs
+                    else hogan_eth_long_horizon_prob
+                )
                 if hogan_prob is None:
                     safety_note = "long_horizon_price_target_requires_calibrated_fair_value"
             else:
