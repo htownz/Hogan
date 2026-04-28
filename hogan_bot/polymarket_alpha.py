@@ -84,6 +84,15 @@ class AlphaRunResult:
     promotion_reasons: list[str]
 
 
+@dataclass(frozen=True)
+class RecommendationRunResult:
+    opportunities: list[PolymarketOpportunity]
+    candidates: list[AlphaCandidate]
+    arbitrage_alerts: int
+    btc_prob: float | None
+    eth_prob: float | None
+
+
 def _has_open_shadow(conn, market_id: str, side: str) -> bool:
     row = conn.execute(
         """
@@ -312,6 +321,143 @@ def _resolve_model_probability(
     return _latest_ml_probability(conn, preferred_symbol) or _latest_ml_probability(conn, fallback_symbol)
 
 
+def _resolve_probabilities(
+    conn,
+    *,
+    symbol: str,
+    btc_prob: float | None,
+    eth_prob: float | None,
+) -> tuple[float | None, float | None]:
+    symbol_upper = symbol.upper()
+    btc_symbol = symbol if symbol_upper.startswith("BTC/") else "BTC/USD"
+    eth_symbol = symbol if symbol_upper.startswith("ETH/") else "ETH/USD"
+    resolved_btc = _resolve_model_probability(
+        conn,
+        explicit_prob=btc_prob,
+        preferred_symbol=btc_symbol,
+        fallback_symbol="BTC/USD",
+    )
+    resolved_eth = _resolve_model_probability(
+        conn,
+        explicit_prob=eth_prob,
+        preferred_symbol=eth_symbol,
+        fallback_symbol="ETH/USD",
+    )
+    return resolved_btc, resolved_eth
+
+
+def _build_candidates(
+    *,
+    markets: list[dict],
+    btc_prob: float | None,
+    eth_prob: float | None,
+    btc_long_prob: float | None,
+    eth_long_prob: float | None,
+) -> tuple[list[PolymarketOpportunity], list[AlphaCandidate], list[ArbitrageAlert]]:
+    snapshots = {snapshot.market_id: snapshot for snapshot in map(normalize_market_snapshot, markets)}
+    opportunities = score_polymarket_opportunities(
+        markets,
+        hogan_btc_bull_prob=btc_prob,
+        hogan_eth_bull_prob=eth_prob,
+        hogan_btc_long_horizon_prob=btc_long_prob,
+        hogan_eth_long_horizon_prob=eth_long_prob,
+        limit=25,
+    )
+    candidates: list[AlphaCandidate] = []
+    for opp in opportunities:
+        edge = assess_opportunity_edge(opp)
+        snapshot = snapshots.get(opp.market_id)
+        if snapshot is None:
+            snapshot = PolymarketMarketSnapshot(
+                market_id=opp.market_id,
+                slug=opp.slug,
+                question=opp.question,
+                event_slug="",
+                category=opp.category,
+                market_type=opp.market_type,
+                horizon=opp.horizon,
+                target_price=opp.target_price,
+                yes_probability=opp.crowd_prob,
+                probability_source="opportunity_fallback",
+                spread=None,
+                liquidity=0.0,
+                volume=0.0,
+                liquidity_score=opp.liquidity_score,
+                spread_score=opp.spread_score,
+                data_quality_score=0.25,
+                eligibility="research",
+                quality_flags=["snapshot_missing"],
+            )
+        assessment = assess_intelligence(opp, edge, snapshot)
+        candidates.append(AlphaCandidate(opp, edge, snapshot, assessment))
+    return opportunities, candidates, detect_arbitrage_alerts(markets)
+
+
+def run_recommendations_only(
+    *,
+    db_path: str = "data/hogan.db",
+    symbol: str = "BTC/USD",
+    limit: int = 100,
+    include_clob: bool = True,
+    clob_limit: int = 12,
+    btc_prob: float | None = None,
+    eth_prob: float | None = None,
+    btc_long_prob: float | None = None,
+    eth_long_prob: float | None = None,
+) -> RecommendationRunResult:
+    """Scan and assess markets without writing reports or shadow ledger rows."""
+    markets = fetch_active_markets(limit=limit)
+    if include_clob:
+        markets = enrich_clob_snapshots(markets, max_markets=clob_limit)
+    conn = get_connection(db_path)
+    try:
+        btc_prob, eth_prob = _resolve_probabilities(
+            conn,
+            symbol=symbol,
+            btc_prob=btc_prob,
+            eth_prob=eth_prob,
+        )
+    finally:
+        conn.close()
+    opportunities, candidates, alerts = _build_candidates(
+        markets=markets,
+        btc_prob=btc_prob,
+        eth_prob=eth_prob,
+        btc_long_prob=btc_long_prob,
+        eth_long_prob=eth_long_prob,
+    )
+    return RecommendationRunResult(
+        opportunities=opportunities,
+        candidates=candidates,
+        arbitrage_alerts=len(alerts),
+        btc_prob=btc_prob,
+        eth_prob=eth_prob,
+    )
+
+
+def print_recommendations(result: RecommendationRunResult, *, limit: int = 10) -> None:
+    print(f"Opportunities: {len(result.opportunities)}")
+    print(f"Arbitrage alerts: {result.arbitrage_alerts}")
+    print(f"Hogan BTC probability: {result.btc_prob:.4f}" if result.btc_prob is not None else "Hogan BTC probability: n/a")
+    print(f"Hogan ETH probability: {result.eth_prob:.4f}" if result.eth_prob is not None else "Hogan ETH probability: n/a")
+    for idx, candidate in enumerate(
+        sorted(result.candidates, key=lambda c: c.assessment.evidence_score, reverse=True)[:limit],
+        start=1,
+    ):
+        assessment = candidate.assessment
+        opp = candidate.opportunity
+        flags = ", ".join(assessment.risk_flags) if assessment.risk_flags else "none"
+        print(f"{idx}. {assessment.recommendation} {opp.question}")
+        print(
+            f"   evidence={assessment.evidence_score:.3f} "
+            f"confidence={assessment.confidence:.3f} "
+            f"size=${assessment.recommended_size_usd:.2f} "
+            f"fair={assessment.fair_value_source}"
+        )
+        print(f"   flags={flags}")
+        print(f"   thesis={assessment.thesis}")
+
+
 def _write_report(
     *,
     report_dir: str,
@@ -472,32 +618,20 @@ def run_alpha_lab(
     markets = fetch_active_markets(limit=limit)
     if include_clob:
         markets = enrich_clob_snapshots(markets, max_markets=clob_limit)
-    snapshots = {snapshot.market_id: snapshot for snapshot in map(normalize_market_snapshot, markets)}
     conn = get_connection(db_path)
-    symbol_upper = symbol.upper()
-    btc_symbol = symbol if symbol_upper.startswith("BTC/") else "BTC/USD"
-    eth_symbol = symbol if symbol_upper.startswith("ETH/") else "ETH/USD"
-    btc_prob = _resolve_model_probability(
+    btc_prob, eth_prob = _resolve_probabilities(
         conn,
-        explicit_prob=btc_prob,
-        preferred_symbol=btc_symbol,
-        fallback_symbol="BTC/USD",
+        symbol=symbol,
+        btc_prob=btc_prob,
+        eth_prob=eth_prob,
     )
-    eth_prob = _resolve_model_probability(
-        conn,
-        explicit_prob=eth_prob,
-        preferred_symbol=eth_symbol,
-        fallback_symbol="ETH/USD",
+    opportunities, built_candidates, alerts = _build_candidates(
+        markets=markets,
+        btc_prob=btc_prob,
+        eth_prob=eth_prob,
+        btc_long_prob=btc_long_prob,
+        eth_long_prob=eth_long_prob,
     )
-    opportunities = score_polymarket_opportunities(
-        markets,
-        hogan_btc_bull_prob=btc_prob,
-        hogan_eth_bull_prob=eth_prob,
-        hogan_btc_long_horizon_prob=btc_long_prob,
-        hogan_eth_long_horizon_prob=eth_long_prob,
-        limit=25,
-    )
-    alerts = detect_arbitrage_alerts(markets)
 
     candidates: list[AlphaCandidate] = []
     shadow_opened = 0
@@ -512,31 +646,10 @@ def run_alpha_lab(
             ts_ms,
             [opp.to_dict() for opp in opportunities],
         )
-        for opp in opportunities:
-            edge = assess_opportunity_edge(opp)
-            snapshot = snapshots.get(opp.market_id)
-            if snapshot is None:
-                snapshot = PolymarketMarketSnapshot(
-                    market_id=opp.market_id,
-                    slug=opp.slug,
-                    question=opp.question,
-                    event_slug="",
-                    category=opp.category,
-                    market_type=opp.market_type,
-                    horizon=opp.horizon,
-                    target_price=opp.target_price,
-                    yes_probability=opp.crowd_prob,
-                    probability_source="opportunity_fallback",
-                    spread=None,
-                    liquidity=0.0,
-                    volume=0.0,
-                    liquidity_score=opp.liquidity_score,
-                    spread_score=opp.spread_score,
-                    data_quality_score=0.25,
-                    eligibility="research",
-                    quality_flags=["snapshot_missing"],
-                )
-            assessment = assess_intelligence(opp, edge, snapshot)
+        for candidate in built_candidates:
+            opp = candidate.opportunity
+            edge = candidate.edge
+            assessment = candidate.assessment
             shadow_id = None
             if allow_shadow:
                 shadow_id = _open_shadow_if_new(
@@ -552,7 +665,7 @@ def run_alpha_lab(
                 if shadow_id is not None:
                     shadow_opened += 1
                     opened_shadow_ids.add(shadow_id)
-            candidates.append(AlphaCandidate(opp, edge, snapshot, assessment, shadow_id))
+            candidates.append(AlphaCandidate(opp, edge, candidate.snapshot, assessment, shadow_id))
         shadow_ledger = _update_shadow_ledger(
             conn,
             markets=markets,
@@ -611,6 +724,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--authority-mode", choices=("research", "shadow", "advisory", "conditional"), default="shadow")
     p.add_argument("--max-open-shadow-trades", type=int, default=10)
     p.add_argument("--max-open-shadow-exposure", type=float, default=250.0)
+    p.add_argument("--recommendations-only", action="store_true", help="Print machine recommendations without writing reports or shadow rows")
+    p.add_argument("--recommendation-limit", type=int, default=10)
     p.add_argument("--no-auto-shadow", action="store_true")
     p.add_argument("--report-dir", default="reports/polymarket")
     return p.parse_args()
@@ -619,6 +734,20 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = parse_args()
+    if args.recommendations_only:
+        result = run_recommendations_only(
+            db_path=args.db,
+            symbol=args.symbol,
+            limit=args.limit,
+            include_clob=not args.no_clob,
+            clob_limit=args.clob_limit,
+            btc_prob=args.btc_prob,
+            eth_prob=args.eth_prob,
+            btc_long_prob=args.btc_long_prob,
+            eth_long_prob=args.eth_long_prob,
+        )
+        print_recommendations(result, limit=args.recommendation_limit)
+        return
     result = run_alpha_lab(
         db_path=args.db,
         symbol=args.symbol,

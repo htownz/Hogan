@@ -341,6 +341,50 @@ def test_alpha_lab_authority_modes_and_shadow_budget(monkeypatch, tmp_path):
     assert "Authority is `research`" in Path(research.report_path).read_text()
 
 
+def test_recommendations_only_does_not_write_report_or_ledger(monkeypatch, tmp_path, capsys):
+    from hogan_bot.polymarket_alpha import (
+        print_recommendations,
+        run_recommendations_only,
+    )
+    from hogan_bot.storage import get_connection
+
+    markets = [
+        {
+            "id": "m1",
+            "slug": "btc-100k",
+            "question": "Will Bitcoin reach $100,000 this month?",
+            "outcomes": '["Yes", "No"]',
+            "outcomePrices": '["0.42", "0.58"]',
+            "poly_clob_midpoint": 0.42,
+            "poly_clob_spread": 0.01,
+            "liquidity": "100000",
+            "volume24hr": "25000",
+        }
+    ]
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.fetch_active_markets", lambda limit: markets)
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.enrich_clob_snapshots", lambda data, max_markets: data)
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.detect_arbitrage_alerts", lambda data: [])
+
+    db_path = tmp_path / "hogan.db"
+    result = run_recommendations_only(
+        db_path=str(db_path),
+        limit=1,
+        include_clob=False,
+        btc_prob=0.72,
+    )
+    print_recommendations(result, limit=1)
+
+    assert result.candidates[0].assessment.recommendation == "shadow_candidate"
+    assert "shadow_candidate" in capsys.readouterr().out
+    conn = get_connection(str(db_path))
+    opp_count = conn.execute("SELECT COUNT(*) FROM polymarket_opportunities").fetchone()[0]
+    shadow_count = conn.execute("SELECT COUNT(*) FROM polymarket_shadow_trades").fetchone()[0]
+    conn.close()
+    assert opp_count == 0
+    assert shadow_count == 0
+    assert not list((tmp_path / "reports").glob("*.md"))
+
+
 def test_alpha_lab_uses_latest_decision_ml_probability(monkeypatch, tmp_path):
     from hogan_bot.polymarket_alpha import run_alpha_lab
     from hogan_bot.storage import get_connection, log_decision

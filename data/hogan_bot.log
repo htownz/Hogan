@@ -59041,3 +59041,111 @@ SystemError: <built-in function kill> returned a result with an exception set
 2026-04-28 15:03:28,354 INFO Loaded forecast model: models\forecast_24h.pkl
 2026-04-28 15:04:04,447 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
 2026-04-28 15:04:04,647 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:05:16,832 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:05:17,003 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:05:17,036 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:05:17,189 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-04-28 15:06:29,081 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:06:29,252 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:07:41,391 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:07:41,543 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:08:17,564 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:08:17,716 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:09:29,933 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:09:30,081 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:10:06,097 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:10:06,254 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:10:06,285 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:10:06,442 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-04-28 15:10:36,077 WARNING REST poll error BTC/USD/1h: kraken GET https://api.kraken.com/0/public/OHLC?pair=XXBTZUSD&interval=60
+2026-04-28 15:11:18,420 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:11:18,581 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:12:30,712 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:12:30,865 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:13:06,861 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:13:07,021 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:14:19,137 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:14:19,292 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:15:31,423 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:15:31,574 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:15:31,606 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:15:31,763 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-04-28 15:15:31,795 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:15:31,956 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-04-28 15:16:07,552 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:16:07,711 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:17:19,853 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:17:20,015 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:18:32,182 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:18:32,339 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:19:08,343 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:19:08,508 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:20:20,662 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:20:20,826 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:20:20,856 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:20:21,019 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-04-28 15:21:32,979 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:21:33,440 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:22:09,132 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:22:09,302 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:23:21,427 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:23:21,585 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:24:33,604 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:24:33,769 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:25:09,769 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:25:09,938 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:25:09,970 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:25:10,132 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-04-28 15:26:22,260 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:26:22,428 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:27:34,579 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:27:34,747 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:28:10,721 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:28:10,892 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:29:23,017 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:29:23,187 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:30:35,330 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:30:35,500 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:30:35,532 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:30:35,701 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-04-28 15:30:35,732 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:30:35,906 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
+2026-04-28 15:30:35,939 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:30:36,112 INFO MTF_EVAL BTC/USD/30m → hold (size scaled 0.70x for sub-hour eval)
+2026-04-28 15:31:11,486 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:31:11,657 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:32:23,766 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:32:23,940 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:33:36,070 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:33:36,241 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:34:12,225 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:34:12,398 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:35:24,508 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:35:24,677 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:35:24,706 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:35:24,880 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-04-28 15:36:36,806 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:36:36,982 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:37:12,951 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:37:13,121 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:38:25,266 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:38:25,443 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:39:37,591 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:39:37,763 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:40:13,730 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:40:14,179 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:40:14,211 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:40:14,399 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-04-28 15:41:26,044 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:41:26,234 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:41:26,248 INFO OnlineLearner: insufficient labeled data for all
+2026-04-28 15:42:38,341 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:42:38,522 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:43:14,759 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:43:14,940 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:44:27,059 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:44:27,239 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-28 15:45:03,221 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:45:03,389 INFO MTF_EVAL BTC/USD/5m → hold (size scaled 0.40x for sub-hour eval)
+2026-04-28 15:45:03,421 INFO MACRO buy: env=risk_off conf=0.28 block_longs=False | SPY+QQQ both bearish → strong risk-off 0.40x; DXY strong + SPY bearish → headwind 0.70x
+2026-04-28 15:45:03,592 INFO MTF_EVAL BTC/USD/15m → hold (size scaled 0.60x for sub-hour eval)
