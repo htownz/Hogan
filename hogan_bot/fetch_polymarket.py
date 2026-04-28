@@ -11,6 +11,7 @@ import json
 import logging
 import math
 import os
+import re
 import time
 from dataclasses import dataclass
 from datetime import date
@@ -66,6 +67,14 @@ _MACRO_RISK_TERMS = (
     "unemployment",
     "war",
 )
+
+
+def _contains_term(text: str, term: str) -> bool:
+    return re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", text) is not None
+
+
+def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
+    return any(_contains_term(text, term) for term in terms)
 
 
 @dataclass(frozen=True)
@@ -213,11 +222,11 @@ def _spread_score(market: dict) -> float:
 
 def _market_category(market: dict) -> str:
     text = _market_text(market)
-    if any(term in text for term in _BTC_TERMS):
+    if _contains_any(text, _BTC_TERMS):
         return "btc"
-    if any(term in text for term in _ETH_TERMS):
+    if _contains_any(text, _ETH_TERMS):
         return "eth"
-    if any(term in text for term in _MACRO_RISK_TERMS):
+    if _contains_any(text, _MACRO_RISK_TERMS):
         return "macro_risk"
     return "other"
 
@@ -225,8 +234,8 @@ def _market_category(market: dict) -> str:
 def _yes_direction(market: dict) -> int:
     """Return +1 if YES is bullish, -1 if YES is bearish, 0 if unknown."""
     text = _market_text(market)
-    bullish_hits = sum(1 for term in _BULLISH_TERMS if term in text)
-    bearish_hits = sum(1 for term in _BEARISH_TERMS if term in text)
+    bullish_hits = sum(1 for term in _BULLISH_TERMS if _contains_term(text, term))
+    bearish_hits = sum(1 for term in _BEARISH_TERMS if _contains_term(text, term))
     if bullish_hits > bearish_hits:
         return 1
     if bearish_hits > bullish_hits:
@@ -237,13 +246,13 @@ def _yes_direction(market: dict) -> int:
 def _catalyst_score(market: dict) -> float:
     text = _market_text(market)
     score = 0.0
-    if any(term in text for term in _BTC_TERMS + _ETH_TERMS):
+    if _contains_any(text, _BTC_TERMS + _ETH_TERMS):
         score += 0.35
-    if any(term in text for term in _MACRO_RISK_TERMS):
+    if _contains_any(text, _MACRO_RISK_TERMS):
         score += 0.25
-    if any(term in text for term in ("today", "tomorrow", "week", "month", "2026", "etf")):
+    if _contains_any(text, ("today", "tomorrow", "week", "month", "2026", "etf")):
         score += 0.20
-    if any(term in text for term in ("above", "below", "reach", "hit", "under", "over")):
+    if _contains_any(text, ("above", "below", "reach", "hit", "under", "over")):
         score += 0.20
     return max(0.0, min(1.0, score))
 
@@ -325,13 +334,13 @@ def enrich_clob_snapshots(markets: list[dict], max_markets: int = 12) -> list[di
 
 def _directional_probability(market: dict, terms: tuple[str, ...]) -> float | None:
     text = _market_text(market)
-    if not any(term in text for term in terms):
+    if not _contains_any(text, terms):
         return None
     yes_prob = _yes_probability(market)
     if yes_prob is None:
         return None
-    bullish_hits = sum(1 for term in _BULLISH_TERMS if term in text)
-    bearish_hits = sum(1 for term in _BEARISH_TERMS if term in text)
+    bullish_hits = sum(1 for term in _BULLISH_TERMS if _contains_term(text, term))
+    bearish_hits = sum(1 for term in _BEARISH_TERMS if _contains_term(text, term))
     if bullish_hits > bearish_hits:
         return yes_prob
     if bearish_hits > bullish_hits:
@@ -341,7 +350,7 @@ def _directional_probability(market: dict, terms: tuple[str, ...]) -> float | No
 
 def _risk_probability(market: dict) -> float | None:
     text = _market_text(market)
-    if not any(term in text for term in _MACRO_RISK_TERMS):
+    if not _contains_any(text, _MACRO_RISK_TERMS):
         return None
     return _yes_probability(market)
 

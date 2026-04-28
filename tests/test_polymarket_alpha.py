@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
 
 def test_calibration_metrics_and_bias_diagnostics():
@@ -165,3 +166,53 @@ def test_polymarket_promotion_gate_requires_shadow_evidence():
     )
     assert approved.approved is True
     assert approved.reasons == []
+
+
+def test_alpha_lab_runner_persists_report_and_opens_shadow_once(monkeypatch, tmp_path):
+    from hogan_bot.polymarket_alpha import run_alpha_lab
+
+    markets = [
+        {
+            "id": "m1",
+            "slug": "btc-100k",
+            "question": "Will Bitcoin reach $100,000 this month?",
+            "outcomes": '["Yes", "No"]',
+            "outcomePrices": '["0.42", "0.58"]',
+            "poly_clob_spread": 0.01,
+            "liquidity": "100000",
+            "volume24hr": "25000",
+        }
+    ]
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.fetch_active_markets", lambda limit: markets)
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.enrich_clob_snapshots", lambda data, max_markets: data)
+    monkeypatch.setattr("hogan_bot.polymarket_alpha.detect_arbitrage_alerts", lambda data: [])
+
+    db_path = tmp_path / "hogan.db"
+    report_dir = tmp_path / "reports"
+    first = run_alpha_lab(
+        db_path=str(db_path),
+        limit=1,
+        include_clob=False,
+        btc_prob=0.72,
+        report_dir=str(report_dir),
+    )
+    second = run_alpha_lab(
+        db_path=str(db_path),
+        limit=1,
+        include_clob=False,
+        btc_prob=0.72,
+        report_dir=str(report_dir),
+    )
+
+    assert first.shadow_opened == 1
+    assert second.shadow_opened == 0
+    assert "Polymarket Alpha Lab Report" in Path(first.report_path).read_text()
+
+    conn = sqlite3.connect(db_path)
+    open_count = conn.execute(
+        "SELECT COUNT(*) FROM polymarket_shadow_trades WHERE status='open'"
+    ).fetchone()[0]
+    opp_count = conn.execute("SELECT COUNT(*) FROM polymarket_opportunities").fetchone()[0]
+    conn.close()
+    assert open_count == 1
+    assert opp_count >= 1

@@ -135,6 +135,25 @@ def test_score_polymarket_opportunities_handles_bearish_yes_mapping():
     assert opportunities[0].candidate_side == "buy_no"
 
 
+def test_score_polymarket_opportunities_does_not_match_eth_inside_names():
+    from hogan_bot.fetch_polymarket import score_polymarket_opportunities
+
+    opportunities = score_polymarket_opportunities(
+        [
+            {
+                "id": "m1",
+                "question": "Will Beth Van Duyne win the 2026 Texas Republican Primary?",
+                "outcomes": '["Yes", "No"]',
+                "outcomePrices": '["0.60", "0.40"]',
+                "liquidity": "100000",
+            }
+        ],
+        hogan_eth_bull_prob=0.70,
+    )
+
+    assert opportunities == []
+
+
 def test_fetch_and_store_writes_public_metrics(monkeypatch, tmp_path):
     from hogan_bot.fetch_polymarket import fetch_and_store
     from hogan_bot.storage import _create_schema
