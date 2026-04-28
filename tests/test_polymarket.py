@@ -80,6 +80,61 @@ def test_enrich_clob_snapshots_attaches_public_orderbook_metrics(monkeypatch):
     assert out[0]["poly_clob_spread"] == 0.03
 
 
+def test_score_polymarket_opportunities_uses_hogan_disagreement():
+    from hogan_bot.fetch_polymarket import score_polymarket_opportunities
+
+    opportunities = score_polymarket_opportunities(
+        [
+            {
+                "id": "m1",
+                "slug": "btc-100k",
+                "question": "Will Bitcoin reach $100,000 this month?",
+                "outcomes": '["Yes", "No"]',
+                "outcomePrices": '["0.42", "0.58"]',
+                "poly_clob_spread": 0.01,
+                "liquidity": "100000",
+                "volume24hr": "25000",
+            },
+            {
+                "id": "m2",
+                "slug": "fed-hike",
+                "question": "Will the Fed hike rates this month?",
+                "outcomes": '["Yes", "No"]',
+                "outcomePrices": '["0.55", "0.45"]',
+                "poly_clob_spread": 0.08,
+                "liquidity": "1000",
+            },
+        ],
+        hogan_btc_bull_prob=0.72,
+    )
+
+    assert opportunities[0].market_id == "m1"
+    assert opportunities[0].candidate_side == "buy_yes"
+    assert opportunities[0].edge_score > 0.9
+    assert opportunities[0].total_score > opportunities[-1].total_score
+
+
+def test_score_polymarket_opportunities_handles_bearish_yes_mapping():
+    from hogan_bot.fetch_polymarket import score_polymarket_opportunities
+
+    opportunities = score_polymarket_opportunities(
+        [
+            {
+                "id": "m1",
+                "question": "Will Ethereum fall below $2,000 this week?",
+                "outcomes": '["Yes", "No"]',
+                "outcomePrices": '["0.60", "0.40"]',
+                "poly_clob_spread": 0.02,
+                "liquidity": "50000",
+            }
+        ],
+        hogan_eth_bull_prob=0.70,
+    )
+
+    assert opportunities[0].category == "eth"
+    assert opportunities[0].candidate_side == "buy_no"
+
+
 def test_fetch_and_store_writes_public_metrics(monkeypatch, tmp_path):
     from hogan_bot.fetch_polymarket import fetch_and_store
     from hogan_bot.storage import _create_schema
@@ -102,7 +157,7 @@ def test_fetch_and_store_writes_public_metrics(monkeypatch, tmp_path):
     monkeypatch.setattr("hogan_bot.fetch_polymarket.fetch_active_markets", _markets)
     monkeypatch.setattr("hogan_bot.fetch_polymarket.enrich_clob_snapshots", lambda markets, max_markets: markets)
 
-    written = fetch_and_store(db_path=str(db_path), limit=1)
+    written = fetch_and_store(db_path=str(db_path), limit=1, hogan_btc_bull_prob=0.75)
 
     conn = sqlite3.connect(db_path)
     rows = conn.execute(
@@ -111,6 +166,7 @@ def test_fetch_and_store_writes_public_metrics(monkeypatch, tmp_path):
     conn.close()
     assert written >= 1
     assert ("poly_btc_bull_prob", 0.55) in rows
+    assert any(metric == "poly_top_edge_score" for metric, _value in rows)
 
 
 def test_agent_pipeline_reads_polymarket_metrics_point_in_time():

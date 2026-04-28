@@ -9,8 +9,10 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import os
 import time
+from dataclasses import dataclass
 from datetime import date
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -59,6 +61,42 @@ _MACRO_RISK_TERMS = (
     "unemployment",
     "war",
 )
+
+
+@dataclass(frozen=True)
+class PolymarketOpportunity:
+    """Ranked analysis candidate from a public Polymarket market."""
+
+    market_id: str
+    slug: str
+    question: str
+    category: str
+    candidate_side: str
+    crowd_prob: float
+    hogan_prob: float | None
+    edge_score: float
+    liquidity_score: float
+    spread_score: float
+    catalyst_score: float
+    total_score: float
+    rationale: str
+
+    def to_dict(self) -> dict:
+        return {
+            "market_id": self.market_id,
+            "slug": self.slug,
+            "question": self.question,
+            "category": self.category,
+            "candidate_side": self.candidate_side,
+            "crowd_prob": round(self.crowd_prob, 4),
+            "hogan_prob": round(self.hogan_prob, 4) if self.hogan_prob is not None else None,
+            "edge_score": round(self.edge_score, 4),
+            "liquidity_score": round(self.liquidity_score, 4),
+            "spread_score": round(self.spread_score, 4),
+            "catalyst_score": round(self.catalyst_score, 4),
+            "total_score": round(self.total_score, 4),
+            "rationale": self.rationale,
+        }
 
 
 def _get_json(path: str, params: dict | None = None) -> object:
@@ -112,6 +150,16 @@ def _market_text(market: dict) -> str:
     return " ".join(str(v or "") for v in fields).lower()
 
 
+def _market_id(market: dict) -> str:
+    return str(
+        market.get("id")
+        or market.get("conditionId")
+        or market.get("condition_id")
+        or market.get("slug")
+        or ""
+    )
+
+
 def _yes_probability(market: dict) -> float | None:
     if "poly_clob_midpoint" in market:
         return _clamp_prob(_to_float(market.get("poly_clob_midpoint"), default=0.5))
@@ -136,6 +184,53 @@ def _market_weight(market: dict) -> float:
         default=0.0,
     )
     return max(1.0, liquidity + volume)
+
+
+def _liquidity_score(market: dict) -> float:
+    # Log scale: Polymarket liquidity varies by orders of magnitude.
+    return max(0.0, min(1.0, math.log10(_market_weight(market) + 1.0) / 6.0))
+
+
+def _spread_score(market: dict) -> float:
+    spread = _to_float(market.get("poly_clob_spread"), default=0.05)
+    return max(0.0, min(1.0, 1.0 - spread / 0.10))
+
+
+def _market_category(market: dict) -> str:
+    text = _market_text(market)
+    if any(term in text for term in _BTC_TERMS):
+        return "btc"
+    if any(term in text for term in _ETH_TERMS):
+        return "eth"
+    if any(term in text for term in _MACRO_RISK_TERMS):
+        return "macro_risk"
+    return "other"
+
+
+def _yes_direction(market: dict) -> int:
+    """Return +1 if YES is bullish, -1 if YES is bearish, 0 if unknown."""
+    text = _market_text(market)
+    bullish_hits = sum(1 for term in _BULLISH_TERMS if term in text)
+    bearish_hits = sum(1 for term in _BEARISH_TERMS if term in text)
+    if bullish_hits > bearish_hits:
+        return 1
+    if bearish_hits > bullish_hits:
+        return -1
+    return 0
+
+
+def _catalyst_score(market: dict) -> float:
+    text = _market_text(market)
+    score = 0.0
+    if any(term in text for term in _BTC_TERMS + _ETH_TERMS):
+        score += 0.35
+    if any(term in text for term in _MACRO_RISK_TERMS):
+        score += 0.25
+    if any(term in text for term in ("today", "tomorrow", "week", "month", "2026", "etf")):
+        score += 0.20
+    if any(term in text for term in ("above", "below", "reach", "hit", "under", "over")):
+        score += 0.20
+    return max(0.0, min(1.0, score))
 
 
 def _yes_token_id(market: dict) -> str | None:
@@ -236,6 +331,79 @@ def _risk_probability(market: dict) -> float | None:
     return _yes_probability(market)
 
 
+def score_polymarket_opportunities(
+    markets: list[dict],
+    *,
+    hogan_btc_bull_prob: float | None = None,
+    hogan_eth_bull_prob: float | None = None,
+    limit: int = 10,
+) -> list[PolymarketOpportunity]:
+    """Rank individual Polymarket markets for research/trading review.
+
+    If Hogan model probabilities are provided, the primary edge is crowd/model
+    disagreement. Without model probabilities, this still ranks liquid,
+    tight-spread, high-relevance markets as intelligence targets.
+    """
+    opportunities: list[PolymarketOpportunity] = []
+    for market in markets:
+        if str(market.get("closed", "")).lower() == "true":
+            continue
+        category = _market_category(market)
+        if category not in ("btc", "eth", "macro_risk"):
+            continue
+        yes_prob = _yes_probability(market)
+        if yes_prob is None:
+            continue
+
+        direction = _yes_direction(market)
+        if category == "btc" and direction != 0:
+            crowd_bull = yes_prob if direction > 0 else 1.0 - yes_prob
+            hogan_prob = hogan_btc_bull_prob
+        elif category == "eth" and direction != 0:
+            crowd_bull = yes_prob if direction > 0 else 1.0 - yes_prob
+            hogan_prob = hogan_eth_bull_prob
+        else:
+            crowd_bull = 1.0 - yes_prob if category == "macro_risk" else yes_prob
+            hogan_prob = None
+
+        if hogan_prob is not None:
+            hogan_prob = _clamp_prob(float(hogan_prob))
+            disagreement = hogan_prob - crowd_bull
+            edge_score = min(1.0, abs(disagreement) / 0.30)
+            bullish_candidate = disagreement > 0
+            if direction < 0:
+                bullish_candidate = not bullish_candidate
+            candidate_side = "buy_yes" if bullish_candidate else "buy_no"
+            rationale = f"Hogan {hogan_prob:.2f} vs crowd {crowd_bull:.2f}"
+        else:
+            # No model comparator: favor informative non-consensus, tradable markets.
+            edge_score = min(1.0, abs(crowd_bull - 0.5) / 0.35)
+            candidate_side = "research"
+            rationale = f"prediction-market crowd probability {crowd_bull:.2f}"
+
+        liq = _liquidity_score(market)
+        spread = _spread_score(market)
+        catalyst = _catalyst_score(market)
+        total = edge_score * 0.45 + spread * 0.25 + liq * 0.20 + catalyst * 0.10
+        opportunities.append(PolymarketOpportunity(
+            market_id=_market_id(market),
+            slug=str(market.get("slug") or market.get("eventSlug") or ""),
+            question=str(market.get("question") or market.get("title") or ""),
+            category=category,
+            candidate_side=candidate_side,
+            crowd_prob=_clamp_prob(crowd_bull),
+            hogan_prob=hogan_prob,
+            edge_score=edge_score,
+            liquidity_score=liq,
+            spread_score=spread,
+            catalyst_score=catalyst,
+            total_score=max(0.0, min(1.0, total)),
+            rationale=rationale,
+        ))
+
+    return sorted(opportunities, key=lambda opp: opp.total_score, reverse=True)[:limit]
+
+
 def _weighted_average(items: list[tuple[float, float]]) -> float | None:
     if not items:
         return None
@@ -299,6 +467,10 @@ def extract_polymarket_metrics(markets: list[dict]) -> dict[str, float]:
         metrics["poly_orderbook_midpoint_avg"] = round(sum(clob_midpoints) / len(clob_midpoints), 6)
     if clob_spreads:
         metrics["poly_orderbook_spread_avg"] = round(sum(clob_spreads) / len(clob_spreads), 6)
+    top_opps = score_polymarket_opportunities(markets, limit=5)
+    if top_opps:
+        metrics["poly_top_opportunity_score"] = round(top_opps[0].total_score, 6)
+        metrics["poly_opportunity_count"] = float(len(top_opps))
     for name, values in (
         ("poly_btc_bull_prob", btc),
         ("poly_eth_bull_prob", eth),
@@ -343,6 +515,8 @@ def fetch_and_store(
     limit: int = 100,
     include_clob: bool = True,
     clob_limit: int = 12,
+    hogan_btc_bull_prob: float | None = None,
+    hogan_eth_bull_prob: float | None = None,
 ) -> int:
     """Fetch active Polymarket markets and store compact daily metrics."""
     from hogan_bot.storage import get_connection, upsert_onchain
@@ -352,6 +526,18 @@ def fetch_and_store(
     if include_clob:
         markets = enrich_clob_snapshots(markets, max_markets=max(0, int(clob_limit)))
     metrics = extract_polymarket_metrics(markets)
+    top_opps = score_polymarket_opportunities(
+        markets,
+        hogan_btc_bull_prob=hogan_btc_bull_prob,
+        hogan_eth_bull_prob=hogan_eth_bull_prob,
+        limit=5,
+    )
+    if top_opps:
+        metrics["poly_top_edge_score"] = round(top_opps[0].edge_score, 6)
+        metrics["poly_top_tradability_score"] = round(
+            (top_opps[0].liquidity_score + top_opps[0].spread_score) / 2.0,
+            6,
+        )
     if not metrics:
         return 0
     today = date.today().isoformat()
@@ -373,6 +559,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--limit", type=int, default=100, help="Active events to inspect")
     p.add_argument("--no-clob", action="store_true", help="Skip public CLOB midpoint/spread snapshots")
     p.add_argument("--clob-limit", type=int, default=12, help="Maximum markets to enrich via CLOB")
+    p.add_argument("--scan", action="store_true", help="Print ranked Polymarket opportunity candidates")
+    p.add_argument("--btc-prob", type=float, default=None, help="Optional Hogan BTC bull probability for edge scoring")
+    p.add_argument("--eth-prob", type=float, default=None, help="Optional Hogan ETH bull probability for edge scoring")
     return p.parse_args()
 
 
@@ -385,8 +574,22 @@ def main() -> None:
         limit=args.limit,
         include_clob=not args.no_clob,
         clob_limit=args.clob_limit,
+        hogan_btc_bull_prob=args.btc_prob,
+        hogan_eth_bull_prob=args.eth_prob,
     )
     print(f"Polymarket metrics written: {written}")
+    if args.scan:
+        markets = fetch_active_markets(limit=args.limit)
+        if not args.no_clob:
+            markets = enrich_clob_snapshots(markets, max_markets=args.clob_limit)
+        opportunities = score_polymarket_opportunities(
+            markets,
+            hogan_btc_bull_prob=args.btc_prob,
+            hogan_eth_bull_prob=args.eth_prob,
+        )
+        for idx, opp in enumerate(opportunities, start=1):
+            print(f"{idx}. {opp.total_score:.3f} {opp.candidate_side} {opp.question}")
+            print(f"   {opp.rationale}; spread={opp.spread_score:.2f} liquidity={opp.liquidity_score:.2f}")
 
 
 if __name__ == "__main__":
