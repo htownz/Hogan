@@ -380,6 +380,9 @@ def _build_candidates(
                 yes_probability=opp.crowd_prob,
                 probability_source="opportunity_fallback",
                 spread=None,
+                clob_status="snapshot_missing",
+                clob_reason="No normalized snapshot was available for this opportunity",
+                clob_token_id=None,
                 liquidity=0.0,
                 volume=0.0,
                 liquidity_score=opp.liquidity_score,
@@ -455,6 +458,7 @@ def print_recommendations(result: RecommendationRunResult, *, limit: int = 10) -
             f"fair={assessment.fair_value_source}"
         )
         print(f"   flags={flags}")
+        print(f"   clob={candidate.snapshot.clob_status}: {candidate.snapshot.clob_reason or 'n/a'}")
         print(f"   thesis={assessment.thesis}")
 
 
@@ -527,6 +531,7 @@ def _write_report(
             f"- Confidence: `{assessment.confidence:.4f}`",
             f"- Recommended size: `${assessment.recommended_size_usd:.2f}`",
             f"- Fair-value source: `{assessment.fair_value_source}`",
+            f"- CLOB diagnostic: `{candidate.snapshot.clob_status}` - {candidate.snapshot.clob_reason or 'n/a'}",
             f"- Risk flags: `{flags}`",
             f"- Thesis: {assessment.thesis}",
             "",
@@ -554,6 +559,7 @@ def _write_report(
             f"- Recommendation: `{assessment.recommendation}`",
             f"- Market type: `{opp.market_type}` / `{opp.horizon}`",
             f"- Data quality: `{assessment.data_quality_score:.4f}`",
+            f"- CLOB diagnostic: `{candidate.snapshot.clob_status}` - {candidate.snapshot.clob_reason or 'n/a'}",
             f"- Confidence: `{assessment.confidence:.4f}`",
             f"- Recommended size: `${assessment.recommended_size_usd:.2f}`",
             f"- Total score: `{opp.total_score:.4f}`",

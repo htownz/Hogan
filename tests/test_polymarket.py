@@ -78,6 +78,77 @@ def test_enrich_clob_snapshots_attaches_public_orderbook_metrics(monkeypatch):
 
     assert out[0]["poly_clob_midpoint"] == 0.61
     assert out[0]["poly_clob_spread"] == 0.03
+    assert out[0]["poly_clob_status"] == "ok"
+    assert out[0]["poly_clob_token_id"] == "yes-token"
+
+
+def test_enrich_clob_snapshots_records_diagnostic_statuses(monkeypatch):
+    from hogan_bot.fetch_polymarket import enrich_clob_snapshots
+
+    def _snapshot(token_id):
+        if token_id == "fail-token":
+            raise RuntimeError("CLOB unavailable")
+        return {}
+
+    monkeypatch.setattr("hogan_bot.fetch_polymarket.fetch_clob_token_snapshot", _snapshot)
+    markets = [
+        {
+            "id": "no-token",
+            "question": "Will Bitcoin reach $100,000?",
+            "outcomes": '["Yes", "No"]',
+        },
+        {
+            "id": "empty-book",
+            "question": "Will Bitcoin reach $110,000?",
+            "outcomes": '["Yes", "No"]',
+            "clobTokenIds": '["empty-token", "no-token"]',
+            "liquidity": "100",
+        },
+        {
+            "id": "failed-book",
+            "question": "Will Bitcoin reach $120,000?",
+            "outcomes": '["Yes", "No"]',
+            "clobTokenIds": '["fail-token", "no-token"]',
+            "liquidity": "50",
+        },
+    ]
+
+    out = {market["id"]: market for market in enrich_clob_snapshots(markets, max_markets=2)}
+
+    assert out["no-token"]["poly_clob_status"] == "no_token_id"
+    assert out["empty-book"]["poly_clob_status"] == "empty"
+    assert out["failed-book"]["poly_clob_status"] == "failed"
+    assert "CLOB unavailable" in out["failed-book"]["poly_clob_reason"]
+
+
+def test_enrich_clob_snapshots_records_limit_skip(monkeypatch):
+    from hogan_bot.fetch_polymarket import enrich_clob_snapshots
+
+    monkeypatch.setattr(
+        "hogan_bot.fetch_polymarket.fetch_clob_token_snapshot",
+        lambda token_id: {"midpoint": 0.61, "spread": 0.03},
+    )
+    markets = [
+        {
+            "id": "m1",
+            "question": "Will Bitcoin reach $100,000?",
+            "outcomes": '["Yes", "No"]',
+            "clobTokenIds": '["yes-1", "no-1"]',
+            "liquidity": "1000",
+        },
+        {
+            "id": "m2",
+            "question": "Will Bitcoin reach $110,000?",
+            "outcomes": '["Yes", "No"]',
+            "clobTokenIds": '["yes-2", "no-2"]',
+            "liquidity": "100",
+        },
+    ]
+
+    out = {market["id"]: market for market in enrich_clob_snapshots(markets, max_markets=1)}
+
+    assert out["m1"]["poly_clob_status"] == "ok"
+    assert out["m2"]["poly_clob_status"] == "skipped_limit"
 
 
 def test_normalize_market_snapshot_scores_data_quality():
@@ -100,9 +171,29 @@ def test_normalize_market_snapshot_scores_data_quality():
     assert snapshot.market_type == "price_target"
     assert snapshot.horizon == "short_term"
     assert snapshot.probability_source == "clob_midpoint"
+    assert snapshot.clob_status == "not_enriched"
     assert snapshot.data_quality_score > 0.8
     assert snapshot.eligibility == "shadow_candidate"
     assert snapshot.to_dict()["target_price"] == 100_000
+
+
+def test_normalize_market_snapshot_exposes_clob_diagnostics():
+    from hogan_bot.fetch_polymarket import normalize_market_snapshot
+
+    snapshot = normalize_market_snapshot({
+        "id": "m1",
+        "question": "Will Bitcoin hit $150k by December 31, 2026?",
+        "outcomes": '["Yes", "No"]',
+        "outcomePrices": '["0.05", "0.95"]',
+        "poly_clob_status": "no_token_id",
+        "poly_clob_reason": "Gamma payload did not include a usable YES CLOB token ID",
+        "liquidity": "100000",
+    })
+
+    assert snapshot.clob_status == "no_token_id"
+    assert snapshot.clob_reason.startswith("Gamma payload")
+    assert "clob_no_token_id" in snapshot.quality_flags
+    assert snapshot.to_dict()["clob_status"] == "no_token_id"
 
 
 def test_score_polymarket_opportunities_uses_hogan_disagreement():

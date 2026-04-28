@@ -285,6 +285,7 @@ def test_alpha_lab_runner_persists_report_and_opens_shadow_once(monkeypatch, tmp
     assert "## Data Quality" in report
     assert "## Machine Recommendations" in report
     assert "## Shadow Positions" in report
+    assert "CLOB diagnostic" in report
     assert "## Next Action" in report
 
     conn = sqlite3.connect(db_path)
@@ -375,7 +376,9 @@ def test_recommendations_only_does_not_write_report_or_ledger(monkeypatch, tmp_p
     print_recommendations(result, limit=1)
 
     assert result.candidates[0].assessment.recommendation == "shadow_candidate"
-    assert "shadow_candidate" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "shadow_candidate" in output
+    assert "clob=not_enriched" in output
     conn = get_connection(str(db_path))
     opp_count = conn.execute("SELECT COUNT(*) FROM polymarket_opportunities").fetchone()[0]
     shadow_count = conn.execute("SELECT COUNT(*) FROM polymarket_shadow_trades").fetchone()[0]

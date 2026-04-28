@@ -129,6 +129,9 @@ class PolymarketMarketSnapshot:
     yes_probability: float | None
     probability_source: str
     spread: float | None
+    clob_status: str
+    clob_reason: str | None
+    clob_token_id: str | None
     liquidity: float
     volume: float
     liquidity_score: float
@@ -149,6 +152,9 @@ class PolymarketMarketSnapshot:
             "yes_probability": round(self.yes_probability, 6) if self.yes_probability is not None else None,
             "probability_source": self.probability_source,
             "spread": round(self.spread, 6) if self.spread is not None else None,
+            "clob_status": self.clob_status,
+            "clob_reason": self.clob_reason,
+            "clob_token_id": self.clob_token_id,
             "liquidity": round(self.liquidity, 2),
             "volume": round(self.volume, 2),
             "liquidity_score": round(self.liquidity_score, 4),
@@ -354,6 +360,9 @@ def _data_quality_score(market: dict) -> tuple[float, list[str]]:
     liquidity_score = _liquidity_score(market)
     if "poly_clob_spread" not in market:
         flags.append("missing_clob_spread")
+    clob_status = str(market.get("poly_clob_status") or "not_enriched")
+    if source != "clob_midpoint":
+        flags.append(f"clob_{clob_status}")
     if spread_score < 0.35:
         flags.append("wide_spread")
     if liquidity_score < 0.20:
@@ -439,6 +448,17 @@ def normalize_market_snapshot(market: dict) -> PolymarketMarketSnapshot:
         spread=_to_float(market.get("poly_clob_spread"), default=float("nan"))
         if "poly_clob_spread" in market
         else None,
+        clob_status=str(market.get("poly_clob_status") or "not_enriched"),
+        clob_reason=(
+            str(market.get("poly_clob_reason"))
+            if market.get("poly_clob_reason") is not None
+            else None
+        ),
+        clob_token_id=(
+            str(market.get("poly_clob_token_id"))
+            if market.get("poly_clob_token_id") is not None
+            else None
+        ),
         liquidity=_market_liquidity(market),
         volume=_market_volume(market),
         liquidity_score=_liquidity_score(market),
@@ -535,17 +555,36 @@ def enrich_clob_snapshots(markets: list[dict], max_markets: int = 12) -> list[di
     for market in candidates:
         out = dict(market)
         token_id = _yes_token_id(out)
-        if token_id and fetched < max_markets:
+        if token_id:
+            out["poly_clob_token_id"] = token_id
+        if not token_id:
+            out["poly_clob_status"] = "no_token_id"
+            out["poly_clob_reason"] = "Gamma payload did not include a usable YES CLOB token ID"
+        elif fetched >= max_markets:
+            out["poly_clob_status"] = "skipped_limit"
+            out["poly_clob_reason"] = f"CLOB enrichment limit reached ({max_markets})"
+        else:
             try:
                 snapshot = fetch_clob_token_snapshot(token_id)
                 if "midpoint" in snapshot:
                     out["poly_clob_midpoint"] = snapshot["midpoint"]
                 if "spread" in snapshot:
                     out["poly_clob_spread"] = snapshot["spread"]
+                if "midpoint" in snapshot and "spread" in snapshot:
+                    out["poly_clob_status"] = "ok"
+                    out["poly_clob_reason"] = "CLOB midpoint and spread fetched"
+                elif snapshot:
+                    out["poly_clob_status"] = "partial"
+                    out["poly_clob_reason"] = "CLOB returned only partial quote data"
+                else:
+                    out["poly_clob_status"] = "empty"
+                    out["poly_clob_reason"] = "CLOB returned no usable midpoint or spread"
                 fetched += 1
                 time.sleep(_SLEEP)
             except Exception as exc:
                 logger.debug("Polymarket CLOB snapshot failed for token %s: %s", token_id, exc)
+                out["poly_clob_status"] = "failed"
+                out["poly_clob_reason"] = str(exc)
         enriched.append(out)
     return enriched
 
