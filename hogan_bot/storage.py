@@ -94,6 +94,64 @@ def _create_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_onchain_symbol ON onchain_metrics (symbol, metric)"
     )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS polymarket_opportunities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_ms INTEGER NOT NULL,
+            symbol TEXT NOT NULL,
+            market_id TEXT NOT NULL,
+            slug TEXT,
+            question TEXT,
+            category TEXT,
+            candidate_side TEXT,
+            crowd_prob REAL,
+            hogan_prob REAL,
+            edge_score REAL,
+            liquidity_score REAL,
+            spread_score REAL,
+            catalyst_score REAL,
+            total_score REAL,
+            rationale TEXT,
+            raw_json TEXT,
+            UNIQUE(ts_ms, symbol, market_id, candidate_side)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_poly_opp_symbol_ts
+        ON polymarket_opportunities(symbol, ts_ms DESC)
+        """
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS polymarket_shadow_trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opened_ts_ms INTEGER NOT NULL,
+            closed_ts_ms INTEGER,
+            symbol TEXT NOT NULL,
+            market_id TEXT NOT NULL,
+            slug TEXT,
+            side TEXT NOT NULL,
+            entry_prob REAL NOT NULL,
+            exit_prob REAL,
+            size_usd REAL NOT NULL,
+            status TEXT NOT NULL,
+            realized_pnl REAL,
+            rationale TEXT,
+            raw_json TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_poly_shadow_status
+        ON polymarket_shadow_trades(status, opened_ts_ms DESC)
+        """
+    )
     
     # -------------------------------------------------------------------
     # Trading / execution journaling (paper + live)
@@ -743,6 +801,161 @@ def load_onchain(
         ORDER BY date
     """
     return pd.read_sql_query(query, conn, params=(symbol, metric))
+
+
+def insert_polymarket_opportunities(
+    conn: sqlite3.Connection,
+    symbol: str,
+    ts_ms: int,
+    opportunities: list[dict],
+) -> int:
+    """Persist ranked Polymarket opportunity snapshots for audit/replay."""
+    if not opportunities:
+        return 0
+    rows = []
+    for opp in opportunities:
+        rows.append((
+            int(ts_ms),
+            symbol,
+            str(opp.get("market_id", "")),
+            opp.get("slug"),
+            opp.get("question"),
+            opp.get("category"),
+            opp.get("candidate_side"),
+            opp.get("crowd_prob"),
+            opp.get("hogan_prob"),
+            opp.get("edge_score"),
+            opp.get("liquidity_score"),
+            opp.get("spread_score"),
+            opp.get("catalyst_score"),
+            opp.get("total_score"),
+            opp.get("rationale"),
+            json.dumps(opp, sort_keys=True),
+        ))
+    conn.executemany(
+        """
+        INSERT OR REPLACE INTO polymarket_opportunities (
+            ts_ms, symbol, market_id, slug, question, category, candidate_side,
+            crowd_prob, hogan_prob, edge_score, liquidity_score, spread_score,
+            catalyst_score, total_score, rationale, raw_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        rows,
+    )
+    conn.commit()
+    return len(rows)
+
+
+def load_polymarket_opportunities(
+    conn: sqlite3.Connection,
+    symbol: str = "BTC/USD",
+    limit: int = 20,
+) -> pd.DataFrame:
+    """Load latest Polymarket opportunity snapshots."""
+    return pd.read_sql_query(
+        """
+        SELECT *
+        FROM polymarket_opportunities
+        WHERE symbol = ?
+        ORDER BY ts_ms DESC, total_score DESC
+        LIMIT ?
+        """,
+        conn,
+        params=(symbol, int(limit)),
+    )
+
+
+def open_polymarket_shadow_trade(
+    conn: sqlite3.Connection,
+    *,
+    opened_ts_ms: int,
+    symbol: str,
+    market_id: str,
+    slug: str,
+    side: str,
+    entry_prob: float,
+    size_usd: float,
+    rationale: str = "",
+    raw: dict | None = None,
+) -> int:
+    """Record a hypothetical Polymarket position. Analysis-only."""
+    cur = conn.execute(
+        """
+        INSERT INTO polymarket_shadow_trades (
+            opened_ts_ms, symbol, market_id, slug, side, entry_prob, size_usd,
+            status, rationale, raw_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)
+        """,
+        (
+            int(opened_ts_ms),
+            symbol,
+            market_id,
+            slug,
+            side,
+            float(entry_prob),
+            float(size_usd),
+            rationale,
+            json.dumps(raw or {}, sort_keys=True),
+        ),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def close_polymarket_shadow_trade(
+    conn: sqlite3.Connection,
+    trade_id: int,
+    *,
+    closed_ts_ms: int,
+    exit_prob: float,
+) -> float:
+    """Close a hypothetical position and return simulated PnL in dollars."""
+    row = conn.execute(
+        """
+        SELECT side, entry_prob, size_usd
+        FROM polymarket_shadow_trades
+        WHERE id = ? AND status = 'open'
+        """,
+        (int(trade_id),),
+    ).fetchone()
+    if row is None:
+        raise ValueError(f"open Polymarket shadow trade not found: {trade_id}")
+    side, entry_prob, size_usd = str(row[0]), float(row[1]), float(row[2])
+    prob_delta = float(exit_prob) - entry_prob
+    if side == "buy_no":
+        prob_delta = -prob_delta
+    pnl = size_usd * prob_delta
+    conn.execute(
+        """
+        UPDATE polymarket_shadow_trades
+        SET closed_ts_ms = ?, exit_prob = ?, realized_pnl = ?, status = 'closed'
+        WHERE id = ?
+        """,
+        (int(closed_ts_ms), float(exit_prob), float(pnl), int(trade_id)),
+    )
+    conn.commit()
+    return float(pnl)
+
+
+def summarize_polymarket_shadow_trades(conn: sqlite3.Connection) -> dict[str, float]:
+    """Return compact promotion metrics for closed shadow trades."""
+    rows = conn.execute(
+        """
+        SELECT realized_pnl
+        FROM polymarket_shadow_trades
+        WHERE status = 'closed' AND realized_pnl IS NOT NULL
+        """
+    ).fetchall()
+    pnls = [float(r[0]) for r in rows]
+    if not pnls:
+        return {"trades": 0.0, "total_pnl": 0.0, "win_rate": 0.0, "avg_pnl": 0.0}
+    wins = sum(1 for pnl in pnls if pnl > 0)
+    return {
+        "trades": float(len(pnls)),
+        "total_pnl": float(sum(pnls)),
+        "win_rate": wins / len(pnls),
+        "avg_pnl": float(sum(pnls) / len(pnls)),
+    }
 
 
 def available_symbols(conn: sqlite3.Connection) -> list[tuple[str, str, int]]:

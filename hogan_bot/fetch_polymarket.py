@@ -519,7 +519,11 @@ def fetch_and_store(
     hogan_eth_bull_prob: float | None = None,
 ) -> int:
     """Fetch active Polymarket markets and store compact daily metrics."""
-    from hogan_bot.storage import get_connection, upsert_onchain
+    from hogan_bot.storage import (
+        get_connection,
+        insert_polymarket_opportunities,
+        upsert_onchain,
+    )
 
     logger.info("Fetching Polymarket public markets (limit=%d)", limit)
     markets = fetch_active_markets(limit=limit)
@@ -544,7 +548,15 @@ def fetch_and_store(
     records = [(today, metric, value) for metric, value in sorted(metrics.items())]
     conn = get_connection(db_path)
     try:
-        return upsert_onchain(conn, symbol, records)
+        written = upsert_onchain(conn, symbol, records)
+        if top_opps:
+            insert_polymarket_opportunities(
+                conn,
+                symbol,
+                int(time.time() * 1000),
+                [opp.to_dict() for opp in top_opps],
+            )
+        return written
     finally:
         conn.close()
 
