@@ -39,16 +39,22 @@ class TestComputeWindows:
 
 
 class TestWalkForwardReport:
-    def _make_report(self, returns: list[float], sharpes: list[float]) -> WalkForwardReport:
+    def _make_report(
+        self,
+        returns: list[float],
+        sharpes: list[float],
+        calmars: list[float] | None = None,
+    ) -> WalkForwardReport:
         cfg = WFConfig(min_windows_positive=3, min_sharpe=0.5, max_drawdown_pct=15.0)
+        calmars = calmars or [1.0] * len(returns)
         report = WalkForwardReport(config=cfg)
-        for i, (ret, sh) in enumerate(zip(returns, sharpes)):
+        for i, (ret, sh, calmar) in enumerate(zip(returns, sharpes, calmars)):
             report.windows.append(WindowResult(
                 window_idx=i, train_start=0, train_end=1000,
                 test_start=1000, test_end=1500,
                 train_bars=1000, test_bars=500,
                 total_return_pct=ret, max_drawdown_pct=5.0,
-                sharpe=sh, trades=10, win_rate=0.5,
+                sharpe=sh, calmar=calmar, trades=10, win_rate=0.5,
                 net_positive=ret > 0,
             ))
         return report
@@ -74,6 +80,16 @@ class TestWalkForwardReport:
             returns=[0.1, 0.1, 0.1, 0.1, 0.1],
             sharpes=[0.1, 0.1, 0.1, 0.1, 0.1],
         )
+        assert report.passes_gate is False
+
+    def test_fails_gate_negative_calmar_when_threshold_zero(self):
+        report = self._make_report(
+            returns=[2.0, 1.5, 3.0, 0.5, 1.0],
+            sharpes=[1.2, 0.8, 1.5, 0.6, 0.9],
+            calmars=[-0.2, -0.1, -0.3, -0.1, -0.2],
+        )
+        assert report.config.min_calmar == 0.0
+        assert report.mean_calmar < 0.0
         assert report.passes_gate is False
 
     def test_summary_structure(self):

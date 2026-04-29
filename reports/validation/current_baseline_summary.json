@@ -1,0 +1,124 @@
+{
+  "generated_at_utc": "2026-04-29T17:43:00Z",
+  "manifest_path": "reports\\validation\\manifest_20260401T173938Z.json",
+  "db": "data/hogan.db",
+  "required_passes": 3,
+  "actual_passes": 0,
+  "recommendation": "HOLD",
+  "scenarios": [
+    {
+      "scenario": "baseline_no_ml",
+      "exit_code": 0,
+      "passes_gate": false,
+      "report_json": "reports\\validation\\wf_baseline_no_ml_20260401T173938Z.json",
+      "n_windows": 5,
+      "n_positive": 0,
+      "total_trades": 1307,
+      "mean_return_pct": -12.3007,
+      "mean_sharpe": -6.1512,
+      "mean_calmar": -0.9937,
+      "worst_calmar": -1.0,
+      "worst_drawdown_pct": 15.78,
+      "gate_config": {
+        "min_sharpe": 0.5,
+        "min_calmar": 0.0,
+        "max_drawdown_pct": 15.0,
+        "min_total_trades": 25,
+        "min_trades_per_window": 5,
+        "min_windows_positive": 3
+      }
+    },
+    {
+      "scenario": "ml_filter",
+      "exit_code": 0,
+      "passes_gate": false,
+      "report_json": "reports\\validation\\wf_ml_filter_20260401T173938Z.json",
+      "n_windows": 5,
+      "n_positive": 0,
+      "total_trades": 478,
+      "mean_return_pct": -1.0915,
+      "mean_sharpe": -4.0003,
+      "mean_calmar": -0.9392,
+      "worst_calmar": -1.0,
+      "worst_drawdown_pct": 1.95,
+      "gate_config": {
+        "min_sharpe": 0.5,
+        "min_calmar": 0.0,
+        "max_drawdown_pct": 15.0,
+        "min_total_trades": 25,
+        "min_trades_per_window": 5,
+        "min_windows_positive": 3
+      }
+    },
+    {
+      "scenario": "ml_sizer",
+      "exit_code": 0,
+      "passes_gate": false,
+      "report_json": "reports\\validation\\wf_ml_sizer_20260401T173938Z.json",
+      "n_windows": 5,
+      "n_positive": 0,
+      "total_trades": 1318,
+      "mean_return_pct": -9.7383,
+      "mean_sharpe": -6.7244,
+      "mean_calmar": -0.987,
+      "worst_calmar": -1.0,
+      "worst_drawdown_pct": 11.65,
+      "gate_config": {
+        "min_sharpe": 0.5,
+        "min_calmar": 0.0,
+        "max_drawdown_pct": 15.0,
+        "min_total_trades": 25,
+        "min_trades_per_window": 5,
+        "min_windows_positive": 3
+      }
+    },
+    {
+      "scenario": "ml_sizer_macro",
+      "exit_code": 0,
+      "passes_gate": false,
+      "report_json": "reports\\validation\\wf_ml_sizer_macro_20260401T173938Z.json",
+      "n_windows": 5,
+      "n_positive": 0,
+      "total_trades": 1213,
+      "mean_return_pct": -8.2007,
+      "mean_sharpe": -6.0696,
+      "mean_calmar": -0.9869,
+      "worst_calmar": -1.0,
+      "worst_drawdown_pct": 9.91,
+      "gate_config": {
+        "min_sharpe": 0.5,
+        "min_calmar": 0.0,
+        "max_drawdown_pct": 15.0,
+        "min_total_trades": 25,
+        "min_trades_per_window": 5,
+        "min_windows_positive": 3
+      }
+    },
+    {
+      "scenario": "regime_models",
+      "exit_code": 0,
+      "passes_gate": false,
+      "report_json": "reports\\validation\\wf_regime_models_20260401T173938Z.json",
+      "n_windows": 5,
+      "n_positive": 0,
+      "total_trades": 888,
+      "mean_return_pct": -3.5949,
+      "mean_sharpe": -4.1664,
+      "mean_calmar": -0.9802,
+      "worst_calmar": -1.0,
+      "worst_drawdown_pct": 4.86,
+      "gate_config": {
+        "min_sharpe": 0.5,
+        "min_calmar": 0.0,
+        "max_drawdown_pct": 15.0,
+        "min_total_trades": 25,
+        "min_trades_per_window": 5,
+        "min_windows_positive": 3
+      }
+    }
+  ],
+  "notes": [
+    "Calmar is an active promotion gate when min_calmar is 0.0.",
+    "A HOLD recommendation means do not scale autonomy or live-like size from this package."
+  ]
+}

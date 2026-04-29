@@ -222,6 +222,47 @@ class TestSignalPathParity:
         assert qc1.ml_separation == pytest.approx(qc2.ml_separation)
         assert qc1.spread_penalty == pytest.approx(qc2.spread_penalty)
 
+    def test_live_evaluator_delegates_to_policy_core(self, monkeypatch):
+        """The live evaluator must route through policy_core.decide."""
+        from hogan_bot import event_loop
+        from hogan_bot.swarm_decision.types import DecisionIntent
+
+        cfg = _make_config(use_policy_core=True)
+        calls = {}
+
+        class FakePipeline:
+            pass
+
+        def fake_decide(**kwargs):
+            calls.update(kwargs)
+            return DecisionIntent(
+                action="buy",
+                confidence=0.61,
+                size_usd=2500.0,
+                stop_distance_pct=0.015,
+                up_prob=0.57,
+                regime="ranging",
+                atr_pct=0.02,
+                tech_confidence=0.55,
+                explanation="policy-core fixture",
+                raw_tech_action="buy",
+                pipeline_action="buy",
+            )
+
+        monkeypatch.setattr(event_loop, "AgentPipeline", lambda config, conn=None: FakePipeline())
+        monkeypatch.setattr("hogan_bot.policy_core.decide", fake_decide)
+
+        evaluator = event_loop.SignalEvaluator(cfg, ml_model=None)
+        candles = _synthetic_candles(200, seed=42)
+        result = evaluator.evaluate("BTC/USD", candles, equity=10_000.0)
+
+        assert result.action == "buy"
+        assert result.size == pytest.approx(2500.0 / candles["close"].iloc[-1])
+        assert result.regime == "ranging"
+        assert calls["mode"] == "live"
+        assert calls["pipeline"] is evaluator.pipeline
+        assert calls["state"] is evaluator._policy_states["BTC/USD"]
+
 
 class TestMlBlindScale:
     """Verify ml_blind_scale detects low-conviction model output."""

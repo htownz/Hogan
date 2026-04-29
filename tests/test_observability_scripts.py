@@ -303,6 +303,12 @@ class TestConfigDefaults:
         cfg = BotConfig()
         assert cfg.use_policy_core is True
 
+    def test_execution_pause_defaults_are_operator_opt_in(self):
+        from hogan_bot.config import BotConfig
+        cfg = BotConfig()
+        assert cfg.pause_new_orders_on_order_circuit is False
+        assert cfg.pause_new_entries_on_dead_man is False
+
     def test_swarm_phase_default(self):
         from hogan_bot.config import BotConfig
         cfg = BotConfig()

@@ -30,6 +30,64 @@ class TrainedModel:
     scaler: object | None = field(default=None)
 
 
+def probability_calibration_report(
+    y_true,
+    y_prob,
+    *,
+    n_bins: int = 10,
+) -> dict[str, object]:
+    """Return Brier/ECE calibration diagnostics for probability sizing.
+
+    Expected calibration error (ECE) compares predicted probabilities with
+    observed hit rates in probability buckets.  Lower is better; unlike AUC,
+    it directly tests whether a 0.60 forecast behaves like a 60% event.
+    """
+    if n_bins <= 0:
+        raise ValueError("n_bins must be positive")
+
+    y_arr = np.asarray(y_true, dtype=float)
+    p_arr = np.clip(np.asarray(y_prob, dtype=float), 0.0, 1.0)
+    if len(y_arr) != len(p_arr):
+        raise ValueError("y_true and y_prob must have the same length")
+    if len(y_arr) == 0:
+        return {"brier": 0.0, "ece": 0.0, "bins": []}
+
+    brier = float(np.mean((p_arr - y_arr) ** 2))
+    edges = np.linspace(0.0, 1.0, n_bins + 1)
+    bins: list[dict[str, float | int]] = []
+    ece = 0.0
+    total = float(len(y_arr))
+
+    for idx in range(n_bins):
+        lo = edges[idx]
+        hi = edges[idx + 1]
+        if idx == n_bins - 1:
+            mask = (p_arr >= lo) & (p_arr <= hi)
+        else:
+            mask = (p_arr >= lo) & (p_arr < hi)
+        count = int(mask.sum())
+        if count == 0:
+            continue
+        mean_pred = float(p_arr[mask].mean())
+        observed_rate = float(y_arr[mask].mean())
+        abs_gap = abs(mean_pred - observed_rate)
+        ece += (count / total) * abs_gap
+        bins.append({
+            "lower": round(float(lo), 4),
+            "upper": round(float(hi), 4),
+            "count": count,
+            "mean_pred": round(mean_pred, 4),
+            "observed_rate": round(observed_rate, 4),
+            "abs_gap": round(abs_gap, 4),
+        })
+
+    return {
+        "brier": round(brier, 6),
+        "ece": round(float(ece), 6),
+        "bins": bins,
+    }
+
+
 class RegimeModelRouter:
     """Routes ML predictions to regime-specific models.
 
@@ -919,7 +977,6 @@ def train_logistic_regression(
         from sklearn.linear_model import LogisticRegression
         from sklearn.metrics import (
             accuracy_score,
-            brier_score_loss,
             f1_score,
             precision_score,
             recall_score,
@@ -969,12 +1026,15 @@ def train_logistic_regression(
     proba = model.predict_proba(x_test_sc)[:, 1]
 
     auc = float(roc_auc_score(y_test, proba)) if len(set(y_test)) > 1 else 0.5
+    calibration = probability_calibration_report(y_test, proba)
     metrics: dict[str, object] = {
         "model_type": "logistic_regression",
         "best_C": best_C,
         "accuracy": float(accuracy_score(y_test, pred)),
         "roc_auc": auc,
-        "brier": float(brier_score_loss(y_test, proba)),
+        "brier": calibration["brier"],
+        "ece": calibration["ece"],
+        "calibration_bins": calibration["bins"],
         "precision": float(precision_score(y_test, pred, zero_division=0)),
         "recall": float(recall_score(y_test, pred, zero_division=0)),
         "f1": float(f1_score(y_test, pred, zero_division=0)),
@@ -1051,6 +1111,7 @@ def train_random_forest(
     proba = model.predict_proba(x_test)[:, 1]
 
     auc = float(roc_auc_score(y_test, proba)) if len(set(y_test)) > 1 else 0.5
+    calibration = probability_calibration_report(y_test, proba)
     importances = {
         col: float(imp) for col, imp in zip(feature_columns, model.feature_importances_)
     }
@@ -1058,6 +1119,9 @@ def train_random_forest(
         "model_type": "random_forest",
         "accuracy": float(accuracy_score(y_test, pred)),
         "roc_auc": auc,
+        "brier": calibration["brier"],
+        "ece": calibration["ece"],
+        "calibration_bins": calibration["bins"],
         "precision": float(precision_score(y_test, pred, zero_division=0)),
         "recall": float(recall_score(y_test, pred, zero_division=0)),
         "f1": float(f1_score(y_test, pred, zero_division=0)),

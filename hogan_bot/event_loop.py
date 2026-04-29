@@ -804,6 +804,15 @@ async def _run_event_loop_inner(
         else:
             executor = PaperExecution(portfolio=portfolio, conn=conn, exchange_id="paper")
 
+    _exec_mode = "live" if allow_live else "paper"
+    _exec_exchange = config.exchange_id if allow_live else "paper"
+    _record_exec_outcome_raw = record_exec_outcome
+
+    def record_exec_outcome(*args, **kwargs) -> None:  # type: ignore[no-redef]
+        kwargs.setdefault("mode", _exec_mode)
+        kwargs.setdefault("exchange", _exec_exchange)
+        _record_exec_outcome_raw(*args, **kwargs)
+
     # Reconcile portfolio with DB: restore open paper trades from prior session
     try:
         _open_trades = conn.execute(
@@ -1604,6 +1613,16 @@ async def _run_event_loop_inner(
             else:
                 _exec_health.record_candle_received()
 
+            _new_entry_pause_reasons = _exec_health.new_entry_pause_reasons(
+                pause_on_order_circuit=getattr(
+                    config, "pause_new_orders_on_order_circuit", False,
+                ),
+                pause_on_dead_man=getattr(
+                    config, "pause_new_entries_on_dead_man", False,
+                ),
+                pause_on_gap_guard=True,
+            )
+
             # FX session filter: block trading during off-hours/weekends
             if _fx_session_filter is not None:
                 _fx_allowed, _fx_scale, _fx_reason = _fx_session_filter.should_trade()
@@ -1824,7 +1843,12 @@ async def _run_event_loop_inner(
                             logger.info("COVER_SHORT %s px=%.2f qty=%.6f equity=%.2f reason=buy_signal ok=%s",
                                         symbol, cover_px, cover_qty, equity, res.ok)
 
-                if not sig.eff_allow_longs:
+                if _new_entry_pause_reasons:
+                    logger.info(
+                        "BUY_BLOCK %s — execution-health pause for new entries: %s",
+                        symbol, ",".join(_new_entry_pause_reasons),
+                    )
+                elif not sig.eff_allow_longs:
                     logger.info("BUY_BLOCK %s — regime %s disallows longs (eff_allow_longs=False)", symbol, _sym_regime)
                 elif symbol in portfolio.positions:
                     pass  # already long
@@ -2093,9 +2117,15 @@ async def _run_event_loop_inner(
                     and symbol not in portfolio.positions
                     and symbol not in portfolio.short_positions
                     and _fx_session_ok
+                    and not _new_entry_pause_reasons
                 )
                 if _closed_long_this_bar and not enable_close_and_reverse:
                     _allow_short_entry = False
+                if _new_entry_pause_reasons and enable_shorts and not _closed_long_this_bar:
+                    logger.info(
+                        "SHORT_BLOCK %s — execution-health pause for new entries: %s",
+                        symbol, ",".join(_new_entry_pause_reasons),
+                    )
                 if _allow_short_entry:
                     if _closed_long_this_bar:
                         _cooldown_remaining = 0

@@ -22,6 +22,7 @@ from hogan_bot.ml import (
     build_feature_frame,
     build_training_set,
     predict_up_probability,
+    probability_calibration_report,
     train_lightgbm,
     train_logistic_regression,
     train_random_forest,
@@ -120,7 +121,7 @@ class LogRegTrainingTests(unittest.TestCase):
 
     def test_metrics_keys_present(self):
         metrics = train_logistic_regression(self.df, model_path=self.tmp)
-        for key in ("accuracy", "roc_auc", "precision", "recall", "f1", "train_rows", "test_rows", "features"):
+        for key in ("accuracy", "roc_auc", "brier", "ece", "calibration_bins", "precision", "recall", "f1", "train_rows", "test_rows", "features"):
             self.assertIn(key, metrics)
 
     def test_model_type_reported(self):
@@ -175,7 +176,7 @@ class RandomForestTrainingTests(unittest.TestCase):
 
     def test_metrics_keys_present(self):
         metrics = train_random_forest(self.df, model_path=self.tmp)
-        for key in ("accuracy", "roc_auc", "precision", "recall", "f1", "feature_importances"):
+        for key in ("accuracy", "roc_auc", "brier", "ece", "calibration_bins", "precision", "recall", "f1", "feature_importances"):
             self.assertIn(key, metrics)
 
     def test_model_type_reported(self):
@@ -202,6 +203,24 @@ class RandomForestTrainingTests(unittest.TestCase):
         prob = predict_up_probability(self.df, artifact)
         self.assertGreaterEqual(prob, 0.0)
         self.assertLessEqual(prob, 1.0)
+
+
+class CalibrationTests(unittest.TestCase):
+    def test_probability_calibration_report_bounds(self):
+        report = probability_calibration_report(
+            [0, 1, 1, 0],
+            [0.1, 0.8, 0.7, 0.4],
+            n_bins=2,
+        )
+        self.assertGreaterEqual(report["brier"], 0.0)
+        self.assertLessEqual(report["brier"], 1.0)
+        self.assertGreaterEqual(report["ece"], 0.0)
+        self.assertLessEqual(report["ece"], 1.0)
+        self.assertTrue(report["bins"])
+
+    def test_probability_calibration_report_rejects_bad_bins(self):
+        with self.assertRaises(ValueError):
+            probability_calibration_report([0], [0.5], n_bins=0)
 
 
 @unittest.skipUnless(pd is not None, "pandas not installed")

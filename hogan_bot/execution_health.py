@@ -105,6 +105,23 @@ class ExecutionHealthState:
     def order_failure_circuit_open(self) -> bool:
         return self.consecutive_order_failures >= self._ORDER_FAILURE_CIRCUIT_THRESHOLD
 
+    def new_entry_pause_reasons(
+        self,
+        *,
+        pause_on_order_circuit: bool = False,
+        pause_on_dead_man: bool = False,
+        pause_on_gap_guard: bool = True,
+    ) -> list[str]:
+        """Reasons new entries should pause while exits remain allowed."""
+        reasons: list[str] = []
+        if pause_on_order_circuit and self.order_failure_circuit_open:
+            reasons.append("order_failure_circuit")
+        if pause_on_dead_man and self.dead_man_triggered:
+            reasons.append("dead_man")
+        if pause_on_gap_guard and self.gap_guard_active:
+            reasons.append("gap_guard")
+        return reasons
+
     def health_snapshot(self) -> dict:
         """Current execution health for dashboards and operator alerts."""
         now = time.time()
@@ -238,6 +255,8 @@ def record_exec_outcome(
     decision_price: float,
     result: object,
     fill_price: float | None = None,
+    mode: str = "live",
+    exchange: str = "unknown",
 ) -> None:
     """Convenience wrapper called from event_loop after each _safe_exec.
 
@@ -256,6 +275,8 @@ def record_exec_outcome(
             fill_price=fp,
             ok=ok,
             error=str(error) if error else None,
+            mode=mode,
+            exchange=exchange,
         )
         health.record_order(outcome)
     except Exception as exc:

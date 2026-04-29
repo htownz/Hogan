@@ -75,6 +75,17 @@ class TestExecutionHealthState:
         assert len(alerts) == 1
         assert alerts[0]["level"] == "critical"
 
+    def test_new_entry_pause_reasons_are_opt_in(self) -> None:
+        h = ExecutionHealthState()
+        for _ in range(5):
+            h.record_order(_fail_outcome())
+        h.dead_man_triggered = True
+        assert h.new_entry_pause_reasons() == []
+        assert h.new_entry_pause_reasons(
+            pause_on_order_circuit=True,
+            pause_on_dead_man=True,
+        ) == ["order_failure_circuit", "dead_man"]
+
     def test_slippage_stats(self) -> None:
         h = ExecutionHealthState()
         h.record_order(OrderOutcome(ts=time.time(), symbol="X", side="open_long",
@@ -163,9 +174,12 @@ class TestRecordExecOutcome:
             error = None
 
         record_exec_outcome(h, symbol="BTC/USD", side="open_long",
-                            decision_price=100.0, result=FakeResult())
+                            decision_price=100.0, result=FakeResult(),
+                            mode="paper", exchange="paper")
         assert h.health_snapshot()["orders_total"] == 1
         assert h.health_snapshot()["orders_ok"] == 1
+        assert h._orders[0].mode == "paper"
+        assert h._orders[0].exchange == "paper"
 
     def test_convenience_wrapper_fail(self) -> None:
         h = ExecutionHealthState()

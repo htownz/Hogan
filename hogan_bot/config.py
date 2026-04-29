@@ -289,6 +289,11 @@ class BotConfig:
     # where the swarm is inert.
     use_policy_core: bool = True
 
+    # Execution-health safety toggles.  These pause new entries only; exits
+    # and emergency flatten paths stay available for risk reduction.
+    pause_new_orders_on_order_circuit: bool = False
+    pause_new_entries_on_dead_man: bool = False
+
     # Swarm Decision Layer
     swarm_enabled: bool = True
     swarm_mode: str = "conditional_active"
@@ -924,6 +929,12 @@ def load_config() -> BotConfig:
         macro_equity_ma_period=_env_int("HOGAN_MACRO_EQUITY_MA", "20"),
         use_rl_agent=os.getenv("HOGAN_USE_RL_AGENT", "false").lower() == "true",
         use_policy_core=os.getenv("HOGAN_USE_POLICY_CORE", "true").lower() == "true",
+        pause_new_orders_on_order_circuit=os.getenv(
+            "HOGAN_PAUSE_NEW_ORDERS_ON_ORDER_CIRCUIT", "false"
+        ).lower() == "true",
+        pause_new_entries_on_dead_man=os.getenv(
+            "HOGAN_PAUSE_NEW_ENTRIES_ON_DEAD_MAN", "false"
+        ).lower() == "true",
         swarm_enabled=os.getenv("HOGAN_SWARM_ENABLED", "true").lower() == "true",
         swarm_mode=os.getenv("HOGAN_SWARM_MODE", "conditional_active"),
         swarm_phase=os.getenv("HOGAN_SWARM_PHASE", "certification"),

@@ -334,6 +334,9 @@ def train_trade_quality_model(
         auc = roc_auc_score(y_test, y_proba)
     except ValueError:
         auc = 0.5
+    from hogan_bot.ml import probability_calibration_report
+
+    calibration = probability_calibration_report(y_test, y_proba)
 
     metrics = {
         "model_type": type(model).__name__,
@@ -343,6 +346,9 @@ def train_trade_quality_model(
         "embargo_bars": int(embargo_bars),
         "accuracy": round(accuracy_score(y_test, y_pred), 4),
         "roc_auc": round(auc, 4),
+        "brier": calibration["brier"],
+        "ece": calibration["ece"],
+        "calibration_bins": calibration["bins"],
         "precision": round(precision_score(y_test, y_pred, zero_division=0), 4),
         "recall": round(recall_score(y_test, y_pred, zero_division=0), 4),
         "f1": round(f1_score(y_test, y_pred, zero_division=0), 4),
@@ -537,6 +543,9 @@ def walk_forward_validate(
             auc = roc_auc_score(y_test, y_proba)
         except ValueError:
             auc = 0.5
+        from hogan_bot.ml import probability_calibration_report
+
+        calibration = probability_calibration_report(y_test, y_proba)
 
         high_q = y_proba >= 0.50
         low_q = y_proba < 0.50
@@ -552,6 +561,8 @@ def walk_forward_validate(
             "test_trades": len(X_test),
             "test_good_rate": round(float(y_test.mean()), 4),
             "auc": round(auc, 4),
+            "brier": calibration["brier"],
+            "ece": calibration["ece"],
             "high_quality_trades": int(high_q.sum()),
             "high_quality_avg_pnl": round(float(high_q_pnl), 4),
             "low_quality_trades": int(low_q.sum()),
@@ -571,6 +582,8 @@ def walk_forward_validate(
     return {
         "n_windows": len(results),
         "mean_auc": round(np.mean([r["auc"] for r in results]), 4),
+        "mean_brier": round(np.mean([r["brier"] for r in results]), 4),
+        "mean_ece": round(np.mean([r["ece"] for r in results]), 4),
         "mean_separation": round(np.mean([r["separation"] for r in results]), 4),
         "mean_high_q_pnl": round(np.mean([r["high_quality_avg_pnl"] for r in results]), 4),
         "mean_low_q_pnl": round(np.mean([r["low_quality_avg_pnl"] for r in results]), 4),

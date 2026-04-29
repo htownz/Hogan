@@ -185,7 +185,7 @@ class WalkForwardReport:
             return False
         if self.worst_drawdown > self.config.max_drawdown_pct:
             return False
-        if self.config.min_calmar > 0 and self.mean_calmar < self.config.min_calmar:
+        if self.mean_calmar < self.config.min_calmar:
             return False
         return True
 
@@ -779,7 +779,7 @@ def main() -> None:
     p.add_argument("--min-test", type=int, default=200)
     p.add_argument("--min-sharpe", type=float, default=0.5)
     p.add_argument("--min-calmar", type=float, default=0.0,
-                   help="Minimum mean Calmar (return/DD) across windows (0 = disabled)")
+                   help="Minimum mean Calmar (return/DD) across windows; default 0 enforces positive profit-per-drawdown")
     p.add_argument("--max-dd", type=float, default=15.0)
     p.add_argument("--no-ml", action="store_true", help="Disable ML filter (technical pipeline only)")
     p.add_argument("--ml-sizer", action="store_true", help="Use ML probability as continuous position sizer instead of binary filter")

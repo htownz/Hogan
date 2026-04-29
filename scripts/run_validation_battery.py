@@ -53,6 +53,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--symbol", default="BTC/USD")
     parser.add_argument("--timeframe", default="1h")
     parser.add_argument("--n-splits", type=int, default=5)
+    parser.add_argument(
+        "--min-calmar",
+        type=float,
+        default=0.0,
+        help="Minimum mean Calmar required by each walk-forward scenario.",
+    )
     parser.add_argument("--skip-walk-forward", action="store_true")
     parser.add_argument("--skip-certification", action="store_true")
     parser.add_argument(
@@ -111,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
                 "--symbol", args.symbol,
                 "--timeframe", args.timeframe,
                 "--n-splits", str(args.n_splits),
+                "--min-calmar", str(args.min_calmar),
                 "--output", str(wf_json.relative_to(_PROJECT_ROOT)),
                 *scen_flags,
             ]
