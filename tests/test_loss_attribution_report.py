@@ -20,13 +20,15 @@ def test_loss_attribution_groups_dominant_buckets(tmp_path):
                         {
                             "side": "long",
                             "pnl_pct": -1.2,
-                            "regime": "ranging",
+                            "entry_regime": "ranging",
+                            "exit_regime": "trending_down",
                             "exit_reason": "proactive_trend_reversal",
                         },
                         {
                             "side": "short",
                             "pnl_pct": 0.8,
-                            "regime": "volatile",
+                            "entry_regime": "volatile",
+                            "exit_regime": "volatile",
                             "exit_reason": "short_max_hold_time",
                         },
                     ],
@@ -40,7 +42,11 @@ def test_loss_attribution_groups_dominant_buckets(tmp_path):
 
     assert report["summary"]["trades"] == 2
     assert report["summary"]["loss_rate"] == 0.5
+    assert report["by_regime"] == report["by_entry_regime"]
+    assert report["by_entry_regime"]["ranging"]["loss_drag_pct"] == -1.2
+    assert report["by_exit_regime"]["trending_down"]["loss_drag_pct"] == -1.2
     assert report["by_exit_reason"]["proactive_trend_reversal"]["loss_drag_pct"] == -1.2
     assert report["top_loss_buckets"][0]["bucket"] == "ranging|long|proactive_trend_reversal"
+    assert report["top_exit_loss_buckets"][0]["bucket"] == "trending_down|long|proactive_trend_reversal"
     assert report["gate_and_block_counts"]["quality_gate_final_conf"] == 3
     assert report["gate_and_block_counts"]["blocked_already_long"] == 2

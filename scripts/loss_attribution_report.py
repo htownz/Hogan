@@ -87,10 +87,12 @@ def _aggregate_funnel(payloads: list[dict[str, Any]]) -> dict[str, int | float]:
 
 def build_report(paths: list[Path]) -> dict[str, Any]:
     payloads = [_load_json(path) for path in paths]
-    by_regime: dict[str, dict[str, float | int]] = defaultdict(_bucket)
+    by_entry_regime: dict[str, dict[str, float | int]] = defaultdict(_bucket)
+    by_exit_regime: dict[str, dict[str, float | int]] = defaultdict(_bucket)
     by_side: dict[str, dict[str, float | int]] = defaultdict(_bucket)
     by_exit: dict[str, dict[str, float | int]] = defaultdict(_bucket)
-    by_regime_side_exit: dict[str, dict[str, float | int]] = defaultdict(_bucket)
+    by_entry_regime_side_exit: dict[str, dict[str, float | int]] = defaultdict(_bucket)
+    by_exit_regime_side_exit: dict[str, dict[str, float | int]] = defaultdict(_bucket)
 
     all_trades: list[dict[str, Any]] = []
     for payload in payloads:
@@ -98,14 +100,17 @@ def build_report(paths: list[Path]) -> dict[str, Any]:
 
     for trade in all_trades:
         pnl = float(trade.get("pnl_pct", 0.0) or 0.0)
-        regime = str(trade.get("regime") or trade.get("entry_regime") or "unknown")
+        entry_regime = str(trade.get("entry_regime") or trade.get("regime") or "unknown")
+        exit_regime = str(trade.get("exit_regime") or "unknown")
         side = str(trade.get("side") or "unknown")
         exit_reason = str(trade.get("exit_reason") or trade.get("close_reason") or "unknown")
 
-        _add_trade(by_regime[regime], pnl)
+        _add_trade(by_entry_regime[entry_regime], pnl)
+        _add_trade(by_exit_regime[exit_regime], pnl)
         _add_trade(by_side[side], pnl)
         _add_trade(by_exit[exit_reason], pnl)
-        _add_trade(by_regime_side_exit[f"{regime}|{side}|{exit_reason}"], pnl)
+        _add_trade(by_entry_regime_side_exit[f"{entry_regime}|{side}|{exit_reason}"], pnl)
+        _add_trade(by_exit_regime_side_exit[f"{exit_regime}|{side}|{exit_reason}"], pnl)
 
     funnel = _aggregate_funnel(payloads)
     block_or_gate_counts = {
@@ -114,11 +119,18 @@ def build_report(paths: list[Path]) -> dict[str, Any]:
         if "block" in key or "gate" in key or "filter" in key
     }
 
-    finalized_combo = {
-        key: _finalize_bucket(value) for key, value in by_regime_side_exit.items()
+    finalized_entry_combo = {
+        key: _finalize_bucket(value) for key, value in by_entry_regime_side_exit.items()
     }
     top_loss_buckets = sorted(
-        finalized_combo.items(),
+        finalized_entry_combo.items(),
+        key=lambda item: item[1]["loss_drag_pct"],
+    )[:20]
+    finalized_exit_combo = {
+        key: _finalize_bucket(value) for key, value in by_exit_regime_side_exit.items()
+    }
+    top_exit_loss_buckets = sorted(
+        finalized_exit_combo.items(),
         key=lambda item: item[1]["loss_drag_pct"],
     )[:20]
 
@@ -136,11 +148,16 @@ def build_report(paths: list[Path]) -> dict[str, Any]:
             "loss_drag_pct": round(sum(losses), 4),
             "worst_loss_pct": round(min(losses), 4) if losses else 0.0,
         },
-        "by_regime": {key: _finalize_bucket(value) for key, value in by_regime.items()},
+        "by_regime": {key: _finalize_bucket(value) for key, value in by_entry_regime.items()},
+        "by_entry_regime": {key: _finalize_bucket(value) for key, value in by_entry_regime.items()},
+        "by_exit_regime": {key: _finalize_bucket(value) for key, value in by_exit_regime.items()},
         "by_side": {key: _finalize_bucket(value) for key, value in by_side.items()},
         "by_exit_reason": {key: _finalize_bucket(value) for key, value in by_exit.items()},
         "top_loss_buckets": [
             {"bucket": key, **value} for key, value in top_loss_buckets
+        ],
+        "top_exit_loss_buckets": [
+            {"bucket": key, **value} for key, value in top_exit_loss_buckets
         ],
         "gate_and_block_counts": block_or_gate_counts,
     }

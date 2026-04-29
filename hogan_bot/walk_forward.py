@@ -887,6 +887,8 @@ def main() -> None:
                         "side": t.get("side", "?"),
                         "pnl_pct": round(t.get("pnl_pct", 0), 4),
                         "regime": t.get("entry_regime", "?"),
+                        "entry_regime": t.get("entry_regime", "?"),
+                        "exit_regime": t.get("exit_regime", "?"),
                         "exit_reason": t.get("close_reason", "?"),
                         "bars_held": t.get("bars_held", 0),
                         "entry_bar": t.get("entry_bar_idx"),
