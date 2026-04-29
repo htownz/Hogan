@@ -28,6 +28,12 @@ def test_loss_attribution_groups_dominant_buckets(tmp_path):
                             "exit_bar": 17,
                             "max_adverse_pct": -1.5,
                             "max_favorable_pct": 0.4,
+                            "entry_context": {
+                                "up_prob": 0.47,
+                                "atr_pct": 0.012,
+                                "quality_scale": 0.8,
+                                "ignored_debug_field": "skip",
+                            },
                         },
                         {
                             "side": "short",
@@ -55,6 +61,11 @@ def test_loss_attribution_groups_dominant_buckets(tmp_path):
     assert report["top_exit_loss_buckets"][0]["bucket"] == "trending_down|long|proactive_trend_reversal"
     assert report["worst_trades_by_entry_bucket"][0]["bucket"] == "ranging|long|proactive_trend_reversal"
     assert report["worst_trades_by_entry_bucket"][0]["worst_trades"][0]["bars_held"] == 7
+    assert report["worst_trades_by_entry_bucket"][0]["worst_trades"][0]["entry_context"] == {
+        "up_prob": 0.47,
+        "atr_pct": 0.012,
+        "quality_scale": 0.8,
+    }
     assert report["worst_trades_by_exit_bucket"][0]["bucket"] == "trending_down|long|proactive_trend_reversal"
     assert report["worst_trades_by_exit_bucket"][0]["worst_trades"][0]["max_adverse_pct"] == -1.5
     assert report["gate_and_block_counts"]["quality_gate_final_conf"] == 3

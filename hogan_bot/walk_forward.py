@@ -860,6 +860,30 @@ def main() -> None:
     for w in report.windows:
         all_closed.extend(w.closed_trades)
 
+    entry_context_keys = (
+        "tech_confidence",
+        "final_confidence",
+        "up_prob",
+        "atr_pct",
+        "regime_confidence",
+        "vol_ratio",
+        "quality_scale",
+        "ranging_scale",
+        "pullback_scale",
+        "momentum_scale",
+        "conf_scale",
+        "whipsaw_count",
+        "spread_est",
+    )
+
+    def _entry_context_sample(trade: dict) -> dict:
+        ctx = trade.get("entry_context") or {}
+        return {
+            key: round(value, 6) if isinstance(value, (int, float)) else value
+            for key in entry_context_keys
+            if (value := ctx.get(key)) is not None
+        }
+
     output = {
         "summary": report.summary(),
         "exit_lifecycle": summarize_exit_lifecycle(all_closed),
@@ -897,6 +921,7 @@ def main() -> None:
                         "exit_price": round(t.get("exit_price", 0), 4),
                         "max_adverse_pct": round(t.get("max_adverse_pct", 0), 4),
                         "max_favorable_pct": round(t.get("max_favorable_pct", 0), 4),
+                        "entry_context": _entry_context_sample(t),
                     }
                     for t in w.closed_trades
                 ],

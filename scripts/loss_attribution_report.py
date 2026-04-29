@@ -86,6 +86,7 @@ def _aggregate_funnel(payloads: list[dict[str, Any]]) -> dict[str, int | float]:
 
 
 def _trade_sample(trade: dict[str, Any]) -> dict[str, Any]:
+    entry_context = trade.get("entry_context") or {}
     return {
         "window_idx": trade.get("window_idx"),
         "side": trade.get("side"),
@@ -100,6 +101,25 @@ def _trade_sample(trade: dict[str, Any]) -> dict[str, Any]:
         "max_favorable_pct": trade.get("max_favorable_pct"),
         "entry_price": trade.get("entry_price"),
         "exit_price": trade.get("exit_price"),
+        "entry_context": {
+            key: entry_context.get(key)
+            for key in (
+                "tech_confidence",
+                "final_confidence",
+                "up_prob",
+                "atr_pct",
+                "regime_confidence",
+                "vol_ratio",
+                "quality_scale",
+                "ranging_scale",
+                "pullback_scale",
+                "momentum_scale",
+                "conf_scale",
+                "whipsaw_count",
+                "spread_est",
+            )
+            if entry_context.get(key) is not None
+        },
     }
 
 
