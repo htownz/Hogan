@@ -61191,3 +61191,4 @@ SystemError: <built-in function kill> returned a result with an exception set
 2026-04-29 10:31:07,392 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
 2026-04-29 10:32:19,630 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
 2026-04-29 10:33:31,994 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
+2026-04-29 10:34:08,174 INFO MTF_EVAL BTC/USD/1m → hold (size scaled 0.30x for sub-hour eval)
