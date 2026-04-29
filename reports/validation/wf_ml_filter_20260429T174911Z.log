@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\15125\Documents\Hogan\Hogan\hogan_bot\walk_forward.py", line 29, in <module>
+    import numpy as np
+ModuleNotFoundError: No module named 'numpy'

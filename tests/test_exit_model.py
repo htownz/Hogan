@@ -68,16 +68,52 @@ class TestExitEvaluator:
 
         assert result.should_exit is False
 
-    def test_ranging_trend_reversal_exits_after_meaningful_damage(self):
+    def test_ranging_trend_reversal_defers_to_risk_exits(self):
         candles = _make_candles(80, trend=0.0, noise=0.001)
         ev = ExitEvaluator(trend_reversal_threshold=0.5)
-        ev._trend_persistence = lambda close, side: -0.6
+        ev._trend_persistence = lambda close, side: -0.85
         ev._current_atr_pct = lambda candles: 0.02
 
         result = ev.should_exit(
             candles,
             entry_price=100.0,
-            current_price=98.80,
+            current_price=97.80,
+            bars_held=8,
+            side="long",
+            max_hold_bars=24,
+            regime="ranging",
+        )
+
+        assert result.should_exit is False
+
+    def test_ranging_trend_reversal_disabled_late_in_hold(self):
+        candles = _make_candles(80, trend=0.0, noise=0.001)
+        ev = ExitEvaluator(trend_reversal_threshold=0.5)
+        ev._trend_persistence = lambda close, side: -0.85
+        ev._current_atr_pct = lambda candles: 0.02
+
+        result = ev.should_exit(
+            candles,
+            entry_price=100.0,
+            current_price=99.50,
+            bars_held=18,
+            side="long",
+            max_hold_bars=24,
+            regime="ranging",
+        )
+
+        assert result.should_exit is False
+
+    def test_ranging_drawdown_exit_still_active(self):
+        candles = _make_candles(80, trend=0.0, noise=0.001)
+        ev = ExitEvaluator(drawdown_panic_pct=0.02, trend_reversal_threshold=0.5)
+        ev._trend_persistence = lambda close, side: -0.85
+        ev._current_atr_pct = lambda candles: 0.01
+
+        result = ev.should_exit(
+            candles,
+            entry_price=100.0,
+            current_price=97.0,
             bars_held=8,
             side="long",
             max_hold_bars=24,
@@ -85,7 +121,7 @@ class TestExitEvaluator:
         )
 
         assert result.should_exit is True
-        assert result.reason == "trend_reversal"
+        assert result.reason == "drawdown_exceeded"
 
     def test_drawdown_panic(self):
         # Uptrending market, but we entered at a very bad price (gap up entry)

@@ -182,21 +182,15 @@ class ExitEvaluator:
         stag_bars = max(3, int(stag_bars * _ease))
 
         # 1. Trend persistence check: has the trend actually reversed?
-        # Guard against "micro-flip exits" right after entry:
-        # require either enough bars in trade, a hard reversal, or
-        # meaningful unrealized weakness before exiting on trend reversal.
+        # In ranging markets, MA/momentum flips are usually chop, not thesis
+        # failure. Let risk exits below handle damage, time decay, and stops.
         trend_score = self._trend_persistence(close, side)
+        if regime == "ranging":
+            trend_score = max(trend_score, 0.0)
         if trend_score < -trend_rev_thresh:
             hard_reversal = trend_score < -(trend_rev_thresh + 0.20)
             min_trend_bars = 5 if is_short else 6
-            if regime == "ranging":
-                min_trend_bars += 2
             reversal_allowed = bars_held >= min_trend_bars or hard_reversal
-            if regime == "ranging" and not hard_reversal:
-                atr_pct = self._current_atr_pct(candles)
-                enough_time = hold_ratio >= 0.50
-                enough_damage = upnl_pct < -0.5 * atr_pct
-                reversal_allowed = reversal_allowed and (enough_time or enough_damage)
             # If still green and no meaningful run-up, avoid early churn exits.
             if upnl_pct > 0 and max_favorable_pct < 0.01 and hold_ratio < 0.50:
                 reversal_allowed = False
