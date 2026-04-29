@@ -85,6 +85,58 @@ def _aggregate_funnel(payloads: list[dict[str, Any]]) -> dict[str, int | float]:
     return dict(sorted(funnel.items()))
 
 
+def _trade_sample(trade: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "window_idx": trade.get("window_idx"),
+        "side": trade.get("side"),
+        "pnl_pct": round(float(trade.get("pnl_pct", 0.0) or 0.0), 4),
+        "entry_regime": trade.get("entry_regime") or trade.get("regime") or "unknown",
+        "exit_regime": trade.get("exit_regime") or "unknown",
+        "exit_reason": trade.get("exit_reason") or trade.get("close_reason") or "unknown",
+        "bars_held": trade.get("bars_held"),
+        "entry_bar": trade.get("entry_bar") or trade.get("entry_bar_idx"),
+        "exit_bar": trade.get("exit_bar") or trade.get("exit_bar_idx"),
+        "max_adverse_pct": trade.get("max_adverse_pct"),
+        "max_favorable_pct": trade.get("max_favorable_pct"),
+        "entry_price": trade.get("entry_price"),
+        "exit_price": trade.get("exit_price"),
+    }
+
+
+def _worst_trades_by_bucket(
+    trades: list[dict[str, Any]],
+    *,
+    bucket_kind: str,
+    limit_buckets: int = 10,
+    limit_trades: int = 3,
+) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for trade in trades:
+        pnl = float(trade.get("pnl_pct", 0.0) or 0.0)
+        if pnl > 0:
+            continue
+        entry_regime = str(trade.get("entry_regime") or trade.get("regime") or "unknown")
+        exit_regime = str(trade.get("exit_regime") or "unknown")
+        side = str(trade.get("side") or "unknown")
+        exit_reason = str(trade.get("exit_reason") or trade.get("close_reason") or "unknown")
+        regime = exit_regime if bucket_kind == "exit" else entry_regime
+        grouped[f"{regime}|{side}|{exit_reason}"].append(trade)
+
+    buckets: list[dict[str, Any]] = []
+    for key, bucket_trades in grouped.items():
+        sorted_trades = sorted(
+            bucket_trades,
+            key=lambda trade: float(trade.get("pnl_pct", 0.0) or 0.0),
+        )
+        buckets.append({
+            "bucket": key,
+            "loss_drag_pct": round(sum(float(t.get("pnl_pct", 0.0) or 0.0) for t in bucket_trades), 4),
+            "worst_trades": [_trade_sample(trade) for trade in sorted_trades[:limit_trades]],
+        })
+
+    return sorted(buckets, key=lambda bucket: bucket["loss_drag_pct"])[:limit_buckets]
+
+
 def build_report(paths: list[Path]) -> dict[str, Any]:
     payloads = [_load_json(path) for path in paths]
     by_entry_regime: dict[str, dict[str, float | int]] = defaultdict(_bucket)
@@ -159,6 +211,8 @@ def build_report(paths: list[Path]) -> dict[str, Any]:
         "top_exit_loss_buckets": [
             {"bucket": key, **value} for key, value in top_exit_loss_buckets
         ],
+        "worst_trades_by_entry_bucket": _worst_trades_by_bucket(all_trades, bucket_kind="entry"),
+        "worst_trades_by_exit_bucket": _worst_trades_by_bucket(all_trades, bucket_kind="exit"),
         "gate_and_block_counts": block_or_gate_counts,
     }
 

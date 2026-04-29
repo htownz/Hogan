@@ -892,6 +892,11 @@ def main() -> None:
                         "exit_reason": t.get("close_reason", "?"),
                         "bars_held": t.get("bars_held", 0),
                         "entry_bar": t.get("entry_bar_idx"),
+                        "exit_bar": t.get("exit_bar_idx"),
+                        "entry_price": round(t.get("entry_price", 0), 4),
+                        "exit_price": round(t.get("exit_price", 0), 4),
+                        "max_adverse_pct": round(t.get("max_adverse_pct", 0), 4),
+                        "max_favorable_pct": round(t.get("max_favorable_pct", 0), 4),
                     }
                     for t in w.closed_trades
                 ],

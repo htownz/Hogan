@@ -191,6 +191,7 @@ class ExitEvaluator:
         trend_score = self._trend_persistence(close, side)
         if regime == "ranging":
             trend_score = max(trend_score, 0.0)
+
         if trend_score < -trend_rev_thresh:
             hard_reversal = trend_score < -(trend_rev_thresh + 0.20)
             min_trend_bars = 5 if is_short else 6
