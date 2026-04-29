@@ -66,7 +66,7 @@ class TestExitEvaluator:
             regime="ranging",
         )
 
-        assert result.should_exit is False
+        assert result.reason != "trend_reversal"
 
     def test_ranging_trend_reversal_defers_to_risk_exits(self):
         candles = _make_candles(80, trend=0.0, noise=0.001)
@@ -84,7 +84,7 @@ class TestExitEvaluator:
             regime="ranging",
         )
 
-        assert result.should_exit is False
+        assert result.reason != "trend_reversal"
 
     def test_ranging_trend_reversal_disabled_late_in_hold(self):
         candles = _make_candles(80, trend=0.0, noise=0.001)
@@ -102,7 +102,7 @@ class TestExitEvaluator:
             regime="ranging",
         )
 
-        assert result.should_exit is False
+        assert result.reason != "trend_reversal"
 
     def test_ranging_drawdown_exit_still_active(self):
         candles = _make_candles(80, trend=0.0, noise=0.001)
@@ -113,7 +113,26 @@ class TestExitEvaluator:
         result = ev.should_exit(
             candles,
             entry_price=100.0,
-            current_price=97.0,
+            current_price=95.0,
+            bars_held=8,
+            side="long",
+            max_hold_bars=24,
+            regime="ranging",
+        )
+
+        assert result.should_exit is True
+        assert result.reason == "drawdown_exceeded"
+
+    def test_ranging_drawdown_exit_before_four_percent_loss(self):
+        candles = _make_candles(80, trend=0.0, noise=0.001)
+        ev = ExitEvaluator(trend_reversal_threshold=0.5)
+        ev._trend_persistence = lambda close, side: -0.85
+        ev._current_atr_pct = lambda candles: 0.01
+
+        result = ev.should_exit(
+            candles,
+            entry_price=100.0,
+            current_price=96.7,
             bars_held=8,
             side="long",
             max_hold_bars=24,

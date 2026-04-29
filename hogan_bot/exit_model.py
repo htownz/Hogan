@@ -105,7 +105,7 @@ class ExitEvaluator:
             "trend_reversal_threshold": 0.62,  # reduce premature exits
         },
         "ranging": {
-            "drawdown_panic_pct": 0.038,       # wider: mean-reversion needs room for pullbacks
+            "drawdown_panic_pct": 0.032,       # tighter tail guard now that chop reversals are ignored
             "time_decay_threshold": 0.80,      # patient: let mean-reversion thesis fully develop
             "stagnation_bars_mult": 1.20,      # extended stagnation window for ranging trades
             "trend_reversal_threshold": 0.78,  # much harder to call reversal in noise
