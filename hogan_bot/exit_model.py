@@ -91,12 +91,14 @@ class ExitEvaluator:
             "time_decay_threshold": 0.65,      # faster exit: vol can reverse
             "stagnation_bars_mult": 0.75,      # shorter patience in chop
             "trend_reversal_threshold": 0.56,  # less hair-trigger in noisy volatility
+            "short_trend_reversal_mult": 0.85, # shorts get cut sooner when vol turns against them
         },
         "trending_up": {
             "drawdown_panic_pct": 0.036,       # slightly wider than base
             "time_decay_threshold": 0.75,      # standard
             "stagnation_bars_mult": 1.00,
             "trend_reversal_threshold": 0.68,  # strict: stay in trend
+            "short_trend_reversal_mult": 0.75, # hostile regime for shorts; exit reversal earlier
         },
         "trending_down": {
             "drawdown_panic_pct": 0.030,       # tighter: protect capital
@@ -105,7 +107,7 @@ class ExitEvaluator:
             "trend_reversal_threshold": 0.62,  # reduce premature exits
         },
         "ranging": {
-            "drawdown_panic_pct": 0.032,       # tighter tail guard now that chop reversals are ignored
+            "drawdown_panic_pct": 0.028,       # tighter tail guard now that chop reversals are ignored
             "time_decay_threshold": 0.80,      # patient: let mean-reversion thesis fully develop
             "stagnation_bars_mult": 1.20,      # extended stagnation window for ranging trades
             "trend_reversal_threshold": 0.78,  # much harder to call reversal in noise
@@ -169,6 +171,8 @@ class ExitEvaluator:
                 stag_bars = max(4, int(stag_bars * _rp["stagnation_bars_mult"]))
             if "trend_reversal_threshold" in _rp:
                 trend_rev_thresh = _rp["trend_reversal_threshold"]
+            if is_short and "short_trend_reversal_mult" in _rp:
+                trend_rev_thresh *= _rp["short_trend_reversal_mult"]
 
         # ── Graduated urgency: scale thresholds by hold_ratio ─────────
         # After 50% of max hold, progressively loosen all triggers.

@@ -123,7 +123,7 @@ class TestExitEvaluator:
         assert result.should_exit is True
         assert result.reason == "drawdown_exceeded"
 
-    def test_ranging_drawdown_exit_before_four_percent_loss(self):
+    def test_ranging_drawdown_exit_near_three_percent_loss(self):
         candles = _make_candles(80, trend=0.0, noise=0.001)
         ev = ExitEvaluator(trend_reversal_threshold=0.5)
         ev._trend_persistence = lambda close, side: -0.85
@@ -132,7 +132,7 @@ class TestExitEvaluator:
         result = ev.should_exit(
             candles,
             entry_price=100.0,
-            current_price=96.7,
+            current_price=97.1,
             bars_held=8,
             side="long",
             max_hold_bars=24,
@@ -226,6 +226,24 @@ class TestExitEvaluator:
             bars_held=30, side="short",
         )
         assert result.should_exit is True
+
+    def test_trending_up_short_reversal_exits_earlier(self):
+        candles = _make_candles(80, trend=0.002, noise=0.001)
+        ev = ExitEvaluator(trend_reversal_threshold=0.8)
+        ev._trend_persistence = lambda close, side: -0.55
+
+        result = ev.should_exit(
+            candles,
+            entry_price=100.0,
+            current_price=100.6,
+            bars_held=8,
+            side="short",
+            max_hold_bars=12,
+            regime="trending_up",
+        )
+
+        assert result.should_exit is True
+        assert result.reason == "trend_reversal"
 
     def test_short_drawdown_panic_tighter(self):
         """Shorts should trigger drawdown panic at a tighter threshold than longs."""
