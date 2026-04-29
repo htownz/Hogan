@@ -46,6 +46,7 @@ from hogan_bot.data_engine import LiveDataEngine
 from hogan_bot.decision import (
     QualityComponents,
     apply_ml_filter,
+    composite_confidence_floor,
     compute_quality_components,
     edge_gate,
     entry_quality_gate,
@@ -603,9 +604,12 @@ class SignalEvaluator:
             quality_gate_scale=quality_scale,
         )
 
-        _MIN_COMPOSITE_SCALE = 0.15
         _composite = max(
-            _MIN_COMPOSITE_SCALE,
+            composite_confidence_floor(
+                action=action,
+                regime=regime_name,
+                conf_scale=conf_scale,
+            ),
             conf_scale * quality_scale * ranging_scale * pullback_scale * eff_position_scale * _freshness_scale * _mtf_conf_mult,
         )
         size = calculate_position_size(

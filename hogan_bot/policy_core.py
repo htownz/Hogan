@@ -299,6 +299,7 @@ def decide(
     from hogan_bot.config import symbol_config
     from hogan_bot.decision import (
         apply_ml_filter,
+        composite_confidence_floor,
         compute_unified_signal_scores,
         edge_gate,
         entry_quality_gate,
@@ -798,9 +799,12 @@ def decide(
     # ------------------------------------------------------------------
     # 8. Position sizing
     # ------------------------------------------------------------------
-    _MIN_COMPOSITE_SCALE = 0.15
     composite_scale = max(
-        _MIN_COMPOSITE_SCALE,
+        composite_confidence_floor(
+            action=action,
+            regime=regime_name,
+            conf_scale=conf_scale,
+        ),
         conf_scale
         * quality_scale
         * ranging_scale

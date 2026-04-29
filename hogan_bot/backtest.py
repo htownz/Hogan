@@ -9,6 +9,7 @@ import pandas as pd
 from hogan_bot.agent_pipeline import AgentPipeline
 from hogan_bot.decision import (
     apply_ml_filter,
+    composite_confidence_floor,
     edge_gate,
     entry_quality_gate,
     estimate_spread_from_candles,
@@ -1881,7 +1882,14 @@ def run_backtest_on_candles(  # noqa: PLR0912,PLR0913
                 stop_distance_pct=signal.stop_distance_pct,
                 max_risk_per_trade=max_risk_per_trade,
                 max_allocation_pct=aggressive_allocation,
-                confidence_scale=max(0.15, conf_scale * _quality_scale * _ranging_scale * _pullback_scale * _eff_position_scale * _momentum_scale),
+                confidence_scale=max(
+                    composite_confidence_floor(
+                        action=action,
+                        regime=_current_regime,
+                        conf_scale=conf_scale,
+                    ),
+                    conf_scale * _quality_scale * _ranging_scale * _pullback_scale * _eff_position_scale * _momentum_scale,
+                ),
                 fee_rate=fee_rate,
             )
 

@@ -17,6 +17,7 @@ from hogan_bot.config import BotConfig
 from hogan_bot.decision import (
     GateDecision,
     apply_ml_filter,
+    composite_confidence_floor,
     compute_quality_components,
     edge_gate,
     entry_quality_gate,
@@ -99,6 +100,31 @@ class TestGateParity:
                           up_prob=0.75, recent_whipsaw_count=0)
         assert isinstance(gd, GateDecision)
         assert gd.action == "buy"
+
+    def test_marginal_ranging_long_gets_lower_composite_floor(self):
+        floor = composite_confidence_floor(
+            action="buy",
+            regime="ranging",
+            conf_scale=0.14,
+        )
+        assert floor == pytest.approx(0.05)
+
+    def test_normal_setups_keep_default_composite_floor(self):
+        assert composite_confidence_floor(
+            action="buy",
+            regime="ranging",
+            conf_scale=0.10,
+        ) == pytest.approx(0.15)
+        assert composite_confidence_floor(
+            action="buy",
+            regime="ranging",
+            conf_scale=0.20,
+        ) == pytest.approx(0.15)
+        assert composite_confidence_floor(
+            action="sell",
+            regime="ranging",
+            conf_scale=0.10,
+        ) == pytest.approx(0.15)
 
 
 class TestRegimeParity:

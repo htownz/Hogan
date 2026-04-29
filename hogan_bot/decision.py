@@ -113,6 +113,24 @@ def compute_unified_signal_scores(
     )
 
 
+def composite_confidence_floor(
+    *,
+    action: str,
+    regime: str | None,
+    conf_scale: float,
+    default_floor: float = 0.15,
+) -> float:
+    """Minimum sizing floor for the final composite confidence scale.
+
+    Marginal-confidence ranging longs were showing up in loss attribution as
+    minimum-sized trades despite weak internal confidence. Keep the normal
+    floor for most setups, but let those marginal mean-reversion entries shrink.
+    """
+    if action == "buy" and regime == "ranging" and 0.12 <= conf_scale < 0.18:
+        return 0.05
+    return default_floor
+
+
 def compute_quality_components(
     *,
     final_confidence: float | None = None,
