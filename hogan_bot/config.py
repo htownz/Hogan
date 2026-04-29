@@ -606,8 +606,8 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         quality_tech_mult=1.10,
         allow_longs=True,
         allow_shorts=True,
-        long_size_scale=0.50,
-        short_size_scale=0.50,
+        long_size_scale=0.25,
+        short_size_scale=0.25,
         trade_quality_threshold_mult=1.30,
     ),
 }
