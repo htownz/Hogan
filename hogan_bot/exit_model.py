@@ -192,6 +192,11 @@ class ExitEvaluator:
             if regime == "ranging":
                 min_trend_bars += 2
             reversal_allowed = bars_held >= min_trend_bars or hard_reversal
+            if regime == "ranging" and not hard_reversal:
+                atr_pct = self._current_atr_pct(candles)
+                enough_time = hold_ratio >= 0.50
+                enough_damage = upnl_pct < -0.5 * atr_pct
+                reversal_allowed = reversal_allowed and (enough_time or enough_damage)
             # If still green and no meaningful run-up, avoid early churn exits.
             if upnl_pct > 0 and max_favorable_pct < 0.01 and hold_ratio < 0.50:
                 reversal_allowed = False

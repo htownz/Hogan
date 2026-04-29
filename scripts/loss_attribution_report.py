@@ -21,6 +21,13 @@ def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(PROJECT_ROOT))
+    except ValueError:
+        return str(path)
+
+
 def _bucket() -> dict[str, float | int]:
     return {
         "trades": 0,
@@ -120,7 +127,7 @@ def build_report(paths: list[Path]) -> dict[str, Any]:
 
     return {
         "generated_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "sources": [str(path.relative_to(PROJECT_ROOT)) for path in paths],
+        "sources": [_display_path(path) for path in paths],
         "summary": {
             "trades": len(all_trades),
             "losses": len(losses),
