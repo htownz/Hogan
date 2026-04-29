@@ -1,0 +1,760 @@
+{
+  "caveats": [
+    "Correlation is not causation.",
+    "All features are point-in-time merged, but external feed delays still matter.",
+    "No social/news feature should create trades alone.",
+    "Use shadow/OOS evidence before promotion."
+  ],
+  "correlations": [
+    {
+      "correlation": -0.183136,
+      "directional_hit_rate": 0.404757,
+      "feature": "tnx_ret_24h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.009104
+    },
+    {
+      "correlation": -0.166772,
+      "directional_hit_rate": 0.43804,
+      "feature": "tnx_trend_24h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": -0.005419
+    },
+    {
+      "correlation": -0.15891,
+      "directional_hit_rate": 0.412757,
+      "feature": "tnx_trend_24h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.011015
+    },
+    {
+      "correlation": 0.127361,
+      "directional_hit_rate": 0.500306,
+      "feature": "gld_ret_1h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.005347
+    },
+    {
+      "correlation": 0.11934,
+      "directional_hit_rate": 0.483246,
+      "feature": "gld_trend_24h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.001125
+    },
+    {
+      "correlation": -0.08508,
+      "directional_hit_rate": 0.487533,
+      "feature": "uup_ret_1h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.003538
+    },
+    {
+      "correlation": -0.080136,
+      "directional_hit_rate": 0.494008,
+      "feature": "vix_ret_24h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.002831
+    },
+    {
+      "correlation": -0.069502,
+      "directional_hit_rate": 0.465673,
+      "feature": "tnx_ret_24h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": -0.000327
+    },
+    {
+      "correlation": 0.064497,
+      "directional_hit_rate": 0.52831,
+      "feature": "gld_ret_24h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.005106
+    },
+    {
+      "correlation": 0.062275,
+      "directional_hit_rate": 0.479743,
+      "feature": "qqq_trend_24h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.002324
+    },
+    {
+      "correlation": -0.062176,
+      "directional_hit_rate": 0.490008,
+      "feature": "btc_ret_24h",
+      "horizon": "3d",
+      "samples": 4904,
+      "top_bucket_avg_forward_return": -0.007248
+    },
+    {
+      "correlation": 0.059011,
+      "directional_hit_rate": 0.508829,
+      "feature": "spy_ret_24h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": 0.005681
+    },
+    {
+      "correlation": -0.05654,
+      "directional_hit_rate": 0.474797,
+      "feature": "uup_trend_24h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.007287
+    },
+    {
+      "correlation": 0.054664,
+      "directional_hit_rate": 0.475469,
+      "feature": "gld_ret_1h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": -0.003438
+    },
+    {
+      "correlation": 0.052508,
+      "directional_hit_rate": 0.518263,
+      "feature": "qqq_ret_24h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.002875
+    },
+    {
+      "correlation": 0.050325,
+      "directional_hit_rate": 0.479865,
+      "feature": "gld_trend_24h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": -0.000602
+    },
+    {
+      "correlation": -0.049473,
+      "directional_hit_rate": 0.487124,
+      "feature": "tnx_trend_24h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": -0.000727
+    },
+    {
+      "correlation": -0.044417,
+      "directional_hit_rate": 0.475476,
+      "feature": "vix_trend_24h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.006756
+    },
+    {
+      "correlation": 0.043262,
+      "directional_hit_rate": 0.465742,
+      "feature": "btc_volatility_24h",
+      "horizon": "3d",
+      "samples": 4904,
+      "top_bucket_avg_forward_return": -0.0064
+    },
+    {
+      "correlation": -0.040666,
+      "directional_hit_rate": 0.466568,
+      "feature": "vix_ret_1h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.011971
+    },
+    {
+      "correlation": -0.038572,
+      "directional_hit_rate": 0.506702,
+      "feature": "btc_ret_4h",
+      "horizon": "3d",
+      "samples": 4924,
+      "top_bucket_avg_forward_return": -0.006985
+    },
+    {
+      "correlation": -0.037402,
+      "directional_hit_rate": 0.486419,
+      "feature": "uup_ret_24h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.008663
+    },
+    {
+      "correlation": -0.036433,
+      "directional_hit_rate": 0.505183,
+      "feature": "uup_trend_24h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": -0.002496
+    },
+    {
+      "correlation": -0.036246,
+      "directional_hit_rate": 0.505286,
+      "feature": "uup_ret_1h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": -0.002007
+    },
+    {
+      "correlation": 0.035827,
+      "directional_hit_rate": 0.519968,
+      "feature": "gld_ret_24h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": -0.001664
+    },
+    {
+      "correlation": 0.034431,
+      "directional_hit_rate": 0.515669,
+      "feature": "gld_ret_24h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": -0.000133
+    },
+    {
+      "correlation": -0.03287,
+      "directional_hit_rate": 0.509752,
+      "feature": "uup_ret_24h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": -0.004221
+    },
+    {
+      "correlation": -0.025637,
+      "directional_hit_rate": 0.494897,
+      "feature": "spy_ret_1h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": -0.000165
+    },
+    {
+      "correlation": 0.025352,
+      "directional_hit_rate": 0.492391,
+      "feature": "btc_ret_4h",
+      "horizon": "1h",
+      "samples": 4995,
+      "top_bucket_avg_forward_return": 0.000162
+    },
+    {
+      "correlation": 0.025143,
+      "directional_hit_rate": 0.492191,
+      "feature": "btc_ret_1h",
+      "horizon": "4h",
+      "samples": 4995,
+      "top_bucket_avg_forward_return": -8.2e-05
+    },
+    {
+      "correlation": 0.024366,
+      "directional_hit_rate": 0.520667,
+      "feature": "tnx_ret_1h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.000262
+    },
+    {
+      "correlation": -0.022845,
+      "directional_hit_rate": 0.480201,
+      "feature": "spy_ret_1h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": -0.000613
+    },
+    {
+      "correlation": -0.021601,
+      "directional_hit_rate": 0.493404,
+      "feature": "spy_ret_1h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.003449
+    },
+    {
+      "correlation": -0.020813,
+      "directional_hit_rate": 0.483256,
+      "feature": "tnx_ret_24h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": 0.000156
+    },
+    {
+      "correlation": -0.01992,
+      "directional_hit_rate": 0.463095,
+      "feature": "qqq_trend_24h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": -0.002037
+    },
+    {
+      "correlation": -0.01981,
+      "directional_hit_rate": 0.496955,
+      "feature": "btc_ret_1h",
+      "horizon": "3d",
+      "samples": 4927,
+      "top_bucket_avg_forward_return": -0.006943
+    },
+    {
+      "correlation": 0.018513,
+      "directional_hit_rate": 0.507733,
+      "feature": "tnx_ret_1h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": 0.000621
+    },
+    {
+      "correlation": -0.018348,
+      "directional_hit_rate": 0.496069,
+      "feature": "tnx_trend_24h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": -0.000152
+    },
+    {
+      "correlation": -0.017269,
+      "directional_hit_rate": 0.498168,
+      "feature": "qqq_ret_1h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": -0.000225
+    },
+    {
+      "correlation": -0.017198,
+      "directional_hit_rate": 0.491658,
+      "feature": "spy_ret_24h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": 0.001379
+    },
+    {
+      "correlation": 0.017115,
+      "directional_hit_rate": 0.50241,
+      "feature": "gld_ret_24h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": -6.4e-05
+    },
+    {
+      "correlation": -0.01709,
+      "directional_hit_rate": 0.469747,
+      "feature": "qqq_ret_1h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": -0.002574
+    },
+    {
+      "correlation": 0.016654,
+      "directional_hit_rate": 0.518251,
+      "feature": "vix_trend_24h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": -0.001123
+    },
+    {
+      "correlation": -0.014858,
+      "directional_hit_rate": 0.503635,
+      "feature": "btc_ret_24h",
+      "horizon": "1d",
+      "samples": 4952,
+      "top_bucket_avg_forward_return": -0.002039
+    },
+    {
+      "correlation": -0.014804,
+      "directional_hit_rate": 0.484281,
+      "feature": "qqq_trend_24h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": -0.000402
+    },
+    {
+      "correlation": 0.014579,
+      "directional_hit_rate": 0.507822,
+      "feature": "vix_trend_24h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": -9.6e-05
+    },
+    {
+      "correlation": 0.014301,
+      "directional_hit_rate": 0.465459,
+      "feature": "spy_trend_24h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.00426
+    },
+    {
+      "correlation": 0.013998,
+      "directional_hit_rate": 0.501975,
+      "feature": "vix_ret_1h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": -6.2e-05
+    },
+    {
+      "correlation": 0.013751,
+      "directional_hit_rate": 0.496552,
+      "feature": "tnx_ret_1h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": 7.2e-05
+    },
+    {
+      "correlation": 0.013431,
+      "directional_hit_rate": 0.485989,
+      "feature": "btc_ret_1h",
+      "horizon": "1h",
+      "samples": 4998,
+      "top_bucket_avg_forward_return": -0.000101
+    },
+    {
+      "correlation": -0.01326,
+      "directional_hit_rate": 0.498671,
+      "feature": "uup_ret_24h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": -0.000693
+    },
+    {
+      "correlation": -0.012849,
+      "directional_hit_rate": 0.488988,
+      "feature": "spy_trend_24h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": -0.000382
+    },
+    {
+      "correlation": -0.012824,
+      "directional_hit_rate": 0.485117,
+      "feature": "btc_ret_24h",
+      "horizon": "4h",
+      "samples": 4972,
+      "top_bucket_avg_forward_return": -0.000659
+    },
+    {
+      "correlation": 0.012363,
+      "directional_hit_rate": 0.485577,
+      "feature": "btc_ret_4h",
+      "horizon": "4h",
+      "samples": 4992,
+      "top_bucket_avg_forward_return": 1.9e-05
+    },
+    {
+      "correlation": -0.011919,
+      "directional_hit_rate": 0.501006,
+      "feature": "btc_ret_4h",
+      "horizon": "1d",
+      "samples": 4972,
+      "top_bucket_avg_forward_return": -0.00116
+    },
+    {
+      "correlation": -0.010651,
+      "directional_hit_rate": 0.496281,
+      "feature": "gld_ret_1h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": -0.000252
+    },
+    {
+      "correlation": -0.009813,
+      "directional_hit_rate": 0.499598,
+      "feature": "qqq_ret_24h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": -0.002014
+    },
+    {
+      "correlation": -0.009721,
+      "directional_hit_rate": 0.495696,
+      "feature": "spy_ret_1h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": -0.000171
+    },
+    {
+      "correlation": -0.009208,
+      "directional_hit_rate": 0.474589,
+      "feature": "spy_trend_24h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": -0.001777
+    },
+    {
+      "correlation": -0.009006,
+      "directional_hit_rate": 0.498497,
+      "feature": "tnx_ret_24h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": 1.1e-05
+    },
+    {
+      "correlation": 0.008361,
+      "directional_hit_rate": 0.48703,
+      "feature": "gld_ret_1h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": -0.000632
+    },
+    {
+      "correlation": 0.008325,
+      "directional_hit_rate": 0.496772,
+      "feature": "gld_trend_24h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": -0.000188
+    },
+    {
+      "correlation": 0.008269,
+      "directional_hit_rate": 0.530879,
+      "feature": "vix_ret_24h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": 0.000336
+    },
+    {
+      "correlation": -0.00694,
+      "directional_hit_rate": 0.480267,
+      "feature": "vix_ret_1h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": -0.002854
+    },
+    {
+      "correlation": -0.006743,
+      "directional_hit_rate": 0.502043,
+      "feature": "uup_ret_24h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": -0.000176
+    },
+    {
+      "correlation": -0.006321,
+      "directional_hit_rate": 0.483916,
+      "feature": "btc_ret_24h",
+      "horizon": "1h",
+      "samples": 4975,
+      "top_bucket_avg_forward_return": -0.000118
+    },
+    {
+      "correlation": -0.005814,
+      "directional_hit_rate": 0.478595,
+      "feature": "btc_volatility_24h",
+      "horizon": "1d",
+      "samples": 4952,
+      "top_bucket_avg_forward_return": -0.002693
+    },
+    {
+      "correlation": -0.005682,
+      "directional_hit_rate": 0.491757,
+      "feature": "btc_ret_1h",
+      "horizon": "1d",
+      "samples": 4975,
+      "top_bucket_avg_forward_return": -0.001666
+    },
+    {
+      "correlation": -0.005286,
+      "directional_hit_rate": 0.492618,
+      "feature": "vix_ret_1h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": -0.000417
+    },
+    {
+      "correlation": 0.004735,
+      "directional_hit_rate": 0.499342,
+      "feature": "uup_ret_1h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": -2.8e-05
+    },
+    {
+      "correlation": -0.004603,
+      "directional_hit_rate": 0.495977,
+      "feature": "btc_volatility_24h",
+      "horizon": "4h",
+      "samples": 4972,
+      "top_bucket_avg_forward_return": -0.000392
+    },
+    {
+      "correlation": -0.004271,
+      "directional_hit_rate": 0.494494,
+      "feature": "spy_ret_24h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": 0.000136
+    },
+    {
+      "correlation": -0.004244,
+      "directional_hit_rate": 0.494956,
+      "feature": "uup_ret_1h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": -0.000236
+    },
+    {
+      "correlation": 0.003937,
+      "directional_hit_rate": 0.496896,
+      "feature": "vix_ret_24h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": 8.5e-05
+    },
+    {
+      "correlation": 0.003456,
+      "directional_hit_rate": 0.495987,
+      "feature": "vix_trend_24h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": -4.7e-05
+    },
+    {
+      "correlation": -0.003433,
+      "directional_hit_rate": 0.491653,
+      "feature": "qqq_ret_1h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": -0.000438
+    },
+    {
+      "correlation": -0.003076,
+      "directional_hit_rate": 0.494012,
+      "feature": "qqq_trend_24h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": -8e-05
+    },
+    {
+      "correlation": -0.002677,
+      "directional_hit_rate": 0.5,
+      "feature": "qqq_ret_24h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": -0.0005
+    },
+    {
+      "correlation": -0.002498,
+      "directional_hit_rate": 0.502769,
+      "feature": "uup_trend_24h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": -0.00028
+    },
+    {
+      "correlation": -0.002353,
+      "directional_hit_rate": 0.497098,
+      "feature": "spy_ret_24h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": 4e-05
+    },
+    {
+      "correlation": -0.002341,
+      "directional_hit_rate": 0.491975,
+      "feature": "spy_trend_24h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": -7.7e-05
+    },
+    {
+      "correlation": 0.002095,
+      "directional_hit_rate": 0.497387,
+      "feature": "gld_trend_24h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": -5.7e-05
+    },
+    {
+      "correlation": 0.002045,
+      "directional_hit_rate": 0.496093,
+      "feature": "vix_ret_24h",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": 0.000184
+    },
+    {
+      "correlation": -0.001804,
+      "directional_hit_rate": 0.495577,
+      "feature": "btc_volatility_24h",
+      "horizon": "1h",
+      "samples": 4975,
+      "top_bucket_avg_forward_return": -3.7e-05
+    },
+    {
+      "correlation": -0.001801,
+      "directional_hit_rate": 0.5002,
+      "feature": "qqq_ret_24h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": -0.000119
+    },
+    {
+      "correlation": -0.001063,
+      "directional_hit_rate": 0.498761,
+      "feature": "qqq_ret_1h",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.003161
+    },
+    {
+      "correlation": -0.000799,
+      "directional_hit_rate": 0.514702,
+      "feature": "tnx_ret_1h",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": 8.3e-05
+    },
+    {
+      "correlation": -0.000217,
+      "directional_hit_rate": 0.500198,
+      "feature": "uup_trend_24h",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": -6.6e-05
+    },
+    {
+      "correlation": 0.0,
+      "directional_hit_rate": 0.495598,
+      "feature": "fear_greed_value",
+      "horizon": "1h",
+      "samples": 4999,
+      "top_bucket_avg_forward_return": -6.5e-05
+    },
+    {
+      "correlation": 0.0,
+      "directional_hit_rate": 0.496397,
+      "feature": "fear_greed_value",
+      "horizon": "4h",
+      "samples": 4996,
+      "top_bucket_avg_forward_return": -0.000254
+    },
+    {
+      "correlation": 0.0,
+      "directional_hit_rate": 0.481109,
+      "feature": "fear_greed_value",
+      "horizon": "1d",
+      "samples": 4976,
+      "top_bucket_avg_forward_return": -0.001555
+    },
+    {
+      "correlation": 0.0,
+      "directional_hit_rate": 0.468344,
+      "feature": "fear_greed_value",
+      "horizon": "3d",
+      "samples": 4928,
+      "top_bucket_avg_forward_return": -0.004834
+    }
+  ],
+  "horizons": [
+    "1h",
+    "4h",
+    "1d",
+    "3d"
+  ],
+  "hypotheses": [],
+  "intelligence_hooks": {
+    "macro_alignment_score": "candidate for future reporting after shadow validation",
+    "news_risk_flag": "candidate for future reporting after shadow validation",
+    "social_confirmation_score": "candidate for future reporting after shadow validation"
+  },
+  "rows": 5000,
+  "ts_ms": 1777475367352
+}
