@@ -544,7 +544,7 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         allow_longs=True,
         allow_shorts=True,
         long_size_scale=1.00,
-        short_size_scale=0.25,
+        short_size_scale=0.20,
         trade_quality_threshold_mult=0.90,
     ),
     "trending_down": RegimeConfig(
@@ -606,8 +606,8 @@ DEFAULT_REGIME_CONFIGS: dict[str, RegimeConfig] = {
         quality_tech_mult=1.10,
         allow_longs=True,
         allow_shorts=True,
-        long_size_scale=0.25,
-        short_size_scale=0.25,
+        long_size_scale=0.20,
+        short_size_scale=0.20,
         trade_quality_threshold_mult=1.30,
     ),
 }
