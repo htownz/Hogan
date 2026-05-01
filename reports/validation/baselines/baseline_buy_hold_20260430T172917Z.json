@@ -1,0 +1,94 @@
+{
+  "summary": {
+    "baseline": "buy_hold",
+    "n_windows": 2,
+    "n_positive": 1,
+    "n_failed": 0,
+    "total_trades": 2,
+    "mean_return_pct": -7.7406,
+    "mean_sharpe": -1.3441,
+    "mean_calmar": 0.0476,
+    "worst_calmar": -0.7546,
+    "mean_drawdown_pct": 24.37,
+    "worst_drawdown_pct": 35.46,
+    "passes_gate": false,
+    "gate_config": {
+      "min_sharpe": 0.5,
+      "min_calmar": 0.0,
+      "max_drawdown_pct": 25.0,
+      "min_total_trades": 1,
+      "min_trades_per_window": 1,
+      "min_windows_positive": 1
+    }
+  },
+  "windows": [
+    {
+      "window_idx": 1,
+      "train_bars": 16000,
+      "test_bars": 1093,
+      "test_start_date": "2026-01-06",
+      "test_end_date": "2026-02-21",
+      "total_return_pct": -26.7599,
+      "max_drawdown_pct": 35.46,
+      "sharpe": -4.407,
+      "calmar": -0.7546,
+      "trades": 1,
+      "win_rate": 0.0,
+      "net_positive": false,
+      "closed_trades": [
+        {
+          "side": "long",
+          "entry_bar_idx": 0,
+          "exit_bar_idx": 1092,
+          "entry_price": 92094.805640625,
+          "exit_price": 67802.4099609375,
+          "pnl_pct": -26.37759590316308,
+          "bars_held": 1092,
+          "close_reason": "end_of_window",
+          "entry_regime": "?",
+          "exit_regime": "?",
+          "max_adverse_pct": 0.0,
+          "max_favorable_pct": 0.0
+        }
+      ]
+    },
+    {
+      "window_idx": 2,
+      "train_bars": 17093,
+      "test_bars": 1093,
+      "test_start_date": "2026-02-21",
+      "test_end_date": "2026-04-30",
+      "total_return_pct": 11.2788,
+      "max_drawdown_pct": 13.27,
+      "sharpe": 1.7187,
+      "calmar": 0.8497,
+      "trades": 1,
+      "win_rate": 1.0,
+      "net_positive": true,
+      "closed_trades": [
+        {
+          "side": "long",
+          "entry_bar_idx": 0,
+          "exit_bar_idx": 1092,
+          "entry_price": 68089.9498359375,
+          "exit_price": 76165.19835,
+          "pnl_pct": 11.859677578731942,
+          "bars_held": 1092,
+          "close_reason": "end_of_window",
+          "entry_regime": "?",
+          "exit_regime": "?",
+          "max_adverse_pct": 0.0,
+          "max_favorable_pct": 0.0
+        }
+      ]
+    }
+  ],
+  "config": {
+    "starting_balance": 10000.0,
+    "fee_rate": 0.0026,
+    "slippage_bps": 5.0,
+    "min_train_bars": 16000,
+    "min_test_bars": 1000,
+    "n_splits": 2
+  }
+}

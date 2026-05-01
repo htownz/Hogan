@@ -93,3 +93,63 @@ def test_dry_run_main_writes_manifest(tmp_path):
     assert payload["best_scenario"] == "ml_sizer"
     assert payload["ranked_results"][0]["scenario"] == "ml_sizer"
     assert payload["ranked_results"][0]["exit_code"] is None
+
+
+def test_scenario_by_name_includes_baselines_when_requested():
+    default = sc.scenario_by_name(include_baselines=False)
+    expanded = sc.scenario_by_name(include_baselines=True)
+    assert len(expanded) > len(default)
+    expanded_names = {scenario.name for scenario in expanded}
+    assert {"baseline_buy_hold", "baseline_ma_trend", "baseline_rsi_mean_revert", "baseline_breakout"} <= expanded_names
+
+
+def test_scenario_by_name_resolves_baseline_explicitly():
+    selected = sc.scenario_by_name(["baseline_buy_hold"])
+    assert len(selected) == 1
+    assert selected[0].kind == "baseline"
+    assert selected[0].baseline_name == "buy_hold"
+
+
+def test_run_baseline_scenario_writes_compatible_report(tmp_path, monkeypatch):
+    import numpy as np
+    import pandas as pd
+
+    from scripts import simple_baselines as sb
+
+    rng = np.random.default_rng(7)
+    rets = rng.normal(0.0001, 0.005, 60)
+    closes = 30_000.0 * np.cumprod(1 + rets)
+    ts = pd.date_range("2024-01-01", periods=60, freq="h", tz="UTC")
+    candles = pd.DataFrame(
+        {
+            "ts_ms": (ts.astype("int64") // 10**6).to_numpy(),
+            "open": closes,
+            "high": closes * 1.001,
+            "low": closes * 0.999,
+            "close": closes,
+            "volume": np.full(60, 10.0),
+            "timestamp": ts,
+        }
+    )
+    monkeypatch.setattr(sb, "_load_candles", lambda *args, **kwargs: candles)
+
+    scenario = sc.scenario_by_name(["baseline_buy_hold"])[0]
+    report_path = tmp_path / "wf_baseline_buy_hold.json"
+    log_path = tmp_path / "wf_baseline_buy_hold.log"
+
+    rc = sc.run_baseline_scenario(
+        scenario,
+        db="data/dummy.db",
+        symbol="BTC/USD",
+        timeframe="1h",
+        n_splits=2,
+        min_train=20,
+        min_test=10,
+        report_path=report_path,
+        log_path=log_path,
+    )
+
+    assert rc == 0
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["baseline"] == "buy_hold"
+    assert payload["summary"]["n_windows"] == 2

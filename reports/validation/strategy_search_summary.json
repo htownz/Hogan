@@ -1,0 +1,278 @@
+{
+  "generated_at_utc": "2026-04-30T18:55:11Z",
+  "baseline": {
+    "path": "reports\\validation\\strategy_search_baseline.json",
+    "frozen_at_utc": "2026-04-30T17:25:01Z",
+    "summary": {
+      "n_windows": 2,
+      "n_positive": 0,
+      "n_failed": 0,
+      "total_trades": 68,
+      "mean_return_pct": -0.439,
+      "mean_sharpe": -4.4609,
+      "mean_calmar": -0.951,
+      "worst_calmar": -0.952,
+      "mean_drawdown_pct": 0.46,
+      "worst_drawdown_pct": 0.63,
+      "passes_gate": false,
+      "gate_config": {
+        "min_sharpe": 0.5,
+        "min_calmar": 0.0,
+        "max_drawdown_pct": 15.0,
+        "min_total_trades": 25,
+        "min_trades_per_window": 5,
+        "min_windows_positive": 3
+      }
+    },
+    "regime_position_scales": {
+      "trending_up": {
+        "long_size_scale": 1.0,
+        "short_size_scale": 0.2
+      },
+      "trending_down": {
+        "long_size_scale": 0.4,
+        "short_size_scale": 1.0
+      },
+      "ranging": {
+        "long_size_scale": 0.7,
+        "short_size_scale": 0.4
+      },
+      "volatile": {
+        "long_size_scale": 0.2,
+        "short_size_scale": 0.2
+      }
+    },
+    "git_commit": "49d1db814602abbbbf39da055b544dd418dce8c5"
+  },
+  "tail_smoke_matrix": {
+    "path": "reports\\validation\\strategy_search_tail_smoke\\strategy_comparison_20260430T173215Z.json",
+    "geometry": {
+      "n_splits": 2,
+      "min_train": 16000,
+      "min_test": 1000,
+      "min_calmar": 0.0
+    },
+    "best_scenario": "baseline_ma_trend",
+    "ranked_results": [
+      {
+        "scenario": "baseline_ma_trend",
+        "kind": "baseline",
+        "passes_gate": false,
+        "n_windows": 2,
+        "n_positive": 1,
+        "total_trades": 22,
+        "mean_return_pct": -0.1914,
+        "mean_sharpe": -0.4709,
+        "mean_calmar": 0.0545,
+        "worst_drawdown_pct": 13.59
+      },
+      {
+        "scenario": "baseline_buy_hold",
+        "kind": "baseline",
+        "passes_gate": false,
+        "n_windows": 2,
+        "n_positive": 1,
+        "total_trades": 2,
+        "mean_return_pct": -7.7406,
+        "mean_sharpe": -1.3441,
+        "mean_calmar": 0.0476,
+        "worst_drawdown_pct": 35.46
+      },
+      {
+        "scenario": "baseline_breakout",
+        "kind": "baseline",
+        "passes_gate": false,
+        "n_windows": 2,
+        "n_positive": 1,
+        "total_trades": 31,
+        "mean_return_pct": -9.5089,
+        "mean_sharpe": -2.6059,
+        "mean_calmar": -0.3439,
+        "worst_drawdown_pct": 23.42
+      },
+      {
+        "scenario": "ml_sizer_macro",
+        "kind": "hogan",
+        "passes_gate": false,
+        "n_windows": 2,
+        "n_positive": 0,
+        "total_trades": 169,
+        "mean_return_pct": -1.3077,
+        "mean_sharpe": -2.4725,
+        "mean_calmar": -0.4486,
+        "worst_drawdown_pct": 3.06
+      },
+      {
+        "scenario": "ml_sizer",
+        "kind": "hogan",
+        "passes_gate": false,
+        "n_windows": 2,
+        "n_positive": 0,
+        "total_trades": 190,
+        "mean_return_pct": -1.7888,
+        "mean_sharpe": -2.9935,
+        "mean_calmar": -0.5071,
+        "worst_drawdown_pct": 3.6
+      },
+      {
+        "scenario": "technical_no_ml",
+        "kind": "hogan",
+        "passes_gate": false,
+        "n_windows": 2,
+        "n_positive": 0,
+        "total_trades": 190,
+        "mean_return_pct": -2.674,
+        "mean_sharpe": -3.0247,
+        "mean_calmar": -0.5139,
+        "worst_drawdown_pct": 5.33
+      },
+      {
+        "scenario": "regime_models",
+        "kind": "hogan",
+        "passes_gate": false,
+        "n_windows": 2,
+        "n_positive": 0,
+        "total_trades": 123,
+        "mean_return_pct": -0.853,
+        "mean_sharpe": -1.781,
+        "mean_calmar": -0.5221,
+        "worst_drawdown_pct": 2.64
+      },
+      {
+        "scenario": "baseline_rsi_mean_revert",
+        "kind": "baseline",
+        "passes_gate": false,
+        "n_windows": 2,
+        "n_positive": 0,
+        "total_trades": 38,
+        "mean_return_pct": -17.8261,
+        "mean_sharpe": -4.875,
+        "mean_calmar": -0.8722,
+        "worst_drawdown_pct": 29.06
+      },
+      {
+        "scenario": "ml_filter",
+        "kind": "hogan",
+        "passes_gate": false,
+        "n_windows": 2,
+        "n_positive": 0,
+        "total_trades": 73,
+        "mean_return_pct": -0.401,
+        "mean_sharpe": -4.0956,
+        "mean_calmar": -0.9203,
+        "worst_drawdown_pct": 0.58
+      }
+    ]
+  },
+  "full_validation": {
+    "path": "reports\\validation\\strategy_search_full\\strategy_comparison_20260430T175413Z.json",
+    "geometry": {
+      "n_splits": 5,
+      "min_train": 2000,
+      "min_test": 200,
+      "min_calmar": 0.0
+    },
+    "best_scenario": "baseline_buy_hold",
+    "ranked_results": [
+      {
+        "scenario": "baseline_buy_hold",
+        "kind": "baseline",
+        "passes_gate": false,
+        "n_windows": 5,
+        "n_positive": 2,
+        "total_trades": 5,
+        "mean_return_pct": 4.6701,
+        "mean_sharpe": 0.2774,
+        "mean_calmar": 0.3624,
+        "worst_drawdown_pct": 35.49
+      },
+      {
+        "scenario": "baseline_ma_trend",
+        "kind": "baseline",
+        "passes_gate": false,
+        "n_windows": 5,
+        "n_positive": 0,
+        "total_trades": 184,
+        "mean_return_pct": -20.5377,
+        "mean_sharpe": -1.9862,
+        "mean_calmar": -0.6631,
+        "worst_drawdown_pct": 36.11
+      },
+      {
+        "scenario": "regime_models",
+        "kind": "hogan",
+        "passes_gate": false,
+        "n_windows": 5,
+        "n_positive": 0,
+        "total_trades": 779,
+        "mean_return_pct": -3.4878,
+        "mean_sharpe": -4.1877,
+        "mean_calmar": -0.9033,
+        "worst_drawdown_pct": 4.82
+      },
+      {
+        "scenario": "ml_sizer_macro",
+        "kind": "hogan",
+        "passes_gate": false,
+        "n_windows": 5,
+        "n_positive": 0,
+        "total_trades": 1060,
+        "mean_return_pct": -7.323,
+        "mean_sharpe": -4.9436,
+        "mean_calmar": -0.9494,
+        "worst_drawdown_pct": 10.09
+      }
+    ]
+  },
+  "leading_candidate_attribution": {
+    "path": "reports\\validation\\strategy_search_tail_smoke\\loss_attribution_regime_models_tail.json",
+    "summary": {
+      "trades": 61,
+      "losses": 32,
+      "loss_rate": 0.5246,
+      "total_pnl_pct": -4.4327,
+      "loss_drag_pct": -41.5055,
+      "worst_loss_pct": -5.3062
+    }
+  },
+  "baseline_attribution": {
+    "path": "reports\\validation\\loss_attribution_volatile_size_020_tail_smoke.json",
+    "summary": {
+      "trades": 33,
+      "losses": 23,
+      "loss_rate": 0.697,
+      "total_pnl_pct": -11.9296,
+      "loss_drag_pct": -25.0102,
+      "worst_loss_pct": -3.5638
+    }
+  },
+  "tail_loss_comparison": {
+    "candidate_summary": {
+      "trades": 61,
+      "losses": 32,
+      "loss_rate": 0.5246,
+      "total_pnl_pct": -4.4327,
+      "loss_drag_pct": -41.5055,
+      "worst_loss_pct": -5.3062
+    },
+    "baseline_summary": {
+      "trades": 33,
+      "losses": 23,
+      "loss_rate": 0.697,
+      "total_pnl_pct": -11.9296,
+      "loss_drag_pct": -25.0102,
+      "worst_loss_pct": -3.5638
+    },
+    "deltas": {
+      "trades": 28.0,
+      "loss_rate": -0.1724,
+      "total_pnl_pct": 7.4969,
+      "loss_drag_pct": -16.4953,
+      "worst_loss_pct": -1.7424
+    }
+  },
+  "verdict_reasons": [
+    "tail loss drag worsened (more negative by -16.50pp)",
+    "worst tail loss worsened (more negative by -1.74pp)"
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "frozen_at_utc": "2026-04-30T17:25:01Z",
+  "note": "Tail-smoke baseline after volatile/short_size_scale tweaks",
+  "baseline_report": "reports\\validation\\wf_volatile_size_020_tail_smoke.json",
+  "baseline_report_sha256": "75732130a4add7cdfa3fc46ff0e634d939e098a0cde36378233a37c518e47ec8",
+  "git_commit": "49d1db814602abbbbf39da055b544dd418dce8c5",
+  "git_subject": "Update hogan_bot.log with detailed logging for Champion Mode and macro candle data fetches. Introduce new model entries in registry.jsonl for recent candidate models, capturing performance metrics and calibration details. Enhance data refresh processes and logging for improved traceability in trading activities.",
+  "summary": {
+    "n_windows": 2,
+    "n_positive": 0,
+    "n_failed": 0,
+    "total_trades": 68,
+    "mean_return_pct": -0.439,
+    "mean_sharpe": -4.4609,
+    "mean_calmar": -0.951,
+    "worst_calmar": -0.952,
+    "mean_drawdown_pct": 0.46,
+    "worst_drawdown_pct": 0.63,
+    "passes_gate": false,
+    "gate_config": {
+      "min_sharpe": 0.5,
+      "min_calmar": 0.0,
+      "max_drawdown_pct": 15.0,
+      "min_total_trades": 25,
+      "min_trades_per_window": 5,
+      "min_windows_positive": 3
+    }
+  },
+  "regime_position_scales": {
+    "trending_up": {
+      "long_size_scale": 1.0,
+      "short_size_scale": 0.2
+    },
+    "trending_down": {
+      "long_size_scale": 0.4,
+      "short_size_scale": 1.0
+    },
+    "ranging": {
+      "long_size_scale": 0.7,
+      "short_size_scale": 0.4
+    },
+    "volatile": {
+      "long_size_scale": 0.2,
+      "short_size_scale": 0.2
+    }
+  }
+}

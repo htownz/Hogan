@@ -24,6 +24,8 @@ class StrategyScenario:
     name: str
     description: str
     flags: tuple[str, ...] = ()
+    kind: str = "hogan"
+    baseline_name: str | None = None
 
 
 DEFAULT_SCENARIOS: tuple[StrategyScenario, ...] = (
@@ -54,6 +56,37 @@ DEFAULT_SCENARIOS: tuple[StrategyScenario, ...] = (
 )
 
 
+BASELINE_SCENARIOS: tuple[StrategyScenario, ...] = (
+    StrategyScenario(
+        name="baseline_buy_hold",
+        description="Buy-and-hold benchmark (no fees beyond entry/exit)",
+        kind="baseline",
+        baseline_name="buy_hold",
+    ),
+    StrategyScenario(
+        name="baseline_ma_trend",
+        description="SMA(20) over SMA(50) trend-follow benchmark",
+        kind="baseline",
+        baseline_name="ma_trend",
+    ),
+    StrategyScenario(
+        name="baseline_rsi_mean_revert",
+        description="RSI(14) mean-reversion benchmark",
+        kind="baseline",
+        baseline_name="rsi_mean_revert",
+    ),
+    StrategyScenario(
+        name="baseline_breakout",
+        description="20-bar Donchian breakout benchmark",
+        kind="baseline",
+        baseline_name="breakout",
+    ),
+)
+
+
+ALL_SCENARIOS: tuple[StrategyScenario, ...] = DEFAULT_SCENARIOS + BASELINE_SCENARIOS
+
+
 def utc_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
@@ -70,17 +103,21 @@ def display_path(path: Path) -> str:
         return str(path)
 
 
-def scenario_by_name(names: list[str] | None = None) -> list[StrategyScenario]:
-    scenarios = list(DEFAULT_SCENARIOS)
+def scenario_by_name(
+    names: list[str] | None = None,
+    *,
+    include_baselines: bool = False,
+) -> list[StrategyScenario]:
+    scenarios = list(ALL_SCENARIOS) if include_baselines else list(DEFAULT_SCENARIOS)
     if not names:
         return scenarios
 
-    lookup = {scenario.name: scenario for scenario in scenarios}
-    missing = [name for name in names if name not in lookup]
+    full_lookup = {scenario.name: scenario for scenario in ALL_SCENARIOS}
+    missing = [name for name in names if name not in full_lookup]
     if missing:
-        valid = ", ".join(sorted(lookup))
+        valid = ", ".join(sorted(full_lookup))
         raise ValueError(f"Unknown scenario(s): {', '.join(missing)}. Valid scenarios: {valid}")
-    return [lookup[name] for name in names]
+    return [full_lookup[name] for name in names]
 
 
 def build_walk_forward_command(
@@ -134,6 +171,65 @@ def run_command(cmd: list[str], log_path: Path) -> int:
     return int(result.returncode)
 
 
+def _ensure_project_on_path() -> None:
+    if str(PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(PROJECT_ROOT))
+
+
+def run_baseline_scenario(
+    scenario: StrategyScenario,
+    *,
+    db: str,
+    symbol: str,
+    timeframe: str,
+    n_splits: int,
+    min_train: int | None,
+    min_test: int | None,
+    report_path: Path,
+    log_path: Path,
+) -> int:
+    """Run a baseline strategy in-process and write a walk-forward-compatible report."""
+    if scenario.kind != "baseline" or not scenario.baseline_name:
+        raise ValueError(f"Scenario {scenario.name} is not a baseline scenario")
+
+    _ensure_project_on_path()
+    from scripts import simple_baselines as sb
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        candles = sb._load_candles(db, symbol, timeframe)
+        if candles.empty:
+            log_path.write_text(
+                f"No candles for {symbol} {timeframe} in {db}\n",
+                encoding="utf-8",
+            )
+            return 1
+
+        cfg = sb.BaselineConfig(
+            n_splits=n_splits,
+            min_train_bars=min_train if min_train is not None else 16000,
+            min_test_bars=min_test if min_test is not None else 1000,
+        )
+        report = sb.run_baseline(scenario.baseline_name, candles, cfg)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        log_path.write_text(
+            "Baseline {0}: ret={1} sharpe={2} calmar={3} dd={4} trades={5}\n".format(
+                scenario.baseline_name,
+                report["summary"].get("mean_return_pct"),
+                report["summary"].get("mean_sharpe"),
+                report["summary"].get("mean_calmar"),
+                report["summary"].get("worst_drawdown_pct"),
+                report["summary"].get("total_trades"),
+            ),
+            encoding="utf-8",
+        )
+        return 0
+    except Exception as exc:
+        log_path.write_text(f"Baseline scenario {scenario.name} failed: {exc!r}\n", encoding="utf-8")
+        return 1
+
+
 def load_summary(report_path: Path) -> dict[str, Any]:
     if not report_path.exists():
         return {}
@@ -153,8 +249,10 @@ def summarize_result(
     summary = {} if dry_run else load_summary(report_path)
     return {
         "scenario": scenario.name,
+        "kind": scenario.kind,
         "description": scenario.description,
         "flags": list(scenario.flags),
+        "baseline_name": scenario.baseline_name,
         "cmd": command,
         "exit_code": exit_code,
         "passes_gate": bool(summary.get("passes_gate", False)),
@@ -240,13 +338,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--scenario",
         action="append",
-        choices=[scenario.name for scenario in DEFAULT_SCENARIOS],
+        choices=[scenario.name for scenario in ALL_SCENARIOS],
         help="Scenario to run. May be repeated. Defaults to the full matrix.",
+    )
+    parser.add_argument(
+        "--include-baselines",
+        action="store_true",
+        help="Include simple benchmark strategies in the default matrix",
     )
     parser.add_argument("--dry-run", action="store_true", help="Write manifest commands without running them")
     args = parser.parse_args(argv)
 
-    scenarios = scenario_by_name(args.scenario)
+    scenarios = scenario_by_name(args.scenario, include_baselines=args.include_baselines)
     out_dir = resolve_path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = utc_stamp()
@@ -255,19 +358,40 @@ def main(argv: list[str] | None = None) -> int:
     for scenario in scenarios:
         report_path = out_dir / f"wf_{scenario.name}_{stamp}.json"
         log_path = out_dir / f"wf_{scenario.name}_{stamp}.log"
-        cmd = build_walk_forward_command(
-            scenario,
-            python_exe=sys.executable,
-            db=args.db,
-            symbol=args.symbol,
-            timeframe=args.timeframe,
-            n_splits=args.n_splits,
-            min_train=args.min_train,
-            min_test=args.min_test,
-            min_calmar=args.min_calmar,
-            output_path=report_path,
-        )
-        exit_code = None if args.dry_run else run_command(cmd, log_path)
+        if scenario.kind == "baseline":
+            cmd = [
+                "<inline>",
+                "scripts.simple_baselines.run_baseline",
+                scenario.baseline_name or "",
+            ]
+            if args.dry_run:
+                exit_code = None
+            else:
+                exit_code = run_baseline_scenario(
+                    scenario,
+                    db=args.db,
+                    symbol=args.symbol,
+                    timeframe=args.timeframe,
+                    n_splits=args.n_splits,
+                    min_train=args.min_train,
+                    min_test=args.min_test,
+                    report_path=report_path,
+                    log_path=log_path,
+                )
+        else:
+            cmd = build_walk_forward_command(
+                scenario,
+                python_exe=sys.executable,
+                db=args.db,
+                symbol=args.symbol,
+                timeframe=args.timeframe,
+                n_splits=args.n_splits,
+                min_train=args.min_train,
+                min_test=args.min_test,
+                min_calmar=args.min_calmar,
+                output_path=report_path,
+            )
+            exit_code = None if args.dry_run else run_command(cmd, log_path)
         results.append(
             summarize_result(
                 scenario,

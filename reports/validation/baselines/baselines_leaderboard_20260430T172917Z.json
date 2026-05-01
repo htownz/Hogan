@@ -1,0 +1,108 @@
+{
+  "generated_at_utc": "2026-04-30T17:29:17Z",
+  "stamp": "20260430T172917Z",
+  "db": "data/hogan.db",
+  "symbol": "BTC/USD",
+  "timeframe": "1h",
+  "n_splits": 2,
+  "min_train": 16000,
+  "min_test": 1000,
+  "results": [
+    {
+      "name": "buy_hold",
+      "report": "reports\\validation\\baselines\\baseline_buy_hold_20260430T172917Z.json",
+      "baseline": "buy_hold",
+      "n_windows": 2,
+      "n_positive": 1,
+      "n_failed": 0,
+      "total_trades": 2,
+      "mean_return_pct": -7.7406,
+      "mean_sharpe": -1.3441,
+      "mean_calmar": 0.0476,
+      "worst_calmar": -0.7546,
+      "mean_drawdown_pct": 24.37,
+      "worst_drawdown_pct": 35.46,
+      "passes_gate": false,
+      "gate_config": {
+        "min_sharpe": 0.5,
+        "min_calmar": 0.0,
+        "max_drawdown_pct": 25.0,
+        "min_total_trades": 1,
+        "min_trades_per_window": 1,
+        "min_windows_positive": 1
+      }
+    },
+    {
+      "name": "ma_trend",
+      "report": "reports\\validation\\baselines\\baseline_ma_trend_20260430T172917Z.json",
+      "baseline": "ma_trend",
+      "n_windows": 2,
+      "n_positive": 1,
+      "n_failed": 0,
+      "total_trades": 22,
+      "mean_return_pct": -0.1914,
+      "mean_sharpe": -0.4709,
+      "mean_calmar": 0.0545,
+      "worst_calmar": -0.6351,
+      "mean_drawdown_pct": 12.34,
+      "worst_drawdown_pct": 13.59,
+      "passes_gate": false,
+      "gate_config": {
+        "min_sharpe": 0.5,
+        "min_calmar": 0.0,
+        "max_drawdown_pct": 25.0,
+        "min_total_trades": 1,
+        "min_trades_per_window": 1,
+        "min_windows_positive": 1
+      }
+    },
+    {
+      "name": "rsi_mean_revert",
+      "report": "reports\\validation\\baselines\\baseline_rsi_mean_revert_20260430T172917Z.json",
+      "baseline": "rsi_mean_revert",
+      "n_windows": 2,
+      "n_positive": 0,
+      "n_failed": 0,
+      "total_trades": 38,
+      "mean_return_pct": -17.8261,
+      "mean_sharpe": -4.875,
+      "mean_calmar": -0.8722,
+      "worst_calmar": -0.8948,
+      "mean_drawdown_pct": 20.66,
+      "worst_drawdown_pct": 29.06,
+      "passes_gate": false,
+      "gate_config": {
+        "min_sharpe": 0.5,
+        "min_calmar": 0.0,
+        "max_drawdown_pct": 25.0,
+        "min_total_trades": 1,
+        "min_trades_per_window": 1,
+        "min_windows_positive": 1
+      }
+    },
+    {
+      "name": "breakout",
+      "report": "reports\\validation\\baselines\\baseline_breakout_20260430T172917Z.json",
+      "baseline": "breakout",
+      "n_windows": 2,
+      "n_positive": 1,
+      "n_failed": 0,
+      "total_trades": 31,
+      "mean_return_pct": -9.5089,
+      "mean_sharpe": -2.6059,
+      "mean_calmar": -0.3439,
+      "worst_calmar": -0.8921,
+      "mean_drawdown_pct": 16.29,
+      "worst_drawdown_pct": 23.42,
+      "passes_gate": false,
+      "gate_config": {
+        "min_sharpe": 0.5,
+        "min_calmar": 0.0,
+        "max_drawdown_pct": 25.0,
+        "min_total_trades": 1,
+        "min_trades_per_window": 1,
+        "min_windows_positive": 1
+      }
+    }
+  ]
+}

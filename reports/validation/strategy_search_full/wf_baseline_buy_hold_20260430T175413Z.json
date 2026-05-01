@@ -1,0 +1,184 @@
+{
+  "summary": {
+    "baseline": "buy_hold",
+    "n_windows": 5,
+    "n_positive": 2,
+    "n_failed": 0,
+    "total_trades": 5,
+    "mean_return_pct": 4.6701,
+    "mean_sharpe": 0.2774,
+    "mean_calmar": 0.3624,
+    "worst_calmar": -0.7377,
+    "mean_drawdown_pct": 28.83,
+    "worst_drawdown_pct": 35.49,
+    "passes_gate": false,
+    "gate_config": {
+      "min_sharpe": 0.5,
+      "min_calmar": 0.0,
+      "max_drawdown_pct": 25.0,
+      "min_total_trades": 1,
+      "min_trades_per_window": 1,
+      "min_windows_positive": 1
+    }
+  },
+  "windows": [
+    {
+      "window_idx": 1,
+      "train_bars": 2000,
+      "test_bars": 3237,
+      "test_start_date": "2024-06-02",
+      "test_end_date": "2024-10-15",
+      "total_return_pct": -3.474,
+      "max_drawdown_pct": 30.43,
+      "sharpe": 0.0742,
+      "calmar": -0.1142,
+      "trades": 1,
+      "win_rate": 0.0,
+      "net_positive": false,
+      "closed_trades": [
+        {
+          "side": "long",
+          "entry_bar_idx": 0,
+          "exit_bar_idx": 3236,
+          "entry_price": 67512.95054296874,
+          "exit_price": 65507.7766015625,
+          "pnl_pct": -2.9700582262806643,
+          "bars_held": 3236,
+          "close_reason": "end_of_window",
+          "entry_regime": "?",
+          "exit_regime": "?",
+          "max_adverse_pct": 0.0,
+          "max_favorable_pct": 0.0
+        }
+      ]
+    },
+    {
+      "window_idx": 2,
+      "train_bars": 5237,
+      "test_bars": 3237,
+      "test_start_date": "2024-10-15",
+      "test_end_date": "2025-02-27",
+      "total_return_pct": 28.7115,
+      "max_drawdown_pct": 22.62,
+      "sharpe": 1.6035,
+      "calmar": 1.2693,
+      "trades": 1,
+      "win_rate": 1.0,
+      "net_positive": true,
+      "closed_trades": [
+        {
+          "side": "long",
+          "entry_bar_idx": 0,
+          "exit_bar_idx": 3236,
+          "entry_price": 65677.0252265625,
+          "exit_price": 84975.20208203126,
+          "pnl_pct": 29.38345150209967,
+          "bars_held": 3236,
+          "close_reason": "end_of_window",
+          "entry_regime": "?",
+          "exit_regime": "?",
+          "max_adverse_pct": 0.0,
+          "max_favorable_pct": 0.0
+        }
+      ]
+    },
+    {
+      "window_idx": 3,
+      "train_bars": 8474,
+      "test_bars": 3237,
+      "test_start_date": "2025-02-27",
+      "test_end_date": "2025-07-12",
+      "total_return_pct": 36.2609,
+      "max_drawdown_pct": 20.77,
+      "sharpe": 2.0163,
+      "calmar": 1.7456,
+      "trades": 1,
+      "win_rate": 1.0,
+      "net_positive": true,
+      "closed_trades": [
+        {
+          "side": "long",
+          "entry_bar_idx": 0,
+          "exit_bar_idx": 3236,
+          "entry_price": 85868.8973671875,
+          "exit_price": 117616.568546875,
+          "pnl_pct": 36.9722590519941,
+          "bars_held": 3236,
+          "close_reason": "end_of_window",
+          "entry_regime": "?",
+          "exit_regime": "?",
+          "max_adverse_pct": 0.0,
+          "max_favorable_pct": 0.0
+        }
+      ]
+    },
+    {
+      "window_idx": 4,
+      "train_bars": 11711,
+      "test_bars": 3237,
+      "test_start_date": "2025-07-12",
+      "test_end_date": "2025-11-23",
+      "total_return_pct": -25.6964,
+      "max_drawdown_pct": 34.83,
+      "sharpe": -1.9091,
+      "calmar": -0.7377,
+      "trades": 1,
+      "win_rate": 0.0,
+      "net_positive": false,
+      "closed_trades": [
+        {
+          "side": "long",
+          "entry_bar_idx": 0,
+          "exit_bar_idx": 3236,
+          "entry_price": 117707.47276171875,
+          "exit_price": 87917.45678125,
+          "pnl_pct": -25.30851719225524,
+          "bars_held": 3236,
+          "close_reason": "end_of_window",
+          "entry_regime": "?",
+          "exit_regime": "?",
+          "max_adverse_pct": 0.0,
+          "max_favorable_pct": 0.0
+        }
+      ]
+    },
+    {
+      "window_idx": 5,
+      "train_bars": 14948,
+      "test_bars": 3237,
+      "test_start_date": "2025-11-23",
+      "test_end_date": "2026-04-30",
+      "total_return_pct": -12.4514,
+      "max_drawdown_pct": 35.49,
+      "sharpe": -0.3979,
+      "calmar": -0.3509,
+      "trades": 1,
+      "win_rate": 0.0,
+      "net_positive": false,
+      "closed_trades": [
+        {
+          "side": "long",
+          "entry_bar_idx": 0,
+          "exit_bar_idx": 3236,
+          "entry_price": 86806.5065625,
+          "exit_price": 76394.58360000001,
+          "pnl_pct": -11.994403846909199,
+          "bars_held": 3236,
+          "close_reason": "end_of_window",
+          "entry_regime": "?",
+          "exit_regime": "?",
+          "max_adverse_pct": 0.0,
+          "max_favorable_pct": 0.0
+        }
+      ]
+    }
+  ],
+  "config": {
+    "starting_balance": 10000.0,
+    "fee_rate": 0.0026,
+    "slippage_bps": 5.0,
+    "min_train_bars": 2000,
+    "min_test_bars": 200,
+    "n_splits": 5
+  }
+}
